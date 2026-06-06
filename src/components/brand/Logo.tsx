@@ -7,6 +7,7 @@ export default function Logo({ className = '' }: { className?: string }) {
       alt="Phare.money"
       width={180}
       height={48}
+      style={{ width: 'auto', height: '48px' }}
       className={className}
       priority
     />
