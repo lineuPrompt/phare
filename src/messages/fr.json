@@ -1,0 +1,17 @@
+{
+  "common": {
+    "appName": "Phare",
+    "tagline": "Votre phare financier",
+    "signIn": "Se connecter",
+    "signUp": "Commencer",
+    "loading": "Chargement..."
+  },
+  "landing": {
+    "hero": {
+      "title": "Les finances de votre famille, enfin claires.",
+      "subtitle": "Téléversez votre tableur. Obtenez un plan financier complet en 5 minutes. Sachez exactement quoi faire ce mois-ci.",
+      "cta": "Commencer gratuitement",
+      "secondaryCta": "Voir comment ça marche"
+    }
+  }
+}

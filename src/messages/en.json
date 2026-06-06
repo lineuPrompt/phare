@@ -1,0 +1,17 @@
+{
+  "common": {
+    "appName": "Phare",
+    "tagline": "Your financial lighthouse",
+    "signIn": "Sign in",
+    "signUp": "Get started",
+    "loading": "Loading..."
+  },
+  "landing": {
+    "hero": {
+      "title": "Your family finances, finally clear.",
+      "subtitle": "Upload your spreadsheet. Get a complete financial plan in 5 minutes. Know exactly what to do this month.",
+      "cta": "Get started free",
+      "secondaryCta": "See how it works"
+    }
+  }
+}
