@@ -10,6 +10,7 @@ export default function Logo({ className = '' }: { className?: string }) {
       style={{ width: 'auto', height: '48px' }}
       className={className}
       priority
+      unoptimized
     />
   );
 }
