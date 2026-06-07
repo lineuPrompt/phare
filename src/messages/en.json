@@ -7,11 +7,102 @@
     "loading": "Loading..."
   },
   "landing": {
+    "badge": "AI financial coach for Canadian families",
     "hero": {
       "title": "Your family finances, finally clear.",
       "subtitle": "Upload your spreadsheet. Get a complete financial plan in 5 minutes. Know exactly what to do this month.",
       "cta": "Get started free",
-      "secondaryCta": "See how it works"
+      "secondaryCta": "See how it works",
+      "socialProof": "Built for Canadian families · RRSP, RESP, TFSA aware · English & Français"
+    },
+    "problem": {
+      "title": "The real reason your credit line keeps growing",
+      "subtitle": "It's not the groceries. It's not the coffee. It's the $8,000 in predictable annual expenses that arrive with no account waiting for them.",
+      "items": {
+        "taxes": {
+          "title": "Property taxes",
+          "description": "Two installments, March and June. Every year. Still a surprise."
+        },
+        "registration": {
+          "title": "Car registration & insurance",
+          "description": "Predictable. Annual. Straight onto the credit line."
+        },
+        "school": {
+          "title": "Back to school",
+          "description": "September hits the same way every year. $800 per kid, no plan."
+        },
+        "income_tax": {
+          "title": "Income tax balance",
+          "description": "Quebec residents with Ontario employers owe provincial tax every April. Every year."
+        }
+      }
+    },
+    "howItWorks": {
+      "title": "From spreadsheet to financial plan in 5 minutes",
+      "steps": {
+        "upload": {
+          "number": "1",
+          "title": "Upload your budget",
+          "description": "Excel, CSV, or a screenshot of your bank statement. Phare reads it and builds your financial picture."
+        },
+        "plan": {
+          "number": "2",
+          "title": "Get your plan",
+          "description": "AI detects your categories, finds the gaps, and gives you a clear plan. No 20-question form."
+        },
+        "review": {
+          "number": "3",
+          "title": "Monthly review",
+          "description": "On the 1st of each month, Phare tells you exactly what happened and what to do next. Like a letter from your financial advisor."
+        }
+      }
+    },
+    "features": {
+      "title": "Everything your family needs. Nothing it doesn't.",
+      "familyBudgets": {
+        "title": "Family member budgets",
+        "description": "Individual spending limits within a shared household budget. Both spouses see the same dashboard. Alerts at 80% and 100%."
+      },
+      "sinkingFunds": {
+        "title": "Sinking funds",
+        "description": "Annual expenses provisioned monthly so they never hit the credit line again. Property taxes, car registration, back to school — all covered."
+      },
+      "goalTracking": {
+        "title": "Goal tracking",
+        "description": "Disney 2028. Brazil 2029. See exactly whether you're on track and by how much."
+      },
+      "monthlyReview": {
+        "title": "Monthly review",
+        "description": "AI-generated, plain language, specific numbers. One clear recommendation. Delivered on the 1st of each month."
+      }
+    },
+    "pricing": {
+      "title": "A financial advisor charges $250/hour",
+      "subtitle": "Phare costs less than a family dinner out.",
+      "price": "$15",
+      "period": "/month",
+      "annual": "$120/year — save $60",
+      "perHousehold": "One subscription covers both spouses.",
+      "cta": "Start your free trial",
+      "features": {
+        "upload": "File upload onboarding",
+        "budgets": "Family member budgets",
+        "sinking": "Sinking funds",
+        "goals": "Goal tracking",
+        "review": "Monthly AI review",
+        "alerts": "Budget alerts",
+        "bilingual": "English & French",
+        "canadian": "RRSP, RESP, TFSA aware"
+      }
+    },
+    "finalCta": {
+      "title": "Your family deserves a financial plan.",
+      "subtitle": "Not another spreadsheet. Not another app that tracks what you already spent. A plan that tells you what to do next.",
+      "cta": "Get started free"
+    },
+    "footer": {
+      "builtFor": "Built for Canadian families",
+      "copyright": "© 2026 Phare. All rights reserved."
     }
   }
 }

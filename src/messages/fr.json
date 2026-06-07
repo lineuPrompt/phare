@@ -7,11 +7,102 @@
     "loading": "Chargement..."
   },
   "landing": {
+    "badge": "Coach financier IA pour les familles canadiennes",
     "hero": {
       "title": "Les finances de votre famille, enfin claires.",
       "subtitle": "Téléversez votre tableur. Obtenez un plan financier complet en 5 minutes. Sachez exactement quoi faire ce mois-ci.",
       "cta": "Commencer gratuitement",
-      "secondaryCta": "Voir comment ça marche"
+      "secondaryCta": "Voir comment ça marche",
+      "socialProof": "Conçu pour les familles canadiennes · REER, REEE, CELI · English & Français"
+    },
+    "problem": {
+      "title": "La vraie raison pour laquelle votre marge de crédit augmente",
+      "subtitle": "Ce n'est pas l'épicerie. Ce n'est pas le café. Ce sont les 8 000 $ en dépenses annuelles prévisibles qui arrivent sans compte pour les recevoir.",
+      "items": {
+        "taxes": {
+          "title": "Taxes municipales",
+          "description": "Deux versements, mars et juin. Chaque année. Toujours une surprise."
+        },
+        "registration": {
+          "title": "Immatriculation et assurance auto",
+          "description": "Prévisible. Annuel. Directement sur la marge de crédit."
+        },
+        "school": {
+          "title": "Rentrée scolaire",
+          "description": "Septembre frappe de la même façon chaque année. 800 $ par enfant, sans plan."
+        },
+        "income_tax": {
+          "title": "Solde d'impôt",
+          "description": "Les résidents du Québec avec un employeur ontarien doivent un solde provincial chaque avril. Chaque année."
+        }
+      }
+    },
+    "howItWorks": {
+      "title": "Du tableur au plan financier en 5 minutes",
+      "steps": {
+        "upload": {
+          "number": "1",
+          "title": "Téléversez votre budget",
+          "description": "Excel, CSV ou une capture d'écran de votre relevé bancaire. Phare le lit et construit votre portrait financier."
+        },
+        "plan": {
+          "number": "2",
+          "title": "Obtenez votre plan",
+          "description": "L'IA détecte vos catégories, trouve les lacunes et vous donne un plan clair. Pas de formulaire de 20 questions."
+        },
+        "review": {
+          "number": "3",
+          "title": "Revue mensuelle",
+          "description": "Le 1er de chaque mois, Phare vous dit exactement ce qui s'est passé et quoi faire ensuite. Comme une lettre de votre conseiller financier."
+        }
+      }
+    },
+    "features": {
+      "title": "Tout ce dont votre famille a besoin. Rien de plus.",
+      "familyBudgets": {
+        "title": "Budgets par membre",
+        "description": "Des limites de dépenses individuelles dans un budget familial partagé. Les deux conjoints voient le même tableau de bord. Alertes à 80 % et 100 %."
+      },
+      "sinkingFunds": {
+        "title": "Fonds de prévoyance",
+        "description": "Les dépenses annuelles provisionnées mensuellement pour qu'elles ne touchent plus jamais la marge de crédit. Taxes municipales, immatriculation, rentrée — tout est couvert."
+      },
+      "goalTracking": {
+        "title": "Suivi des objectifs",
+        "description": "Disney 2028. Brésil 2029. Voyez exactement si vous êtes sur la bonne voie et de combien."
+      },
+      "monthlyReview": {
+        "title": "Revue mensuelle",
+        "description": "Générée par l'IA, en langage clair, avec des chiffres précis. Une recommandation claire. Livrée le 1er de chaque mois."
+      }
+    },
+    "pricing": {
+      "title": "Un conseiller financier coûte 250 $/heure",
+      "subtitle": "Phare coûte moins qu'un souper en famille au restaurant.",
+      "price": "15 $",
+      "period": "/mois",
+      "annual": "120 $/an — économisez 60 $",
+      "perHousehold": "Un abonnement couvre les deux conjoints.",
+      "cta": "Commencer l'essai gratuit",
+      "features": {
+        "upload": "Intégration par téléversement",
+        "budgets": "Budgets par membre de la famille",
+        "sinking": "Fonds de prévoyance",
+        "goals": "Suivi des objectifs",
+        "review": "Revue mensuelle IA",
+        "alerts": "Alertes budgétaires",
+        "bilingual": "English & Français",
+        "canadian": "REER, REEE, CELI"
+      }
+    },
+    "finalCta": {
+      "title": "Votre famille mérite un plan financier.",
+      "subtitle": "Pas un autre tableur. Pas une autre application qui suit ce que vous avez déjà dépensé. Un plan qui vous dit quoi faire ensuite.",
+      "cta": "Commencer gratuitement"
+    },
+    "footer": {
+      "builtFor": "Conçu pour les familles canadiennes",
+      "copyright": "© 2026 Phare. Tous droits réservés."
     }
   }
 }

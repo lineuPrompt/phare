@@ -17,7 +17,7 @@ export default function LanguageSwitcher() {
   return (
     <button
       onClick={toggle}
-      className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium transition-all"
+      className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium transition-all cursor-pointer"
       style={{
         border: '1.5px solid #2ABFBF',
         color: '#2ABFBF',
