@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     let prompt: string;
 
     if (body.source === 'template') {
-      // Template path: numbers are already verified by code. Claude ONLY interprets.
+      // Template path: numbers verified by code. Claude ONLY interprets.
       const p = body.parsed;
       prompt = `You are Phare, an AI financial coach for Canadian families. The family filled out the official Phare template, so all numbers below are VERIFIED and EXACT. Do NOT change, recalculate, or invent any numbers — use these exactly as given.
 
@@ -34,29 +34,34 @@ Rules:
 - monthlyReview: four paragraphs max, specific numbers from the verified data, one clear recommendation, plain language, like a letter from a financial advisor. Good tone: "This month your budget looks solid." NOT corporate jargon.
 - If net cash flow is negative, the top recommendation must address that first.
 - Separate paragraphs in monthlyReview with \\n`;
-    } else {
-      // Generic path: analysis + answers (existing behavior)
-      const { analysis, answers } = body;
-      prompt = `You are Phare, an AI financial coach for Canadian families. You analyzed a family's data and they answered your questions. Now build their complete financial plan.
+    } else if (body.source === 'calculated') {
+      // Own-file or manual form: numbers verified by the calculator. Claude ONLY interprets.
+      const c = body.calculated;
+      prompt = `You are Phare, an AI financial coach for Canadian families. The numbers below were computed directly from the family's data and are VERIFIED and EXACT. Do NOT change, recalculate, or invent any numbers — use these exactly as given.
 
-Analysis:
-${JSON.stringify(analysis)}
-
-Their answers:
-${JSON.stringify(answers)}
+VERIFIED DATA:
+Monthly income: $${c.income.total} (lines: ${JSON.stringify(c.income.lines)})
+Monthly expenses: $${c.expenses.total} (lines: ${JSON.stringify(c.expenses.lines)})
+Net cash flow: $${c.netCashFlow}
 
 Return ONLY valid JSON:
-{"monthlyBudget":{"totalIncome":0,"totalExpenses":0,"totalSavings":0,"categories":[{"name":"","budgeted":0,"type":"expense"}]},"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"monthlyReview":"","topRecommendation":"","topRecommendation_fr":""}
+{"monthlyBudget":{"totalIncome":${c.income.total},"totalExpenses":${c.expenses.total},"totalSavings":${c.netCashFlow},"categories":[{"name":"","budgeted":0,"type":"expense"}]},"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"monthlyReview":"","topRecommendation":"","topRecommendation_fr":""}
 
 Rules:
-- Use real numbers from the analysis and answers, never invent
-- RRSP: if Quebec resident with Ontario employer, suggest RRSP to offset provincial tax gap
-- RESP: if children and no RESP, recommend $2,500/year per child for full $500 CESG
-- TFSA: suggest for sinking funds and short-term goals
-- Sinking funds: property tax (March & June in Quebec), car registration, back to school, income tax balance
-- monthlyReview: four paragraphs max, specific numbers, one recommendation, plain language, like a letter from a financial advisor.
-- If no debt, set debtPayoff to null.
+- Use the VERIFIED numbers exactly. totalIncome MUST equal ${c.income.total}, totalExpenses MUST equal ${c.expenses.total}, totalSavings MUST equal ${c.netCashFlow}.
+- Populate categories from the actual income and expense lines provided. Do not add lines that aren't there.
+- Suggest sinkingFunds for likely Canadian annual expenses you can infer from the expense labels (property tax, car registration, back to school, income tax balance). Mark these clearly as suggestions in the monthly review.
+- Apply Canadian context: RRSP reduces taxable income; RESP gives $500/yr CESG per child; TFSA is ideal for sinking funds. If you see signs of children or a mortgage in the labels, factor that in.
+- monthlyReview: four paragraphs max, specific numbers from the verified data, one clear recommendation, plain language, like a letter from a financial advisor. Good tone: "This month your budget looks solid." NOT corporate jargon.
+- If net cash flow is negative, the top recommendation must address that first.
+- If you cannot determine something (e.g. number of children), do NOT invent it — speak generally instead.
+- If no debt is evident, set debtPayoff to null.
 - Separate paragraphs in monthlyReview with \\n`;
+    } else {
+      return NextResponse.json(
+        { error: 'Unknown plan source' },
+        { status: 400 }
+      );
     }
 
     const message = await anthropic.messages.create({
