@@ -112,6 +112,24 @@
     "formats": "Supports .xlsx, .xls, .csv",
     "uploading": "Reading your file...",
     "analyzing": "Analyzing your finances...",
+    "or": "or",
+    "tryAgain": "Try again",
+    "templateHint": "Having trouble with your file? Try our pre-formatted template instead.",
+    "template": "Don't have a spreadsheet? Download our template",
+    "noFile": {
+      "title": "Don't have a spreadsheet yet?",
+      "description": "Download our template, fill in your numbers, and upload it. Takes about 10 minutes.",
+      "cta": "Download template"
+    },
+    "analyzingSteps": {
+      "reading": "Reading your data...",
+      "categories": "Detecting categories...",
+      "patterns": "Finding patterns...",
+      "tax": "Checking Canadian tax context...",
+      "building": "Building your financial picture...",
+      "savings": "Identifying savings opportunities...",
+      "almost": "Almost there..."
+    },
     "confirm": {
       "title": "Here's what we found",
       "subtitle": "Review and confirm before we build your plan.",
@@ -127,15 +145,28 @@
       "perYear": "/year",
       "confirmBtn": "This looks right — build my plan",
       "editBtn": "Let me correct something",
-      "template": "Don't have a spreadsheet? Download our template",
-      "tryAgain": "Try again",
-      "templateHint": "Having trouble with your file? Try our pre-formatted template instead."
+      "answerPlaceholder": "Type your answer here...",
+      "generating": "Building your plan..."
     },
-      "or": "or",
-      "noFile": {
-        "title": "Don't have a spreadsheet yet?",
-        "description": "Download our template, fill in your numbers, and upload it. Takes about 10 minutes.",
-        "cta": "Download template"
-      }
+    "plan": {
+      "topRec": "Your #1 priority this month",
+      "budget": "Monthly Budget",
+      "income": "Income",
+      "expenses": "Expenses",
+      "savings": "Savings",
+      "sinkingFunds": "Sinking Funds",
+      "perMonth": "/month",
+      "perYear": "/year",
+      "dueIn": "Due in",
+      "debtPayoff": "Debt Payoff Plan",
+      "targetDate": "Target",
+      "monthlyPayment": "Monthly payment",
+      "goals": "Your Goals",
+      "onTrack": "On track",
+      "behind": "Behind",
+      "monthlyReview": "Your First Monthly Review",
+      "startOver": "Upload a different file",
+      "estimatedDate": "Est."
+    }
   }
 }

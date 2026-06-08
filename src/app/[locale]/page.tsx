@@ -1,5 +1,6 @@
 import {useTranslations} from 'next-intl';
 import Navbar from '@/components/brand/Navbar';
+import Link from 'next/link';
 
 export default function Home() {
   const t = useTranslations('landing');
@@ -29,18 +30,19 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4">
-          <button
-            className="px-8 py-3 rounded-full text-white font-semibold text-lg transition-all hover:opacity-90 cursor-pointer"
+          <Link
+            href="/upload"
+            className="px-8 py-3 rounded-full text-white font-semibold text-lg transition-all hover:opacity-90 cursor-pointer inline-block"
             style={{background: '#0F2044'}}
           >
             {t('hero.cta')}
-          </button>
-          <button
-            className="px-8 py-3 rounded-full font-semibold text-lg transition-all hover:opacity-90 cursor-pointer"
+          </Link>
+          <a href="#how-it-works"
+            className="px-8 py-3 rounded-full font-semibold text-lg transition-all hover:opacity-90 cursor-pointer inline-block"
             style={{ border: '2px solid #0F2044', color: '#0F2044' }}
           >
             {t('hero.secondaryCta')}
-          </button>
+          </a>
         </div>
 
         <p className="mt-8 text-sm" style={{color: '#6B7280'}}>
@@ -78,7 +80,7 @@ export default function Home() {
       </section>
 
       {/* How it works */}
-      <section className="px-6 py-20" style={{background: '#FAFAF8'}}>
+      <section id="how-it-works" className="px-6 py-20" style={{background: '#FAFAF8'}}>
         <div className="max-w-4xl mx-auto text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4" style={{color: '#0F2044'}}>
             {t('howItWorks.title')}
@@ -162,12 +164,13 @@ export default function Home() {
               ))}
             </div>
 
-            <button
-              className="w-full py-3 rounded-full text-white font-semibold text-lg transition-all hover:opacity-90 cursor-pointer"
+            <Link
+              href="/upload"
+              className="block w-full py-3 rounded-full text-white font-semibold text-lg transition-all hover:opacity-90 cursor-pointer text-center"
               style={{background: '#0F2044'}}
             >
               {t('pricing.cta')}
-            </button>
+            </Link>
           </div>
         </div>
       </section>
@@ -181,12 +184,13 @@ export default function Home() {
           <p className="text-lg mb-10" style={{color: '#94A3B8'}}>
             {t('finalCta.subtitle')}
           </p>
-          <button
-            className="px-10 py-4 rounded-full font-semibold text-lg transition-all hover:opacity-90 cursor-pointer"
+          <Link
+            href="/upload"
+            className="px-10 py-4 rounded-full font-semibold text-lg transition-all hover:opacity-90 cursor-pointer inline-block"
             style={{background: '#2ABFBF', color: '#0F2044'}}
           >
             {t('finalCta.cta')}
-          </button>
+          </Link>
         </div>
       </section>
 

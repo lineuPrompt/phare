@@ -41,16 +41,50 @@ type Analysis = {
   }[];
 };
 
-function AnalyzingLoader() {
+type Plan = {
+  monthlyBudget: {
+    totalIncome: number;
+    totalExpenses: number;
+    totalSavings: number;
+    categories: {
+      name: string;
+      budgeted: number;
+      type: string;
+    }[];
+  };
+  sinkingFunds: {
+    name: string;
+    annualAmount: number;
+    monthlyProvision: number;
+    dueMonth: string;
+  }[];
+  debtPayoff: {
+    description: string;
+    targetDate: string;
+    monthlyPayment: number;
+  } | null;
+  goals: {
+    name: string;
+    targetAmount: number;
+    monthlyContribution: number;
+    onTrack: boolean;
+    estimatedDate: string;
+  }[];
+  monthlyReview: string;
+  topRecommendation: string;
+  topRecommendation_fr: string;
+};
+
+function AnalyzingLoader({ t }: { t: (key: string) => string }) {
   const [msgIndex, setMsgIndex] = useState(0);
   const messages = [
-    { emoji: '🔍', text: 'Reading your data...' },
-    { emoji: '📊', text: 'Detecting categories...' },
-    { emoji: '💡', text: 'Finding patterns...' },
-    { emoji: '🏦', text: 'Checking Canadian tax context...' },
-    { emoji: '📋', text: 'Building your financial picture...' },
-    { emoji: '🎯', text: 'Identifying savings opportunities...' },
-    { emoji: '✨', text: 'Almost there...' },
+    { emoji: '🔍', text: t('analyzingSteps.reading') },
+    { emoji: '📊', text: t('analyzingSteps.categories') },
+    { emoji: '💡', text: t('analyzingSteps.patterns') },
+    { emoji: '🏦', text: t('analyzingSteps.tax') },
+    { emoji: '📋', text: t('analyzingSteps.building') },
+    { emoji: '🎯', text: t('analyzingSteps.savings') },
+    { emoji: '✨', text: t('analyzingSteps.almost') },
   ];
 
   useEffect(() => {
@@ -72,17 +106,19 @@ function AnalyzingLoader() {
 
 export default function UploadPage() {
   const t = useTranslations('upload');
-  const [status, setStatus] = useState<'idle' | 'uploading' | 'analyzing' | 'done' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'analyzing' | 'done' | 'error' | 'plan'>('idle');
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [generating, setGenerating] = useState(false);
+  const [plan, setPlan] = useState<Plan | null>(null);
 
   const handleFile = useCallback(async (file: File) => {
     setStatus('uploading');
     setError('');
 
     try {
-      // Step 1: Upload and parse
       const formData = new FormData();
       formData.append('file', file);
 
@@ -98,7 +134,6 @@ export default function UploadPage() {
 
       const uploadData = await uploadRes.json();
 
-      // Step 2: Analyze with AI
       setStatus('analyzing');
 
       const analyzeRes = await fetch('/api/analyze', {
@@ -145,6 +180,38 @@ export default function UploadPage() {
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(amount);
 
+  const handleBuildPlan = useCallback(async () => {
+    if (!analysis) return;
+    setGenerating(true);
+
+    try {
+      const questionsWithAnswers = analysis.questions.map((q, i) => ({
+        question: q.question,
+        answer: answers[i] || 'Not answered',
+      }));
+
+      const res = await fetch('/api/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          analysis,
+          answers: questionsWithAnswers,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Plan generation failed');
+
+      const data = await res.json();
+      setPlan(data.plan);
+      setStatus('plan');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setStatus('error');
+    } finally {
+      setGenerating(false);
+    }
+  }, [analysis, answers]);
+
   return (
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
       <Navbar />
@@ -157,10 +224,9 @@ export default function UploadPage() {
           {t('subtitle')}
         </p>
 
-        {/* Upload states */}
+        {/* Idle */}
         {status === 'idle' && (
           <div className="space-y-6">
-            {/* Path 1: Upload */}
             <div
               onDrop={onDrop}
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -188,14 +254,12 @@ export default function UploadPage() {
               />
             </div>
 
-            {/* Divider */}
             <div className="flex items-center gap-4">
               <div className="flex-1 h-px" style={{ background: '#D1D5DB' }} />
               <span className="text-sm font-medium" style={{ color: '#6B7280' }}>{t('or')}</span>
               <div className="flex-1 h-px" style={{ background: '#D1D5DB' }} />
             </div>
 
-            {/* Path 2: Template */}
             <div
               className="rounded-2xl p-8 text-center"
               style={{ background: '#F0FDFD', border: '1px solid #D1FAE5' }}
@@ -219,6 +283,7 @@ export default function UploadPage() {
           </div>
         )}
 
+        {/* Uploading */}
         {status === 'uploading' && (
           <div className="rounded-2xl bg-white p-16 text-center" style={{ border: '1px solid #E5E7EB' }}>
             <div className="text-4xl mb-4 animate-pulse">📊</div>
@@ -226,8 +291,10 @@ export default function UploadPage() {
           </div>
         )}
 
-        {status === 'analyzing' && <AnalyzingLoader />}
+        {/* Analyzing */}
+        {status === 'analyzing' && <AnalyzingLoader t={t} />}
 
+        {/* Error */}
         {status === 'error' && (
           <div className="rounded-2xl p-8 text-center" style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}>
             <p className="text-red-600 mb-6">{error}</p>
@@ -239,22 +306,22 @@ export default function UploadPage() {
               {t('tryAgain')}
             </button>
             <div className="mt-6 pt-6" style={{ borderTop: '1px solid #FECACA' }}>
-            <p className="text-sm mb-2" style={{ color: '#6B7280' }}>{t('templateHint')}</p>
-                <a
-                  href="/phare_template.xlsx"
-                  download
-                  className="inline-block text-sm font-medium underline cursor-pointer"
-                  style={{ color: '#2ABFBF' }}
-                >
-                  {t('template')}
-                </a>
-              </div>
+              <p className="text-sm mb-2" style={{ color: '#6B7280' }}>{t('templateHint')}</p>
+              <a
+                href="/phare_template.xlsx"
+                download
+                className="inline-block text-sm font-medium underline cursor-pointer"
+                style={{ color: '#2ABFBF' }}
+              >
+                {t('template')}
+              </a>
             </div>
+          </div>
         )}
-        {/* Results */}
+
+        {/* Analysis Results */}
         {status === 'done' && analysis && (
           <div className="space-y-8">
-            {/* Summary */}
             <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
               <h2 className="text-2xl font-bold mb-6" style={{ color: '#0F2044' }}>
                 {t('confirm.title')}
@@ -289,7 +356,6 @@ export default function UploadPage() {
               </div>
             </div>
 
-            {/* Categories */}
             <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
               <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
                 {t('confirm.categories')}
@@ -312,7 +378,6 @@ export default function UploadPage() {
               </div>
             </div>
 
-            {/* Insights */}
             {analysis.insights.length > 0 && (
               <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
                 <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
@@ -338,7 +403,6 @@ export default function UploadPage() {
               </div>
             )}
 
-            {/* Sinking Funds */}
             {analysis.suggestedSinkingFunds.length > 0 && (
               <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
                 <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
@@ -365,37 +429,216 @@ export default function UploadPage() {
               </div>
             )}
 
-            {/* Questions */}
             {analysis.questions.length > 0 && (
               <div className="rounded-2xl bg-white p-8" style={{ border: '2px solid #F5A623' }}>
                 <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
                   {t('confirm.questions')}
                 </h3>
-                <div className="space-y-4">
+                <div className="space-y-6">
                   {analysis.questions.map((q, i) => (
-                    <div key={i} className="py-3" style={{ borderBottom: '1px solid #F3F4F6' }}>
+                    <div key={i}>
                       <p className="font-medium mb-1" style={{ color: '#0F2044' }}>{q.question}</p>
-                      <p className="text-sm" style={{ color: '#6B7280' }}>{q.reason}</p>
+                      <p className="text-sm mb-2" style={{ color: '#6B7280' }}>{q.reason}</p>
+                      <input
+                        type="text"
+                        value={answers[i] || ''}
+                        onChange={(e) => setAnswers(prev => ({ ...prev, [i]: e.target.value }))}
+                        placeholder={t('confirm.answerPlaceholder')}
+                        className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
+                        style={{
+                          border: '1.5px solid #D1D5DB',
+                          color: '#0F2044',
+                        }}
+                        onFocus={(e) => e.target.style.borderColor = '#2ABFBF'}
+                        onBlur={(e) => e.target.style.borderColor = '#D1D5DB'}
+                      />
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Action buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
               <button
-                className="px-8 py-3 rounded-full text-white font-semibold text-lg cursor-pointer hover:opacity-90 transition-all"
+                onClick={handleBuildPlan}
+                disabled={generating}
+                className="px-8 py-3 rounded-full text-white font-semibold text-lg cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
                 style={{ background: '#0F2044' }}
               >
-                {t('confirm.confirmBtn')}
+                {generating ? t('confirm.generating') : t('confirm.confirmBtn')}
               </button>
               <button
                 className="px-8 py-3 rounded-full font-semibold text-lg cursor-pointer hover:opacity-90 transition-all"
                 style={{ border: '2px solid #0F2044', color: '#0F2044' }}
-                onClick={() => { setStatus('idle'); setAnalysis(null); }}
+                onClick={() => { setStatus('idle'); setAnalysis(null); setAnswers({}); }}
               >
                 {t('confirm.editBtn')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Plan Display */}
+        {status === 'plan' && plan && (
+          <div className="space-y-8">
+            {/* Top Recommendation */}
+            <div className="rounded-2xl p-8 text-center" style={{ background: '#0F2044' }}>
+              <p className="text-sm font-medium mb-2" style={{ color: '#2ABFBF' }}>
+                {t('plan.topRec')}
+              </p>
+              <p className="text-xl font-semibold text-white">
+                {plan.topRecommendation}
+              </p>
+            </div>
+
+            {/* Monthly Budget */}
+            <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
+              <h3 className="text-xl font-bold mb-6" style={{ color: '#0F2044' }}>
+                {t('plan.budget')}
+              </h3>
+
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="rounded-xl p-4" style={{ background: '#F0FDFD' }}>
+                  <p className="text-sm" style={{ color: '#6B7280' }}>{t('plan.income')}</p>
+                  <p className="text-xl font-bold" style={{ color: '#16A34A' }}>
+                    {formatCurrency(plan.monthlyBudget.totalIncome)}
+                  </p>
+                </div>
+                <div className="rounded-xl p-4" style={{ background: '#FEF2F2' }}>
+                  <p className="text-sm" style={{ color: '#6B7280' }}>{t('plan.expenses')}</p>
+                  <p className="text-xl font-bold" style={{ color: '#DC2626' }}>
+                    {formatCurrency(plan.monthlyBudget.totalExpenses)}
+                  </p>
+                </div>
+                <div className="rounded-xl p-4" style={{ background: '#F0FDF4' }}>
+                  <p className="text-sm" style={{ color: '#6B7280' }}>{t('plan.savings')}</p>
+                  <p className="text-xl font-bold" style={{ color: '#0F2044' }}>
+                    {formatCurrency(plan.monthlyBudget.totalSavings)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {plan.monthlyBudget.categories.map((cat, i) => (
+                  <div key={i} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid #F3F4F6' }}>
+                    <span style={{ color: '#0F2044' }}>{cat.name}</span>
+                    <span className="font-medium" style={{ color: cat.type === 'income' ? '#16A34A' : '#6B7280' }}>
+                      {formatCurrency(cat.budgeted)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Sinking Funds */}
+            {plan.sinkingFunds.length > 0 && (
+              <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
+                <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
+                  {t('plan.sinkingFunds')}
+                </h3>
+                <div className="space-y-4">
+                  {plan.sinkingFunds.map((fund, i) => (
+                    <div key={i} className="flex items-center justify-between py-3" style={{ borderBottom: '1px solid #F3F4F6' }}>
+                      <div>
+                        <p className="font-medium" style={{ color: '#0F2044' }}>{fund.name}</p>
+                        <p className="text-sm" style={{ color: '#6B7280' }}>
+                          {t('plan.dueIn')} {fund.dueMonth} · {formatCurrency(fund.annualAmount)}{t('plan.perYear')}
+                        </p>
+                      </div>
+                      <p className="font-bold" style={{ color: '#2ABFBF' }}>
+                        {formatCurrency(fund.monthlyProvision)}{t('plan.perMonth')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Debt Payoff */}
+            {plan.debtPayoff && (
+              <div className="rounded-2xl bg-white p-8" style={{ border: '2px solid #F5A623' }}>
+                <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
+                  {t('plan.debtPayoff')}
+                </h3>
+                <p className="mb-4" style={{ color: '#6B7280' }}>{plan.debtPayoff.description}</p>
+                <div className="flex gap-6">
+                  <div>
+                    <p className="text-sm" style={{ color: '#6B7280' }}>{t('plan.targetDate')}</p>
+                    <p className="font-bold" style={{ color: '#0F2044' }}>{plan.debtPayoff.targetDate}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm" style={{ color: '#6B7280' }}>{t('plan.monthlyPayment')}</p>
+                    <p className="font-bold" style={{ color: '#F5A623' }}>
+                      {formatCurrency(plan.debtPayoff.monthlyPayment)}{t('plan.perMonth')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Goals */}
+            {plan.goals.length > 0 && (
+              <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
+                <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
+                  {t('plan.goals')}
+                </h3>
+                <div className="space-y-4">
+                  {plan.goals.map((goal, i) => (
+                    <div key={i} className="rounded-xl p-4" style={{ background: '#F0FDFD', border: '1px solid #D1FAE5' }}>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="font-semibold" style={{ color: '#0F2044' }}>{goal.name}</p>
+                        <span
+                          className="px-3 py-1 rounded-full text-xs font-medium"
+                          style={{
+                            background: goal.onTrack ? '#DCFCE7' : '#FEF2F2',
+                            color: goal.onTrack ? '#16A34A' : '#DC2626',
+                          }}
+                        >
+                          {goal.onTrack ? t('plan.onTrack') : t('plan.behind')}
+                        </span>
+                      </div>
+                      <div className="flex gap-6 text-sm">
+                        <span style={{ color: '#6B7280' }}>
+                          {formatCurrency(goal.targetAmount)}
+                        </span>
+                        <span style={{ color: '#2ABFBF' }}>
+                          {formatCurrency(goal.monthlyContribution)}{t('plan.perMonth')}
+                        </span>
+                        <span style={{ color: '#6B7280' }}>
+                          {t('plan.estimatedDate')} {goal.estimatedDate}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Monthly Review */}
+            <div className="rounded-2xl bg-white p-8" style={{ border: '2px solid #2ABFBF' }}>
+              <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
+                {t('plan.monthlyReview')}
+              </h3>
+              <div className="prose" style={{ color: '#374151' }}>
+                {plan.monthlyReview.split('\n').map((paragraph, i) => (
+                  <p key={i} className="mb-4">{paragraph}</p>
+                ))}
+              </div>
+            </div>
+
+            {/* Start over */}
+            <div className="text-center pt-4">
+              <button
+                onClick={() => {
+                  setStatus('idle');
+                  setAnalysis(null);
+                  setAnswers({});
+                  setPlan(null);
+                }}
+                className="text-sm font-medium underline cursor-pointer"
+                style={{ color: '#6B7280' }}
+              >
+                {t('plan.startOver')}
               </button>
             </div>
           </div>
