@@ -5,72 +5,23 @@ export async function POST(request: NextRequest) {
   try {
     const { sheets, fileName } = await request.json();
 
-    const prompt = `You are Phare, an AI financial coach for Canadian families. A family just uploaded their financial file "${fileName}".
-
-Here is the data extracted from their file:
-
-${JSON.stringify(sheets.map((s: { sheet: string; rowCount: number; columns: string[]; sampleRows: Record<string, unknown>[] }) => ({
+    // Keep only essential data — 5 sample rows, column names, row count
+    const slim = sheets.map((s: { sheet: string; rowCount: number; columns: string[]; sampleRows: Record<string, unknown>[] }) => ({
       sheet: s.sheet,
-      rowCount: s.rowCount,
-      columns: s.columns,
-      sampleRows: s.sampleRows.slice(0, 3),
-    })), null, 2)}
+      rows: s.rowCount,
+      columns: s.columns?.slice(0, 10) || [],
+      sample: (s.sampleRows || []).slice(0, 5),
+    }));
 
-Your job is to analyze this data and return a JSON response with the following structure. Return ONLY valid JSON, no markdown, no backticks, no explanation:
+    const prompt = `You are Phare, an AI financial coach for Canadian families. Analyze this uploaded file "${fileName}".
 
-{
-  "summary": {
-    "monthsDetected": number,
-    "totalIncome": number,
-    "totalExpenses": number,
-    "netCashFlow": number,
-    "currency": "CAD"
-  },
-  "categories": [
-    {
-      "name": "Category name",
-      "name_fr": "French name",
-      "type": "expense" or "income",
-      "monthlyAverage": number,
-      "confidence": "high" or "medium" or "low"
-    }
-  ],
-  "insights": [
-    {
-      "type": "warning" or "opportunity" or "positive",
-      "title": "Short title",
-      "title_fr": "French title",
-      "description": "One sentence explanation with specific numbers",
-      "description_fr": "French translation"
-    }
-  ],
-  "suggestedSinkingFunds": [
-    {
-      "name": "Fund name",
-      "name_fr": "French name",
-      "annualAmount": number,
-      "monthlyProvision": number,
-      "reason": "Why this fund is needed",
-      "reason_fr": "French translation"
-    }
-  ],
-  "questions": [
-    {
-      "question": "Question to ask the family to fill gaps",
-      "question_fr": "French translation",
-      "reason": "Why you need this information"
-    }
-  ]
-}
+Data:
+${JSON.stringify(slim)}
 
-Rules:
-- Use Canadian financial context: RRSP, RESP, TFSA, CESG
-- If you see Quebec-specific patterns (provincial tax, municipal taxes in March/June), flag them
-- Detect if the family might be missing RESP contributions (leaving $500/year CESG unclaimed per child)
-- Identify expenses that look like annual irregular costs and suggest sinking funds
-- Be specific with numbers, never vague
-- If data is ambiguous, add a question instead of guessing
-- Categories with "low" confidence should have a corresponding question`;
+Return ONLY valid JSON:
+{"summary":{"monthsDetected":0,"totalIncome":0,"totalExpenses":0,"netCashFlow":0,"currency":"CAD"},"categories":[{"name":"","name_fr":"","type":"expense","monthlyAverage":0,"confidence":"high"}],"insights":[{"type":"warning","title":"","title_fr":"","description":"","description_fr":""}],"suggestedSinkingFunds":[{"name":"","name_fr":"","annualAmount":0,"monthlyProvision":0,"reason":"","reason_fr":""}],"questions":[{"question":"","question_fr":"","reason":""}]}
+
+Rules: Use Canadian context (RRSP, RESP, TFSA, CESG). Flag Quebec patterns. Suggest sinking funds for annual expenses. Be specific with numbers. If data is ambiguous, ask a question. Max 3 insights, 3 sinking funds, 5 questions.`;
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
