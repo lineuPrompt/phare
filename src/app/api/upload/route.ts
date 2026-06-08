@@ -42,16 +42,21 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // MODE: Own file — try the calculator across all sheets
+// MODE: Own file — try the calculator across all sheets
     let bestResult = null;
+    let usedSheet: string | null = null;
+    const skippedSheets: string[] = [];
+
     for (const name of sheetNames) {
       const sheet = workbook.Sheets[name];
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null }) as unknown[][];
       const pairs = extractLabelAmountPairs(rows);
       const result = calculateFinancials(pairs);
-      if (result.confidence === 'high') {
+      if (result.confidence === 'high' && !bestResult) {
         bestResult = result;
-        break;
+        usedSheet = name;
+      } else {
+        skippedSheets.push(name);
       }
     }
 
@@ -60,6 +65,8 @@ export async function POST(request: NextRequest) {
         fileName: file.name,
         source: 'calculated',
         calculated: bestResult,
+        usedSheet,
+        skippedSheets,
       });
     }
 
