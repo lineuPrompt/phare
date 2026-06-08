@@ -167,6 +167,22 @@
       "monthlyReview": "Votre première revue mensuelle",
       "startOver": "Téléverser un autre fichier",
       "estimatedDate": "Est."
+    },
+    "mode": {
+      "own": "Mon propre fichier",
+      "ownDesc": "Téléversez votre tableur budgétaire existant",
+      "template": "Modèle Phare",
+      "templateDesc": "J'ai rempli le modèle Phare"
+    },
+    "form": {
+      "title": "Nous n'avons pas pu lire ce fichier automatiquement",
+      "subtitle": "Pas de souci — entrez vos chiffres ci-dessous et nous construirons votre plan.",
+      "income": "Revenu mensuel",
+      "expenses": "Dépenses mensuelles",
+      "sourcePlaceholder": "ex. Salaire",
+      "expensePlaceholder": "ex. Hypothèque",
+      "addLine": "+ Ajouter une ligne",
+      "submit": "Construire mon plan"
     }
   }
 }

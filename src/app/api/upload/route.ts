@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
+import { parseTemplate, isPhareTemplate } from '@/lib/templateParser';
+import { calculateFinancials, extractLabelAmountPairs } from '@/lib/calculator';
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
+    const mode = (formData.get('mode') as string) || 'own'; // 'template' or 'own'
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -13,40 +16,57 @@ export async function POST(request: NextRequest) {
     const fileName = file.name.toLowerCase();
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    let data: Record<string, unknown>[][] = [];
-    let sheetNames: string[] = [];
-
-    if (fileName.endsWith('.csv')) {
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      sheetNames = workbook.SheetNames;
-      data = sheetNames.map((name) =>
-        XLSX.utils.sheet_to_json(workbook.Sheets[name])
-      );
-    } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      sheetNames = workbook.SheetNames;
-      data = sheetNames.map((name) =>
-        XLSX.utils.sheet_to_json(workbook.Sheets[name])
-      );
-    } else {
+    if (!fileName.endsWith('.csv') && !fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
       return NextResponse.json(
         { error: 'Unsupported file type. Please upload CSV or Excel.' },
         { status: 400 }
       );
     }
 
-    // Build a summary for the AI
-    const summary = sheetNames.map((name, i) => ({
-      sheet: name,
-      rowCount: data[i].length,
-      columns: data[i].length > 0 ? Object.keys(data[i][0]) : [],
-      sampleRows: data[i].slice(0, 5),
-    }));
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheetNames = workbook.SheetNames;
 
+    // MODE: Phare template
+    if (mode === 'template') {
+      if (!isPhareTemplate(sheetNames)) {
+        return NextResponse.json({
+          source: 'template_mismatch',
+          message: 'This does not look like the Phare template.',
+        });
+      }
+      const parsed = parseTemplate(buffer);
+      return NextResponse.json({
+        fileName: file.name,
+        source: 'template',
+        parsed,
+      });
+    }
+
+    // MODE: Own file — try the calculator across all sheets
+    let bestResult = null;
+    for (const name of sheetNames) {
+      const sheet = workbook.Sheets[name];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null }) as unknown[][];
+      const pairs = extractLabelAmountPairs(rows);
+      const result = calculateFinancials(pairs);
+      if (result.confidence === 'high') {
+        bestResult = result;
+        break;
+      }
+    }
+
+    if (bestResult) {
+      return NextResponse.json({
+        fileName: file.name,
+        source: 'calculated',
+        calculated: bestResult,
+      });
+    }
+
+    // Calculator could not parse confidently → tell frontend to show the form
     return NextResponse.json({
       fileName: file.name,
-      sheets: summary,
-      rawData: data,
+      source: 'needs_form',
     });
   } catch (error) {
     console.error('File upload error:', error);

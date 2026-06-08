@@ -4,43 +4,6 @@ import { useState, useCallback, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import Navbar from '@/components/brand/Navbar';
 
-type Analysis = {
-  summary: {
-    monthsDetected: number;
-    totalIncome: number;
-    totalExpenses: number;
-    netCashFlow: number;
-    currency: string;
-  };
-  categories: {
-    name: string;
-    name_fr: string;
-    type: string;
-    monthlyAverage: number;
-    confidence: string;
-  }[];
-  insights: {
-    type: string;
-    title: string;
-    title_fr: string;
-    description: string;
-    description_fr: string;
-  }[];
-  suggestedSinkingFunds: {
-    name: string;
-    name_fr: string;
-    annualAmount: number;
-    monthlyProvision: number;
-    reason: string;
-    reason_fr: string;
-  }[];
-  questions: {
-    question: string;
-    question_fr: string;
-    reason: string;
-  }[];
-};
-
 type Plan = {
   monthlyBudget: {
     totalIncome: number;
@@ -104,15 +67,36 @@ function AnalyzingLoader({ t }: { t: (key: string) => string }) {
   );
 }
 
+type FormLine = { label: string; amount: string };
+
 export default function UploadPage() {
   const t = useTranslations('upload');
-  const [status, setStatus] = useState<'idle' | 'uploading' | 'analyzing' | 'done' | 'error' | 'plan'>('idle');
-  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form'>('idle');
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
-  const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [generating, setGenerating] = useState(false);
+  const [mode, setMode] = useState<'template' | 'own'>('own');
   const [plan, setPlan] = useState<Plan | null>(null);
+
+  // Manual form state (fallback when calculator can't parse)
+  const [formIncome, setFormIncome] = useState<FormLine[]>([{ label: '', amount: '' }]);
+  const [formExpenses, setFormExpenses] = useState<FormLine[]>([{ label: '', amount: '' }]);
+  const [formSubmitting, setFormSubmitting] = useState(false);
+
+  const buildPlan = useCallback(async (planBody: Record<string, unknown>) => {
+    setStatus('analyzing');
+    const planRes = await fetch('/api/plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(planBody),
+    });
+    if (!planRes.ok) {
+      const err = await planRes.json();
+      throw new Error(err.error || 'Plan generation failed');
+    }
+    const planData = await planRes.json();
+    setPlan(planData.plan);
+    setStatus('plan');
+  }, []);
 
   const handleFile = useCallback(async (file: File) => {
     setStatus('uploading');
@@ -121,6 +105,7 @@ export default function UploadPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('mode', mode);
 
       const uploadRes = await fetch('/api/upload', {
         method: 'POST',
@@ -134,30 +119,28 @@ export default function UploadPage() {
 
       const uploadData = await uploadRes.json();
 
-      setStatus('analyzing');
-
-      const analyzeRes = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sheets: uploadData.sheets,
-          fileName: uploadData.fileName,
-        }),
-      });
-
-      if (!analyzeRes.ok) {
-        const err = await analyzeRes.json();
-        throw new Error(err.error || 'Analysis failed');
+      if (uploadData.source === 'template_mismatch') {
+        setError(uploadData.message || 'This does not look like the Phare template.');
+        setStatus('error');
+        return;
       }
 
-      const analyzeData = await analyzeRes.json();
-      setAnalysis(analyzeData.analysis);
-      setStatus('done');
+      if (uploadData.source === 'needs_form') {
+        setStatus('form');
+        return;
+      }
+
+      const planBody =
+        uploadData.source === 'template'
+          ? { source: 'template', parsed: uploadData.parsed }
+          : { source: 'calculated', calculated: uploadData.calculated };
+
+      await buildPlan(planBody);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
       setStatus('error');
     }
-  }, []);
+  }, [mode, buildPlan]);
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
@@ -180,37 +163,36 @@ export default function UploadPage() {
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(amount);
 
-  const handleBuildPlan = useCallback(async () => {
-    if (!analysis) return;
-    setGenerating(true);
-
+  const submitForm = useCallback(async () => {
+    setFormSubmitting(true);
+    setError('');
     try {
-      const questionsWithAnswers = analysis.questions.map((q, i) => ({
-        question: q.question,
-        answer: answers[i] || 'Not answered',
-      }));
+      const income = formIncome
+        .filter((l) => l.label.trim() && l.amount)
+        .map((l) => ({ label: l.label.trim(), amount: parseFloat(l.amount) }));
+      const expenses = formExpenses
+        .filter((l) => l.label.trim() && l.amount)
+        .map((l) => ({ label: l.label.trim(), amount: parseFloat(l.amount) }));
 
-      const res = await fetch('/api/plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          analysis,
-          answers: questionsWithAnswers,
-        }),
-      });
+      const incomeTotal = income.reduce((s, l) => s + l.amount, 0);
+      const expenseTotal = expenses.reduce((s, l) => s + l.amount, 0);
 
-      if (!res.ok) throw new Error('Plan generation failed');
+      const calculated = {
+        income: { detected: income.length > 0, lines: income, total: incomeTotal },
+        expenses: { detected: expenses.length > 0, lines: expenses, total: expenseTotal },
+        netCashFlow: incomeTotal - expenseTotal,
+        excludedLines: [],
+        confidence: 'high',
+      };
 
-      const data = await res.json();
-      setPlan(data.plan);
-      setStatus('plan');
+      await buildPlan({ source: 'calculated', calculated });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
       setStatus('error');
     } finally {
-      setGenerating(false);
+      setFormSubmitting(false);
     }
-  }, [analysis, answers]);
+  }, [formIncome, formExpenses, buildPlan]);
 
   return (
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
@@ -227,6 +209,50 @@ export default function UploadPage() {
         {/* Idle */}
         {status === 'idle' && (
           <div className="space-y-6">
+            {/* Mode selector */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => setMode('own')}
+                className="flex-1 rounded-xl p-4 text-left transition-all cursor-pointer"
+                style={{
+                  border: mode === 'own' ? '2px solid #2ABFBF' : '1.5px solid #D1D5DB',
+                  background: mode === 'own' ? '#F0FDFD' : 'white',
+                }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span
+                    className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
+                    style={{ border: `2px solid ${mode === 'own' ? '#2ABFBF' : '#D1D5DB'}` }}
+                  >
+                    {mode === 'own' && <span className="w-2 h-2 rounded-full" style={{ background: '#2ABFBF' }} />}
+                  </span>
+                  <span className="font-semibold" style={{ color: '#0F2044' }}>{t('mode.own')}</span>
+                </div>
+                <p className="text-sm ml-6" style={{ color: '#6B7280' }}>{t('mode.ownDesc')}</p>
+              </button>
+
+              <button
+                onClick={() => setMode('template')}
+                className="flex-1 rounded-xl p-4 text-left transition-all cursor-pointer"
+                style={{
+                  border: mode === 'template' ? '2px solid #2ABFBF' : '1.5px solid #D1D5DB',
+                  background: mode === 'template' ? '#F0FDFD' : 'white',
+                }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span
+                    className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
+                    style={{ border: `2px solid ${mode === 'template' ? '#2ABFBF' : '#D1D5DB'}` }}
+                  >
+                    {mode === 'template' && <span className="w-2 h-2 rounded-full" style={{ background: '#2ABFBF' }} />}
+                  </span>
+                  <span className="font-semibold" style={{ color: '#0F2044' }}>{t('mode.template')}</span>
+                </div>
+                <p className="text-sm ml-6" style={{ color: '#6B7280' }}>{t('mode.templateDesc')}</p>
+              </button>
+            </div>
+
+            {/* Upload zone */}
             <div
               onDrop={onDrop}
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -254,32 +280,29 @@ export default function UploadPage() {
               />
             </div>
 
-            <div className="flex items-center gap-4">
-              <div className="flex-1 h-px" style={{ background: '#D1D5DB' }} />
-              <span className="text-sm font-medium" style={{ color: '#6B7280' }}>{t('or')}</span>
-              <div className="flex-1 h-px" style={{ background: '#D1D5DB' }} />
-            </div>
-
-            <div
-              className="rounded-2xl p-8 text-center"
-              style={{ background: '#F0FDFD', border: '1px solid #D1FAE5' }}
-            >
-              <div className="text-4xl mb-4">📝</div>
-              <p className="text-lg font-medium mb-2" style={{ color: '#0F2044' }}>
-                {t('noFile.title')}
-              </p>
-              <p className="text-sm mb-4" style={{ color: '#6B7280' }}>
-                {t('noFile.description')}
-              </p>
-              <a
-                href="/phare_template.xlsx"
-                download
-                className="inline-block px-6 py-2.5 rounded-full font-medium cursor-pointer transition-all hover:opacity-90"
-                style={{ background: '#2ABFBF', color: '#0F2044' }}
+            {/* Template download — only relevant in template mode */}
+            {mode === 'template' && (
+              <div
+                className="rounded-2xl p-8 text-center"
+                style={{ background: '#F0FDFD', border: '1px solid #D1FAE5' }}
               >
-                {t('noFile.cta')}
-              </a>
-            </div>
+                <div className="text-4xl mb-4">📝</div>
+                <p className="text-lg font-medium mb-2" style={{ color: '#0F2044' }}>
+                  {t('noFile.title')}
+                </p>
+                <p className="text-sm mb-4" style={{ color: '#6B7280' }}>
+                  {t('noFile.description')}
+                </p>
+                <a
+                  href="/phare_template.xlsx"
+                  download
+                  className="inline-block px-6 py-2.5 rounded-full font-medium cursor-pointer transition-all hover:opacity-90"
+                  style={{ background: '#2ABFBF', color: '#0F2044' }}
+                >
+                  {t('noFile.cta')}
+                </a>
+              </div>
+            )}
           </div>
         )}
 
@@ -294,6 +317,102 @@ export default function UploadPage() {
         {/* Analyzing */}
         {status === 'analyzing' && <AnalyzingLoader t={t} />}
 
+        {/* Manual form fallback */}
+        {status === 'form' && (
+          <div className="space-y-8">
+            <div className="rounded-2xl p-6" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+              <p className="font-medium mb-1" style={{ color: '#0F2044' }}>{t('form.title')}</p>
+              <p className="text-sm" style={{ color: '#6B7280' }}>{t('form.subtitle')}</p>
+            </div>
+
+            {/* Income */}
+            <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
+              <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>{t('form.income')}</h3>
+              <div className="space-y-3">
+                {formIncome.map((line, i) => (
+                  <div key={i} className="flex gap-3">
+                    <input
+                      type="text"
+                      value={line.label}
+                      onChange={(e) => setFormIncome((prev) => prev.map((l, j) => j === i ? { ...l, label: e.target.value } : l))}
+                      placeholder={t('form.sourcePlaceholder')}
+                      className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none"
+                      style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
+                    />
+                    <input
+                      type="number"
+                      value={line.amount}
+                      onChange={(e) => setFormIncome((prev) => prev.map((l, j) => j === i ? { ...l, amount: e.target.value } : l))}
+                      placeholder="0.00"
+                      className="w-32 px-4 py-2.5 rounded-lg text-sm outline-none"
+                      style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => setFormIncome((prev) => [...prev, { label: '', amount: '' }])}
+                className="mt-3 text-sm font-medium cursor-pointer"
+                style={{ color: '#2ABFBF' }}
+              >
+                {t('form.addLine')}
+              </button>
+            </div>
+
+            {/* Expenses */}
+            <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
+              <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>{t('form.expenses')}</h3>
+              <div className="space-y-3">
+                {formExpenses.map((line, i) => (
+                  <div key={i} className="flex gap-3">
+                    <input
+                      type="text"
+                      value={line.label}
+                      onChange={(e) => setFormExpenses((prev) => prev.map((l, j) => j === i ? { ...l, label: e.target.value } : l))}
+                      placeholder={t('form.expensePlaceholder')}
+                      className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none"
+                      style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
+                    />
+                    <input
+                      type="number"
+                      value={line.amount}
+                      onChange={(e) => setFormExpenses((prev) => prev.map((l, j) => j === i ? { ...l, amount: e.target.value } : l))}
+                      placeholder="0.00"
+                      className="w-32 px-4 py-2.5 rounded-lg text-sm outline-none"
+                      style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => setFormExpenses((prev) => [...prev, { label: '', amount: '' }])}
+                className="mt-3 text-sm font-medium cursor-pointer"
+                style={{ color: '#2ABFBF' }}
+              >
+                {t('form.addLine')}
+              </button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <button
+                onClick={submitForm}
+                disabled={formSubmitting}
+                className="px-8 py-3 rounded-full text-white font-semibold text-lg cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
+                style={{ background: '#0F2044' }}
+              >
+                {formSubmitting ? t('confirm.generating') : t('form.submit')}
+              </button>
+              <button
+                onClick={() => setStatus('idle')}
+                className="px-8 py-3 rounded-full font-semibold text-lg cursor-pointer hover:opacity-90 transition-all"
+                style={{ border: '2px solid #0F2044', color: '#0F2044' }}
+              >
+                {t('confirm.editBtn')}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Error */}
         {status === 'error' && (
           <div className="rounded-2xl p-8 text-center" style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}>
@@ -305,176 +424,6 @@ export default function UploadPage() {
             >
               {t('tryAgain')}
             </button>
-            <div className="mt-6 pt-6" style={{ borderTop: '1px solid #FECACA' }}>
-              <p className="text-sm mb-2" style={{ color: '#6B7280' }}>{t('templateHint')}</p>
-              <a
-                href="/phare_template.xlsx"
-                download
-                className="inline-block text-sm font-medium underline cursor-pointer"
-                style={{ color: '#2ABFBF' }}
-              >
-                {t('template')}
-              </a>
-            </div>
-          </div>
-        )}
-
-        {/* Analysis Results */}
-        {status === 'done' && analysis && (
-          <div className="space-y-8">
-            <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
-              <h2 className="text-2xl font-bold mb-6" style={{ color: '#0F2044' }}>
-                {t('confirm.title')}
-              </h2>
-              <p className="mb-6" style={{ color: '#6B7280' }}>{t('confirm.subtitle')}</p>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div className="rounded-xl p-4" style={{ background: '#F0FDFD' }}>
-                  <p className="text-sm" style={{ color: '#6B7280' }}>{t('confirm.income')}</p>
-                  <p className="text-xl font-bold" style={{ color: '#0F2044' }}>
-                    {formatCurrency(analysis.summary.totalIncome)}
-                  </p>
-                </div>
-                <div className="rounded-xl p-4" style={{ background: '#FEF2F2' }}>
-                  <p className="text-sm" style={{ color: '#6B7280' }}>{t('confirm.expenses')}</p>
-                  <p className="text-xl font-bold" style={{ color: '#0F2044' }}>
-                    {formatCurrency(analysis.summary.totalExpenses)}
-                  </p>
-                </div>
-                <div className="rounded-xl p-4" style={{ background: analysis.summary.netCashFlow >= 0 ? '#F0FDF4' : '#FEF2F2' }}>
-                  <p className="text-sm" style={{ color: '#6B7280' }}>{t('confirm.cashFlow')}</p>
-                  <p className="text-xl font-bold" style={{ color: analysis.summary.netCashFlow >= 0 ? '#16A34A' : '#DC2626' }}>
-                    {formatCurrency(analysis.summary.netCashFlow)}
-                  </p>
-                </div>
-                <div className="rounded-xl p-4" style={{ background: '#F5F3FF' }}>
-                  <p className="text-sm" style={{ color: '#6B7280' }}>{t('confirm.months')}</p>
-                  <p className="text-xl font-bold" style={{ color: '#0F2044' }}>
-                    {analysis.summary.monthsDetected}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
-              <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
-                {t('confirm.categories')}
-              </h3>
-              <div className="space-y-3">
-                {analysis.categories.map((cat, i) => (
-                  <div key={i} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid #F3F4F6' }}>
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="w-2 h-2 rounded-full"
-                        style={{ background: cat.confidence === 'high' ? '#16A34A' : cat.confidence === 'medium' ? '#F5A623' : '#DC2626' }}
-                      />
-                      <span style={{ color: '#0F2044' }}>{cat.name}</span>
-                    </div>
-                    <span className="font-medium" style={{ color: '#6B7280' }}>
-                      {formatCurrency(cat.monthlyAverage)}{t('confirm.perMonth')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {analysis.insights.length > 0 && (
-              <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
-                <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
-                  {t('confirm.insights')}
-                </h3>
-                <div className="space-y-4">
-                  {analysis.insights.map((insight, i) => (
-                    <div
-                      key={i}
-                      className="rounded-xl p-4"
-                      style={{
-                        background: insight.type === 'warning' ? '#FEF2F2' : insight.type === 'opportunity' ? '#F0FDFD' : '#F0FDF4',
-                        border: `1px solid ${insight.type === 'warning' ? '#FECACA' : insight.type === 'opportunity' ? '#A7F3D0' : '#BBF7D0'}`,
-                      }}
-                    >
-                      <p className="font-semibold mb-1" style={{ color: '#0F2044' }}>
-                        {insight.type === 'warning' ? '⚠️' : insight.type === 'opportunity' ? '💡' : '✅'} {insight.title}
-                      </p>
-                      <p style={{ color: '#6B7280' }}>{insight.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {analysis.suggestedSinkingFunds.length > 0 && (
-              <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
-                <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
-                  {t('confirm.sinkingFunds')}
-                </h3>
-                <div className="space-y-4">
-                  {analysis.suggestedSinkingFunds.map((fund, i) => (
-                    <div key={i} className="rounded-xl p-4" style={{ background: '#F0FDFD', border: '1px solid #D1FAE5' }}>
-                      <div className="flex justify-between items-start mb-2">
-                        <p className="font-semibold" style={{ color: '#0F2044' }}>{fund.name}</p>
-                        <div className="text-right">
-                          <p className="font-bold" style={{ color: '#2ABFBF' }}>
-                            {formatCurrency(fund.monthlyProvision)}{t('confirm.perMonth')}
-                          </p>
-                          <p className="text-sm" style={{ color: '#6B7280' }}>
-                            {formatCurrency(fund.annualAmount)}{t('confirm.perYear')}
-                          </p>
-                        </div>
-                      </div>
-                      <p className="text-sm" style={{ color: '#6B7280' }}>{fund.reason}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {analysis.questions.length > 0 && (
-              <div className="rounded-2xl bg-white p-8" style={{ border: '2px solid #F5A623' }}>
-                <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
-                  {t('confirm.questions')}
-                </h3>
-                <div className="space-y-6">
-                  {analysis.questions.map((q, i) => (
-                    <div key={i}>
-                      <p className="font-medium mb-1" style={{ color: '#0F2044' }}>{q.question}</p>
-                      <p className="text-sm mb-2" style={{ color: '#6B7280' }}>{q.reason}</p>
-                      <input
-                        type="text"
-                        value={answers[i] || ''}
-                        onChange={(e) => setAnswers(prev => ({ ...prev, [i]: e.target.value }))}
-                        placeholder={t('confirm.answerPlaceholder')}
-                        className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                        style={{
-                          border: '1.5px solid #D1D5DB',
-                          color: '#0F2044',
-                        }}
-                        onFocus={(e) => e.target.style.borderColor = '#2ABFBF'}
-                        onBlur={(e) => e.target.style.borderColor = '#D1D5DB'}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-              <button
-                onClick={handleBuildPlan}
-                disabled={generating}
-                className="px-8 py-3 rounded-full text-white font-semibold text-lg cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
-                style={{ background: '#0F2044' }}
-              >
-                {generating ? t('confirm.generating') : t('confirm.confirmBtn')}
-              </button>
-              <button
-                className="px-8 py-3 rounded-full font-semibold text-lg cursor-pointer hover:opacity-90 transition-all"
-                style={{ border: '2px solid #0F2044', color: '#0F2044' }}
-                onClick={() => { setStatus('idle'); setAnalysis(null); setAnswers({}); }}
-              >
-                {t('confirm.editBtn')}
-              </button>
-            </div>
           </div>
         )}
 
@@ -631,8 +580,6 @@ export default function UploadPage() {
               <button
                 onClick={() => {
                   setStatus('idle');
-                  setAnalysis(null);
-                  setAnswers({});
                   setPlan(null);
                 }}
                 className="text-sm font-medium underline cursor-pointer"

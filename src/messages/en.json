@@ -167,6 +167,22 @@
       "monthlyReview": "Your First Monthly Review",
       "startOver": "Upload a different file",
       "estimatedDate": "Est."
+    },
+    "mode": {
+      "own": "My own file",
+      "ownDesc": "Upload your existing budget spreadsheet",
+      "template": "Phare template",
+      "templateDesc": "I filled out the Phare template"
+    },
+    "form": {
+      "title": "We couldn't read that file automatically",
+      "subtitle": "No problem — enter your numbers below and we'll build your plan.",
+      "income": "Monthly Income",
+      "expenses": "Monthly Expenses",
+      "sourcePlaceholder": "e.g. Salary",
+      "expensePlaceholder": "e.g. Mortgage",
+      "addLine": "+ Add another line",
+      "submit": "Build my plan"
     }
   }
 }
