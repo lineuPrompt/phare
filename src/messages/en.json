@@ -104,5 +104,38 @@
       "builtFor": "Built for Canadian families",
       "copyright": "© 2026 Phare. All rights reserved."
     }
+  },
+  "upload": {
+    "title": "Upload your financial data",
+    "subtitle": "Drop your Excel, CSV, or bank statement. Phare will read it and build your financial picture.",
+    "dropzone": "Drag and drop your file here, or click to browse",
+    "formats": "Supports .xlsx, .xls, .csv",
+    "uploading": "Reading your file...",
+    "analyzing": "Analyzing your finances...",
+    "confirm": {
+      "title": "Here's what we found",
+      "subtitle": "Review and confirm before we build your plan.",
+      "income": "Monthly Income",
+      "expenses": "Monthly Expenses",
+      "cashFlow": "Net Cash Flow",
+      "months": "months of data",
+      "categories": "Categories Detected",
+      "insights": "Insights",
+      "sinkingFunds": "Suggested Sinking Funds",
+      "questions": "We need a few answers",
+      "perMonth": "/month",
+      "perYear": "/year",
+      "confirmBtn": "This looks right — build my plan",
+      "editBtn": "Let me correct something",
+      "template": "Don't have a spreadsheet? Download our template",
+      "tryAgain": "Try again",
+      "templateHint": "Having trouble with your file? Try our pre-formatted template instead."
+    },
+      "or": "or",
+      "noFile": {
+        "title": "Don't have a spreadsheet yet?",
+        "description": "Download our template, fill in your numbers, and upload it. Takes about 10 minutes.",
+        "cta": "Download template"
+      }
   }
 }

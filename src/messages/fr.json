@@ -104,5 +104,38 @@
       "builtFor": "Conçu pour les familles canadiennes",
       "copyright": "© 2026 Phare. Tous droits réservés."
     }
+  },
+  "upload": {
+    "title": "Téléversez vos données financières",
+    "subtitle": "Déposez votre fichier Excel, CSV ou relevé bancaire. Phare le lira et construira votre portrait financier.",
+    "dropzone": "Glissez-déposez votre fichier ici, ou cliquez pour parcourir",
+    "formats": "Formats acceptés : .xlsx, .xls, .csv",
+    "uploading": "Lecture de votre fichier...",
+    "analyzing": "Analyse de vos finances...",
+    "confirm": {
+      "title": "Voici ce que nous avons trouvé",
+      "subtitle": "Vérifiez et confirmez avant que nous construisions votre plan.",
+      "income": "Revenu mensuel",
+      "expenses": "Dépenses mensuelles",
+      "cashFlow": "Flux net",
+      "months": "mois de données",
+      "categories": "Catégories détectées",
+      "insights": "Observations",
+      "sinkingFunds": "Fonds de prévoyance suggérés",
+      "questions": "Nous avons besoin de quelques réponses",
+      "perMonth": "/mois",
+      "perYear": "/an",
+      "confirmBtn": "C'est correct — construisez mon plan",
+      "editBtn": "Je veux corriger quelque chose",
+      "template": "Pas de tableur? Téléchargez notre modèle",
+      "tryAgain": "Réessayer",
+      "templateHint": "Problème avec votre fichier? Essayez notre modèle pré-formaté."
+    },
+      "or": "ou",
+      "noFile": {
+        "title": "Pas encore de tableur?",
+        "description": "Téléchargez notre modèle, remplissez vos chiffres et téléversez-le. Environ 10 minutes.",
+        "cta": "Télécharger le modèle"
+      }
   }
 }
