@@ -23,7 +23,7 @@ Sinking funds: ${JSON.stringify(p.sinkingFunds.lines)}
 Goals: ${JSON.stringify(p.goals)}
 
 Return ONLY valid JSON:
-{"monthlyBudget":{"totalIncome":${p.summary.monthlyIncome},"totalExpenses":${p.summary.monthlyExpenses},"totalSavings":${p.summary.netCashFlow},"categories":[{"name":"","budgeted":0,"type":"expense"}]},"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"monthlyReview":"","topRecommendation":"","topRecommendation_fr":""}
+{"monthlyBudget":{"totalIncome":${p.summary.monthlyIncome},"totalExpenses":${p.summary.monthlyExpenses},"totalSavings":${p.summary.netCashFlow},"categories":[{"name":"","budgeted":0,"type":"expense"}]},"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"topRecommendation":"","topRecommendation_fr":""}
 
 Rules:
 - Use the VERIFIED numbers exactly. totalIncome MUST equal ${p.summary.monthlyIncome}, totalExpenses MUST equal ${p.summary.monthlyExpenses}, totalSavings MUST equal ${p.summary.netCashFlow}.
@@ -31,9 +31,7 @@ Rules:
 - Populate sinkingFunds from the provided sinking fund lines (keep their exact amounts).
 - Populate goals from the provided goals. Mark onTrack true if savedSoFar > 0 or net cash flow comfortably covers the monthly contribution needed.
 - Household info tells you province, kids, RRSP/RESP/TFSA status, employer province. USE IT: if Quebec resident with Ontario employer, flag the provincial tax gap. If kids and no RESP, recommend $2,500/yr per child for the $500 CESG.
-- monthlyReview: four paragraphs max, specific numbers from the verified data, one clear recommendation, plain language, like a letter from a financial advisor. Good tone: "This month your budget looks solid." NOT corporate jargon.
-- If net cash flow is negative, the top recommendation must address that first.
-- Separate paragraphs in monthlyReview with \\n`;
+- If net cash flow is negative, the top recommendation must address that first.`;
     } else if (body.source === 'calculated') {
       // Own-file or manual form: numbers verified by the calculator. Claude ONLY interprets.
       const c = body.calculated;
@@ -45,18 +43,16 @@ Monthly expenses: $${c.expenses.total} (lines: ${JSON.stringify(c.expenses.lines
 Net cash flow: $${c.netCashFlow}
 
 Return ONLY valid JSON:
-{"monthlyBudget":{"totalIncome":${c.income.total},"totalExpenses":${c.expenses.total},"totalSavings":${c.netCashFlow},"categories":[{"name":"","budgeted":0,"type":"expense"}]},"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"monthlyReview":"","topRecommendation":"","topRecommendation_fr":""}
+{"monthlyBudget":{"totalIncome":${c.income.total},"totalExpenses":${c.expenses.total},"totalSavings":${c.netCashFlow},"categories":[{"name":"","budgeted":0,"type":"expense"}]},"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"topRecommendation":"","topRecommendation_fr":""}
 
 Rules:
 - Use the VERIFIED numbers exactly. totalIncome MUST equal ${c.income.total}, totalExpenses MUST equal ${c.expenses.total}, totalSavings MUST equal ${c.netCashFlow}.
 - Populate categories from the actual income and expense lines provided. Do not add lines that aren't there.
-- Suggest sinkingFunds for likely Canadian annual expenses you can infer from the expense labels (property tax, car registration, back to school, income tax balance). Mark these clearly as suggestions in the monthly review.
+- Suggest sinkingFunds for likely Canadian annual expenses you can infer from the expense labels (property tax, car registration, back to school, income tax balance).
 - Apply Canadian context: RRSP reduces taxable income; RESP gives $500/yr CESG per child; TFSA is ideal for sinking funds. If you see signs of children or a mortgage in the labels, factor that in.
-- monthlyReview: four paragraphs max, specific numbers from the verified data, one clear recommendation, plain language, like a letter from a financial advisor. Good tone: "This month your budget looks solid." NOT corporate jargon.
 - If net cash flow is negative, the top recommendation must address that first.
 - If you cannot determine something (e.g. number of children), do NOT invent it — speak generally instead.
-- If no debt is evident, set debtPayoff to null.
-- Separate paragraphs in monthlyReview with \\n`;
+- If no debt is evident, set debtPayoff to null.`;
     } else {
       return NextResponse.json(
         { error: 'Unknown plan source' },

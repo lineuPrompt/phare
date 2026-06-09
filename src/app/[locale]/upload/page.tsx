@@ -33,7 +33,6 @@ type Plan = {
     onTrack: boolean;
     estimatedDate: string;
   }[];
-  monthlyReview: string;
   topRecommendation: string;
   topRecommendation_fr: string;
 };
@@ -76,11 +75,42 @@ export default function UploadPage() {
   const [dragOver, setDragOver] = useState(false);
   const [mode, setMode] = useState<'template' | 'own'>('own');
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [reviewText, setReviewText] = useState('');
+  const [reviewStreaming, setReviewStreaming] = useState(false);
 
   // Manual form state (fallback when calculator can't parse)
   const [formIncome, setFormIncome] = useState<FormLine[]>([{ label: '', amount: '' }]);
   const [formExpenses, setFormExpenses] = useState<FormLine[]>([{ label: '', amount: '' }]);
   const [formSubmitting, setFormSubmitting] = useState(false);
+
+  const streamReview = useCallback(async (planData: Plan, planBody: Record<string, unknown>) => {
+    setReviewStreaming(true);
+    setReviewText('');
+    try {
+      const locale = window.location.pathname.startsWith('/fr') ? 'fr' : 'en';
+      const res = await fetch('/api/review-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: planData, analysis: planBody, locale }),
+      });
+
+      if (!res.ok || !res.body) throw new Error('Review stream failed');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        setReviewText((prev) => prev + decoder.decode(value, { stream: true }));
+      }
+    } catch (err) {
+      console.error('Review streaming error:', err);
+      setReviewText(t('plan.reviewError'));
+    } finally {
+      setReviewStreaming(false);
+    }
+  }, [t]);
 
   const buildPlan = useCallback(async (planBody: Record<string, unknown>) => {
     setStatus('analyzing');
@@ -96,7 +126,9 @@ export default function UploadPage() {
     const planData = await planRes.json();
     setPlan(planData.plan);
     setStatus('plan');
-  }, []);
+    // Plan numbers are on screen instantly; now stream the review live
+    streamReview(planData.plan, planBody);
+  }, [streamReview]);
 
   const handleFile = useCallback(async (file: File) => {
     setStatus('uploading');
@@ -569,9 +601,14 @@ export default function UploadPage() {
                 {t('plan.monthlyReview')}
               </h3>
               <div className="prose" style={{ color: '#374151' }}>
-                {plan.monthlyReview.split('\n').map((paragraph, i) => (
-                  <p key={i} className="mb-4">{paragraph}</p>
-                ))}
+                {reviewText
+                  ? reviewText.split('\n').filter(Boolean).map((paragraph, i) => (
+                      <p key={i} className="mb-4">{paragraph}</p>
+                    ))
+                  : null}
+                {reviewStreaming && (
+                  <span className="inline-block w-2 h-5 align-middle animate-pulse" style={{ background: '#2ABFBF' }} />
+                )}
               </div>
             </div>
 
@@ -581,6 +618,7 @@ export default function UploadPage() {
                 onClick={() => {
                   setStatus('idle');
                   setPlan(null);
+                  setReviewText('');
                 }}
                 className="text-sm font-medium underline cursor-pointer"
                 style={{ color: '#6B7280' }}

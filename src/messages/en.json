@@ -166,7 +166,8 @@
       "behind": "Behind",
       "monthlyReview": "Your First Monthly Review",
       "startOver": "Upload a different file",
-      "estimatedDate": "Est."
+      "estimatedDate": "Est.",
+      "reviewError": "We couldn't generate your review just now. Please try again."
     },
     "mode": {
       "own": "My own file",

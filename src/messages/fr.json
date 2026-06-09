@@ -166,7 +166,8 @@
       "behind": "En retard",
       "monthlyReview": "Votre première revue mensuelle",
       "startOver": "Téléverser un autre fichier",
-      "estimatedDate": "Est."
+      "estimatedDate": "Est.",
+      "reviewError": "Nous n'avons pas pu générer votre revue pour le moment. Veuillez réessayer."
     },
     "mode": {
       "own": "Mon propre fichier",
