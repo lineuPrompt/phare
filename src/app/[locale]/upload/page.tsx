@@ -468,7 +468,9 @@ export default function UploadPage() {
                 {t('plan.topRec')}
               </p>
               <p className="text-xl font-semibold text-white">
-                {plan.topRecommendation}
+                {(window.location.pathname.startsWith('/fr') && plan.topRecommendation_fr)
+                  ? plan.topRecommendation_fr
+                  : plan.topRecommendation}
               </p>
             </div>
 
