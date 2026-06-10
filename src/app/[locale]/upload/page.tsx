@@ -117,7 +117,7 @@ export default function UploadPage() {
     const planRes = await fetch('/api/plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(planBody),
+      body: JSON.stringify({ ...planBody, locale: window.location.pathname.startsWith('/fr') ? 'fr' : 'en' }),
     });
     if (!planRes.ok) {
       const err = await planRes.json();
@@ -468,9 +468,7 @@ export default function UploadPage() {
                 {t('plan.topRec')}
               </p>
               <p className="text-xl font-semibold text-white">
-                {(window.location.pathname.startsWith('/fr') && plan.topRecommendation_fr)
-                  ? plan.topRecommendation_fr
-                  : plan.topRecommendation}
+                {plan.topRecommendation}
               </p>
             </div>
 

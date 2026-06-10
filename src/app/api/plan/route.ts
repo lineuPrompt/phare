@@ -1,76 +1,126 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { anthropic } from '@/lib/anthropic';
 
+type Category = { name: string; budgeted: number; type: string };
+
+function round(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const locale = body.locale === 'fr' ? 'fr' : 'en';
+    const lang = locale === 'fr' ? 'French (Quebec French, natural and native)' : 'English';
 
-    let prompt: string;
+    let monthlyBudget: {
+      totalIncome: number;
+      totalExpenses: number;
+      totalSavings: number;
+      categories: Category[];
+    };
+    let sinkingFundsFromData: { name: string; annualAmount: number; monthlyProvision: number; dueMonth: string }[] | null = null;
+    let aiContext: string;
 
     if (body.source === 'template') {
-      // Template path: numbers verified by code. Claude ONLY interprets.
       const p = body.parsed;
-      prompt = `You are Phare, an AI financial coach for Canadian families. The family filled out the official Phare template, so all numbers below are VERIFIED and EXACT. Do NOT change, recalculate, or invent any numbers — use these exactly as given.
 
-VERIFIED DATA:
-Household: ${JSON.stringify(p.household)}
-Monthly income: $${p.summary.monthlyIncome} (lines: ${JSON.stringify(p.income.lines)})
-Fixed expenses: $${p.fixedExpenses.total} (lines: ${JSON.stringify(p.fixedExpenses.lines)})
-Variable expenses: $${p.variableExpenses.total} (lines: ${JSON.stringify(p.variableExpenses.lines)})
-Monthly expenses total: $${p.summary.monthlyExpenses}
-Net cash flow: $${p.summary.netCashFlow}
-Sinking funds: ${JSON.stringify(p.sinkingFunds.lines)}
-Goals: ${JSON.stringify(p.goals)}
+      // ----- TypeScript assembles the budget. Exact, instant. -----
+      monthlyBudget = {
+        totalIncome: p.summary.monthlyIncome,
+        totalExpenses: p.summary.monthlyExpenses,
+        totalSavings: p.summary.netCashFlow,
+        categories: [
+          ...p.income.lines.map((l: { label: string; amount: number }) => ({
+            name: l.label, budgeted: l.amount, type: 'income',
+          })),
+          ...p.fixedExpenses.lines.map((l: { label: string; amount: number }) => ({
+            name: l.label, budgeted: l.amount, type: 'expense',
+          })),
+          ...p.variableExpenses.lines.map((l: { label: string; amount: number }) => ({
+            name: l.label, budgeted: l.amount, type: 'expense',
+          })),
+        ],
+      };
 
-Return ONLY valid JSON:
-{"monthlyBudget":{"totalIncome":${p.summary.monthlyIncome},"totalExpenses":${p.summary.monthlyExpenses},"totalSavings":${p.summary.netCashFlow},"categories":[{"name":"","budgeted":0,"type":"expense"}]},"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"topRecommendation":"","topRecommendation_fr":""}
-
-Rules:
-- Use the VERIFIED numbers exactly. totalIncome MUST equal ${p.summary.monthlyIncome}, totalExpenses MUST equal ${p.summary.monthlyExpenses}, totalSavings MUST equal ${p.summary.netCashFlow}.
-- Populate categories from the actual income, fixed, and variable lines provided.
-- Populate sinkingFunds from the provided sinking fund lines (keep their exact amounts).
-- Populate goals from the provided goals. Mark onTrack true if savedSoFar > 0 or net cash flow comfortably covers the monthly contribution needed.
-- Household info tells you province, kids, RRSP/RESP/TFSA status, employer province. USE IT: if Quebec resident with Ontario employer, flag the provincial tax gap. If kids and no RESP, recommend $2,500/yr per child for the $500 CESG.
-- If net cash flow is negative, the top recommendation must address that first.`;
-    } else if (body.source === 'calculated') {
-      // Own-file or manual form: numbers verified by the calculator. Claude ONLY interprets.
-      const c = body.calculated;
-      prompt = `You are Phare, an AI financial coach for Canadian families. The numbers below were computed directly from the family's data and are VERIFIED and EXACT. Do NOT change, recalculate, or invent any numbers — use these exactly as given.
-
-VERIFIED DATA:
-Monthly income: $${c.income.total} (lines: ${JSON.stringify(c.income.lines)})
-Monthly expenses: $${c.expenses.total} (lines: ${JSON.stringify(c.expenses.lines)})
-Net cash flow: $${c.netCashFlow}
-
-Return ONLY valid JSON:
-{"monthlyBudget":{"totalIncome":${c.income.total},"totalExpenses":${c.expenses.total},"totalSavings":${c.netCashFlow},"categories":[{"name":"","budgeted":0,"type":"expense"}]},"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"topRecommendation":"","topRecommendation_fr":""}
-
-Rules:
-- Use the VERIFIED numbers exactly. totalIncome MUST equal ${c.income.total}, totalExpenses MUST equal ${c.expenses.total}, totalSavings MUST equal ${c.netCashFlow}.
-- Populate categories from the actual income and expense lines provided. Do not add lines that aren't there.
-- Suggest sinkingFunds for likely Canadian annual expenses you can infer from the expense labels (property tax, car registration, back to school, income tax balance).
-- Apply Canadian context: RRSP reduces taxable income; RESP gives $500/yr CESG per child; TFSA is ideal for sinking funds. If you see signs of children or a mortgage in the labels, factor that in.
-- If net cash flow is negative, the top recommendation must address that first.
-- If you cannot determine something (e.g. number of children), do NOT invent it — speak generally instead.
-- If no debt is evident, set debtPayoff to null.`;
-    } else {
-      return NextResponse.json(
-        { error: 'Unknown plan source' },
-        { status: 400 }
+      // Sinking funds come straight from the template. Exact.
+      sinkingFundsFromData = p.sinkingFunds.lines.map(
+        (l: { label: string; annualAmount: number; monthlyProvision: number; dueMonth: string }) => ({
+          name: l.label,
+          annualAmount: l.annualAmount,
+          monthlyProvision: l.monthlyProvision,
+          dueMonth: l.dueMonth,
+        })
       );
+
+      aiContext = `Household info: ${JSON.stringify(p.household)}
+Net cash flow: $${p.summary.netCashFlow}/month (income $${p.summary.monthlyIncome}, expenses $${p.summary.monthlyExpenses})
+Their stated goals: ${JSON.stringify(p.goals)}
+Their sinking funds (already set up): ${JSON.stringify(p.sinkingFunds.lines)}
+Expense lines: ${JSON.stringify([...p.fixedExpenses.lines, ...p.variableExpenses.lines].map((l: { label: string }) => l.label))}`;
+    } else if (body.source === 'calculated') {
+      const c = body.calculated;
+
+      monthlyBudget = {
+        totalIncome: c.income.total,
+        totalExpenses: c.expenses.total,
+        totalSavings: round(c.income.total - c.expenses.total),
+        categories: [
+          ...c.income.lines.map((l: { label: string; amount: number }) => ({
+            name: l.label, budgeted: l.amount, type: 'income',
+          })),
+          ...c.expenses.lines.map((l: { label: string; amount: number }) => ({
+            name: l.label, budgeted: l.amount, type: 'expense',
+          })),
+        ],
+      };
+
+      aiContext = `Net cash flow: $${c.netCashFlow}/month (income $${c.income.total}, expenses $${c.expenses.total})
+Income lines: ${JSON.stringify(c.income.lines)}
+Expense lines: ${JSON.stringify(c.expenses.lines)}
+No goals or sinking funds were provided — suggest sinking funds based on the expense labels and typical Canadian annual costs.`;
+    } else {
+      return NextResponse.json({ error: 'Unknown plan source' }, { status: 400 });
     }
+
+    // ----- Claude does ONLY the interpretive part, in the user's language -----
+    const needsSinkingFunds = sinkingFundsFromData === null;
+
+    const prompt = `You are Phare, an AI financial coach for Canadian families. The numbers below are VERIFIED — computed in code from the family's data. Do not change or recalculate them.
+
+${aiContext}
+
+Write ALL text in ${lang}.
+
+Return ONLY valid JSON:
+{${needsSinkingFunds ? '"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],' : ''}"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"topRecommendation":""}
+
+Rules:
+- All names, descriptions, and text in ${lang}.
+${needsSinkingFunds ? '- Suggest 3-6 sinking funds for likely Canadian annual expenses inferred from the expense labels (property tax March & June in Quebec, car registration, back to school, income tax balance, Christmas).' : ''}
+- goals: ${body.source === 'template' ? 'assess THEIR stated goals — compute monthlyContribution as (target - saved) / months to target date, mark onTrack based on whether net cash flow covers it' : 'suggest 2-3 sensible goals based on their situation (emergency fund of 3 months expenses, RESP if children evident, debt payoff if debt evident)'}.
+- Canadian context: RRSP reduces taxable income (flag Quebec resident + Ontario employer tax gap if household info shows it). RESP gives $500/yr CESG per child on $2,500 contributed. TFSA is ideal for sinking funds.
+- If net cash flow is negative, topRecommendation must address that first.
+- If no debt is evident, set debtPayoff to null.
+- topRecommendation: one specific sentence with a dollar amount.`;
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
+      max_tokens: 1500,
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const responseText = message.content[0].type === 'text'
-      ? message.content[0].text
-      : '';
+    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
+    const aiPart = JSON.parse(responseText.replace(/```json|```/g, '').trim());
 
-    const plan = JSON.parse(responseText.replace(/```json|```/g, '').trim());
+    // ----- Assemble final plan: verified numbers + AI interpretation -----
+    const plan = {
+      monthlyBudget,
+      sinkingFunds: sinkingFundsFromData ?? aiPart.sinkingFunds ?? [],
+      debtPayoff: aiPart.debtPayoff ?? null,
+      goals: aiPart.goals ?? [],
+      topRecommendation: aiPart.topRecommendation ?? '',
+    };
 
     return NextResponse.json({ plan });
   } catch (error) {
