@@ -86,8 +86,9 @@ export default function UploadPage() {
   const streamReview = useCallback(async (planData: Plan, planBody: Record<string, unknown>) => {
     setReviewStreaming(true);
     setReviewText('');
+    const locale = window.location.pathname.startsWith('/fr') ? 'fr' : 'en';
+    let fullText = '';
     try {
-      const locale = window.location.pathname.startsWith('/fr') ? 'fr' : 'en';
       const res = await fetch('/api/review-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -102,8 +103,17 @@ export default function UploadPage() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        setReviewText((prev) => prev + decoder.decode(value, { stream: true }));
+        const chunk = decoder.decode(value, { stream: true });
+        fullText += chunk;
+        setReviewText((prev) => prev + chunk);
       }
+
+      // Review complete — auto-save the whole plan (no-op if not signed in)
+      fetch('/api/save-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: planData, reviewText: fullText, locale }),
+      }).catch(() => {});
     } catch (err) {
       console.error('Review streaming error:', err);
       setReviewText(t('plan.reviewError'));

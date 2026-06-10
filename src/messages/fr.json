@@ -185,5 +185,23 @@
       "addLine": "+ Ajouter une ligne",
       "submit": "Construire mon plan"
     }
+  },
+  "auth": {
+    "signinTitle": "Bon retour",
+    "signupTitle": "Créez votre compte",
+    "signinSubtitle": "Connectez-vous pour voir le plan de votre famille.",
+    "signupSubtitle": "Votre plan financier, sauvegardé et mis à jour chaque mois.",
+    "fullName": "Nom complet",
+    "email": "Courriel",
+    "password": "Mot de passe",
+    "signinBtn": "Se connecter",
+    "signupBtn": "Créer le compte",
+    "loading": "Un instant...",
+    "noAccount": "Pas encore de compte?",
+    "hasAccount": "Vous avez déjà un compte?",
+    "signupLink": "Créez-en un",
+    "signinLink": "Se connecter",
+    "checkEmail": "Vérifiez votre courriel pour confirmer votre compte.",
+    "signOut": "Déconnexion"
   }
 }

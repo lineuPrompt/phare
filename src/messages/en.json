@@ -185,5 +185,23 @@
       "addLine": "+ Add another line",
       "submit": "Build my plan"
     }
+  },
+  "auth": {
+    "signinTitle": "Welcome back",
+    "signupTitle": "Create your account",
+    "signinSubtitle": "Sign in to see your family's plan.",
+    "signupSubtitle": "Your financial plan, saved and waiting every month.",
+    "fullName": "Full name",
+    "email": "Email",
+    "password": "Password",
+    "signinBtn": "Sign in",
+    "signupBtn": "Create account",
+    "loading": "One moment...",
+    "noAccount": "No account yet?",
+    "hasAccount": "Already have an account?",
+    "signupLink": "Create one",
+    "signinLink": "Sign in",
+    "checkEmail": "Check your email to confirm your account.",
+    "signOut": "Sign out"
   }
 }

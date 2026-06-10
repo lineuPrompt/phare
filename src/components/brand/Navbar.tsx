@@ -1,5 +1,6 @@
 import Logo from './Logo';
 import LanguageSwitcher from './LanguageSwitcher';
+import AuthButton from './AuthButton';
 
 export default function Navbar() {
   return (
@@ -8,7 +9,10 @@ export default function Navbar() {
       style={{ borderBottom: '1px solid #E5E7EB' }}
     >
       <Logo />
-      <LanguageSwitcher />
+      <div className="flex items-center gap-3">
+        <LanguageSwitcher />
+        <AuthButton />
+      </div>
     </nav>
   );
 }
