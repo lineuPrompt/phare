@@ -345,6 +345,17 @@ export default function UploadPage() {
                 </a>
               </div>
             )}
+
+            {/* Path 3: Start without a file */}
+            <div className="text-center">
+              <button
+                onClick={() => setStatus('form')}
+                className="text-sm font-medium underline cursor-pointer"
+                style={{ color: '#6B7280' }}
+              >
+                {t('noFile.manual')}
+              </button>
+            </div>
           </div>
         )}
 

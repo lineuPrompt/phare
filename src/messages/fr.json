@@ -119,7 +119,8 @@
     "noFile": {
       "title": "Pas encore de tableur?",
       "description": "Téléchargez notre modèle, remplissez vos chiffres et téléversez-le. Environ 10 minutes.",
-      "cta": "Télécharger le modèle"
+      "cta": "Télécharger le modèle",
+      "manual": "Ou commencez sans fichier — entrez vos chiffres manuellement"
     },
     "analyzingSteps": {
       "reading": "Lecture de vos données...",
@@ -202,6 +203,32 @@
     "signupLink": "Créez-en un",
     "signinLink": "Se connecter",
     "checkEmail": "Vérifiez votre courriel pour confirmer votre compte.",
-    "signOut": "Déconnexion"
+    "signOut": "Déconnexion",
+    "dashboard": "Tableau de bord"
+  },
+  "dashboard": {
+    "welcome": "Bon retour, {name}",
+    "snapshot": "Votre portrait financier",
+    "income": "Revenu mensuel",
+    "expenses": "Dépenses mensuelles",
+    "surplus": "Surplus mensuel",
+    "deficit": "Déficit mensuel",
+    "topPriority": "Votre priorité #1",
+    "sinkingFunds": "Fonds de prévoyance",
+    "perMonth": "/mois",
+    "perYear": "/an",
+    "goals": "Vos objectifs",
+    "review": "Votre dernière revue",
+    "reviewDate": "Rédigée le {date}",
+    "noPlan": "Vous n'avez pas encore de plan.",
+    "noPlanCta": "Téléversez votre budget pour commencer",
+    "newPlan": "Téléverser un nouveau budget",
+    "loading": "Chargement de votre plan...",
+    "nav": {
+      "overview": "Aperçu",
+      "upload": "Nouveau plan",
+      "transactions": "Transactions",
+      "reviews": "Revues"
+    }
   }
 }

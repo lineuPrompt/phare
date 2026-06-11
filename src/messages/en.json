@@ -119,7 +119,8 @@
     "noFile": {
       "title": "Don't have a spreadsheet yet?",
       "description": "Download our template, fill in your numbers, and upload it. Takes about 10 minutes.",
-      "cta": "Download template"
+      "cta": "Download template",
+      "manual": "Or start without a file — enter your numbers manually"
     },
     "analyzingSteps": {
       "reading": "Reading your data...",
@@ -202,6 +203,32 @@
     "signupLink": "Create one",
     "signinLink": "Sign in",
     "checkEmail": "Check your email to confirm your account.",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "dashboard": "Dashboard"
+  },
+  "dashboard": {
+    "welcome": "Welcome back, {name}",
+    "snapshot": "Your financial snapshot",
+    "income": "Monthly income",
+    "expenses": "Monthly expenses",
+    "surplus": "Monthly surplus",
+    "deficit": "Monthly deficit",
+    "topPriority": "Your #1 priority",
+    "sinkingFunds": "Sinking funds",
+    "perMonth": "/month",
+    "perYear": "/year",
+    "goals": "Your goals",
+    "review": "Your latest review",
+    "reviewDate": "Written on {date}",
+    "noPlan": "You don't have a plan yet.",
+    "noPlanCta": "Upload your budget to get started",
+    "newPlan": "Upload a new budget",
+    "loading": "Loading your plan...",
+    "nav": {
+      "overview": "Overview",
+      "upload": "New plan",
+      "transactions": "Transactions",
+      "reviews": "Reviews"
+    }
   }
 }

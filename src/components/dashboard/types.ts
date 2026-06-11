@@ -1,0 +1,54 @@
+export type DashboardSummary = {
+  totalIncome: number;
+  totalExpenses: number;
+  netCashFlow: number;
+};
+
+export type SinkingFund = {
+  name: string;
+  annual_amount: number;
+  monthly_provision: number;
+  due_month: number | null;
+  current_balance: number;
+};
+
+export type Goal = {
+  name: string;
+  target_amount: number;
+  current_amount: number;
+  status: string;
+};
+
+export type DashboardData = {
+  hasPlan: boolean;
+  firstName?: string;
+  month?: string;
+  summary?: DashboardSummary;
+  categories?: { name: string; type: string; amount: number }[];
+  sinkingFunds?: SinkingFund[];
+  goals?: Goal[];
+  review?: string | null;
+  topRecommendation?: string | null;
+  reviewDate?: string | null;
+};
+
+export function formatCurrency(amount: number, locale: string) {
+  return new Intl.NumberFormat(locale === 'fr' ? 'fr-CA' : 'en-CA', {
+    style: 'currency',
+    currency: 'CAD',
+  }).format(amount);
+}
+
+export function monthName(n: number | null, locale: string) {
+  if (!n) return '';
+  return new Date(2026, n - 1, 1).toLocaleDateString(
+    locale === 'fr' ? 'fr-CA' : 'en-CA',
+    { month: 'long' }
+  );
+}
+
+export function formatDate(iso: string, locale: string) {
+  return new Date(iso).toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+}

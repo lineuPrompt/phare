@@ -81,6 +81,14 @@ export default function AuthButton() {
             <div className="px-4 py-2 text-xs truncate" style={{ color: '#6B7280', borderBottom: '1px solid #F3F4F6' }}>
               {user.email}
             </div>
+            <Link
+              href={`/${locale}/dashboard`}
+              onClick={() => setOpen(false)}
+              className="block px-4 py-2.5 text-sm font-medium cursor-pointer hover:bg-gray-50 transition-all"
+              style={{ color: '#0F2044' }}
+            >
+              {t('dashboard')}
+            </Link>
             <button
               onClick={signOut}
               className="w-full text-left px-4 py-2.5 text-sm font-medium cursor-pointer hover:bg-gray-50 transition-all"
