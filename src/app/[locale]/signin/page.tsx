@@ -40,7 +40,7 @@ export default function SignInPage() {
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        router.push(`/${locale}/upload`);
+        router.push(`/${locale}/dashboard`);
         router.refresh();
       }
     } catch (err) {
