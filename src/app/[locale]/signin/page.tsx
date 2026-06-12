@@ -99,6 +99,9 @@ export default function SignInPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && email && password && !loading) handleSubmit();
+              }}
               className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
               style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
             />

@@ -227,8 +227,39 @@
     "nav": {
       "overview": "Aperçu",
       "upload": "Nouveau plan",
-      "transactions": "Transactions",
+      "expenses": "Dépenses",
       "reviews": "Revues"
+    }
+  },
+  "expenses": {
+    "title": "Dépenses",
+    "loading": "Chargement de vos dépenses...",
+    "form": {
+      "title": "Ajouter une dépense",
+      "description": "Description",
+      "category": "Catégorie...",
+      "amount": "Montant",
+      "once": "Une fois",
+      "monthly": "Mensuel",
+      "installments": "Versements",
+      "saving": "Enregistrement...",
+      "save": "Ajouter la dépense",
+      "newCategory": "+ Nouvelle catégorie...",
+      "newCategoryName": "Nom, puis Entrée"
+    },
+    "summary": {
+      "title": "Résumé du mois",
+      "category": "Catégorie",
+      "budget": "Budget",
+      "spent": "Dépensé",
+      "difference": "Différence",
+      "status": "Statut",
+      "over": "Dépassé",
+      "ok": "OK",
+      "total": "TOTAL",
+      "within": "Dans l'objectif",
+      "overGoal": "Objectif dépassé",
+      "setGoal": "Définir l'objectif mensuel"
     }
   }
 }

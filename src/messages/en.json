@@ -227,8 +227,39 @@
     "nav": {
       "overview": "Overview",
       "upload": "New plan",
-      "transactions": "Transactions",
+      "expenses": "Expenses",
       "reviews": "Reviews"
+    }
+  },
+  "expenses": {
+    "title": "Expenses",
+    "loading": "Loading your expenses...",
+    "form": {
+      "title": "Add expense",
+      "description": "Description",
+      "category": "Category...",
+      "amount": "Amount",
+      "once": "Once",
+      "monthly": "Monthly",
+      "installments": "Installments",
+      "saving": "Saving...",
+      "save": "Add expense",
+      "newCategory": "+ New category...",
+      "newCategoryName": "Name, then Enter"
+    },
+    "summary": {
+      "title": "Month summary",
+      "category": "Category",
+      "budget": "Budget",
+      "spent": "Spent",
+      "difference": "Difference",
+      "status": "Status",
+      "over": "Over",
+      "ok": "OK",
+      "total": "TOTAL",
+      "within": "Within goal",
+      "overGoal": "Over goal",
+      "setGoal": "Set monthly goal"
     }
   }
 }

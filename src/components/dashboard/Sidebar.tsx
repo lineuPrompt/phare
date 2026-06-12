@@ -8,13 +8,13 @@ export default function Sidebar({ locale }: { locale: string }) {
   const t = useTranslations('dashboard.nav');
   const pathname = usePathname();
 
-  const items = [
+const items = [
     { href: `/${locale}/dashboard`, label: t('overview'), icon: '🏠', active: true },
+    { href: `/${locale}/expenses`, label: t('expenses'), icon: '💳', active: true },
     { href: `/${locale}/upload`, label: t('upload'), icon: '📄', active: true },
   ];
 
   const comingSoon = [
-    { label: t('transactions'), icon: '💳' },
     { label: t('reviews'), icon: '✉️' },
   ];
 
