@@ -32,14 +32,22 @@ export async function POST(request: Request) {
     await supabase.from('sinking_funds').delete().eq('household_id', householdId);
     await supabase.from('goals').delete().eq('household_id', householdId);
 
-    // Categories + budgets
+    // Names that are sinking funds — these must NOT become monthly budget lines
+    const sinkingFundNames = new Set(
+      (plan.sinkingFunds ?? []).map((f: { name: string }) => f.name.trim().toLowerCase())
+    );
+
+    // Categories + budgets (excluding sinking funds)
     for (const cat of plan.monthlyBudget.categories) {
+      if (sinkingFundNames.has(cat.name.trim().toLowerCase())) continue;
+
       const { data: catRow, error: catError } = await supabase
         .from('categories')
         .insert({
           household_id: householdId,
           name: cat.name,
           type: cat.type === 'income' ? 'income' : 'expense',
+          is_sinking_fund: false,
         })
         .select('id')
         .single();

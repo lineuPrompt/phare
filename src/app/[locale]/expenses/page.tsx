@@ -9,6 +9,7 @@ import ExpenseForm from '@/components/expenses/ExpenseForm';
 import SummaryTable from '@/components/expenses/SummaryTable';
 import { MonthData } from '@/components/expenses/types';
 import GoalSetter from '@/components/expenses/GoalSetter';
+import ExpenseList from '@/components/expenses/ExpenseList';
 
 export default function ExpensesPage() {
   const t = useTranslations('expenses');
@@ -92,6 +93,12 @@ export default function ExpensesPage() {
                   onSaved={load}
                 />
                 <ExpenseForm categories={data.categories} onSaved={load} defaultDate={`${selectedMonth}-01`} />
+                <ExpenseList
+                  expenses={data.expenses}
+                  categories={data.categories}
+                  locale={locale}
+                  onChanged={load}
+                />
                 <SummaryTable
                   summary={data.summary}
                   totalSpent={data.totalSpent}
