@@ -1,20 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { ExpenseCategory } from './types';
 
 export default function ExpenseForm({
   categories,
   onSaved,
+  defaultDate,
 }: {
   categories: ExpenseCategory[];
   onSaved: () => void;
+  defaultDate?: string;
 }) {
   const t = useTranslations('expenses.form');
   const today = new Date().toISOString().slice(0, 10);
-
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useState(defaultDate ?? today);
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
@@ -24,6 +25,9 @@ export default function ExpenseForm({
   const [error, setError] = useState('');
   const [newCategoryMode, setNewCategoryMode] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [localCategories, setLocalCategories] = useState(categories);
+
+  useEffect(() => { setLocalCategories(categories); }, [categories]);
 
   const submit = async () => {
     setSaving(true);
@@ -54,6 +58,24 @@ export default function ExpenseForm({
     }
   };
 
+  const createCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    const res = await fetch('/api/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newCategoryName }),
+    });
+    if (res.ok) {
+      const { category } = await res.json();
+      setLocalCategories((prev) => [...prev, category]);
+      setCategoryId(category.id);
+      setNewCategoryMode(false);
+      setNewCategoryName('');
+    } else {
+      setError((await res.json()).error || 'Failed to create category');
+    }
+  };
+
   const inputStyle = { border: '1.5px solid #D1D5DB', color: '#0F2044' };
   const canSave = description.trim() && categoryId && parseFloat(amount) > 0;
 
@@ -74,7 +96,7 @@ export default function ExpenseForm({
             }}
             className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
             <option value="">{t('category')}</option>
-            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {localCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             <option value="__new__">{t('newCategory')}</option>
           </select>
         ) : (
@@ -90,23 +112,7 @@ export default function ExpenseForm({
             />
             <button
               type="button"
-              onClick={async () => {
-                if (!newCategoryName.trim()) return;
-                const res = await fetch('/api/categories', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ name: newCategoryName }),
-                });
-                if (res.ok) {
-                  const { category } = await res.json();
-                  setCategoryId(category.id);
-                  setNewCategoryMode(false);
-                  setNewCategoryName('');
-                  onSaved();
-                } else {
-                  setError((await res.json()).error || 'Failed to create category');
-                }
-              }}
+              onClick={createCategory}
               className="px-3 py-2.5 rounded-lg text-sm font-medium cursor-pointer shrink-0"
               style={{ background: '#2ABFBF', color: '#0F2044' }}
             >

@@ -260,6 +260,14 @@
       "within": "Dans l'objectif",
       "overGoal": "Objectif dépassé",
       "setGoal": "Définir l'objectif mensuel"
+    },
+    "goal": {
+      "label": "Objectif mensuel de carte",
+      "notSet": "Non défini",
+      "set": "Définir",
+      "edit": "Modifier",
+      "save": "Enregistrer",
+      "cancel": "Annuler"
     }
   }
 }

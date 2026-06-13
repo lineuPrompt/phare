@@ -260,6 +260,14 @@
       "within": "Within goal",
       "overGoal": "Over goal",
       "setGoal": "Set monthly goal"
+    },
+    "goal": {
+      "label": "Monthly card goal",
+      "notSet": "Not set",
+      "set": "Set goal",
+      "edit": "Edit",
+      "save": "Save",
+      "cancel": "Cancel"
     }
   }
 }
