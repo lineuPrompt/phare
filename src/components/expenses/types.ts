@@ -23,8 +23,11 @@ export type SummaryRow = {
 export type MonthData = {
   month: string;
   expenses: Expense[];
+  income: Expense[];
+  totalIncome: number;
   summary: SummaryRow[];
   totalSpent: number;
+  net: number;
   cardGoal: number | null;
   categories: ExpenseCategory[];
 };

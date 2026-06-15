@@ -279,6 +279,11 @@
       "deleteOne": "Delete this one",
       "deleteSeries": "Delete this and all future",
       "cancel": "Cancel"
+    },
+    "flow": {
+      "in": "Money in",
+      "out": "Money out",
+      "net": "Net"
     }
   },
   "recurring": {

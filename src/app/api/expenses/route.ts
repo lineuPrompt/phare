@@ -135,14 +135,17 @@ export async function GET(request: Request) {
     const [y, m] = monthParam.split('-').map(Number);
     const nextMonth = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
 
-    const { data: txns } = await supabase
+    const { data: allTxns } = await supabase
       .from('transactions')
-      .select('id, date, description, amount, installment_label, recurrence_id, category_id, categories(name), household_members(name)')
+      .select('id, date, description, amount, type, installment_label, recurrence_id, category_id, categories(name), household_members(name)')
       .eq('household_id', householdId)
-      .eq('type', 'expense')
       .gte('date', monthStart)
       .lt('date', nextMonth)
       .order('date', { ascending: true });
+
+    const txns = (allTxns ?? []).filter((t) => t.type === 'expense');
+    const incomeTxns = (allTxns ?? []).filter((t) => t.type === 'income');
+    const totalIncome = Math.round(incomeTxns.reduce((s, t) => s + Number(t.amount), 0) * 100) / 100;
 
     const { data: budgets } = await supabase
       .from('budgets')
@@ -204,11 +207,14 @@ export async function GET(request: Request) {
 
     const totalSpent = Math.round([...spentByCategory.values()].reduce((s, v) => s + v, 0) * 100) / 100;
 
-    return NextResponse.json({
+return NextResponse.json({
       month: monthParam,
-      expenses: txns ?? [],
+      expenses: txns,
+      income: incomeTxns,
+      totalIncome,
       summary: summaryRows,
       totalSpent,
+      net: Math.round((totalIncome - totalSpent) * 100) / 100,
       cardGoal: goalRow?.card_goal ? Number(goalRow.card_goal) : null,
       categories: categories ?? [],
     });

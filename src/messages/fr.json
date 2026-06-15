@@ -279,6 +279,11 @@
       "deleteOne": "Supprimer celle-ci",
       "deleteSeries": "Supprimer celle-ci et toutes les suivantes",
       "cancel": "Annuler"
+    },
+    "flow": {
+      "in": "Entrées",
+      "out": "Sorties",
+      "net": "Net"
     }
   },
   "recurring": {
