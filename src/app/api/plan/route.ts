@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { anthropic } from '@/lib/anthropic';
+import { dedupeSinkingFunds } from '@/lib/planHelpers';
 
 type Category = { name: string; budgeted: number; type: string };
 
@@ -113,10 +114,14 @@ ${needsSinkingFunds ? '- Suggest 3-6 sinking funds for likely Canadian annual ex
     const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
     const aiPart = JSON.parse(responseText.replace(/```json|```/g, '').trim());
 
-    // ----- Assemble final plan: verified numbers + AI interpretation -----
+ // ----- Assemble final plan: verified numbers + AI interpretation -----
+    const finalSinkingFunds = sinkingFundsFromData ?? aiPart.sinkingFunds ?? [];
+
+    monthlyBudget.categories = dedupeSinkingFunds(monthlyBudget.categories, finalSinkingFunds);
+
     const plan = {
       monthlyBudget,
-      sinkingFunds: sinkingFundsFromData ?? aiPart.sinkingFunds ?? [],
+      sinkingFunds: finalSinkingFunds,
       debtPayoff: aiPart.debtPayoff ?? null,
       goals: aiPart.goals ?? [],
       topRecommendation: aiPart.topRecommendation ?? '',
