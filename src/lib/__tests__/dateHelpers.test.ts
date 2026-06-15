@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { monthNameToNumber } from '../dateHelpers';
-import { occurrencesInMonth } from '../dateHelpers';
+import { monthNameToNumber , materializeRule, occurrencesInMonth } from '../dateHelpers';
 
 describe('monthNameToNumber', () => {
   it('maps English month names', () => {
@@ -166,5 +165,60 @@ describe('occurrencesInMonth', () => {
     // June, before anchor — cycle steps back: Jun 3, 17 (Jul 1 - 14 = Jun 17, -14 = Jun 3)
     const result = occurrencesInMonth(rule, '2026-06');
     expect(result).toEqual(['2026-06-03', '2026-06-17']);
+  });
+});
+
+describe('materializeRule', () => {
+  it('monthly: one row per month across the window', () => {
+    const rule = { cadence: 'monthly' as const, anchorDate: '2026-06-01' };
+    const dates = materializeRule(rule, '2026-06', 3);
+    expect(dates).toEqual(['2026-06-01', '2026-07-01', '2026-08-01']);
+  });
+
+  it('monthly: 12 rows over a year, crossing the year boundary', () => {
+    const rule = { cadence: 'monthly' as const, anchorDate: '2026-08-01' };
+    const dates = materializeRule(rule, '2026-08', 12);
+    expect(dates).toHaveLength(12);
+    expect(dates[0]).toBe('2026-08-01');
+    expect(dates[11]).toBe('2027-07-01');
+  });
+
+  it('monthly: clamps day-31 across short months', () => {
+    const rule = { cadence: 'monthly' as const, anchorDate: '2026-01-31' };
+    const dates = materializeRule(rule, '2026-01', 3);
+    // Jan 31, Feb 28, Mar 31
+    expect(dates).toEqual(['2026-01-31', '2026-02-28', '2026-03-31']);
+  });
+
+  it('semimonthly: two rows per month', () => {
+    const rule = { cadence: 'semimonthly' as const, anchorDate: '2026-06-15', secondDay: 30 };
+    const dates = materializeRule(rule, '2026-06', 2);
+    expect(dates).toEqual(['2026-06-15', '2026-06-30', '2026-07-15', '2026-07-30']);
+  });
+
+  it('biweekly: produces 26 occurrences across 12 months', () => {
+    const rule = { cadence: 'biweekly' as const, anchorDate: '2026-01-02' };
+    const dates = materializeRule(rule, '2026-01', 12);
+    // 365 days / 14 ≈ 26 pay periods in a year
+    expect(dates.length).toBeGreaterThanOrEqual(26);
+    expect(dates.length).toBeLessThanOrEqual(27);
+  });
+
+  it('biweekly: every date is 14 days after the previous', () => {
+    const rule = { cadence: 'biweekly' as const, anchorDate: '2026-07-01' };
+    const dates = materializeRule(rule, '2026-07', 3);
+    for (let i = 1; i < dates.length; i++) {
+      const prev = new Date(dates[i - 1] + 'T00:00:00');
+      const curr = new Date(dates[i] + 'T00:00:00');
+      const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+      expect(diff).toBe(14);
+    }
+  });
+
+  it('returns sorted, deduplicated dates', () => {
+    const rule = { cadence: 'monthly' as const, anchorDate: '2026-06-10' };
+    const dates = materializeRule(rule, '2026-06', 2);
+    const sorted = [...dates].sort();
+    expect(dates).toEqual(sorted);
   });
 });

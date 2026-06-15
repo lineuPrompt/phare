@@ -105,3 +105,32 @@ export function occurrencesInMonth(
 
   return dates;
 }
+
+/**
+ * Expands a recurring rule into all occurrence dates across a window of
+ * months, starting from startMonth (YYYY-MM) for `monthCount` months.
+ * Returns a flat, sorted list of YYYY-MM-DD dates.
+ */
+export function materializeRule(
+  rule: {
+    cadence: 'monthly' | 'biweekly' | 'semimonthly';
+    anchorDate: string;
+    secondDay?: number | null;
+  },
+  startMonth: string,   // YYYY-MM
+  monthCount: number
+): string[] {
+  const [sy, sm] = startMonth.split('-').map(Number);
+  const all: string[] = [];
+
+  for (let i = 0; i < monthCount; i++) {
+    const monthIndex = (sm - 1) + i;
+    const year = sy + Math.floor(monthIndex / 12);
+    const month = (monthIndex % 12) + 1;
+    const targetMonth = `${year}-${String(month).padStart(2, '0')}`;
+    all.push(...occurrencesInMonth(rule, targetMonth));
+  }
+
+  // Dedupe (biweekly edges can't double here, but safe) and sort
+  return [...new Set(all)].sort();
+}
