@@ -228,7 +228,8 @@
       "overview": "Overview",
       "upload": "New plan",
       "expenses": "Expenses",
-      "reviews": "Reviews"
+      "reviews": "Reviews",
+      "recurring": "Recurring"
     }
   },
   "expenses": {
@@ -278,6 +279,39 @@
       "deleteOne": "Delete this one",
       "deleteSeries": "Delete this and all future",
       "cancel": "Cancel"
+    }
+  },
+  "recurring": {
+    "title": "Recurring",
+    "subtitle": "Your fixed income and expenses — set once, they fill every month.",
+    "loading": "Loading...",
+    "form": {
+      "title": "Add a recurring line",
+      "income": "Money in",
+      "expense": "Money out",
+      "description": "Description",
+      "amount": "Amount",
+      "monthly": "Monthly",
+      "biweekly": "Every 2 weeks",
+      "semimonthly": "Twice a month",
+      "secondDay": "Second day of month",
+      "saving": "Saving...",
+      "save": "Add"
+    },
+    "list": {
+      "empty": "No recurring lines yet. Add your mortgage, salary, loans above.",
+      "incomeTitle": "Money in",
+      "expenseTitle": "Money out",
+      "delete": "Delete",
+      "confirmTitle": "Delete this recurring line?",
+      "confirmBody": "Future entries will be removed. Past entries stay as history.",
+      "confirmDelete": "Delete",
+      "cancel": "Cancel",
+      "cadence": {
+        "monthly": "Monthly",
+        "biweekly": "Every 2 weeks",
+        "semimonthly": "Twice a month"
+      }
     }
   }
 }

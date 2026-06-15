@@ -228,7 +228,8 @@
       "overview": "Aperçu",
       "upload": "Nouveau plan",
       "expenses": "Dépenses",
-      "reviews": "Revues"
+      "reviews": "Revues",
+      "recurring": "Récurrents"
     }
   },
   "expenses": {
@@ -278,6 +279,39 @@
       "deleteOne": "Supprimer celle-ci",
       "deleteSeries": "Supprimer celle-ci et toutes les suivantes",
       "cancel": "Annuler"
+    }
+  },
+  "recurring": {
+    "title": "Récurrents",
+    "subtitle": "Vos revenus et dépenses fixes — configurés une fois, présents chaque mois.",
+    "loading": "Chargement...",
+    "form": {
+      "title": "Ajouter une ligne récurrente",
+      "income": "Entrées",
+      "expense": "Sorties",
+      "description": "Description",
+      "amount": "Montant",
+      "monthly": "Mensuel",
+      "biweekly": "Aux 2 semaines",
+      "semimonthly": "Deux fois par mois",
+      "secondDay": "Deuxième jour du mois",
+      "saving": "Enregistrement...",
+      "save": "Ajouter"
+    },
+    "list": {
+      "empty": "Aucune ligne récurrente. Ajoutez votre hypothèque, salaire, prêts ci-dessus.",
+      "incomeTitle": "Entrées",
+      "expenseTitle": "Sorties",
+      "delete": "Supprimer",
+      "confirmTitle": "Supprimer cette ligne récurrente?",
+      "confirmBody": "Les entrées futures seront retirées. Les entrées passées restent comme historique.",
+      "confirmDelete": "Supprimer",
+      "cancel": "Annuler",
+      "cadence": {
+        "monthly": "Mensuel",
+        "biweekly": "Aux 2 semaines",
+        "semimonthly": "Deux fois par mois"
+      }
     }
   }
 }
