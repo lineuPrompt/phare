@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { recurrenceDates } from '@/lib/dateHelpers';
 
 // POST: create expense (single, monthly recurring, or installments)
 export async function POST(request: Request) {
@@ -24,7 +25,6 @@ export async function POST(request: Request) {
     }
     const householdId = userRow.household_id;
 
-    // The member entering the expense (their own member row)
     const { data: member } = await supabase
       .from('household_members')
       .select('id')
@@ -32,8 +32,6 @@ export async function POST(request: Request) {
       .eq('user_id', user.id)
       .single();
     if (!member) return NextResponse.json({ error: 'No member record' }, { status: 400 });
-
-    const baseDate = new Date(date + 'T00:00:00');
 
     type Row = {
       household_id: string;
@@ -49,44 +47,39 @@ export async function POST(request: Request) {
     };
 
     const rows: Row[] = [];
-    const makeDate = (monthsAhead: number) => {
-      const d = new Date(baseDate);
-      d.setMonth(d.getMonth() + monthsAhead);
-      return d.toISOString().slice(0, 10);
-    };
 
     if (repeat === 'monthly') {
       const recurrenceId = crypto.randomUUID();
-      for (let i = 0; i < 12; i++) {
+      recurrenceDates(date, 12).forEach((d) => {
         rows.push({
           household_id: householdId,
           member_id: member.id,
           category_id: categoryId,
           amount,
           description,
-          date: makeDate(i),
+          date: d,
           type: 'expense',
           source: 'manual',
           recurrence_id: recurrenceId,
           installment_label: null,
         });
-      }
+      });
     } else if (repeat === 'installments' && installments > 1) {
       const recurrenceId = crypto.randomUUID();
-      for (let i = 0; i < installments; i++) {
+      recurrenceDates(date, installments).forEach((d, i) => {
         rows.push({
           household_id: householdId,
           member_id: member.id,
           category_id: categoryId,
           amount,
           description,
-          date: makeDate(i),
+          date: d,
           type: 'expense',
           source: 'manual',
           recurrence_id: recurrenceId,
           installment_label: `${i + 1}/${installments}`,
         });
-      }
+      });
     } else {
       rows.push({
         household_id: householdId,
@@ -119,7 +112,7 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const monthParam = url.searchParams.get('month'); // '2026-06'
+    const monthParam = url.searchParams.get('month');
     if (!monthParam || !/^\d{4}-\d{2}$/.test(monthParam)) {
       return NextResponse.json({ error: 'Invalid month' }, { status: 400 });
     }
@@ -142,7 +135,6 @@ export async function GET(request: Request) {
     const [y, m] = monthParam.split('-').map(Number);
     const nextMonth = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
 
-    // Expenses in the month
     const { data: txns } = await supabase
       .from('transactions')
       .select('id, date, description, amount, installment_label, recurrence_id, category_id, categories(name), household_members(name)')
@@ -152,14 +144,12 @@ export async function GET(request: Request) {
       .lt('date', nextMonth)
       .order('date', { ascending: true });
 
-    // Category budgets for the month (orçamento)
     const { data: budgets } = await supabase
       .from('budgets')
       .select('amount, category_id, categories(name, type)')
       .eq('household_id', householdId)
       .eq('month', monthStart);
 
-    // All expense categories (for the entry form dropdown)
     const { data: categories } = await supabase
       .from('categories')
       .select('id, name, type')
@@ -167,7 +157,6 @@ export async function GET(request: Request) {
       .eq('type', 'expense')
       .order('name');
 
-    // Card goal: this month's, or most recent before it (carry-forward)
     const { data: goalRow } = await supabase
       .from('monthly_goals')
       .select('card_goal, month')
@@ -177,7 +166,6 @@ export async function GET(request: Request) {
       .limit(1)
       .maybeSingle();
 
-    // Build the summary: per category — budget, spent, difference
     type Txn = { amount: number; category_id: string | null };
     type BudgetRow = { amount: number; category_id: string; categories: { name: string; type: string } | null };
 
@@ -200,7 +188,6 @@ export async function GET(request: Request) {
         };
       });
 
-    // Categories with spending but no budget line still appear
     const budgetedIds = new Set(summaryRows.map((r) => r.categoryId));
     for (const [catId, spent] of spentByCategory) {
       if (!budgetedIds.has(catId)) {
