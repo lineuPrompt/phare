@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { monthNameToNumber } from '../dateHelpers';
+import { occurrencesInMonth } from '../dateHelpers';
 
 describe('monthNameToNumber', () => {
   it('maps English month names', () => {
@@ -107,5 +108,63 @@ describe('recurrenceDates', () => {
     // Starting Jan 31, the Feb occurrence clamps to Feb 28
     const dates = recurrenceDates('2026-01-31', 2);
     expect(dates).toEqual(['2026-01-31', '2026-02-28']);
+  });
+});
+
+describe('occurrencesInMonth', () => {
+  // --- monthly ---
+  it('monthly: one occurrence on the anchor day', () => {
+    const rule = { cadence: 'monthly' as const, anchorDate: '2026-06-01' };
+    expect(occurrencesInMonth(rule, '2026-08')).toEqual(['2026-08-01']);
+  });
+
+  it('monthly: clamps a day-31 anchor into a short month', () => {
+    const rule = { cadence: 'monthly' as const, anchorDate: '2026-01-31' };
+    expect(occurrencesInMonth(rule, '2026-02')).toEqual(['2026-02-28']);
+  });
+
+  // --- semimonthly ---
+  it('semimonthly: two occurrences, sorted', () => {
+    const rule = { cadence: 'semimonthly' as const, anchorDate: '2026-06-15', secondDay: 30 };
+    expect(occurrencesInMonth(rule, '2026-07')).toEqual(['2026-07-15', '2026-07-30']);
+  });
+
+  it('semimonthly: clamps the second day in February', () => {
+    const rule = { cadence: 'semimonthly' as const, anchorDate: '2026-02-15', secondDay: 30 };
+    expect(occurrencesInMonth(rule, '2026-02')).toEqual(['2026-02-15', '2026-02-28']);
+  });
+
+  it('semimonthly: dedupes when both days are equal', () => {
+    const rule = { cadence: 'semimonthly' as const, anchorDate: '2026-06-15', secondDay: 15 };
+    expect(occurrencesInMonth(rule, '2026-06')).toEqual(['2026-06-15']);
+  });
+
+  // --- biweekly ---
+  it('biweekly: two paycheques in a normal month', () => {
+    // anchor July 1 2026 (Wed). July: 1, 15, 29 → actually three. Use a 2-pay month.
+    const rule = { cadence: 'biweekly' as const, anchorDate: '2026-08-05' };
+    // Aug 5, 19 → two in August
+    expect(occurrencesInMonth(rule, '2026-08')).toEqual(['2026-08-05', '2026-08-19']);
+  });
+
+  it('biweekly: THREE paycheques in a windfall month', () => {
+    // anchor July 1 2026 → July 1, 15, 29 all land in July
+    const rule = { cadence: 'biweekly' as const, anchorDate: '2026-07-01' };
+    expect(occurrencesInMonth(rule, '2026-07')).toEqual(['2026-07-01', '2026-07-15', '2026-07-29']);
+  });
+
+  it('biweekly: works months before the anchor', () => {
+    // anchor in July, ask about September — should still compute correctly
+    const rule = { cadence: 'biweekly' as const, anchorDate: '2026-07-01' };
+    const result = occurrencesInMonth(rule, '2026-09');
+    // Sep 9, 23 (continuing the 14-day cycle from Jul 1)
+    expect(result).toEqual(['2026-09-09', '2026-09-23']);
+  });
+
+  it('biweekly: works months before the anchor date itself', () => {
+    const rule = { cadence: 'biweekly' as const, anchorDate: '2026-07-01' };
+    // June, before anchor — cycle steps back: Jun 3, 17 (Jul 1 - 14 = Jun 17, -14 = Jun 3)
+    const result = occurrencesInMonth(rule, '2026-06');
+    expect(result).toEqual(['2026-06-03', '2026-06-17']);
   });
 });

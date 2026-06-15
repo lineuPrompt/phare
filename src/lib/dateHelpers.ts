@@ -51,3 +51,57 @@ export function recurrenceDates(baseDate: string, count: number): string[] {
   }
   return dates;
 }
+
+/**
+ * Given a recurring rule and a target month (YYYY-MM), returns the dates
+ * within that month on which the rule occurs (YYYY-MM-DD strings).
+ *
+ * - monthly: once a month, on the anchor's day (clamped to month end)
+ * - semimonthly: twice a month, on anchorDay and secondDay (clamped)
+ * - biweekly: every 14 days from the anchor date; returns any that land in the month
+ */
+export function occurrencesInMonth(
+  rule: {
+    cadence: 'monthly' | 'biweekly' | 'semimonthly';
+    anchorDate: string;      // YYYY-MM-DD
+    secondDay?: number | null;
+  },
+  targetMonth: string        // YYYY-MM
+): string[] {
+  const [ty, tm] = targetMonth.split('-').map(Number);
+  const lastDay = new Date(ty, tm, 0).getDate(); // last day of target month
+
+  const clampDay = (day: number) =>
+    `${targetMonth}-${String(Math.min(day, lastDay)).padStart(2, '0')}`;
+
+  if (rule.cadence === 'monthly') {
+    const anchorDay = Number(rule.anchorDate.split('-')[2]);
+    return [clampDay(anchorDay)];
+  }
+
+  if (rule.cadence === 'semimonthly') {
+    const anchorDay = Number(rule.anchorDate.split('-')[2]);
+    const second = rule.secondDay ?? anchorDay;
+    const days = [...new Set([anchorDay, second])].sort((a, b) => a - b);
+    return days.map(clampDay);
+  }
+
+  // biweekly: step 14 days from anchor, collect those landing in target month
+  const anchor = new Date(rule.anchorDate + 'T00:00:00');
+  const monthStart = new Date(ty, tm - 1, 1);
+  const monthEnd = new Date(ty, tm - 1, lastDay);
+
+  const dates: string[] = [];
+  const cursor = new Date(anchor);
+
+  // Wind forward/backward to near the month in 14-day steps
+  while (cursor > monthStart) cursor.setDate(cursor.getDate() - 14);
+  while (cursor < monthStart) cursor.setDate(cursor.getDate() + 14);
+
+  while (cursor <= monthEnd) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 14);
+  }
+
+  return dates;
+}
