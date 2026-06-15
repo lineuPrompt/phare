@@ -80,7 +80,7 @@ function sheetRows(sheet: XLSX.WorkSheet): unknown[][] {
  * and the numeric amount at `amountCol`. Skips rows whose label contains
  * any skip word (headers, titles) and rows with zero/blank amounts.
  */
-function parseSection(
+export function parseSection(
   rows: unknown[][],
   labelCol: number,
   amountCol: number,
