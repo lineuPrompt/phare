@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { monthNameToNumber } from '@/lib/dateHelpers';
 
 export async function POST(request: Request) {
   try {
