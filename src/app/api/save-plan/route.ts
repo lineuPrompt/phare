@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { monthNameToNumber } from '@/lib/dateHelpers';
-import { materializeRule } from '@/lib/dateHelpers';
+import { monthNameToNumber, materializeRule } from '@/lib/dateHelpers';
 
 type PlanCategory = {
   name: string;
@@ -32,7 +31,6 @@ export async function POST(request: Request) {
     }
     const householdId = userRow.household_id;
 
-    // The member (for recurring item ownership)
     const { data: member } = await supabase
       .from('household_members')
       .select('id')
@@ -40,6 +38,17 @@ export async function POST(request: Request) {
       .eq('user_id', user.id)
       .single();
     const memberId = member?.id ?? null;
+
+    // ----- Resolve accounts: chequing (base) + first card if any -----
+    const { data: accts } = await supabase
+      .from('accounts')
+      .select('id, type')
+      .eq('household_id', householdId);
+
+    const chequingId = accts?.find((a) => a.type === 'chequing')?.id ?? null;
+    const firstCardId = accts?.find((a) => a.type === 'credit_card')?.id ?? null;
+    // Variable spending defaults to the card if one exists, else chequing
+    const variableAccountId = firstCardId ?? chequingId;
 
     const now = new Date();
     const monthDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
@@ -69,7 +78,6 @@ export async function POST(request: Request) {
       })))
       .select('id, name');
 
-    // name(lowercased) → category id
     const catByName = new Map<string, string>();
     for (const c of seededCats ?? []) {
       catByName.set(c.name.trim().toLowerCase(), c.id);
@@ -84,13 +92,12 @@ export async function POST(request: Request) {
     );
 
     const recurringRows: Record<string, unknown>[] = [];
-    const budgetByCat = new Map<string, number>(); // categoryId → summed budget
+    const budgetByCat = new Map<string, number>();
 
     for (const cat of (plan.monthlyBudget.categories as PlanCategory[])) {
       if (sinkingFundNames.has(cat.name.trim().toLowerCase())) continue;
 
       if (cat.type === 'income') {
-        // Income → recurring item (salary recurs monthly)
         recurringRows.push({
           household_id: householdId,
           member_id: memberId,
@@ -101,6 +108,7 @@ export async function POST(request: Request) {
           cadence: 'monthly',
           anchor_date: anchorDate,
           second_day: null,
+          account_id: chequingId,
         });
         continue;
       }
@@ -108,7 +116,7 @@ export async function POST(request: Request) {
       const categoryId = resolveCat(cat.seedCategory);
 
       if (cat.isFixed) {
-        // Fixed expense → recurring item under its category
+        // Fixed expense → recurring item, paid from chequing
         recurringRows.push({
           household_id: householdId,
           member_id: memberId,
@@ -119,19 +127,20 @@ export async function POST(request: Request) {
           cadence: 'monthly',
           anchor_date: anchorDate,
           second_day: null,
+          account_id: chequingId,
         });
       } else {
-        // Variable expense → contributes to its category's budget
+        // Variable expense → contributes to its category's budget (lands on card)
         budgetByCat.set(categoryId, (budgetByCat.get(categoryId) ?? 0) + Number(cat.budgeted));
       }
     }
 
-// ----- Insert recurring items + materialize 12 months of transactions -----
+    // ----- Insert recurring items + materialize 12 months of transactions -----
     if (recurringRows.length) {
       const { data: insertedItems } = await supabase
         .from('recurring_items')
         .insert(recurringRows)
-        .select('id, description, amount, type, cadence, anchor_date, second_day, category_id');
+        .select('id, description, amount, type, cadence, anchor_date, second_day, category_id, account_id');
 
       const startMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       const txnRows: Record<string, unknown>[] = [];
@@ -157,6 +166,7 @@ export async function POST(request: Request) {
             type: item.type,
             source: 'manual',
             recurring_item_id: item.id,
+            account_id: item.account_id,
           });
         }
       }

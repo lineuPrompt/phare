@@ -122,6 +122,15 @@
       "cta": "Download template",
       "manual": "Or start without a file — enter your numbers manually"
     },
+    "accounts": {
+      "title": "Your accounts",
+      "subtitle": "How many credit cards do you want to track? Your chequing account is set up automatically.",
+      "howMany": "Number of credit cards",
+      "nameThem": "Name your cards",
+      "cardPlaceholder": "Add your credit card name",
+      "creating": "Setting up...",
+      "continue": "Continue"
+    },
     "analyzingSteps": {
       "reading": "Reading your data...",
       "categories": "Detecting categories...",

@@ -122,6 +122,15 @@
       "cta": "Télécharger le modèle",
       "manual": "Ou commencez sans fichier — entrez vos chiffres manuellement"
     },
+    "accounts": {
+      "title": "Vos comptes",
+      "subtitle": "Combien de cartes de crédit voulez-vous suivre? Votre compte chèque est configuré automatiquement.",
+      "howMany": "Nombre de cartes de crédit",
+      "nameThem": "Nommez vos cartes",
+      "cardPlaceholder": "Nom de votre carte de crédit",
+      "creating": "Configuration...",
+      "continue": "Continuer"
+    },
     "analyzingSteps": {
       "reading": "Lecture de vos données...",
       "categories": "Détection des catégories...",
