@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { monthNameToNumber } from '@/lib/dateHelpers';
+import { materializeRule } from '@/lib/dateHelpers';
+
+type PlanCategory = {
+  name: string;
+  budgeted: number;
+  type: string;
+  seedCategory?: string;
+  isFixed?: boolean;
+};
 
 export async function POST(request: Request) {
   try {
@@ -8,13 +17,11 @@ export async function POST(request: Request) {
 
     const supabase = await createClient();
 
-    // Who is this?
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Find their household
     const { data: userRow, error: userError } = await supabase
       .from('users')
       .select('household_id')
@@ -24,45 +31,153 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No household found' }, { status: 400 });
     }
     const householdId = userRow.household_id;
-    const month = new Date();
-    const monthDate = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}-01`;
 
-    // Replace existing plan data (simple wipe-and-insert for MVP)
+    // The member (for recurring item ownership)
+    const { data: member } = await supabase
+      .from('household_members')
+      .select('id')
+      .eq('household_id', householdId)
+      .eq('user_id', user.id)
+      .single();
+    const memberId = member?.id ?? null;
+
+    const now = new Date();
+    const monthDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const anchorDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+    // ----- Wipe existing plan data -----
     await supabase.from('budgets').delete().eq('household_id', householdId);
+    await supabase.from('recurring_items').delete().eq('household_id', householdId);
     await supabase.from('categories').delete().eq('household_id', householdId);
     await supabase.from('sinking_funds').delete().eq('household_id', householdId);
     await supabase.from('goals').delete().eq('household_id', householdId);
 
-    // Names that are sinking funds — these must NOT become monthly budget lines
+    // ----- Seed the fixed category set -----
+    const seedNames: string[] = plan.seedCategories ?? [
+      'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
+      'Utilities & Subscriptions', 'Childcare', 'Shopping',
+      'Health & Personal', 'Installments', 'Unexpected',
+    ];
+
+    const { data: seededCats } = await supabase
+      .from('categories')
+      .insert(seedNames.map((name) => ({
+        household_id: householdId,
+        name,
+        type: 'expense',
+        is_sinking_fund: false,
+      })))
+      .select('id, name');
+
+    // name(lowercased) → category id
+    const catByName = new Map<string, string>();
+    for (const c of seededCats ?? []) {
+      catByName.set(c.name.trim().toLowerCase(), c.id);
+    }
+    const unexpectedId = catByName.get('unexpected') ?? (seededCats?.[0]?.id ?? null);
+    const resolveCat = (seed?: string) =>
+      (seed && catByName.get(seed.trim().toLowerCase())) || unexpectedId;
+
+    // ----- Route each plan line -----
     const sinkingFundNames = new Set(
       (plan.sinkingFunds ?? []).map((f: { name: string }) => f.name.trim().toLowerCase())
     );
 
-    // Categories + budgets (excluding sinking funds)
-    for (const cat of plan.monthlyBudget.categories) {
+    const recurringRows: Record<string, unknown>[] = [];
+    const budgetByCat = new Map<string, number>(); // categoryId → summed budget
+
+    for (const cat of (plan.monthlyBudget.categories as PlanCategory[])) {
       if (sinkingFundNames.has(cat.name.trim().toLowerCase())) continue;
 
-      const { data: catRow, error: catError } = await supabase
-        .from('categories')
-        .insert({
+      if (cat.type === 'income') {
+        // Income → recurring item (salary recurs monthly)
+        recurringRows.push({
           household_id: householdId,
-          name: cat.name,
-          type: cat.type === 'income' ? 'income' : 'expense',
-          is_sinking_fund: false,
-        })
-        .select('id')
-        .single();
-      if (catError || !catRow) continue;
+          member_id: memberId,
+          category_id: null,
+          description: cat.name,
+          amount: cat.budgeted,
+          type: 'income',
+          cadence: 'monthly',
+          anchor_date: anchorDate,
+          second_day: null,
+        });
+        continue;
+      }
 
-      await supabase.from('budgets').insert({
-        household_id: householdId,
-        category_id: catRow.id,
-        month: monthDate,
-        amount: cat.budgeted,
-      });
+      const categoryId = resolveCat(cat.seedCategory);
+
+      if (cat.isFixed) {
+        // Fixed expense → recurring item under its category
+        recurringRows.push({
+          household_id: householdId,
+          member_id: memberId,
+          category_id: categoryId,
+          description: cat.name,
+          amount: cat.budgeted,
+          type: 'expense',
+          cadence: 'monthly',
+          anchor_date: anchorDate,
+          second_day: null,
+        });
+      } else {
+        // Variable expense → contributes to its category's budget
+        budgetByCat.set(categoryId, (budgetByCat.get(categoryId) ?? 0) + Number(cat.budgeted));
+      }
     }
 
-    // Sinking funds
+// ----- Insert recurring items + materialize 12 months of transactions -----
+    if (recurringRows.length) {
+      const { data: insertedItems } = await supabase
+        .from('recurring_items')
+        .insert(recurringRows)
+        .select('id, description, amount, type, cadence, anchor_date, second_day, category_id');
+
+      const startMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const txnRows: Record<string, unknown>[] = [];
+
+      for (const item of insertedItems ?? []) {
+        const dates = materializeRule(
+          {
+            cadence: item.cadence as 'monthly' | 'biweekly' | 'semimonthly',
+            anchorDate: item.anchor_date,
+            secondDay: item.second_day,
+          },
+          startMonth,
+          12
+        );
+        for (const d of dates) {
+          txnRows.push({
+            household_id: householdId,
+            member_id: memberId,
+            category_id: item.category_id,
+            amount: item.amount,
+            description: item.description,
+            date: d,
+            type: item.type,
+            source: 'manual',
+            recurring_item_id: item.id,
+          });
+        }
+      }
+
+      if (txnRows.length) {
+        await supabase.from('transactions').insert(txnRows);
+      }
+    }
+
+    // ----- Insert category budgets (summed variable spending per category) -----
+    const budgetRows = [...budgetByCat.entries()].map(([categoryId, amount]) => ({
+      household_id: householdId,
+      category_id: categoryId,
+      month: monthDate,
+      amount: Math.round(amount * 100) / 100,
+    }));
+    if (budgetRows.length) {
+      await supabase.from('budgets').insert(budgetRows);
+    }
+
+    // ----- Sinking funds -----
     if (plan.sinkingFunds?.length) {
       await supabase.from('sinking_funds').insert(
         plan.sinkingFunds.map((f: { name: string; annualAmount: number; dueMonth: string }) => ({
@@ -74,7 +189,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Goals
+    // ----- Goals -----
     if (plan.goals?.length) {
       await supabase.from('goals').insert(
         plan.goals.map((g: { name: string; targetAmount: number }) => ({
@@ -85,7 +200,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // The review + recommendation as the first conversation entry
+    // ----- Review -----
     await supabase.from('conversations').insert({
       household_id: householdId,
       user_id: user.id,
