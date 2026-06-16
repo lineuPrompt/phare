@@ -31,18 +31,19 @@ export default function SummaryTable({
         </thead>
         <tbody>
           {summary.map((row) => {
-            const over = row.difference < 0;
+            const noBudget = row.budget === 0;
+            const over = !noBudget && row.difference < 0;
             const untouched = row.spent === 0;
             return (
               <tr key={row.categoryId} style={{ borderBottom: '1px solid #F3F4F6' }}>
                 <td className="py-2.5" style={{ color: '#0F2044' }}>{row.name}</td>
                 <td className="py-2.5 text-right" style={{ color: '#6B7280' }}>{formatCurrency(row.budget, locale)}</td>
                 <td className="py-2.5 text-right font-medium" style={{ color: '#0F2044' }}>{formatCurrency(row.spent, locale)}</td>
-                <td className="py-2.5 text-right font-medium" style={{ color: over ? '#DC2626' : '#16A34A' }}>
-                  {formatCurrency(row.difference, locale)}
+                <td className="py-2.5 text-right font-medium" style={{ color: noBudget ? '#9CA3AF' : over ? '#DC2626' : '#16A34A' }}>
+                  {noBudget ? '—' : formatCurrency(row.difference, locale)}
                 </td>
                 <td className="py-2.5 text-right">
-                  {untouched ? <span style={{ color: '#9CA3AF' }}>—</span>
+                  {untouched || noBudget ? <span style={{ color: '#9CA3AF' }}>—</span>
                     : over ? <span style={{ color: '#DC2626' }}>{t('over')}</span>
                     : <span style={{ color: '#16A34A' }}>✓ {t('ok')}</span>}
                 </td>
