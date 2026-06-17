@@ -16,30 +16,34 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const { date, description, categoryId, amount } = await request.json();
+    const { date, description, categoryId, amount, accountId } = await request.json();
 
     const supabase = await createClient();
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('transactions')
       .update({
         date,
         description: description?.trim(),
         category_id: categoryId || null,
+        account_id: accountId || null,
         amount,
       })
       .eq('id', id)
-      .eq('household_id', householdId);
+      .eq('household_id', householdId)
+      .select('id, category_id, account_id')
+      .maybeSingle();
 
     if (error) {
-      console.error('PATCH update error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    return NextResponse.json({ updated: true });
+    if (!data) {
+      return NextResponse.json({ error: 'Expense not found or not accessible' }, { status: 404 });
+    }
+    return NextResponse.json({ updated: true, expense: data });
   } catch (err) {
-    console.error('PATCH threw:', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

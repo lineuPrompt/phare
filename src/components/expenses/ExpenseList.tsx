@@ -37,7 +37,7 @@ export default function ExpenseList({
 
   const saveEdit = async (id: string) => {
     console.log('SAVING:', { id, editAccount, editCat });
-    await fetch(`/api/expenses/${id}`, {
+    const response = await fetch(`/api/expenses/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -48,6 +48,10 @@ export default function ExpenseList({
         accountId: editAccount || null,
       }),
     });
+    if (!response.ok) {
+      console.error('Failed to update expense:', await response.json().catch(() => null));
+      return;
+    }
     setEditingId(null);
     onChanged();
   };
