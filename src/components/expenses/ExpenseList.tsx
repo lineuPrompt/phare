@@ -2,16 +2,18 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Expense, ExpenseCategory, formatCurrency } from './types';
+import { Expense, ExpenseCategory, Account, formatCurrency } from './types';
 
 export default function ExpenseList({
   expenses,
   categories,
+  accounts,
   locale,
   onChanged,
 }: {
   expenses: Expense[];
   categories: ExpenseCategory[];
+  accounts: Account[];
   locale: string;
   onChanged: () => void;
 }) {
@@ -21,6 +23,7 @@ export default function ExpenseList({
   const [editDesc, setEditDesc] = useState('');
   const [editCat, setEditCat] = useState('');
   const [editAmount, setEditAmount] = useState('');
+  const [editAccount, setEditAccount] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Expense | null>(null);
 
   const startEdit = (e: Expense) => {
@@ -29,9 +32,11 @@ export default function ExpenseList({
     setEditDesc(e.description);
     setEditCat(e.category_id ?? '');
     setEditAmount(String(e.amount));
+    setEditAccount(e.account_id ?? '');
   };
 
   const saveEdit = async (id: string) => {
+    console.log('SAVING:', { id, editAccount, editCat });
     await fetch(`/api/expenses/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -40,6 +45,7 @@ export default function ExpenseList({
         description: editDesc,
         categoryId: editCat,
         amount: parseFloat(editAmount),
+        accountId: editAccount || null,
       }),
     });
     setEditingId(null);
@@ -84,6 +90,12 @@ export default function ExpenseList({
                   className="px-2 py-1.5 rounded text-sm outline-none bg-white" style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}>
                   <option value="">—</option>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <select value={editAccount} onChange={(ev) => setEditAccount(ev.target.value)}
+                  className="px-2 py-1.5 rounded text-sm outline-none bg-white" style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>{a.type === 'chequing' ? '🏦' : '💳'} {a.name}</option>
+                  ))}
                 </select>
                 <input type="number" step="0.01" value={editAmount} onChange={(ev) => setEditAmount(ev.target.value)}
                   className="w-24 px-2 py-1.5 rounded text-sm outline-none" style={{ border: '1px solid #D1D5DB', color: '#0F2044' }} />

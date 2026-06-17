@@ -128,6 +128,7 @@ export default function ExpensesPage() {
                 <ExpenseList
                   expenses={data.expenses}
                   categories={data.categories}
+                  accounts={data.accounts}
                   locale={locale}
                   onChanged={load}
                 />
