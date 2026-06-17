@@ -5,7 +5,7 @@ import { recurrenceDates } from '@/lib/dateHelpers';
 // POST: create expense (single, monthly recurring, or installments)
 export async function POST(request: Request) {
   try {
-    const { date, description, categoryId, amount, repeat, installments } = await request.json();
+    const { date, description, categoryId, amount, repeat, installments, accountId } = await request.json();
 
     if (!date || !description || !amount || !categoryId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -44,6 +44,7 @@ export async function POST(request: Request) {
       source: string;
       recurrence_id: string | null;
       installment_label: string | null;
+      account_id: string | null;
     };
 
     const rows: Row[] = [];
@@ -52,46 +53,25 @@ export async function POST(request: Request) {
       const recurrenceId = crypto.randomUUID();
       recurrenceDates(date, 12).forEach((d) => {
         rows.push({
-          household_id: householdId,
-          member_id: member.id,
-          category_id: categoryId,
-          amount,
-          description,
-          date: d,
-          type: 'expense',
-          source: 'manual',
-          recurrence_id: recurrenceId,
-          installment_label: null,
+          household_id: householdId, member_id: member.id, category_id: categoryId,
+          amount, description, date: d, type: 'expense', source: 'manual',
+          recurrence_id: recurrenceId, installment_label: null, account_id: accountId ?? null,
         });
       });
     } else if (repeat === 'installments' && installments > 1) {
       const recurrenceId = crypto.randomUUID();
       recurrenceDates(date, installments).forEach((d, i) => {
         rows.push({
-          household_id: householdId,
-          member_id: member.id,
-          category_id: categoryId,
-          amount,
-          description,
-          date: d,
-          type: 'expense',
-          source: 'manual',
-          recurrence_id: recurrenceId,
-          installment_label: `${i + 1}/${installments}`,
+          household_id: householdId, member_id: member.id, category_id: categoryId,
+          amount, description, date: d, type: 'expense', source: 'manual',
+          recurrence_id: recurrenceId, installment_label: `${i + 1}/${installments}`, account_id: accountId ?? null,
         });
       });
     } else {
       rows.push({
-        household_id: householdId,
-        member_id: member.id,
-        category_id: categoryId,
-        amount,
-        description,
-        date,
-        type: 'expense',
-        source: 'manual',
-        recurrence_id: null,
-        installment_label: null,
+        household_id: householdId, member_id: member.id, category_id: categoryId,
+        amount, description, date, type: 'expense', source: 'manual',
+        recurrence_id: null, installment_label: null, account_id: accountId ?? null,
       });
     }
 
@@ -108,11 +88,12 @@ export async function POST(request: Request) {
   }
 }
 
-// GET: expenses + category summary for a given month (?month=2026-06)
+// GET: per-account expenses + summary for a month (?month=2026-06&account=<id>)
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const monthParam = url.searchParams.get('month');
+    const accountParam = url.searchParams.get('account');
     if (!monthParam || !/^\d{4}-\d{2}$/.test(monthParam)) {
       return NextResponse.json({ error: 'Invalid month' }, { status: 400 });
     }
@@ -122,26 +103,42 @@ export async function GET(request: Request) {
     if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const { data: userRow } = await supabase
-      .from('users')
-      .select('household_id')
-      .eq('id', user.id)
-      .single();
+      .from('users').select('household_id').eq('id', user.id).single();
     if (!userRow?.household_id) {
       return NextResponse.json({ error: 'No household' }, { status: 400 });
     }
     const householdId = userRow.household_id;
 
+    const { data: accounts } = await supabase
+      .from('accounts')
+      .select('id, name, type')
+      .eq('household_id', householdId)
+      .order('type', { ascending: true })
+      .order('name', { ascending: true });
+
+    const accountList = accounts ?? [];
+    const selectedAccount =
+      accountList.find((a) => a.id === accountParam) ??
+      accountList.find((a) => a.type === 'chequing') ??
+      accountList[0] ??
+      null;
+
     const monthStart = `${monthParam}-01`;
     const [y, m] = monthParam.split('-').map(Number);
     const nextMonth = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
 
-    const { data: allTxns } = await supabase
+    let txnQuery = supabase
       .from('transactions')
-      .select('id, date, description, amount, type, installment_label, recurrence_id, category_id, categories(name), household_members(name)')
+      .select('id, date, description, amount, type, account_id, installment_label, recurrence_id, category_id, categories(name), household_members(name)')
       .eq('household_id', householdId)
       .gte('date', monthStart)
       .lt('date', nextMonth)
       .order('date', { ascending: true });
+
+    if (selectedAccount) {
+      txnQuery = txnQuery.eq('account_id', selectedAccount.id);
+    }
+    const { data: allTxns } = await txnQuery;
 
     const txns = (allTxns ?? []).filter((t) => t.type === 'expense');
     const incomeTxns = (allTxns ?? []).filter((t) => t.type === 'income');
@@ -207,8 +204,10 @@ export async function GET(request: Request) {
 
     const totalSpent = Math.round([...spentByCategory.values()].reduce((s, v) => s + v, 0) * 100) / 100;
 
-return NextResponse.json({
+    return NextResponse.json({
       month: monthParam,
+      accounts: accountList,
+      selectedAccount,
       expenses: txns,
       income: incomeTxns,
       totalIncome,

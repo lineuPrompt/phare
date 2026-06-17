@@ -8,10 +8,12 @@ export default function ExpenseForm({
   categories,
   onSaved,
   defaultDate,
+  accountId,
 }: {
   categories: ExpenseCategory[];
   onSaved: () => void;
   defaultDate?: string;
+  accountId: string | null;
 }) {
   const t = useTranslations('expenses.form');
   const today = new Date().toISOString().slice(0, 10);
@@ -43,6 +45,7 @@ export default function ExpenseForm({
           amount: parseFloat(amount),
           repeat,
           installments: repeat === 'installments' ? parseInt(installments, 10) : undefined,
+          accountId,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
@@ -101,31 +104,16 @@ export default function ExpenseForm({
           </select>
         ) : (
           <div className="flex gap-2">
-            <input
-              type="text"
-              value={newCategoryName}
-              autoFocus
+            <input type="text" value={newCategoryName} autoFocus
               onChange={(e) => setNewCategoryName(e.target.value)}
               placeholder={t('newCategoryName')}
-              className="flex-1 min-w-0 px-3 py-2.5 rounded-lg text-sm outline-none"
-              style={inputStyle}
-            />
-            <button
-              type="button"
-              onClick={createCategory}
+              className="flex-1 min-w-0 px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
+            <button type="button" onClick={createCategory}
               className="px-3 py-2.5 rounded-lg text-sm font-medium cursor-pointer shrink-0"
-              style={{ background: '#2ABFBF', color: '#0F2044' }}
-            >
-              ✓
-            </button>
-            <button
-              type="button"
-              onClick={() => { setNewCategoryMode(false); setNewCategoryName(''); }}
+              style={{ background: '#2ABFBF', color: '#0F2044' }}>✓</button>
+            <button type="button" onClick={() => { setNewCategoryMode(false); setNewCategoryName(''); }}
               className="px-3 py-2.5 rounded-lg text-sm cursor-pointer shrink-0"
-              style={{ border: '1.5px solid #D1D5DB', color: '#6B7280' }}
-            >
-              ✕
-            </button>
+              style={{ border: '1.5px solid #D1D5DB', color: '#6B7280' }}>✕</button>
           </div>
         )}
         <input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)}

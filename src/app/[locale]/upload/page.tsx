@@ -168,11 +168,22 @@ export default function UploadPage() {
     }
   }, [formIncome, formExpenses]);
 
-  const confirmAccounts = useCallback(async () => {
+const confirmAccounts = useCallback(async () => {
     if (!pendingPlanBody) return;
     setCreatingAccounts(true);
     setError('');
     try {
+      // Clear existing card accounts first (re-onboarding replaces them; chequing is kept)
+      const existing = await fetch('/api/accounts').then((r) => r.json()).catch(() => null);
+      if (existing?.accounts) {
+        for (const acct of existing.accounts) {
+          if (acct.type !== 'chequing') {
+            await fetch(`/api/accounts/${acct.id}`, { method: 'DELETE' });
+          }
+        }
+      }
+
+      // Create the new card accounts
       for (let i = 0; i < cardCount; i++) {
         const name = (cardNames[i] || `Card ${i + 1}`).trim();
         await fetch('/api/accounts', {

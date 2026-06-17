@@ -6,11 +6,11 @@ import { useRouter, usePathname } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import ExpenseForm from '@/components/expenses/ExpenseForm';
-import SummaryTable from '@/components/expenses/SummaryTable';
-import { MonthData } from '@/components/expenses/types';
-import GoalSetter from '@/components/expenses/GoalSetter';
 import ExpenseList from '@/components/expenses/ExpenseList';
+import SummaryTable from '@/components/expenses/SummaryTable';
+import GoalSetter from '@/components/expenses/GoalSetter';
 import MoneyFlow from '@/components/expenses/MoneyFlow';
+import { MonthData } from '@/components/expenses/types';
 
 export default function ExpensesPage() {
   const t = useTranslations('expenses');
@@ -18,9 +18,9 @@ export default function ExpensesPage() {
   const pathname = usePathname();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
 
-// Rolling window: current month + 11 ahead, multi-year safe
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.toISOString().slice(0, 7));
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
 
   const months: { value: string; label: string }[] = [];
   for (let i = 0; i < 12; i++) {
@@ -36,19 +36,26 @@ export default function ExpensesPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    fetch(`/api/expenses?month=${selectedMonth}`)
+    const params = new URLSearchParams({ month: selectedMonth });
+    if (selectedAccount) params.set('account', selectedAccount);
+    fetch(`/api/expenses?${params.toString()}`)
       .then(async (res) => {
-        if (res.status === 401) {
-          router.push(`/${locale}/signin`);
-          return null;
-        }
+        if (res.status === 401) { router.push(`/${locale}/signin`); return null; }
         return res.json();
       })
-      .then((d) => { if (d) setData(d); })
+      .then((d) => {
+        if (d) {
+          setData(d);
+          // Lock in the resolved account so tabs reflect the real selection
+          if (!selectedAccount && d.selectedAccount) setSelectedAccount(d.selectedAccount.id);
+        }
+      })
       .finally(() => setLoading(false));
-  }, [selectedMonth, router, locale]);
+  }, [selectedMonth, selectedAccount, router, locale]);
 
   useEffect(() => { load(); }, [load]);
+
+  const isChequing = data?.selectedAccount?.type === 'chequing';
 
   return (
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
@@ -57,62 +64,82 @@ export default function ExpensesPage() {
         <Sidebar locale={locale} />
         <div className="flex-1 min-w-0">
           <div className="max-w-5xl mx-auto px-6 py-10 space-y-6">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <h1 className="text-3xl font-bold" style={{ color: '#0F2044' }}>
-                {t('title')}
-              </h1>
-            </div>
+            <h1 className="text-3xl font-bold" style={{ color: '#0F2044' }}>{t('title')}</h1>
+
+            {/* Account tabs */}
+            {data && data.accounts.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {data.accounts.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => setSelectedAccount(a.id)}
+                    className="px-4 py-2 rounded-xl text-sm font-medium cursor-pointer transition-all"
+                    style={{
+                      background: data.selectedAccount?.id === a.id ? '#0F2044' : 'white',
+                      color: data.selectedAccount?.id === a.id ? 'white' : '#6B7280',
+                      border: data.selectedAccount?.id === a.id ? '2px solid #0F2044' : '1.5px solid #D1D5DB',
+                    }}
+                  >
+                    {a.type === 'chequing' ? '🏦 ' : '💳 '}{a.name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Month tabs */}
             <div className="flex gap-2 overflow-x-auto pb-2">
-              {months.map((m) => (
-                <button
-                  key={m.value}
-                  onClick={() => setSelectedMonth(m.value)}
+              {months.map((mo) => (
+                <button key={mo.value} onClick={() => setSelectedMonth(mo.value)}
                   className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap cursor-pointer transition-all shrink-0"
                   style={{
-                    background: selectedMonth === m.value ? '#0F2044' : 'white',
-                    color: selectedMonth === m.value ? 'white' : '#6B7280',
-                    border: selectedMonth === m.value ? '2px solid #0F2044' : '1.5px solid #D1D5DB',
-                  }}
-                >
-                  {m.label}
+                    background: selectedMonth === mo.value ? '#0F2044' : 'white',
+                    color: selectedMonth === mo.value ? 'white' : '#6B7280',
+                    border: selectedMonth === mo.value ? '2px solid #0F2044' : '1.5px solid #D1D5DB',
+                  }}>
+                  {mo.label}
                 </button>
               ))}
             </div>
 
-            {loading && (
-              <p className="text-center py-12" style={{ color: '#6B7280' }}>{t('loading')}</p>
-            )}
+            {loading && <p className="text-center py-12" style={{ color: '#6B7280' }}>{t('loading')}</p>}
 
             {!loading && data && (
               <>
-                <GoalSetter
-                  month={selectedMonth}
-                  currentGoal={data.cardGoal}
-                  locale={locale}
+                {/* Chequing → money in/out. Card → goal + summary. */}
+                {isChequing ? (
+                  <MoneyFlow
+                    income={data.income}
+                    totalIncome={data.totalIncome}
+                    totalSpent={data.totalSpent}
+                    net={data.net}
+                    locale={locale}
+                  />
+                ) : (
+                  <GoalSetter month={selectedMonth} currentGoal={data.cardGoal} locale={locale} onSaved={load} />
+                )}
+
+                <ExpenseForm
+                  categories={data.categories}
                   onSaved={load}
+                  defaultDate={`${selectedMonth}-01`}
+                  accountId={data.selectedAccount?.id ?? null}
                 />
-                <MoneyFlow
-                  income={data.income}
-                  totalIncome={data.totalIncome}
-                  totalSpent={data.totalSpent}
-                  net={data.net}
-                  locale={locale}
-                />
-                <ExpenseForm categories={data.categories} onSaved={load} defaultDate={`${selectedMonth}-01`} />
+
                 <ExpenseList
                   expenses={data.expenses}
                   categories={data.categories}
                   locale={locale}
                   onChanged={load}
                 />
-                <SummaryTable
-                  summary={data.summary}
-                  totalSpent={data.totalSpent}
-                  cardGoal={data.cardGoal}
-                  locale={locale}
-                />
+
+                {!isChequing && (
+                  <SummaryTable
+                    summary={data.summary}
+                    totalSpent={data.totalSpent}
+                    cardGoal={data.cardGoal}
+                    locale={locale}
+                  />
+                )}
               </>
             )}
           </div>

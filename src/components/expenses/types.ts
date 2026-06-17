@@ -1,10 +1,14 @@
 export type ExpenseCategory = { id: string; name: string; type: string };
 
+export type Account = { id: string; name: string; type: string };
+
 export type Expense = {
   id: string;
   date: string;
   description: string;
   amount: number;
+  type: string;
+  account_id: string | null;
   installment_label: string | null;
   recurrence_id: string | null;
   category_id: string | null;
@@ -22,6 +26,8 @@ export type SummaryRow = {
 
 export type MonthData = {
   month: string;
+  accounts: Account[];
+  selectedAccount: Account | null;
   expenses: Expense[];
   income: Expense[];
   totalIncome: number;
