@@ -33,11 +33,33 @@ export default function UploadPage() {
   const [pendingPlanBody, setPendingPlanBody] = useState<Record<string, unknown> | null>(null);
   const [creatingAccounts, setCreatingAccounts] = useState(false);
 
+  // Plan save state
+  type PlanSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+  const [planSaveStatus, setPlanSaveStatus] = useState<PlanSaveStatus>('idle');
+  const [pendingSavePayload, setPendingSavePayload] = useState<{ plan: Plan; reviewText: string; locale: string } | null>(null);
+
   const localeOf = () => (typeof window !== 'undefined' && window.location.pathname.startsWith('/fr') ? 'fr' : 'en');
+
+  const doSave = useCallback(async (payload: { plan: Plan; reviewText: string; locale: string }) => {
+    setPlanSaveStatus('saving');
+    try {
+      const res = await fetch('/api/save-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      setPlanSaveStatus('saved');
+    } catch (err) {
+      console.error('Plan save error:', err);
+      setPlanSaveStatus('error');
+    }
+  }, []);
 
   const streamReview = useCallback(async (planData: Plan, planBody: Record<string, unknown>) => {
     setReviewStreaming(true);
     setReviewText('');
+    setPlanSaveStatus('idle');
     const locale = localeOf();
     let fullText = '';
     try {
@@ -58,18 +80,21 @@ export default function UploadPage() {
         setReviewText((prev) => prev + chunk);
       }
 
-      fetch('/api/save-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: planData, reviewText: fullText, locale }),
-      }).catch(() => {});
+      const savePayload = { plan: planData, reviewText: fullText, locale };
+      setPendingSavePayload(savePayload);
+      await doSave(savePayload);
     } catch (err) {
       console.error('Review streaming error:', err);
       setReviewText(t('plan.reviewError'));
     } finally {
       setReviewStreaming(false);
     }
-  }, [t]);
+  }, [t, doSave]);
+
+  const retrySave = useCallback(async () => {
+    if (!pendingSavePayload) return;
+    await doSave(pendingSavePayload);
+  }, [pendingSavePayload, doSave]);
 
   const buildPlan = useCallback(async (planBody: Record<string, unknown>) => {
     setStatus('analyzing');
@@ -262,7 +287,9 @@ const confirmAccounts = useCallback(async () => {
             plan={plan}
             reviewText={reviewText}
             reviewStreaming={reviewStreaming}
-            onStartOver={() => { setStatus('idle'); setPlan(null); setReviewText(''); }}
+            planSaveStatus={planSaveStatus}
+            onRetrySave={retrySave}
+            onStartOver={() => { setStatus('idle'); setPlan(null); setReviewText(''); setPlanSaveStatus('idle'); setPendingSavePayload(null); }}
           />
         )}
       </div>

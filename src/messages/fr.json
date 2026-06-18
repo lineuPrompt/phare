@@ -177,7 +177,10 @@
       "monthlyReview": "Votre première revue mensuelle",
       "startOver": "Téléverser un autre fichier",
       "estimatedDate": "Est.",
-      "reviewError": "Nous n'avons pas pu générer votre revue pour le moment. Veuillez réessayer."
+      "reviewError": "Nous n'avons pas pu générer votre revue pour le moment. Veuillez réessayer.",
+      "saving": "Enregistrement du plan...",
+      "saveError": "Impossible d'enregistrer votre plan.",
+      "saveRetry": "Réessayer"
     },
     "mode": {
       "own": "Mon propre fichier",

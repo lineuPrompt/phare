@@ -7,11 +7,15 @@ export default function PlanDisplay({
   plan,
   reviewText,
   reviewStreaming,
+  planSaveStatus,
+  onRetrySave,
   onStartOver,
 }: {
   plan: Plan;
   reviewText: string;
   reviewStreaming: boolean;
+  planSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
+  onRetrySave: () => void;
   onStartOver: () => void;
 }) {
   const t = useTranslations('upload');
@@ -139,6 +143,18 @@ export default function PlanDisplay({
           )}
         </div>
       </div>
+
+      {planSaveStatus === 'saving' && (
+        <p className="text-center text-sm" style={{ color: '#9CA3AF' }}>{t('plan.saving')}</p>
+      )}
+      {planSaveStatus === 'error' && (
+        <div className="text-center">
+          <p className="text-sm mb-1" style={{ color: '#DC2626' }}>{t('plan.saveError')}</p>
+          <button onClick={onRetrySave} className="text-sm font-medium underline cursor-pointer" style={{ color: '#DC2626' }}>
+            {t('plan.saveRetry')}
+          </button>
+        </div>
+      )}
 
       <div className="text-center pt-4">
         <button onClick={onStartOver} className="text-sm font-medium underline cursor-pointer" style={{ color: '#6B7280' }}>

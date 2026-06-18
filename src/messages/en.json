@@ -177,7 +177,10 @@
       "monthlyReview": "Your First Monthly Review",
       "startOver": "Upload a different file",
       "estimatedDate": "Est.",
-      "reviewError": "We couldn't generate your review just now. Please try again."
+      "reviewError": "We couldn't generate your review just now. Please try again.",
+      "saving": "Saving your plan...",
+      "saveError": "Could not save your plan.",
+      "saveRetry": "Retry"
     },
     "mode": {
       "own": "My own file",
