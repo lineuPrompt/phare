@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { recurrenceDates } from '@/lib/dateHelpers';
+import { recurrenceDates, bridgePaymentDate } from '@/lib/dateHelpers';
 
 // POST: create expense (single, monthly recurring, or installments)
 export async function POST(request: Request) {
@@ -109,6 +109,11 @@ export async function GET(request: Request) {
     }
     const householdId = userRow.household_id;
 
+    const { data: { user: u2 } } = await supabase.auth.getUser();
+    const { data: memberRow } = await supabase
+      .from('household_members').select('id').eq('household_id', householdId).eq('user_id', u2?.id).single();
+    const memberId = memberRow?.id ?? null;
+
     const { data: accounts } = await supabase
       .from('accounts')
       .select('id, name, type')
@@ -127,9 +132,76 @@ export async function GET(request: Request) {
     const [y, m] = monthParam.split('-').map(Number);
     const nextMonth = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
 
+    // ----- BRIDGE: when viewing chequing, ensure prior-month card totals
+    // exist as payment lines this month -----
+    if (selectedAccount?.type === 'chequing') {
+      const chequingId = selectedAccount.id;
+      // Previous month (the spending month whose total is paid now)
+      const prevMonthIndex = (m - 1) - 1; // 0-based prev month
+      const prevYear = y + Math.floor(prevMonthIndex / 12);
+      const prevMonth0 = ((prevMonthIndex % 12) + 12) % 12;
+      const prevMonth = `${prevYear}-${String(prevMonth0 + 1).padStart(2, '0')}`;
+      const prevStart = `${prevMonth}-01`;
+      const prevEnd = monthStart; // exclusive upper bound = this month's start
+
+      const cards = accountList.filter((a) => a.type === 'credit_card');
+
+      for (const card of cards) {
+        // Sum that card's spending in the previous month
+        const { data: cardTxns } = await supabase
+          .from('transactions')
+          .select('amount')
+          .eq('household_id', householdId)
+          .eq('account_id', card.id)
+          .eq('type', 'expense')
+          .gte('date', prevStart)
+          .lt('date', prevEnd);
+
+        const total = Math.round(
+          ((cardTxns ?? []).reduce((s, t) => s + Number(t.amount), 0)) * 100
+        ) / 100;
+
+        // Does a bridge line already exist for this card + spending month?
+        const { data: existing } = await supabase
+          .from('transactions')
+          .select('id, amount')
+          .eq('household_id', householdId)
+          .eq('is_bridge', true)
+          .eq('bridge_source_account', card.id)
+          .eq('bridge_source_month', prevMonth)
+          .maybeSingle();
+
+        if (total <= 0) {
+          // No spending last month → no payment line needed.
+          // (We deliberately do NOT delete an existing edited line.)
+          continue;
+        }
+
+        if (!existing) {
+          // Create the payment line (editable later by the user)
+          await supabase.from('transactions').insert({
+            household_id: householdId,
+            member_id: memberId,
+            account_id: chequingId,
+            category_id: null,
+            amount: total,
+            description: `${card.name} payment`,
+            date: bridgePaymentDate(prevMonth, 1),
+            type: 'expense',
+            source: 'bridge',
+            is_bridge: true,
+            bridge_source_account: card.id,
+            bridge_source_month: prevMonth,
+          });
+        }
+        // If it exists, we leave it — the user may have corrected the amount
+        // to match their real statement. We don't overwrite their edit.
+      }
+    }
+
     let txnQuery = supabase
       .from('transactions')
-      .select('id, date, description, amount, type, account_id, installment_label, recurrence_id, category_id, categories(name), household_members(name)')
+      .select('id, date, description, amount, type, account_id, is_bridge, installment_label, recurrence_id, category_id, categories(name), household_members(name)')
       .eq('household_id', householdId)
       .gte('date', monthStart)
       .lt('date', nextMonth)
@@ -166,12 +238,13 @@ export async function GET(request: Request) {
       .limit(1)
       .maybeSingle();
 
-    type Txn = { amount: number; category_id: string | null };
+    type Txn = { amount: number; category_id: string | null; is_bridge?: boolean };
     type BudgetRow = { amount: number; category_id: string; categories: { name: string; type: string } | null };
 
+    // Bridge lines don't belong to a spending category — exclude from category rollup
     const spentByCategory = new Map<string, number>();
     for (const t of (txns as Txn[] | null) ?? []) {
-      if (!t.category_id) continue;
+      if (!t.category_id || t.is_bridge) continue;
       spentByCategory.set(t.category_id, (spentByCategory.get(t.category_id) ?? 0) + Number(t.amount));
     }
 
@@ -202,7 +275,11 @@ export async function GET(request: Request) {
       }
     }
 
-    const totalSpent = Math.round([...spentByCategory.values()].reduce((s, v) => s + v, 0) * 100) / 100;
+    // totalSpent for chequing should include bridge lines (real money out);
+    // for cards it's category spending. Compute from the actual expense txns.
+    const totalSpent = Math.round(
+      (txns as { amount: number }[]).reduce((s, t) => s + Number(t.amount), 0) * 100
+    ) / 100;
 
     return NextResponse.json({
       month: monthParam,

@@ -134,3 +134,26 @@ export function materializeRule(
   // Dedupe (biweekly edges can't double here, but safe) and sort
   return [...new Set(all)].sort();
 }
+
+/**
+ * The chequing payment for a card statement falls in the month AFTER the
+ * spending month. Given a spending month (YYYY-MM) and a payment day-of-month,
+ * returns the payment date (YYYY-MM-DD) in the following month, clamped to
+ * month end.
+ *
+ * e.g. spending in 2026-06, payDay 1 → "2026-07-01"
+ *      spending in 2026-12, payDay 15 → "2027-01-15"
+ *      spending in 2026-01, payDay 31 → "2026-02-28" (clamped)
+ */
+export function bridgePaymentDate(spendMonth: string, payDay: number): string {
+  const [y, m] = spendMonth.split('-').map(Number);
+  // Payment month is the month after spending
+  const payMonthIndex = m; // m is 1-based; the next month's 0-based index is m
+  const payYear = y + Math.floor(payMonthIndex / 12);
+  const payMonth0 = payMonthIndex % 12; // 0-based month of payment
+  const lastDay = new Date(payYear, payMonth0 + 1, 0).getDate();
+  const day = Math.min(Math.max(payDay, 1), lastDay);
+  const mm = String(payMonth0 + 1).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  return `${payYear}-${mm}-${dd}`;
+}

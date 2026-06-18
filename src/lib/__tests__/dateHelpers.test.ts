@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { monthNameToNumber , materializeRule, occurrencesInMonth } from '../dateHelpers';
+import { monthNameToNumber , materializeRule, occurrencesInMonth, bridgePaymentDate } from '../dateHelpers';
 
 describe('monthNameToNumber', () => {
   it('maps English month names', () => {
@@ -220,5 +220,40 @@ describe('materializeRule', () => {
     const dates = materializeRule(rule, '2026-06', 2);
     const sorted = [...dates].sort();
     expect(dates).toEqual(sorted);
+  });
+});
+
+describe('bridgePaymentDate', () => {
+  it('payment lands in the month after spending', () => {
+    expect(bridgePaymentDate('2026-06', 1)).toBe('2026-07-01');
+    expect(bridgePaymentDate('2026-06', 15)).toBe('2026-07-15');
+  });
+
+  it('rolls over the year boundary', () => {
+    expect(bridgePaymentDate('2026-12', 1)).toBe('2027-01-01');
+    expect(bridgePaymentDate('2026-12', 15)).toBe('2027-01-15');
+  });
+
+  it('clamps a day-31 payment into a short month', () => {
+    // spending Jan → payment Feb, 2026 not leap → Feb 28
+    expect(bridgePaymentDate('2026-01', 31)).toBe('2026-02-28');
+  });
+
+  it('clamps to Feb 29 in a leap year', () => {
+    // spending Jan 2028 → payment Feb 2028 (leap)
+    expect(bridgePaymentDate('2028-01', 31)).toBe('2028-02-29');
+  });
+
+  it('clamps day-31 into a 30-day payment month', () => {
+    // spending March → payment April (30 days)
+    expect(bridgePaymentDate('2026-03', 31)).toBe('2026-04-30');
+  });
+
+  it('guards against payDay below 1', () => {
+    expect(bridgePaymentDate('2026-06', 0)).toBe('2026-07-01');
+  });
+
+  it('preserves a normal mid-month day', () => {
+    expect(bridgePaymentDate('2026-09', 10)).toBe('2026-10-10');
   });
 });
