@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { monthNameToNumber , materializeRule, occurrencesInMonth, bridgePaymentDate } from '../dateHelpers';
+import {
+  formatLocalDate,
+  formatLocalMonth,
+  materializeFutureRule,
+  materializeRule,
+  monthNameToNumber,
+  occurrencesInMonth,
+  bridgePaymentDate,
+} from '../dateHelpers';
 
 describe('monthNameToNumber', () => {
   it('maps English month names', () => {
@@ -220,6 +228,41 @@ describe('materializeRule', () => {
     const dates = materializeRule(rule, '2026-06', 2);
     const sorted = [...dates].sort();
     expect(dates).toEqual(sorted);
+  });
+});
+
+describe('formatLocalDate and formatLocalMonth', () => {
+  it('formats dates using local calendar fields', () => {
+    const date = new Date(2026, 5, 18, 23, 30, 0);
+    expect(formatLocalDate(date)).toBe('2026-06-18');
+    expect(formatLocalMonth(date)).toBe('2026-06');
+  });
+});
+
+describe('materializeFutureRule', () => {
+  it('filters out occurrences before today in the current month', () => {
+    const rule = { cadence: 'monthly' as const, anchorDate: '2026-06-01' };
+    expect(materializeFutureRule(rule, '2026-06-18', 3)).toEqual([
+      '2026-07-01',
+      '2026-08-01',
+    ]);
+  });
+
+  it('keeps an occurrence that lands today', () => {
+    const rule = { cadence: 'monthly' as const, anchorDate: '2026-06-18' };
+    expect(materializeFutureRule(rule, '2026-06-18', 2)).toEqual([
+      '2026-06-18',
+      '2026-07-18',
+    ]);
+  });
+
+  it('keeps only future semimonthly occurrences in the current month', () => {
+    const rule = { cadence: 'semimonthly' as const, anchorDate: '2026-06-01', secondDay: 20 };
+    expect(materializeFutureRule(rule, '2026-06-18', 2)).toEqual([
+      '2026-06-20',
+      '2026-07-01',
+      '2026-07-20',
+    ]);
   });
 });
 

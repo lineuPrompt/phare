@@ -2,8 +2,15 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { RecurringAccount } from './types';
 
-export default function RecurringForm({ onSaved }: { onSaved: () => void }) {
+export default function RecurringForm({
+  accounts,
+  onSaved,
+}: {
+  accounts: RecurringAccount[];
+  onSaved: () => void;
+}) {
   const t = useTranslations('recurring.form');
   const today = new Date().toISOString().slice(0, 10);
 
@@ -13,10 +20,17 @@ export default function RecurringForm({ onSaved }: { onSaved: () => void }) {
   const [cadence, setCadence] = useState<'monthly' | 'biweekly' | 'semimonthly'>('monthly');
   const [anchorDate, setAnchorDate] = useState(today);
   const [secondDay, setSecondDay] = useState('30');
+  const [accountId, setAccountId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const submit = async () => {
+    const resolvedAccountId = accountId || accounts[0]?.id;
+    if (!resolvedAccountId) {
+      setError('Add an account before saving a recurring item');
+      return;
+    }
+
     setSaving(true);
     setError('');
     try {
@@ -30,6 +44,7 @@ export default function RecurringForm({ onSaved }: { onSaved: () => void }) {
           cadence,
           anchorDate,
           secondDay: cadence === 'semimonthly' ? parseInt(secondDay, 10) : null,
+          accountId: resolvedAccountId,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
@@ -44,7 +59,7 @@ export default function RecurringForm({ onSaved }: { onSaved: () => void }) {
   };
 
   const inputStyle = { border: '1.5px solid #D1D5DB', color: '#0F2044' };
-  const canSave = description.trim() && parseFloat(amount) > 0;
+  const canSave = description.trim() && parseFloat(amount) > 0 && accounts.length > 0;
 
   return (
     <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>
@@ -81,6 +96,15 @@ export default function RecurringForm({ onSaved }: { onSaved: () => void }) {
         </select>
         <input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)}
           className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
+      </div>
+
+      <div className="mb-4">
+        <select value={accountId || accounts[0]?.id || ''} onChange={(e) => setAccountId(e.target.value)}
+          className="w-full px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
+          {accounts.map((account) => (
+            <option key={account.id} value={account.id}>{account.name}</option>
+          ))}
+        </select>
       </div>
 
       {cadence === 'semimonthly' && (

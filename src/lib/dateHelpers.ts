@@ -135,6 +135,30 @@ export function materializeRule(
   return [...new Set(all)].sort();
 }
 
+export function formatLocalDate(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function formatLocalMonth(date: Date): string {
+  return formatLocalDate(date).slice(0, 7);
+}
+
+export function materializeFutureRule(
+  rule: {
+    cadence: 'monthly' | 'biweekly' | 'semimonthly';
+    anchorDate: string;
+    secondDay?: number | null;
+  },
+  today: string,
+  monthCount: number
+): string[] {
+  return materializeRule(rule, today.slice(0, 7), monthCount)
+    .filter((date) => date >= today);
+}
+
 /**
  * The chequing payment for a card statement falls in the month AFTER the
  * spending month. Given a spending month (YYYY-MM) and a payment day-of-month,

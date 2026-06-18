@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { occurrencesInMonth } from '@/lib/dateHelpers';
 
 async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -22,6 +23,54 @@ export async function PATCH(
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
+    const { data: existing, error: existingError } = await supabase
+      .from('transactions')
+      .select('id, date, description, amount, type, category_id, account_id, recurring_item_id')
+      .eq('id', id)
+      .eq('household_id', householdId)
+      .maybeSingle();
+
+    if (existingError) {
+      return NextResponse.json({ error: existingError.message }, { status: 500 });
+    }
+    if (!existing) {
+      return NextResponse.json({ error: 'Expense not found or not accessible' }, { status: 404 });
+    }
+
+    let recurringItemId = existing.recurring_item_id as string | null;
+
+    if (!recurringItemId) {
+      let ruleQuery = supabase
+        .from('recurring_items')
+        .select('id, cadence, anchor_date, second_day')
+        .eq('household_id', householdId)
+        .eq('description', existing.description)
+        .eq('amount', existing.amount)
+        .eq('type', existing.type);
+
+      ruleQuery = existing.category_id
+        ? ruleQuery.eq('category_id', existing.category_id)
+        : ruleQuery.is('category_id', null);
+
+      const { data: matchingRules, error: matchingRulesError } = await ruleQuery;
+      if (matchingRulesError) {
+        return NextResponse.json({ error: matchingRulesError.message }, { status: 500 });
+      }
+
+      const existingMonth = existing.date.slice(0, 7);
+      const matchingRule = (matchingRules ?? []).find((rule) =>
+        occurrencesInMonth(
+          {
+            cadence: rule.cadence as 'monthly' | 'biweekly' | 'semimonthly',
+            anchorDate: rule.anchor_date,
+            secondDay: rule.second_day,
+          },
+          existingMonth
+        ).includes(existing.date)
+      );
+      recurringItemId = matchingRule?.id ?? null;
+    }
+
     const { data, error } = await supabase
       .from('transactions')
       .update({
@@ -42,6 +91,49 @@ export async function PATCH(
     if (!data) {
       return NextResponse.json({ error: 'Expense not found or not accessible' }, { status: 404 });
     }
+
+    if (recurringItemId && accountId && accountId !== existing.account_id) {
+      const { error: ruleError } = await supabase
+        .from('recurring_items')
+        .update({ account_id: accountId })
+        .eq('id', recurringItemId)
+        .eq('household_id', householdId);
+
+      if (ruleError) {
+        return NextResponse.json({ error: ruleError.message }, { status: 500 });
+      }
+
+      const { error: seriesError } = await supabase
+        .from('transactions')
+        .update({ account_id: accountId })
+        .eq('household_id', householdId)
+        .eq('recurring_item_id', recurringItemId)
+        .gte('date', existing.date);
+
+      if (seriesError) {
+        return NextResponse.json({ error: seriesError.message }, { status: 500 });
+      }
+
+      let orphanQuery = supabase
+        .from('transactions')
+        .delete()
+        .eq('household_id', householdId)
+        .is('recurring_item_id', null)
+        .eq('description', existing.description)
+        .eq('amount', existing.amount)
+        .eq('type', existing.type)
+        .gte('date', existing.date);
+
+      orphanQuery = existing.category_id
+        ? orphanQuery.eq('category_id', existing.category_id)
+        : orphanQuery.is('category_id', null);
+
+      const { error: orphanError } = await orphanQuery;
+      if (orphanError) {
+        return NextResponse.json({ error: orphanError.message }, { status: 500 });
+      }
+    }
+
     return NextResponse.json({ updated: true, expense: data });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

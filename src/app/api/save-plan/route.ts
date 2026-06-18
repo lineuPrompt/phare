@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { monthNameToNumber, materializeRule } from '@/lib/dateHelpers';
+import { formatLocalDate, formatLocalMonth, materializeFutureRule, monthNameToNumber } from '@/lib/dateHelpers';
 
 type PlanCategory = {
   name: string;
@@ -49,13 +49,24 @@ export async function POST(request: Request) {
     const firstCardId = accts?.find((a) => a.type === 'credit_card')?.id ?? null;
     // Variable spending defaults to the card if one exists, else chequing
     const variableAccountId = firstCardId ?? chequingId;
+    if (!chequingId || !variableAccountId) {
+      return NextResponse.json({ error: 'A chequing account is required before saving a plan' }, { status: 400 });
+    }
 
     const now = new Date();
-    const monthDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const anchorDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const today = formatLocalDate(now);
+    const currentMonth = formatLocalMonth(now);
+    const monthDate = `${currentMonth}-01`;
+    const anchorDate = `${currentMonth}-01`;
 
     // ----- Wipe existing plan data -----
     await supabase.from('budgets').delete().eq('household_id', householdId);
+    await supabase
+      .from('transactions')
+      .delete()
+      .eq('household_id', householdId)
+      .not('recurring_item_id', 'is', null)
+      .gte('date', today);
     await supabase.from('recurring_items').delete().eq('household_id', householdId);
     await supabase.from('categories').delete().eq('household_id', householdId);
     await supabase.from('sinking_funds').delete().eq('household_id', householdId);
@@ -137,22 +148,38 @@ export async function POST(request: Request) {
 
     // ----- Insert recurring items + materialize 12 months of transactions -----
     if (recurringRows.length) {
-      const { data: insertedItems } = await supabase
+      const { data: insertedItems, error: recurringError } = await supabase
         .from('recurring_items')
         .insert(recurringRows)
         .select('id, description, amount, type, cadence, anchor_date, second_day, category_id, account_id');
 
-      const startMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      if (recurringError) {
+        console.error('Save plan recurring insert error:', recurringError);
+        return NextResponse.json({ error: 'Failed to save recurring items' }, { status: 500 });
+      }
+
       const txnRows: Record<string, unknown>[] = [];
 
       for (const item of insertedItems ?? []) {
-        const dates = materializeRule(
+        const { error: cleanupError } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('household_id', householdId)
+          .eq('recurring_item_id', item.id)
+          .gte('date', today);
+
+        if (cleanupError) {
+          console.error('Save plan materialize cleanup error:', cleanupError);
+          return NextResponse.json({ error: 'Failed to prepare recurring transactions' }, { status: 500 });
+        }
+
+        const dates = materializeFutureRule(
           {
             cadence: item.cadence as 'monthly' | 'biweekly' | 'semimonthly',
             anchorDate: item.anchor_date,
             secondDay: item.second_day,
           },
-          startMonth,
+          today,
           12
         );
         for (const d of dates) {
@@ -172,7 +199,11 @@ export async function POST(request: Request) {
       }
 
       if (txnRows.length) {
-        await supabase.from('transactions').insert(txnRows);
+        const { error: txError } = await supabase.from('transactions').insert(txnRows);
+        if (txError) {
+          console.error('Save plan materialize insert error:', txError);
+          return NextResponse.json({ error: 'Failed to save recurring transactions' }, { status: 500 });
+        }
       }
     }
 

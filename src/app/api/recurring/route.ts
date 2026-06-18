@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { materializeRule } from '@/lib/dateHelpers';
+import { formatLocalDate, materializeFutureRule } from '@/lib/dateHelpers';
 
 async function getContext(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -23,12 +23,18 @@ export async function GET() {
 
     const { data: items } = await supabase
       .from('recurring_items')
-      .select('id, description, amount, type, cadence, anchor_date, second_day, active, category_id, categories(name)')
+      .select('id, description, amount, type, cadence, anchor_date, second_day, active, category_id, account_id, categories(name), accounts(name, type)')
       .eq('household_id', ctx.householdId)
       .order('type', { ascending: true })
       .order('description', { ascending: true });
 
-    return NextResponse.json({ items: items ?? [] });
+    const { data: accounts } = await supabase
+      .from('accounts')
+      .select('id, name, type')
+      .eq('household_id', ctx.householdId)
+      .order('type', { ascending: true });
+
+    return NextResponse.json({ items: items ?? [], accounts: accounts ?? [] });
   } catch {
     return NextResponse.json({ error: 'Failed to load recurring items' }, { status: 500 });
   }
@@ -37,9 +43,9 @@ export async function GET() {
 // POST: create a recurring item + materialize 12 months of transactions
 export async function POST(request: Request) {
   try {
-    const { description, amount, type, cadence, anchorDate, secondDay, categoryId } = await request.json();
+    const { description, amount, type, cadence, anchorDate, secondDay, categoryId, accountId } = await request.json();
 
-    if (!description?.trim() || !amount || !type || !cadence || !anchorDate) {
+    if (!description?.trim() || !amount || !type || !cadence || !anchorDate || !accountId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
     if (!['income', 'expense'].includes(type)) {
@@ -54,6 +60,16 @@ export async function POST(request: Request) {
     if (!ctx) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     if (!ctx.memberId) return NextResponse.json({ error: 'No member record' }, { status: 400 });
 
+    const { data: account } = await supabase
+      .from('accounts')
+      .select('id')
+      .eq('id', accountId)
+      .eq('household_id', ctx.householdId)
+      .single();
+    if (!account) {
+      return NextResponse.json({ error: 'Invalid account' }, { status: 400 });
+    }
+
     // 1. Create the rule
     const { data: item, error: itemError } = await supabase
       .from('recurring_items')
@@ -61,6 +77,7 @@ export async function POST(request: Request) {
         household_id: ctx.householdId,
         member_id: ctx.memberId,
         category_id: categoryId || null,
+        account_id: accountId,
         description: description.trim(),
         amount,
         type,
@@ -77,20 +94,32 @@ export async function POST(request: Request) {
     }
 
     // 2. Materialize 12 months forward from current month
-    const now = new Date();
-    const startMonth = now.toISOString().slice(0, 7);
-    const dates = materializeRule(
+    const today = formatLocalDate(new Date());
+    const dates = materializeFutureRule(
       { cadence, anchorDate, secondDay: secondDay ?? null },
-      startMonth,
+      today,
       12
     );
 
-    // 3. Write the transaction rows, linked back to the rule
+    // 3. Idempotently write future transaction rows, linked back to the rule
+    const { error: deleteError } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('household_id', ctx.householdId)
+      .eq('recurring_item_id', item.id)
+      .gte('date', today);
+
+    if (deleteError) {
+      console.error('Materialize cleanup error:', deleteError);
+      return NextResponse.json({ error: 'Item created but materialization cleanup failed' }, { status: 500 });
+    }
+
     if (dates.length) {
       const rows = dates.map((d) => ({
         household_id: ctx.householdId,
         member_id: ctx.memberId,
         category_id: categoryId || null,
+        account_id: accountId,
         amount,
         description: description.trim(),
         date: d,

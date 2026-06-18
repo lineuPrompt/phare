@@ -2,14 +2,16 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { RecurringItem, formatCurrency } from './types';
+import { RecurringItem, RecurringAccount, formatCurrency } from './types';
 
 export default function RecurringList({
   items,
+  accounts,
   locale,
   onChanged,
 }: {
   items: RecurringItem[];
+  accounts: RecurringAccount[];
   locale: string;
   onChanged: () => void;
 }) {
@@ -19,6 +21,19 @@ export default function RecurringList({
   const doDelete = async (id: string) => {
     await fetch(`/api/recurring/${id}`, { method: 'DELETE' });
     setConfirmId(null);
+    onChanged();
+  };
+
+  const changeAccount = async (id: string, accountId: string) => {
+    const response = await fetch(`/api/recurring/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: accountId || null }),
+    });
+    if (!response.ok) {
+      console.error('Failed to update recurring account:', await response.json().catch(() => null));
+      return;
+    }
     onChanged();
   };
 
@@ -43,7 +58,17 @@ export default function RecurringList({
           {cadenceLabel(item.cadence)}{item.categories?.name ? ` · ${item.categories.name}` : ''}
         </p>
       </div>
-      <span className="font-bold shrink-0" style={{ color: item.type === 'income' ? '#16A34A' : '#0F2044' }}>
+      <select
+        value={item.account_id ?? ''}
+        onChange={(e) => changeAccount(item.id, e.target.value)}
+        className="text-xs px-2 py-1 rounded outline-none bg-white shrink-0 cursor-pointer"
+        style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
+      >
+        {accounts.map((a) => (
+          <option key={a.id} value={a.id}>{a.type === 'chequing' ? '🏦' : '💳'} {a.name}</option>
+        ))}
+      </select>
+      <span className="font-bold shrink-0 w-24 text-right" style={{ color: item.type === 'income' ? '#16A34A' : '#0F2044' }}>
         {item.type === 'income' ? '+' : ''}{formatCurrency(Number(item.amount), locale)}
       </span>
       <button onClick={() => setConfirmId(item.id)}
@@ -69,7 +94,6 @@ export default function RecurringList({
         </div>
       )}
 
-      {/* Delete confirmation */}
       {confirmId && (
         <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(15,32,68,0.4)' }}>
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full" style={{ boxShadow: '0 8px 24px rgba(15,32,68,0.15)' }}>

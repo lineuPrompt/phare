@@ -7,7 +7,7 @@ import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import RecurringForm from '@/components/recurring/RecurringForm';
 import RecurringList from '@/components/recurring/RecurringList';
-import { RecurringItem } from '@/components/recurring/types';
+import { RecurringAccount, RecurringItem } from '@/components/recurring/types';
 
 export default function RecurringPage() {
   const t = useTranslations('recurring');
@@ -16,6 +16,7 @@ export default function RecurringPage() {
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
 
   const [items, setItems] = useState<RecurringItem[]>([]);
+  const [accounts, setAccounts] = useState<RecurringAccount[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
@@ -24,7 +25,12 @@ export default function RecurringPage() {
         if (res.status === 401) { router.push(`/${locale}/signin`); return null; }
         return res.json();
       })
-      .then((d) => { if (d) setItems(d.items); })
+      .then((d) => {
+        if (d) {
+          setItems(d.items);
+          setAccounts(d.accounts ?? []);
+        }
+      })
       .finally(() => setLoading(false));
   }, [router, locale]);
 
@@ -42,11 +48,11 @@ export default function RecurringPage() {
               <p className="mt-1" style={{ color: '#6B7280' }}>{t('subtitle')}</p>
             </div>
 
-            <RecurringForm onSaved={load} />
+            <RecurringForm accounts={accounts} onSaved={load} />
 
             {loading
               ? <p className="text-center py-12" style={{ color: '#6B7280' }}>{t('loading')}</p>
-              : <RecurringList items={items} locale={locale} onChanged={load} />}
+              : <RecurringList items={items} accounts={accounts} locale={locale} onChanged={load} />}
           </div>
         </div>
       </div>

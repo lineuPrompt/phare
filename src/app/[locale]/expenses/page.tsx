@@ -65,7 +65,20 @@ export default function ExpensesPage() {
         <div className="flex-1 min-w-0">
           <div className="max-w-5xl mx-auto px-6 py-10 space-y-6">
             <h1 className="text-3xl font-bold" style={{ color: '#0F2044' }}>{t('title')}</h1>
-
+            {/* Month tabs */}
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {months.map((mo) => (
+                <button key={mo.value} onClick={() => setSelectedMonth(mo.value)}
+                  className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap cursor-pointer transition-all shrink-0"
+                  style={{
+                    background: selectedMonth === mo.value ? '#0F2044' : 'white',
+                    color: selectedMonth === mo.value ? 'white' : '#6B7280',
+                    border: selectedMonth === mo.value ? '2px solid #0F2044' : '1.5px solid #D1D5DB',
+                  }}>
+                  {mo.label}
+                </button>
+              ))}
+            </div>
             {/* Account tabs */}
             {data && data.accounts.length > 0 && (
               <div className="flex gap-2 flex-wrap">
@@ -85,21 +98,6 @@ export default function ExpensesPage() {
                 ))}
               </div>
             )}
-
-            {/* Month tabs */}
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {months.map((mo) => (
-                <button key={mo.value} onClick={() => setSelectedMonth(mo.value)}
-                  className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap cursor-pointer transition-all shrink-0"
-                  style={{
-                    background: selectedMonth === mo.value ? '#0F2044' : 'white',
-                    color: selectedMonth === mo.value ? 'white' : '#6B7280',
-                    border: selectedMonth === mo.value ? '2px solid #0F2044' : '1.5px solid #D1D5DB',
-                  }}>
-                  {mo.label}
-                </button>
-              ))}
-            </div>
 
             {loading && <p className="text-center py-12" style={{ color: '#6B7280' }}>{t('loading')}</p>}
 
