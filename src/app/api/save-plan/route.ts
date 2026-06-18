@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { formatLocalDate, formatLocalMonth, materializeFutureRule, monthNameToNumber } from '@/lib/dateHelpers';
+import { formatLocalDate, formatLocalMonth, materializeRule, monthNameToNumber } from '@/lib/dateHelpers';
 
 type PlanCategory = {
   name: string;
@@ -166,20 +166,20 @@ export async function POST(request: Request) {
           .delete()
           .eq('household_id', householdId)
           .eq('recurring_item_id', item.id)
-          .gte('date', today);
+          .gte('date', monthDate);
 
         if (cleanupError) {
           console.error('Save plan materialize cleanup error:', cleanupError);
           return NextResponse.json({ error: 'Failed to prepare recurring transactions' }, { status: 500 });
         }
 
-        const dates = materializeFutureRule(
+        const dates = materializeRule(
           {
             cadence: item.cadence as 'monthly' | 'biweekly' | 'semimonthly',
             anchorDate: item.anchor_date,
             secondDay: item.second_day,
           },
-          today,
+          currentMonth,
           12
         );
         for (const d of dates) {
