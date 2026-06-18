@@ -33,8 +33,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'Cannot delete the chequing account' }, { status: 400 });
     }
 
-    // Transactions/recurring_items point here with ON DELETE SET NULL —
-    // they survive as account-less rows rather than vanishing.
+    // Block deletion when transactions exist — account_id is NOT NULL in the DB
+    const { count } = await supabase
+      .from('transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('account_id', id);
+    if (count && count > 0) {
+      return NextResponse.json(
+        { error: 'Cannot delete an account that has transactions. Remove all transactions first.' },
+        { status: 400 }
+      );
+    }
+
     const { error } = await supabase
       .from('accounts')
       .delete()

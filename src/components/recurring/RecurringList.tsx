@@ -28,7 +28,7 @@ export default function RecurringList({
     const response = await fetch(`/api/recurring/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accountId: accountId || null }),
+      body: JSON.stringify({ accountId }),
     });
     if (!response.ok) {
       console.error('Failed to update recurring account:', await response.json().catch(() => null));

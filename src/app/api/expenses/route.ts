@@ -33,6 +33,19 @@ export async function POST(request: Request) {
       .single();
     if (!member) return NextResponse.json({ error: 'No member record' }, { status: 400 });
 
+    // Resolve account — fall back to chequing when caller omits it
+    let resolvedAccountId: string = accountId;
+    if (!resolvedAccountId) {
+      const { data: chequing } = await supabase
+        .from('accounts')
+        .select('id')
+        .eq('household_id', householdId)
+        .eq('type', 'chequing')
+        .single();
+      if (!chequing) return NextResponse.json({ error: 'No chequing account found' }, { status: 400 });
+      resolvedAccountId = chequing.id;
+    }
+
     type Row = {
       household_id: string;
       member_id: string;
@@ -44,7 +57,7 @@ export async function POST(request: Request) {
       source: string;
       recurrence_id: string | null;
       installment_label: string | null;
-      account_id: string | null;
+      account_id: string;
     };
 
     const rows: Row[] = [];
@@ -55,7 +68,7 @@ export async function POST(request: Request) {
         rows.push({
           household_id: householdId, member_id: member.id, category_id: categoryId,
           amount, description, date: d, type: 'expense', source: 'manual',
-          recurrence_id: recurrenceId, installment_label: null, account_id: accountId ?? null,
+          recurrence_id: recurrenceId, installment_label: null, account_id: resolvedAccountId,
         });
       });
     } else if (repeat === 'installments' && installments > 1) {
@@ -64,14 +77,14 @@ export async function POST(request: Request) {
         rows.push({
           household_id: householdId, member_id: member.id, category_id: categoryId,
           amount, description, date: d, type: 'expense', source: 'manual',
-          recurrence_id: recurrenceId, installment_label: `${i + 1}/${installments}`, account_id: accountId ?? null,
+          recurrence_id: recurrenceId, installment_label: `${i + 1}/${installments}`, account_id: resolvedAccountId,
         });
       });
     } else {
       rows.push({
         household_id: householdId, member_id: member.id, category_id: categoryId,
         amount, description, date, type: 'expense', source: 'manual',
-        recurrence_id: null, installment_label: null, account_id: accountId ?? null,
+        recurrence_id: null, installment_label: null, account_id: resolvedAccountId,
       });
     }
 
