@@ -2,15 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { ExpenseCategory } from './types';
+import { Account, ExpenseCategory } from './types';
 
 export default function ExpenseForm({
   categories,
+  accounts,
   onSaved,
   defaultDate,
   accountId,
 }: {
   categories: ExpenseCategory[];
+  accounts: Account[];
   onSaved: () => void;
   defaultDate?: string;
   accountId: string | null;
@@ -20,6 +22,7 @@ export default function ExpenseForm({
   const [date, setDate] = useState(defaultDate ?? today);
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [selectedAccountId, setSelectedAccountId] = useState(accountId ?? '');
   const [amount, setAmount] = useState('');
   const [repeat, setRepeat] = useState<'once' | 'monthly' | 'installments'>('once');
   const [installments, setInstallments] = useState('2');
@@ -30,6 +33,7 @@ export default function ExpenseForm({
   const [localCategories, setLocalCategories] = useState(categories);
 
   useEffect(() => { setLocalCategories(categories); }, [categories]);
+  useEffect(() => { setSelectedAccountId(accountId ?? ''); }, [accountId]);
 
   const submit = async () => {
     setSaving(true);
@@ -45,7 +49,7 @@ export default function ExpenseForm({
           amount: parseFloat(amount),
           repeat,
           installments: repeat === 'installments' ? parseInt(installments, 10) : undefined,
-          accountId,
+          accountId: selectedAccountId || null,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
@@ -80,13 +84,14 @@ export default function ExpenseForm({
   };
 
   const inputStyle = { border: '1.5px solid #D1D5DB', color: '#0F2044' };
-  const canSave = description.trim() && categoryId && parseFloat(amount) > 0;
+  const canSave = description.trim() && categoryId && parseFloat(amount) > 0
+    && (accounts.length <= 1 || selectedAccountId);
 
   return (
     <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>
       <h3 className="text-lg font-bold mb-4" style={{ color: '#0F2044' }}>{t('title')}</h3>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${accounts.length > 1 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3 mb-3`}>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
           className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
         <input type="text" value={description} onChange={(e) => setDescription(e.target.value)}
@@ -115,6 +120,17 @@ export default function ExpenseForm({
               className="px-3 py-2.5 rounded-lg text-sm cursor-pointer shrink-0"
               style={{ border: '1.5px solid #D1D5DB', color: '#6B7280' }}>✕</button>
           </div>
+        )}
+        {accounts.length > 1 && (
+          <select value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)}
+            className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
+            <option value="">{t('account')}</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.type === 'chequing' ? '🏦 ' : '💳 '}{a.name}
+              </option>
+            ))}
+          </select>
         )}
         <input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)}
           placeholder={t('amount')} className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />

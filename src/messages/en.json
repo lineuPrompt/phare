@@ -255,7 +255,8 @@
       "saving": "Saving...",
       "save": "Add expense",
       "newCategory": "+ New category...",
-      "newCategoryName": "Name, then Enter"
+      "newCategoryName": "Name, then Enter",
+      "account": "Account..."
     },
     "summary": {
       "title": "Month summary",

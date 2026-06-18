@@ -118,6 +118,7 @@ export default function ExpensesPage() {
 
                 <ExpenseForm
                   categories={data.categories}
+                  accounts={data.accounts}
                   onSaved={load}
                   defaultDate={`${selectedMonth}-01`}
                   accountId={data.selectedAccount?.id ?? null}

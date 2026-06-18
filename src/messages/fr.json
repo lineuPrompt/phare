@@ -255,7 +255,8 @@
       "saving": "Enregistrement...",
       "save": "Ajouter la dépense",
       "newCategory": "+ Nouvelle catégorie...",
-      "newCategoryName": "Nom, puis Entrée"
+      "newCategoryName": "Nom, puis Entrée",
+      "account": "Compte..."
     },
     "summary": {
       "title": "Résumé du mois",
