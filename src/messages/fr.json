@@ -287,6 +287,7 @@
       "confirmTitle": "Supprimer cette dépense?",
       "deleteOne": "Supprimer celle-ci",
       "deleteSeries": "Supprimer celle-ci et toutes les suivantes",
+      "pickCategory": "Choisir une catégorie",
       "cancel": "Annuler"
     },
     "flow": {

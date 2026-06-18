@@ -91,8 +91,9 @@ export default function ExpenseList({
                 <input type="text" value={editDesc} onChange={(ev) => setEditDesc(ev.target.value)}
                   className="flex-1 min-w-[120px] px-2 py-1.5 rounded text-sm outline-none" style={{ border: '1px solid #D1D5DB', color: '#0F2044' }} />
                 <select value={editCat} onChange={(ev) => setEditCat(ev.target.value)}
-                  className="px-2 py-1.5 rounded text-sm outline-none bg-white" style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}>
-                  <option value="">—</option>
+                  className="px-2 py-1.5 rounded text-sm outline-none bg-white"
+                  style={{ border: editCat ? '1px solid #D1D5DB' : '1.5px solid #DC2626', color: '#0F2044' }}>
+                  <option value="">{t('pickCategory')}</option>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 <select value={editAccount} onChange={(ev) => setEditAccount(ev.target.value)}
@@ -108,7 +109,6 @@ export default function ExpenseList({
               </div>
             );
           }
-
           return (
             <div key={e.id} className="flex items-center gap-3 py-2.5 px-2 group" style={{ borderBottom: '1px solid #F3F4F6' }}>
               <span className="text-sm w-14 shrink-0" style={{ color: '#6B7280' }}>{fmtDate(e.date)}</span>
