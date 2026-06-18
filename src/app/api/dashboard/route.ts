@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { computeMonthTotals } from '@/lib/dashboardHelpers';
 
 export async function GET() {
   try {
@@ -21,7 +22,7 @@ export async function GET() {
     }
     const householdId = userRow.household_id;
 
-    // Latest budget month for this household (versioning-friendly: always "latest")
+    // Active month: determined by when the plan was last saved.
     const { data: latestBudget } = await supabase
       .from('budgets')
       .select('month')
@@ -34,66 +35,83 @@ export async function GET() {
       return NextResponse.json({ hasPlan: false });
     }
 
-    // Budgets joined with their categories, for the latest month only
-    const { data: budgets } = await supabase
-      .from('budgets')
-      .select('amount, categories(name, type)')
-      .eq('household_id', householdId)
-      .eq('month', latestBudget.month);
+    const monthStart = latestBudget.month as string; // YYYY-MM-01
+    const [y, m] = monthStart.slice(0, 7).split('-').map(Number);
+    const monthEnd = m === 12
+      ? `${y + 1}-01-01`
+      : `${y}-${String(m + 1).padStart(2, '0')}-01`;
 
-    const { data: sinkingFunds } = await supabase
-      .from('sinking_funds')
-      .select('name, annual_amount, monthly_provision, due_month, current_balance')
-      .eq('household_id', householdId);
+    // Fetch transactions and accounts in parallel.
+    const [txResult, acctResult, budgetResult, sfResult, goalResult, convResult] =
+      await Promise.all([
+        supabase
+          .from('transactions')
+          .select('amount, type, account_id')
+          .eq('household_id', householdId)
+          .gte('date', monthStart)
+          .lt('date', monthEnd),
 
-    const { data: goals } = await supabase
-      .from('goals')
-      .select('name, target_amount, current_amount, status')
-      .eq('household_id', householdId);
+        supabase
+          .from('accounts')
+          .select('id, type')
+          .eq('household_id', householdId),
 
-    // Latest review from conversations
-    const { data: conversation } = await supabase
-      .from('conversations')
-      .select('messages, created_at')
-      .eq('household_id', householdId)
-      .in('type', ['onboarding', 'monthly_review'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+        supabase
+          .from('budgets')
+          .select('amount, category_id, categories(name, type)')
+          .eq('household_id', householdId)
+          .eq('month', monthStart),
 
-    // Shape the response
-    type BudgetRow = { amount: number; categories: { name: string; type: string } | null };
-    const lines = (budgets as BudgetRow[] | null) ?? [];
+        supabase
+          .from('sinking_funds')
+          .select('name, annual_amount, monthly_provision, due_month, current_balance')
+          .eq('household_id', householdId),
 
-    const income = lines.filter((b) => b.categories?.type === 'income');
-    const expenses = lines.filter((b) => b.categories?.type === 'expense');
-    const totalIncome = income.reduce((s, b) => s + Number(b.amount), 0);
-    const totalExpenses = expenses.reduce((s, b) => s + Number(b.amount), 0);
+        supabase
+          .from('goals')
+          .select('name, target_amount, current_amount, status')
+          .eq('household_id', householdId),
+
+        supabase
+          .from('conversations')
+          .select('messages, created_at')
+          .eq('household_id', householdId)
+          .in('type', ['onboarding', 'monthly_review'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+    // Headline totals come from the actual ledger, not the plan.
+    // Money-out = chequing expenses only (see dashboardHelpers.ts for the
+    // double-count rule).
+    const summary = computeMonthTotals(txResult.data ?? [], acctResult.data ?? []);
+
+    // Budgets are kept as planned-comparison data only.
+    type BudgetRow = { amount: number; category_id: string; categories: { name: string; type: string } | null };
+    const budgetRows = (budgetResult.data as BudgetRow[] | null) ?? [];
+    const categories = budgetRows.map((b) => ({
+      name:   b.categories?.name ?? '',
+      type:   b.categories?.type ?? 'expense',
+      amount: Number(b.amount),
+    }));
 
     type Message = { role: string; type: string; content: string; locale?: string };
-    const messages = (conversation?.messages as Message[] | null) ?? [];
-    const review = messages.find((m) => m.type === 'monthly_review')?.content ?? null;
+    const messages = (convResult.data?.messages as Message[] | null) ?? [];
+    const review            = messages.find((m) => m.type === 'monthly_review')?.content ?? null;
     const topRecommendation = messages.find((m) => m.type === 'top_recommendation')?.content ?? null;
 
     return NextResponse.json({
       hasPlan: true,
-      firstName: (userRow.full_name || '').split(' ')[0],
-      month: latestBudget.month,
-      summary: {
-        totalIncome,
-        totalExpenses,
-        netCashFlow: Math.round((totalIncome - totalExpenses) * 100) / 100,
-      },
-      categories: lines.map((b) => ({
-        name: b.categories?.name ?? '',
-        type: b.categories?.type ?? 'expense',
-        amount: Number(b.amount),
-      })),
-      sinkingFunds: sinkingFunds ?? [],
-      goals: goals ?? [],
+      firstName:         (userRow.full_name || '').split(' ')[0],
+      month:             monthStart,
+      summary,
+      categories,
+      sinkingFunds:      sfResult.data   ?? [],
+      goals:             goalResult.data ?? [],
       review,
       topRecommendation,
-      reviewDate: conversation?.created_at ?? null,
+      reviewDate:        convResult.data?.created_at ?? null,
     });
   } catch (error) {
     console.error('Dashboard error:', error);
