@@ -258,6 +258,9 @@
       "installments": "Installments",
       "saving": "Saving...",
       "save": "Add expense",
+      "saveIncome": "Add income",
+      "moneyOut": "Money out",
+      "moneyIn": "Money in",
       "newCategory": "+ New category...",
       "newCategoryName": "Name, then Enter",
       "account": "Account..."
@@ -325,12 +328,17 @@
       "semimonthly": "Twice a month",
       "secondDay": "Second day of month",
       "saving": "Saving...",
-      "save": "Add"
+      "save": "Add",
+      "category": "Category..."
     },
     "list": {
       "empty": "No recurring lines yet. Add your mortgage, salary, loans above.",
       "incomeTitle": "Money in",
       "expenseTitle": "Money out",
+      "edit": "Edit",
+      "save": "Save",
+      "noCategory": "No category",
+      "secondDay": "Second day of month",
       "delete": "Delete",
       "confirmTitle": "Delete this recurring line?",
       "confirmBody": "Future entries will be removed. Past entries stay as history.",

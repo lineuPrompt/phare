@@ -10,46 +10,94 @@ async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) 
   return userRow?.household_id ?? null;
 }
 
-// PATCH: change a recurring rule's account, re-pointing FUTURE materialized rows
+/**
+ * PATCH: full edit of a recurring rule.
+ *
+ * Accepts all editable fields: description, amount, cadence, anchorDate,
+ * secondDay, categoryId, accountId.  Any omitted field defaults to its
+ * current value (loaded from DB before the update).
+ *
+ * Re-materialization strategy (idempotent, no-duplicate):
+ *   1. Delete all future linked rows (WHERE recurring_item_id = id AND date >= today).
+ *      Keyed by recurring_item_id, so exactly the linked set is removed.
+ *   2. materializeFutureRule with the NEW cadence params.
+ *   3. Insert fresh rows with new description/amount/category/account.
+ *
+ * Past rows (date < today) are untouched as history.
+ */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const { accountId } = await request.json();
+    const body = await request.json();
 
     const supabase = await createClient();
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    if (!accountId) return NextResponse.json({ error: 'Missing account' }, { status: 400 });
 
+    // Load current rule (needed to fall back to existing values for omitted fields)
+    const { data: current, error: loadErr } = await supabase
+      .from('recurring_items')
+      .select('id, household_id, member_id, description, amount, type, cadence, anchor_date, second_day, category_id, account_id')
+      .eq('id', id)
+      .eq('household_id', householdId)
+      .single();
+
+    if (loadErr || !current) {
+      return NextResponse.json({ error: 'Recurring item not found' }, { status: 404 });
+    }
+
+    // Merge incoming fields with current values (any field absent in body keeps its current value)
+    const newDescription = typeof body.description === 'string' ? body.description.trim() : current.description;
+    const newAmount      = body.amount   != null ? Number(body.amount)   : Number(current.amount);
+    const newCadence     = body.cadence  ?? current.cadence;
+    const newAnchorDate  = body.anchorDate ?? current.anchor_date;
+    const newSecondDay   = body.secondDay  !== undefined ? (body.secondDay ?? null) : current.second_day;
+    const newCategoryId  = body.categoryId !== undefined ? (body.categoryId || null) : current.category_id;
+    const newAccountId   = body.accountId  ?? current.account_id;
+
+    if (!['monthly', 'biweekly', 'semimonthly'].includes(newCadence)) {
+      return NextResponse.json({ error: 'Invalid cadence' }, { status: 400 });
+    }
+
+    // Verify account belongs to this household
     const { data: account } = await supabase
       .from('accounts')
       .select('id')
-      .eq('id', accountId)
+      .eq('id', newAccountId)
       .eq('household_id', householdId)
       .single();
     if (!account) {
       return NextResponse.json({ error: 'Invalid account' }, { status: 400 });
     }
 
-    // Update the rule's account
-    const { data: item, error: ruleErr } = await supabase
+    // 1. Update the rule
+    const { data: updatedItem, error: ruleErr } = await supabase
       .from('recurring_items')
-      .update({ account_id: accountId })
+      .update({
+        description: newDescription,
+        amount:      newAmount,
+        cadence:     newCadence,
+        anchor_date: newAnchorDate,
+        second_day:  newSecondDay,
+        category_id: newCategoryId,
+        account_id:  newAccountId,
+      })
       .eq('id', id)
       .eq('household_id', householdId)
-      .select('id, household_id, member_id, category_id, account_id, description, amount, type, cadence, anchor_date, second_day')
+      .select('id, member_id, type')
       .single();
 
-    if (ruleErr || !item) {
+    if (ruleErr || !updatedItem) {
       console.error('Recurring PATCH rule error:', ruleErr);
-      return NextResponse.json({ error: ruleErr?.message ?? 'Recurring item not found' }, { status: 500 });
+      return NextResponse.json({ error: ruleErr?.message ?? 'Update failed' }, { status: 500 });
     }
 
-    // Re-point this rule's FUTURE transactions by rebuilding the linked series (past = history)
     const todayStr = formatLocalDate(new Date());
+
+    // 2. Delete all future linked rows (keyed by recurring_item_id — no orphan risk)
     const { error: deleteErr } = await supabase
       .from('transactions')
       .delete()
@@ -62,51 +110,26 @@ export async function PATCH(
       return NextResponse.json({ error: deleteErr.message }, { status: 500 });
     }
 
+    // 3. Re-materialize with new cadence params
     const dates = materializeFutureRule(
-      {
-        cadence: item.cadence as 'monthly' | 'biweekly' | 'semimonthly',
-        anchorDate: item.anchor_date,
-        secondDay: item.second_day,
-      },
+      { cadence: newCadence, anchorDate: newAnchorDate, secondDay: newSecondDay },
       todayStr,
       12
     );
 
-    if (dates.length) {
-      let orphanQuery = supabase
-        .from('transactions')
-        .delete()
-        .eq('household_id', householdId)
-        .is('recurring_item_id', null)
-        .eq('description', item.description)
-        .eq('amount', item.amount)
-        .eq('type', item.type)
-        .gte('date', todayStr)
-        .in('date', dates);
-
-      orphanQuery = item.category_id
-        ? orphanQuery.eq('category_id', item.category_id)
-        : orphanQuery.is('category_id', null);
-
-      const { error: orphanErr } = await orphanQuery;
-      if (orphanErr) {
-        console.error('Recurring PATCH orphan cleanup error:', orphanErr);
-        return NextResponse.json({ error: orphanErr.message }, { status: 500 });
-      }
-    }
-
+    // 4. Insert fresh rows with new field values
     if (dates.length) {
       const rows = dates.map((date) => ({
-        household_id: householdId,
-        member_id: item.member_id,
-        category_id: item.category_id,
-        account_id: accountId,
-        amount: item.amount,
-        description: item.description,
+        household_id:      householdId,
+        member_id:         updatedItem.member_id,
+        category_id:       newCategoryId,
+        account_id:        newAccountId,
+        amount:            newAmount,
+        description:       newDescription,
         date,
-        type: item.type,
-        source: 'manual',
-        recurring_item_id: item.id,
+        type:              updatedItem.type,
+        source:            'manual',
+        recurring_item_id: id,
       }));
 
       const { error: insertErr } = await supabase.from('transactions').insert(rows);

@@ -258,6 +258,9 @@
       "installments": "Versements",
       "saving": "Enregistrement...",
       "save": "Ajouter la dépense",
+      "saveIncome": "Ajouter un revenu",
+      "moneyOut": "Sorties",
+      "moneyIn": "Entrées",
       "newCategory": "+ Nouvelle catégorie...",
       "newCategoryName": "Nom, puis Entrée",
       "account": "Compte..."
@@ -325,12 +328,17 @@
       "semimonthly": "Deux fois par mois",
       "secondDay": "Deuxième jour du mois",
       "saving": "Enregistrement...",
-      "save": "Ajouter"
+      "save": "Ajouter",
+      "category": "Catégorie..."
     },
     "list": {
       "empty": "Aucune ligne récurrente. Ajoutez votre hypothèque, salaire, prêts ci-dessus.",
       "incomeTitle": "Entrées",
       "expenseTitle": "Sorties",
+      "edit": "Modifier",
+      "save": "Enregistrer",
+      "noCategory": "Sans catégorie",
+      "secondDay": "Deuxième jour du mois",
       "delete": "Supprimer",
       "confirmTitle": "Supprimer cette ligne récurrente?",
       "confirmBody": "Les entrées futures seront retirées. Les entrées passées restent comme historique.",

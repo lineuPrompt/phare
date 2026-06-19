@@ -2,13 +2,15 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { RecurringAccount } from './types';
+import { RecurringAccount, RecurringCategory } from './types';
 
 export default function RecurringForm({
   accounts,
+  categories,
   onSaved,
 }: {
   accounts: RecurringAccount[];
+  categories: RecurringCategory[];
   onSaved: () => void;
 }) {
   const t = useTranslations('recurring.form');
@@ -20,6 +22,7 @@ export default function RecurringForm({
   const [cadence, setCadence] = useState<'monthly' | 'biweekly' | 'semimonthly'>('monthly');
   const [anchorDate, setAnchorDate] = useState(today);
   const [secondDay, setSecondDay] = useState('30');
+  const [categoryId, setCategoryId] = useState('');
   const [accountId, setAccountId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -44,12 +47,14 @@ export default function RecurringForm({
           cadence,
           anchorDate,
           secondDay: cadence === 'semimonthly' ? parseInt(secondDay, 10) : null,
+          categoryId: categoryId || null,
           accountId: resolvedAccountId,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
       setDescription('');
       setAmount('');
+      setCategoryId('');
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -98,13 +103,21 @@ export default function RecurringForm({
           className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
       </div>
 
-      <div className="mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         <select value={accountId || accounts[0]?.id || ''} onChange={(e) => setAccountId(e.target.value)}
-          className="w-full px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
+          className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>{account.name}</option>
           ))}
         </select>
+        {/* Category — optional for expenses; hidden for income */}
+        {type === 'expense' && categories.length > 0 && (
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}
+            className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
+            <option value="">{t('category')}</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
       </div>
 
       {cadence === 'semimonthly' && (

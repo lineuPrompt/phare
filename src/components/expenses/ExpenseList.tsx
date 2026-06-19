@@ -36,14 +36,13 @@ export default function ExpenseList({
   };
 
   const saveEdit = async (id: string) => {
-    console.log('SAVING:', { id, editAccount, editCat });
     const response = await fetch(`/api/expenses/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         date: editDate,
         description: editDesc,
-        categoryId: editCat,
+        categoryId: editCat || null,
         amount: parseFloat(editAmount),
         accountId: editAccount || null,
       }),
@@ -82,6 +81,10 @@ export default function ExpenseList({
       <div className="space-y-1">
         {expenses.map((e) => {
           const isEditing = editingId === e.id;
+          const isBridge = e.is_bridge === true;
+          // Save enabled as long as we have a description and valid amount.
+          // Category is optional (uncategorized expenses are valid; bridge lines stay uncategorized).
+          const canSaveEdit = editDesc.trim().length > 0 && parseFloat(editAmount) > 0;
 
           if (isEditing) {
             return (
@@ -90,12 +93,15 @@ export default function ExpenseList({
                   className="px-2 py-1.5 rounded text-sm outline-none" style={{ border: '1px solid #D1D5DB', color: '#0F2044' }} />
                 <input type="text" value={editDesc} onChange={(ev) => setEditDesc(ev.target.value)}
                   className="flex-1 min-w-[120px] px-2 py-1.5 rounded text-sm outline-none" style={{ border: '1px solid #D1D5DB', color: '#0F2044' }} />
-                <select value={editCat} onChange={(ev) => setEditCat(ev.target.value)}
-                  className="px-2 py-1.5 rounded text-sm outline-none bg-white"
-                  style={{ border: editCat ? '1px solid #D1D5DB' : '1.5px solid #DC2626', color: '#0F2044' }}>
-                  <option value="">{t('pickCategory')}</option>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                {/* Category selector: hidden for bridge lines (deliberately uncategorized) */}
+                {!isBridge && (
+                  <select value={editCat} onChange={(ev) => setEditCat(ev.target.value)}
+                    className="px-2 py-1.5 rounded text-sm outline-none bg-white"
+                    style={{ border: editCat ? '1px solid #D1D5DB' : '1.5px solid #DC2626', color: '#0F2044' }}>
+                    <option value="">{t('pickCategory')}</option>
+                    {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                )}
                 <select value={editAccount} onChange={(ev) => setEditAccount(ev.target.value)}
                   className="px-2 py-1.5 rounded text-sm outline-none bg-white" style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}>
                   {accounts.map((a) => (
@@ -104,7 +110,9 @@ export default function ExpenseList({
                 </select>
                 <input type="number" step="0.01" value={editAmount} onChange={(ev) => setEditAmount(ev.target.value)}
                   className="w-24 px-2 py-1.5 rounded text-sm outline-none" style={{ border: '1px solid #D1D5DB', color: '#0F2044' }} />
-                <button onClick={() => editCat && saveEdit(e.id)} disabled={!editCat} className="px-3 py-1.5 rounded text-sm font-medium text-white cursor-pointer disabled:opacity-40" style={{ background: '#0F2044' }}>✓</button>
+                <button onClick={() => saveEdit(e.id)} disabled={!canSaveEdit}
+                  className="px-3 py-1.5 rounded text-sm font-medium text-white cursor-pointer disabled:opacity-40"
+                  style={{ background: '#0F2044' }}>✓</button>
                 <button onClick={() => setEditingId(null)} className="px-3 py-1.5 rounded text-sm cursor-pointer" style={{ color: '#6B7280' }}>✕</button>
               </div>
             );

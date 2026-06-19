@@ -19,6 +19,7 @@ export default function ExpenseForm({
 }) {
   const t = useTranslations('expenses.form');
   const today = new Date().toISOString().slice(0, 10);
+  const [entryType, setEntryType] = useState<'expense' | 'income'>('expense');
   const [date, setDate] = useState(defaultDate ?? today);
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -35,6 +36,12 @@ export default function ExpenseForm({
   useEffect(() => { setLocalCategories(categories); }, [categories]);
   useEffect(() => { setSelectedAccountId(accountId ?? ''); }, [accountId]);
 
+  const switchType = (t: 'expense' | 'income') => {
+    setEntryType(t);
+    // Category is irrelevant for income — clear it to avoid stale state
+    if (t === 'income') setCategoryId('');
+  };
+
   const submit = async () => {
     setSaving(true);
     setError('');
@@ -43,9 +50,10 @@ export default function ExpenseForm({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          type: entryType,
           date,
           description: description.trim(),
-          categoryId,
+          categoryId: entryType === 'expense' ? categoryId : undefined,
           amount: parseFloat(amount),
           repeat,
           installments: repeat === 'installments' ? parseInt(installments, 10) : undefined,
@@ -84,43 +92,70 @@ export default function ExpenseForm({
   };
 
   const inputStyle = { border: '1.5px solid #D1D5DB', color: '#0F2044' };
-  const canSave = description.trim() && categoryId && parseFloat(amount) > 0
+
+  // Category required only for expenses; account required only when multiple accounts exist
+  const canSave = description.trim() && parseFloat(amount) > 0
+    && (entryType === 'income' || categoryId)
     && (accounts.length <= 1 || selectedAccountId);
 
   return (
     <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>
       <h3 className="text-lg font-bold mb-4" style={{ color: '#0F2044' }}>{t('title')}</h3>
 
-      <div className={`grid grid-cols-1 sm:grid-cols-2 ${accounts.length > 1 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3 mb-3`}>
+      {/* Money-in / Money-out toggle */}
+      <div className="flex gap-2 mb-4">
+        {(['expense', 'income'] as const).map((tp) => (
+          <button key={tp} onClick={() => switchType(tp)}
+            className="px-4 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all"
+            style={{
+              border: entryType === tp ? '2px solid #2ABFBF' : '1.5px solid #D1D5DB',
+              background: entryType === tp ? '#F0FDFD' : 'white',
+              color: entryType === tp ? '#0F2044' : '#6B7280',
+            }}>
+            {tp === 'expense' ? t('moneyOut') : t('moneyIn')}
+          </button>
+        ))}
+      </div>
+
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${
+        entryType === 'expense'
+          ? accounts.length > 1 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+          : accounts.length > 1 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
+      } gap-3 mb-3`}>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
           className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
         <input type="text" value={description} onChange={(e) => setDescription(e.target.value)}
           placeholder={t('description')} className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
-        {!newCategoryMode ? (
-          <select value={categoryId}
-            onChange={(e) => {
-              if (e.target.value === '__new__') { setNewCategoryMode(true); setCategoryId(''); }
-              else setCategoryId(e.target.value);
-            }}
-            className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
-            <option value="">{t('category')}</option>
-            {localCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            <option value="__new__">{t('newCategory')}</option>
-          </select>
-        ) : (
-          <div className="flex gap-2">
-            <input type="text" value={newCategoryName} autoFocus
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              placeholder={t('newCategoryName')}
-              className="flex-1 min-w-0 px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
-            <button type="button" onClick={createCategory}
-              className="px-3 py-2.5 rounded-lg text-sm font-medium cursor-pointer shrink-0"
-              style={{ background: '#2ABFBF', color: '#0F2044' }}>✓</button>
-            <button type="button" onClick={() => { setNewCategoryMode(false); setNewCategoryName(''); }}
-              className="px-3 py-2.5 rounded-lg text-sm cursor-pointer shrink-0"
-              style={{ border: '1.5px solid #D1D5DB', color: '#6B7280' }}>✕</button>
-          </div>
+
+        {/* Category — expenses only */}
+        {entryType === 'expense' && (
+          !newCategoryMode ? (
+            <select value={categoryId}
+              onChange={(e) => {
+                if (e.target.value === '__new__') { setNewCategoryMode(true); setCategoryId(''); }
+                else setCategoryId(e.target.value);
+              }}
+              className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
+              <option value="">{t('category')}</option>
+              {localCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <option value="__new__">{t('newCategory')}</option>
+            </select>
+          ) : (
+            <div className="flex gap-2">
+              <input type="text" value={newCategoryName} autoFocus
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder={t('newCategoryName')}
+                className="flex-1 min-w-0 px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
+              <button type="button" onClick={createCategory}
+                className="px-3 py-2.5 rounded-lg text-sm font-medium cursor-pointer shrink-0"
+                style={{ background: '#2ABFBF', color: '#0F2044' }}>✓</button>
+              <button type="button" onClick={() => { setNewCategoryMode(false); setNewCategoryName(''); }}
+                className="px-3 py-2.5 rounded-lg text-sm cursor-pointer shrink-0"
+                style={{ border: '1.5px solid #D1D5DB', color: '#6B7280' }}>✕</button>
+            </div>
+          )
         )}
+
         {accounts.length > 1 && (
           <select value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)}
             className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
@@ -132,6 +167,7 @@ export default function ExpenseForm({
             ))}
           </select>
         )}
+
         <input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)}
           placeholder={t('amount')} className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
       </div>
@@ -159,8 +195,8 @@ export default function ExpenseForm({
 
       <button onClick={submit} disabled={!canSave || saving}
         className="px-6 py-2.5 rounded-full text-white font-semibold cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
-        style={{ background: '#0F2044' }}>
-        {saving ? t('saving') : t('save')}
+        style={{ background: entryType === 'income' ? '#16A34A' : '#0F2044' }}>
+        {saving ? t('saving') : entryType === 'income' ? t('saveIncome') : t('save')}
       </button>
     </div>
   );

@@ -34,7 +34,14 @@ export async function GET() {
       .eq('household_id', ctx.householdId)
       .order('type', { ascending: true });
 
-    return NextResponse.json({ items: items ?? [], accounts: accounts ?? [] });
+    const { data: categories } = await supabase
+      .from('categories')
+      .select('id, name')
+      .eq('household_id', ctx.householdId)
+      .eq('type', 'expense')
+      .order('name');
+
+    return NextResponse.json({ items: items ?? [], accounts: accounts ?? [], categories: categories ?? [] });
   } catch {
     return NextResponse.json({ error: 'Failed to load recurring items' }, { status: 500 });
   }

@@ -5,10 +5,16 @@ import { recurrenceDates, bridgePaymentDate } from '@/lib/dateHelpers';
 // POST: create expense (single, monthly recurring, or installments)
 export async function POST(request: Request) {
   try {
-    const { date, description, categoryId, amount, repeat, installments, accountId } = await request.json();
+    const { date, description, categoryId, amount, repeat, installments, accountId, type = 'expense' } = await request.json();
 
-    if (!date || !description || !amount || !categoryId) {
+    if (!['income', 'expense'].includes(type)) {
+      return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
+    }
+    if (!date || !description || !amount) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+    if (type === 'expense' && !categoryId) {
+      return NextResponse.json({ error: 'Category required for expenses' }, { status: 400 });
     }
 
     const supabase = await createClient();
@@ -66,8 +72,8 @@ export async function POST(request: Request) {
       const recurrenceId = crypto.randomUUID();
       recurrenceDates(date, 12).forEach((d) => {
         rows.push({
-          household_id: householdId, member_id: member.id, category_id: categoryId,
-          amount, description, date: d, type: 'expense', source: 'manual',
+          household_id: householdId, member_id: member.id, category_id: categoryId || null,
+          amount, description, date: d, type, source: 'manual',
           recurrence_id: recurrenceId, installment_label: null, account_id: resolvedAccountId,
         });
       });
@@ -75,15 +81,15 @@ export async function POST(request: Request) {
       const recurrenceId = crypto.randomUUID();
       recurrenceDates(date, installments).forEach((d, i) => {
         rows.push({
-          household_id: householdId, member_id: member.id, category_id: categoryId,
-          amount, description, date: d, type: 'expense', source: 'manual',
+          household_id: householdId, member_id: member.id, category_id: categoryId || null,
+          amount, description, date: d, type, source: 'manual',
           recurrence_id: recurrenceId, installment_label: `${i + 1}/${installments}`, account_id: resolvedAccountId,
         });
       });
     } else {
       rows.push({
-        household_id: householdId, member_id: member.id, category_id: categoryId,
-        amount, description, date, type: 'expense', source: 'manual',
+        household_id: householdId, member_id: member.id, category_id: categoryId || null,
+        amount, description, date, type, source: 'manual',
         recurrence_id: null, installment_label: null, account_id: resolvedAccountId,
       });
     }

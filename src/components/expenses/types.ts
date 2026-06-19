@@ -9,6 +9,7 @@ export type Expense = {
   amount: number;
   type: string;
   account_id: string | null;
+  is_bridge: boolean | null;
   installment_label: string | null;
   recurrence_id: string | null;
   category_id: string | null;
