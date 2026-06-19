@@ -25,7 +25,7 @@ export async function PATCH(
 
     const { data: existing, error: existingError } = await supabase
       .from('transactions')
-      .select('id, date, description, amount, type, category_id, account_id, recurring_item_id')
+      .select('id, date, description, amount, type, category_id, account_id, recurring_item_id, is_bridge')
       .eq('id', id)
       .eq('household_id', householdId)
       .maybeSingle();
@@ -35,6 +35,10 @@ export async function PATCH(
     }
     if (!existing) {
       return NextResponse.json({ error: 'Expense not found or not accessible' }, { status: 404 });
+    }
+
+    if (existing.type === 'expense' && !existing.is_bridge && !categoryId) {
+      return NextResponse.json({ error: 'Category required for expenses' }, { status: 400 });
     }
 
     let recurringItemId = existing.recurring_item_id as string | null;

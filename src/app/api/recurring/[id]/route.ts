@@ -61,6 +61,15 @@ export async function PATCH(
     if (!['monthly', 'biweekly', 'semimonthly'].includes(newCadence)) {
       return NextResponse.json({ error: 'Invalid cadence' }, { status: 400 });
     }
+    if (!newDescription) {
+      return NextResponse.json({ error: 'Description is required' }, { status: 400 });
+    }
+    if (!newAmount || newAmount <= 0 || isNaN(newAmount)) {
+      return NextResponse.json({ error: 'Amount must be a positive number' }, { status: 400 });
+    }
+    if (current.type === 'expense' && !newCategoryId) {
+      return NextResponse.json({ error: 'Category required for expense recurring items' }, { status: 400 });
+    }
 
     // Verify account belongs to this household
     const { data: account } = await supabase

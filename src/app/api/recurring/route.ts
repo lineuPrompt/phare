@@ -61,6 +61,9 @@ export async function POST(request: Request) {
     if (!['monthly', 'biweekly', 'semimonthly'].includes(cadence)) {
       return NextResponse.json({ error: 'Invalid cadence' }, { status: 400 });
     }
+    if (type === 'expense' && !categoryId) {
+      return NextResponse.json({ error: 'Category required for expense recurring items' }, { status: 400 });
+    }
 
     const supabase = await createClient();
     const ctx = await getContext(supabase);

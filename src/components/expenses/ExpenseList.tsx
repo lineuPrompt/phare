@@ -82,9 +82,7 @@ export default function ExpenseList({
         {expenses.map((e) => {
           const isEditing = editingId === e.id;
           const isBridge = e.is_bridge === true;
-          // Save enabled as long as we have a description and valid amount.
-          // Category is optional (uncategorized expenses are valid; bridge lines stay uncategorized).
-          const canSaveEdit = editDesc.trim().length > 0 && parseFloat(editAmount) > 0;
+          const canSaveEdit = editDesc.trim().length > 0 && parseFloat(editAmount) > 0 && (isBridge || editCat.length > 0);
 
           if (isEditing) {
             return (

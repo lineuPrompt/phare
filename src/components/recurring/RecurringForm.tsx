@@ -64,7 +64,7 @@ export default function RecurringForm({
   };
 
   const inputStyle = { border: '1.5px solid #D1D5DB', color: '#0F2044' };
-  const canSave = description.trim() && parseFloat(amount) > 0 && accounts.length > 0;
+  const canSave = description.trim() && parseFloat(amount) > 0 && accounts.length > 0 && (type === 'income' || categoryId);
 
   return (
     <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>

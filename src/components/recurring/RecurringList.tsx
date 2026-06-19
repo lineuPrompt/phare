@@ -27,6 +27,7 @@ export default function RecurringList({
   const [editSecondDay, setEditSecondDay] = useState('30');
   const [editCategoryId, setEditCategoryId] = useState('');
   const [editAccountId, setEditAccountId] = useState('');
+  const [editType, setEditType] = useState<'income' | 'expense'>('expense');
   const [saving, setSaving] = useState(false);
 
   const startEdit = (item: RecurringItem) => {
@@ -38,6 +39,7 @@ export default function RecurringList({
     setEditSecondDay(String(item.second_day ?? 30));
     setEditCategoryId(item.category_id ?? '');
     setEditAccountId(item.account_id);
+    setEditType(item.type as 'income' | 'expense');
   };
 
   const cancelEdit = () => setEditingId(null);
@@ -78,7 +80,7 @@ export default function RecurringList({
   const cadenceLabel = (c: string) => t(`cadence.${c}`);
 
   const inputStyle = { border: '1px solid #D1D5DB', color: '#0F2044' };
-  const canSaveEdit = editDesc.trim().length > 0 && parseFloat(editAmount) > 0 && editAccountId;
+  const canSaveEdit = editDesc.trim().length > 0 && parseFloat(editAmount) > 0 && editAccountId && (editType === 'income' || editCategoryId);
 
   if (!items.length) {
     return (

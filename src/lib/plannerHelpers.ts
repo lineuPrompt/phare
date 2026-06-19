@@ -1,4 +1,5 @@
 import { computeMonthTotals, AccountRow, MonthTotals } from './dashboardHelpers';
+export type { MonthTotals } from './dashboardHelpers';
 
 /**
  * PLANNER GROUPING
