@@ -11,6 +11,7 @@ export default function Sidebar({ locale }: { locale: string }) {
 const items = [
     { href: `/${locale}/dashboard`, label: t('overview'), icon: '🏠', active: true },
     { href: `/${locale}/expenses`, label: t('expenses'), icon: '💳', active: true },
+    { href: `/${locale}/planner`, label: t('planner'), icon: '📊', active: true },
     { href: `/${locale}/upload`, label: t('upload'), icon: '📄', active: true },
     { href: `/${locale}/recurring`, label: t('recurring'), icon: '🔁', active: true },
   ];

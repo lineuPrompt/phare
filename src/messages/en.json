@@ -241,7 +241,8 @@
       "upload": "New plan",
       "expenses": "Expenses",
       "reviews": "Reviews",
-      "recurring": "Recurring"
+      "recurring": "Recurring",
+      "planner": "Planner"
     }
   },
   "expenses": {
@@ -299,6 +300,15 @@
       "out": "Money out",
       "net": "Net"
     }
+  },
+  "planner": {
+    "title": "Cash-Flow Planner",
+    "loading": "Loading your cash flow...",
+    "income": "Income",
+    "expenses": "Expenses",
+    "savings": "Savings",
+    "remaining": "Remaining Cash",
+    "empty": "No transactions this month."
   },
   "recurring": {
     "title": "Recurring",

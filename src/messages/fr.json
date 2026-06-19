@@ -241,7 +241,8 @@
       "upload": "Nouveau plan",
       "expenses": "Dépenses",
       "reviews": "Revues",
-      "recurring": "Récurrents"
+      "recurring": "Récurrents",
+      "planner": "Planificateur"
     }
   },
   "expenses": {
@@ -299,6 +300,15 @@
       "out": "Sorties",
       "net": "Net"
     }
+  },
+  "planner": {
+    "title": "Planificateur de flux de trésorerie",
+    "loading": "Chargement de votre flux de trésorerie...",
+    "income": "Revenus",
+    "expenses": "Dépenses",
+    "savings": "Épargne",
+    "remaining": "Reste en caisse",
+    "empty": "Aucune transaction ce mois-ci."
   },
   "recurring": {
     "title": "Récurrents",
