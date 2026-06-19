@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { computeMonthTotals } from '@/lib/dashboardHelpers';
+import { computeMonthTotals, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 
 export async function GET() {
   try {
@@ -42,7 +42,11 @@ export async function GET() {
       : `${y}-${String(m + 1).padStart(2, '0')}-01`;
 
     // Fetch transactions and accounts in parallel.
-    const [txResult, acctResult, budgetResult, sfResult, goalResult, convResult] =
+    // Note: legacy `goals` table is intentionally NOT queried here.
+    // Goal data is now represented as goal accounts (type in GOAL_ACCOUNT_TYPES).
+    // Account balances are omitted from goalAccounts — they will be wired when
+    // the goals UI calls computeGoalBalance with the account's full transaction history.
+    const [txResult, acctResult, budgetResult, sfResult, convResult] =
       await Promise.all([
         supabase
           .from('transactions')
@@ -53,7 +57,7 @@ export async function GET() {
 
         supabase
           .from('accounts')
-          .select('id, type')
+          .select('id, name, type, goal_target, goal_target_date')
           .eq('household_id', householdId),
 
         supabase
@@ -65,11 +69,6 @@ export async function GET() {
         supabase
           .from('sinking_funds')
           .select('name, annual_amount, monthly_provision, due_month, current_balance')
-          .eq('household_id', householdId),
-
-        supabase
-          .from('goals')
-          .select('name, target_amount, current_amount, status')
           .eq('household_id', householdId),
 
         supabase
@@ -85,7 +84,12 @@ export async function GET() {
     // Headline totals come from the actual ledger, not the plan.
     // Money-out = chequing expenses only (see dashboardHelpers.ts for the
     // double-count rule).
-    const summary = computeMonthTotals(txResult.data ?? [], acctResult.data ?? []);
+    const allAccounts = acctResult.data ?? [];
+    const summary = computeMonthTotals(txResult.data ?? [], allAccounts);
+
+    const goalAccounts = allAccounts
+      .filter((a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type))
+      .map((a) => ({ id: a.id, name: a.name, type: a.type, goalTarget: a.goal_target, goalTargetDate: a.goal_target_date }));
 
     // Budgets are kept as planned-comparison data only.
     type BudgetRow = { amount: number; category_id: string; categories: { name: string; type: string } | null };
@@ -107,8 +111,8 @@ export async function GET() {
       month:             monthStart,
       summary, // includes totalIncome, totalExpenses, totalSavings, netCashFlow
       categories,
-      sinkingFunds:      sfResult.data   ?? [],
-      goals:             goalResult.data ?? [],
+      sinkingFunds:  sfResult.data ?? [],
+      goalAccounts,
       review,
       topRecommendation,
       reviewDate:        convResult.data?.created_at ?? null,

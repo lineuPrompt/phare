@@ -9,7 +9,56 @@ async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) 
   return userRow?.household_id ?? null;
 }
 
-// PATCH: update a transfer's amount (both sides of the pair)
+/**
+ * Resolve all rows that belong to a transfer pair, given either side's id.
+ *
+ * Two queries run in parallel:
+ *   Q1  WHERE id = $id                  — the row the caller named
+ *   Q2  WHERE transfer_peer_id = $id    — any row that points TO the caller's row
+ *
+ * Together they find the complete pair even when one direction of the peer link
+ * is null (e.g. a pre-RPC transfer where the goal row's transfer_peer_id was
+ * never written). As long as at least one link in the pair is intact, both
+ * rows are found and operated on.
+ */
+async function resolvePair(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  id: string,
+  householdId: string
+): Promise<{ ids: string[]; type: string | null }> {
+  const [direct, reverse] = await Promise.all([
+    supabase
+      .from('transactions')
+      .select('id, type, transfer_peer_id')
+      .eq('id', id)
+      .eq('household_id', householdId)
+      .maybeSingle(),
+
+    supabase
+      .from('transactions')
+      .select('id')
+      .eq('transfer_peer_id', id)
+      .eq('household_id', householdId),
+  ]);
+
+  const target = direct.data;
+  const type = target?.type ?? null;
+
+  const ids = new Set<string>();
+  if (target) {
+    ids.add(target.id);
+    if (target.transfer_peer_id) ids.add(target.transfer_peer_id);
+  }
+  for (const row of reverse.data ?? []) {
+    ids.add(row.id);
+  }
+
+  return { ids: [...ids], type };
+}
+
+// PATCH: update a transfer's amount on BOTH sides of the pair.
+// Works correctly when given either the chequing-side or goal-side id,
+// and recovers from a broken peer link on either side.
 // Body: { amount }
 export async function PATCH(
   request: Request,
@@ -27,24 +76,15 @@ export async function PATCH(
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    // Fetch this row and its peer id
-    const { data: tx } = await supabase
-      .from('transactions')
-      .select('id, transfer_peer_id, type')
-      .eq('id', id)
-      .eq('household_id', householdId)
-      .single();
+    const { ids, type } = await resolvePair(supabase, id, householdId);
 
-    if (!tx || tx.type !== 'transfer') {
+    if (ids.length === 0 || type !== 'transfer') {
       return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
     }
 
-    const numAmount = Number(amount);
-    const ids = [id, tx.transfer_peer_id].filter((x): x is string => x !== null);
-
     const { error } = await supabase
       .from('transactions')
-      .update({ amount: numAmount })
+      .update({ amount: Number(amount) })
       .in('id', ids)
       .eq('household_id', householdId);
 
@@ -60,7 +100,9 @@ export async function PATCH(
   }
 }
 
-// DELETE: remove both sides of a transfer pair
+// DELETE: remove BOTH sides of a transfer pair.
+// Works correctly when given either the chequing-side or goal-side id,
+// and recovers from a broken peer link on either side.
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -71,19 +113,11 @@ export async function DELETE(
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    // Fetch peer id before deleting (ON DELETE SET NULL would clear it after)
-    const { data: tx } = await supabase
-      .from('transactions')
-      .select('id, transfer_peer_id, type')
-      .eq('id', id)
-      .eq('household_id', householdId)
-      .single();
+    const { ids, type } = await resolvePair(supabase, id, householdId);
 
-    if (!tx || tx.type !== 'transfer') {
+    if (ids.length === 0 || type !== 'transfer') {
       return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
     }
-
-    const ids = [id, tx.transfer_peer_id].filter((x): x is string => x !== null);
 
     const { error } = await supabase
       .from('transactions')

@@ -16,15 +16,19 @@ async function getContext(supabase: Awaited<ReturnType<typeof createClient>>) {
   return { householdId: userRow.household_id, memberId: member?.id ?? null };
 }
 
-// POST: create a chequing → goal transfer
-// Creates two linked transaction rows (transfer_peer_id).
+// POST: create a chequing → goal transfer (atomic via RPC).
+// Both rows and both transfer_peer_id links are written inside a single Postgres
+// transaction. Any failure rolls back completely — no partial pair can persist.
 // Body: { date, amount, description?, goalAccountId }
 export async function POST(request: Request) {
   try {
-    const { date, amount, description, goalAccountId } = await request.json();
+    const body = await request.json();
+    const { date, amount, goalAccountId } = body;
+    const description: string | undefined = body.description;
 
+    // --- Input validation (400, before any DB call) ---
     if (!date || !amount || !goalAccountId) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing required fields: date, amount, goalAccountId' }, { status: 400 });
     }
     if (Number(amount) <= 0) {
       return NextResponse.json({ error: 'Amount must be positive' }, { status: 400 });
@@ -37,7 +41,7 @@ export async function POST(request: Request) {
 
     const { householdId, memberId } = ctx;
 
-    // Verify goal account belongs to household and is a goal type
+    // Verify goal account belongs to this household and is a goal type (400 — user error)
     const { data: goalAccount } = await supabase
       .from('accounts')
       .select('id, type')
@@ -49,7 +53,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid goal account' }, { status: 400 });
     }
 
-    // Find chequing account
+    // Resolve chequing account (400 — configuration error, fixable by user)
     const { data: chequing } = await supabase
       .from('accounts')
       .select('id')
@@ -61,69 +65,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No chequing account found' }, { status: 400 });
     }
 
-    const desc = description?.trim() || null;
-    const numAmount = Number(amount);
+    // --- Atomic RPC (500 if it throws — not a user error) ---
+    const { data: result, error: rpcErr } = await supabase.rpc('create_transfer', {
+      p_household_id: householdId,
+      p_member_id:    memberId,
+      p_chequing_id:  chequing.id,
+      p_goal_id:      goalAccountId,
+      p_amount:       Number(amount),
+      p_date:         date,
+      p_description:  description?.trim() ?? null,
+    });
 
-    // Step 1: insert goal-side row (no peer yet)
-    const { data: goalRow, error: goalErr } = await supabase
-      .from('transactions')
-      .insert({
-        household_id: householdId,
-        member_id: memberId,
-        account_id: goalAccountId,
-        amount: numAmount,
-        description: desc,
-        date,
-        type: 'transfer',
-        source: 'manual',
-      })
-      .select('id')
-      .single();
-
-    if (goalErr || !goalRow) {
-      console.error('Transfer goal-side insert error:', goalErr);
+    if (rpcErr) {
+      console.error('create_transfer RPC error:', rpcErr);
       return NextResponse.json({ error: 'Failed to create transfer' }, { status: 500 });
-    }
-
-    // Step 2: insert chequing-side row pointing to goal
-    const { data: chqRow, error: chqErr } = await supabase
-      .from('transactions')
-      .insert({
-        household_id: householdId,
-        member_id: memberId,
-        account_id: chequing.id,
-        amount: numAmount,
-        description: desc,
-        date,
-        type: 'transfer',
-        source: 'manual',
-        transfer_peer_id: goalRow.id,
-      })
-      .select('id')
-      .single();
-
-    if (chqErr || !chqRow) {
-      // Clean up orphan goal row
-      await supabase.from('transactions').delete().eq('id', goalRow.id);
-      console.error('Transfer chequing-side insert error:', chqErr);
-      return NextResponse.json({ error: 'Failed to create transfer' }, { status: 500 });
-    }
-
-    // Step 3: link goal-side back to chequing-side
-    const { error: linkErr } = await supabase
-      .from('transactions')
-      .update({ transfer_peer_id: chqRow.id })
-      .eq('id', goalRow.id);
-
-    if (linkErr) {
-      // Transfer exists but peer link is one-sided; log for monitoring
-      console.error('Transfer peer link error:', linkErr);
     }
 
     return NextResponse.json({
-      created: true,
-      chequingRowId: chqRow.id,
-      goalRowId: goalRow.id,
+      created:       true,
+      chequingRowId: result.chequing_row_id,
+      goalRowId:     result.goal_row_id,
     });
   } catch (error) {
     console.error('Transfer POST threw:', error);

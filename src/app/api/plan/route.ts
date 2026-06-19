@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { anthropic } from '@/lib/anthropic';
-import { dedupeSinkingFunds } from '@/lib/planHelpers';
+import { dedupeSinkingFunds, assembleCalculatedBudget } from '@/lib/planHelpers';
 
 const SEED_CATEGORIES = [
   'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
@@ -61,28 +61,21 @@ export async function POST(request: NextRequest) {
       );
 
       aiContext = `Household info: ${JSON.stringify(p.household)}
-Net cash flow: $${p.summary.netCashFlow}/month (income $${p.summary.monthlyIncome}, expenses $${p.summary.monthlyExpenses})
+Net cash flow: $${p.summary.netCashFlow}/month (income $${p.summary.monthlyIncome}, expenses $${p.summary.monthlyExpenses}, savings $0 at plan creation)
+Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts; none exist yet)
 Their stated goals: ${JSON.stringify(p.goals)}
 Their sinking funds (already set up): ${JSON.stringify(p.sinkingFunds.lines)}
 Expense lines: ${JSON.stringify([...p.fixedExpenses.lines, ...p.variableExpenses.lines].map((l: { label: string }) => l.label))}`;
     } else if (body.source === 'calculated') {
       const c = body.calculated;
 
-      monthlyBudget = {
-        totalIncome: c.income.total,
-        totalExpenses: c.expenses.total,
-        totalSavings: round(c.income.total - c.expenses.total),
-        categories: [
-          ...c.income.lines.map((l: { label: string; amount: number }) => ({
-            name: l.label, budgeted: l.amount, type: 'income',
-          })),
-          ...c.expenses.lines.map((l: { label: string; amount: number }) => ({
-            name: l.label, budgeted: l.amount, type: 'expense',
-          })),
-        ],
-      };
+      // assembleCalculatedBudget sets totalSavings = 0 (not income − expenses).
+      // Savings appear later as real transfers; using the residual here would
+      // produce a wrong net once transfers are recorded.
+      monthlyBudget = assembleCalculatedBudget(c);
 
-      aiContext = `Net cash flow: $${c.netCashFlow}/month (income $${c.income.total}, expenses $${c.expenses.total})
+      aiContext = `Net cash flow: $${c.netCashFlow}/month (income $${c.income.total}, expenses $${c.expenses.total}, savings $0 at plan creation)
+Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts; none exist yet)
 Income lines: ${JSON.stringify(c.income.lines)}
 Expense lines: ${JSON.stringify(c.expenses.lines)}
 No goals or sinking funds were provided — suggest sinking funds based on the expense labels and typical Canadian annual costs.`;

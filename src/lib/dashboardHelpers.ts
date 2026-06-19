@@ -88,6 +88,10 @@ export function computeMonthTotals(
  * Derives a goal account's current balance from its transaction ledger.
  * Balance = sum of all transfer inflows into this account.
  * No static current_balance column is used or trusted.
+ *
+ * CONTRACT: caller MUST pass the account's FULL transaction history across ALL
+ * time — never a month-scoped slice. A partial slice underestimates the balance
+ * by omitting older deposits.
  */
 export function computeGoalBalance(
   transactions: TxRow[],

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dedupeSinkingFunds } from '../planHelpers';
+import { dedupeSinkingFunds, assembleCalculatedBudget } from '../planHelpers';
 
 describe('dedupeSinkingFunds', () => {
   it('removes an expense category that matches a sinking fund', () => {
@@ -59,5 +59,66 @@ describe('dedupeSinkingFunds', () => {
     const sinkingFunds = [{ name: 'Property tax' }];
     const result = dedupeSinkingFunds(categories, sinkingFunds);
     expect(result).toEqual([{ name: 'Groceries', type: 'expense', budgeted: 600 }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// assembleCalculatedBudget — three-bucket invariant
+// ---------------------------------------------------------------------------
+
+describe('assembleCalculatedBudget', () => {
+  const calculated = {
+    income:   { total: 5000, lines: [{ label: 'Salary', amount: 5000 }] },
+    expenses: {
+      total: 3000,
+      lines: [
+        { label: 'Rent',      amount: 2000 },
+        { label: 'Groceries', amount: 1000 },
+      ],
+    },
+  };
+
+  it('totalSavings is 0 — savings come from real transfers, not from the residual', () => {
+    const budget = assembleCalculatedBudget(calculated);
+    expect(budget.totalSavings).toBe(0);
+  });
+
+  it('totalSavings is NOT income − expenses (guard against the old wrong formula)', () => {
+    const budget = assembleCalculatedBudget(calculated);
+    const wrongValue = budget.totalIncome - budget.totalExpenses; // 2000
+    expect(budget.totalSavings).not.toBe(wrongValue);
+  });
+
+  it('totalIncome and totalExpenses come directly from the source', () => {
+    const budget = assembleCalculatedBudget(calculated);
+    expect(budget.totalIncome).toBe(5000);
+    expect(budget.totalExpenses).toBe(3000);
+  });
+
+  it('categories contain all income and expense lines with correct types', () => {
+    const budget = assembleCalculatedBudget(calculated);
+    const income  = budget.categories.filter((c) => c.type === 'income');
+    const expense = budget.categories.filter((c) => c.type === 'expense');
+    expect(income).toHaveLength(1);
+    expect(income[0]).toEqual({ name: 'Salary', budgeted: 5000, type: 'income' });
+    expect(expense).toHaveLength(2);
+  });
+
+  it('three-bucket invariant: income − expenses − savings equals the implied net', () => {
+    const budget = assembleCalculatedBudget(calculated);
+    // With savings=0, implied net = income − expenses
+    const impliedNet = budget.totalIncome - budget.totalExpenses - budget.totalSavings;
+    expect(impliedNet).toBe(2000); // 5000 − 3000 − 0
+  });
+
+  it('handles zero income correctly (savings stays 0, not negative)', () => {
+    const zeroIncome = {
+      income:   { total: 0, lines: [] },
+      expenses: { total: 500, lines: [{ label: 'Rent', amount: 500 }] },
+    };
+    const budget = assembleCalculatedBudget(zeroIncome);
+    expect(budget.totalSavings).toBe(0);
+    expect(budget.totalIncome).toBe(0);
+    expect(budget.totalExpenses).toBe(500);
   });
 });
