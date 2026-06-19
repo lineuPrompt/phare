@@ -105,7 +105,7 @@ export async function GET() {
       hasPlan: true,
       firstName:         (userRow.full_name || '').split(' ')[0],
       month:             monthStart,
-      summary,
+      summary, // includes totalIncome, totalExpenses, totalSavings, netCashFlow
       categories,
       sinkingFunds:      sfResult.data   ?? [],
       goals:             goalResult.data ?? [],

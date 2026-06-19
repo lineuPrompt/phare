@@ -129,7 +129,7 @@ export async function GET(request: Request) {
 
     const { data: accounts } = await supabase
       .from('accounts')
-      .select('id, name, type')
+      .select('id, name, type, payment_day')
       .eq('household_id', householdId)
       .order('type', { ascending: true })
       .order('name', { ascending: true });
@@ -199,7 +199,7 @@ export async function GET(request: Request) {
             category_id: null,
             amount: total,
             description: `${card.name} payment`,
-            date: bridgePaymentDate(prevMonth, 1),
+            date: bridgePaymentDate(prevMonth, card.payment_day ?? 1),
             type: 'expense',
             source: 'bridge',
             is_bridge: true,

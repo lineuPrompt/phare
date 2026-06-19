@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 
 async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -18,7 +19,7 @@ export async function GET() {
 
     const { data: accounts } = await supabase
       .from('accounts')
-      .select('id, name, type, statement_close_day, payment_day')
+      .select('id, name, type, statement_close_day, payment_day, goal_target, goal_target_date')
       .eq('household_id', householdId)
       .order('type', { ascending: true })
       .order('name', { ascending: true });
@@ -29,14 +30,16 @@ export async function GET() {
   }
 }
 
-// POST: create an account (a credit card or line of credit)
+const VALID_TYPES = ['chequing', 'credit_card', 'line_of_credit', ...GOAL_ACCOUNT_TYPES];
+
+// POST: create an account (credit card, line of credit, or goal account)
 export async function POST(request: Request) {
   try {
-    const { name, type, statementCloseDay, paymentDay } = await request.json();
+    const { name, type, statementCloseDay, paymentDay, goalTarget, goalTargetDate } = await request.json();
     if (!name?.trim() || !type) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
-    if (!['chequing', 'credit_card', 'line_of_credit'].includes(type)) {
+    if (!VALID_TYPES.includes(type)) {
       return NextResponse.json({ error: 'Invalid account type' }, { status: 400 });
     }
 
@@ -52,8 +55,10 @@ export async function POST(request: Request) {
         type,
         statement_close_day: statementCloseDay ?? null,
         payment_day: paymentDay ?? null,
+        goal_target: goalTarget ?? null,
+        goal_target_date: goalTargetDate ?? null,
       })
-      .select('id, name, type, statement_close_day, payment_day')
+      .select('id, name, type, statement_close_day, payment_day, goal_target, goal_target_date')
       .single();
 
     if (error) {
