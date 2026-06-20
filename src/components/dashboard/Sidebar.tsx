@@ -14,6 +14,7 @@ const items = [
     { href: `/${locale}/planner`, label: t('planner'), icon: '📊', active: true },
     { href: `/${locale}/upload`, label: t('upload'), icon: '📄', active: true },
     { href: `/${locale}/recurring`, label: t('recurring'), icon: '🔁', active: true },
+    { href: `/${locale}/reconcile`, label: t('reconcile'), icon: '🔍', active: true },
   ];
 
   const comingSoon = [

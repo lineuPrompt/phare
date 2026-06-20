@@ -242,7 +242,8 @@
       "expenses": "Dépenses",
       "reviews": "Revues",
       "recurring": "Récurrents",
-      "planner": "Planificateur"
+      "planner": "Planificateur",
+      "reconcile": "Audit"
     }
   },
   "expenses": {
