@@ -358,3 +358,51 @@ describe('computeGoalBalance', () => {
     expect(buckets.netCashFlow).toBe(4000); // reverted to pre-transfer net
   });
 });
+
+// ---------------------------------------------------------------------------
+// computeGoalBalance — full-history contract
+// The dashboard endpoint must pass ALL-TIME transactions, not a month slice.
+// These tests verify the accumulation behavior that enforces that contract.
+// ---------------------------------------------------------------------------
+
+describe('computeGoalBalance — full history contract', () => {
+  it('accumulates transfers across multiple "months" (simulated by separate rows)', () => {
+    // Three deposits that would span different calendar months in production.
+    // The function sees them all because the caller passes the full history.
+    const allTime: TxRow[] = [
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 200 }, // month 1
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 300 }, // month 2
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 150 }, // month 3
+    ];
+    expect(computeGoalBalance(allTime, SAVINGS_ID)).toBe(650);
+  });
+
+  it('a month-scoped slice underestimates the balance vs full history', () => {
+    const fullHistory: TxRow[] = [
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 500 }, // prior month
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 200 }, // current month
+    ];
+    const currentMonthOnly: TxRow[] = [
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 200 },
+    ];
+    const fullBalance  = computeGoalBalance(fullHistory, SAVINGS_ID);
+    const sliceBalance = computeGoalBalance(currentMonthOnly, SAVINGS_ID);
+    expect(fullBalance).toBe(700);
+    expect(sliceBalance).toBe(200);
+    // The slice underestimates by exactly the prior-month deposit.
+    expect(fullBalance - sliceBalance).toBe(500);
+  });
+
+  it('balance across all three goal types accumulates independently over time', () => {
+    const allTime: TxRow[] = [
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 100 },
+      { type: 'transfer', account_id: TFSA_ID,    amount: 200 },
+      { type: 'transfer', account_id: RRSP_ID,    amount: 300 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 50  }, // second deposit to savings
+      { type: 'transfer', account_id: TFSA_ID,    amount: 75  }, // second deposit to TFSA
+    ];
+    expect(computeGoalBalance(allTime, SAVINGS_ID)).toBe(150);
+    expect(computeGoalBalance(allTime, TFSA_ID)).toBe(275);
+    expect(computeGoalBalance(allTime, RRSP_ID)).toBe(300);
+  });
+});

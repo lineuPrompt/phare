@@ -8,13 +8,14 @@ export default function Sidebar({ locale }: { locale: string }) {
   const t = useTranslations('dashboard.nav');
   const pathname = usePathname();
 
-const items = [
-    { href: `/${locale}/dashboard`, label: t('overview'), icon: '🏠', active: true },
-    { href: `/${locale}/expenses`, label: t('expenses'), icon: '💳', active: true },
-    { href: `/${locale}/planner`, label: t('planner'), icon: '📊', active: true },
-    { href: `/${locale}/upload`, label: t('upload'), icon: '📄', active: true },
-    { href: `/${locale}/recurring`, label: t('recurring'), icon: '🔁', active: true },
-    { href: `/${locale}/reconcile`, label: t('reconcile'), icon: '🔍', active: true },
+  const items = [
+    { href: `/${locale}/dashboard`, label: t('overview'),  icon: '🏠' },
+    { href: `/${locale}/expenses`,  label: t('expenses'),  icon: '💳' },
+    { href: `/${locale}/goals`,     label: t('goals'),     icon: '🎯' },
+    { href: `/${locale}/planner`,   label: t('planner'),   icon: '📊' },
+    { href: `/${locale}/upload`,    label: t('upload'),    icon: '📄' },
+    { href: `/${locale}/recurring`, label: t('recurring'), icon: '🔁' },
+    { href: `/${locale}/reconcile`, label: t('reconcile'), icon: '🔍' },
   ];
 
   const comingSoon = [

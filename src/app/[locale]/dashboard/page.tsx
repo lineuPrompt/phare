@@ -57,7 +57,7 @@ export default function DashboardPage() {
     );
   }
 
- return (
+  return (
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
       <Navbar />
 
@@ -73,7 +73,9 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {data.topRecommendation && <TopPriorityCard text={data.topRecommendation} />}
               {data.summary && <SnapshotCard summary={data.summary} locale={locale} />}
-              {data.goals && <GoalsCard goals={data.goals} locale={locale} />}
+              {data.goalAccounts !== undefined && (
+                <GoalsCard goals={data.goalAccounts} locale={locale} />
+              )}
               {data.sinkingFunds && <SinkingFundsCard funds={data.sinkingFunds} locale={locale} />}
             </div>
 

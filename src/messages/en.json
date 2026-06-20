@@ -223,6 +223,7 @@
     "snapshot": "Your financial snapshot",
     "income": "Monthly income",
     "expenses": "Monthly expenses",
+    "savings": "Saved this month",
     "surplus": "Monthly surplus",
     "deficit": "Monthly deficit",
     "topPriority": "Your #1 priority",
@@ -230,6 +231,8 @@
     "perMonth": "/month",
     "perYear": "/year",
     "goals": "Your goals",
+    "noGoals": "No savings goals yet",
+    "createGoalCta": "Create your first savings goal",
     "review": "Your latest review",
     "reviewDate": "Written on {date}",
     "noPlan": "You don't have a plan yet.",
@@ -243,7 +246,8 @@
       "reviews": "Reviews",
       "recurring": "Recurring",
       "planner": "Planner",
-      "reconcile": "Audit"
+      "reconcile": "Audit",
+      "goals": "Goals"
     }
   },
   "expenses": {
@@ -313,6 +317,51 @@
     "savings": "Savings",
     "remaining": "Remaining Cash",
     "empty": "No transactions this month."
+  },
+  "goals": {
+    "title": "Goals",
+    "loading": "Loading your goals...",
+    "noGoals": "No savings goals yet. Create your first one below.",
+    "type": {
+      "savings": "Savings",
+      "tfsa": "TFSA",
+      "rrsp": "RRSP"
+    },
+    "typeDesc": {
+      "savings": "Regular savings account",
+      "tfsa": "Tax-Free Savings Account — contributions grow tax-free",
+      "rrsp": "Registered Retirement Savings Plan — contributions reduce taxable income"
+    },
+    "balance": "Balance",
+    "of": "of",
+    "saved": "saved",
+    "noTarget": "No target set",
+    "create": {
+      "title": "Create a savings goal",
+      "name": "Name",
+      "namePlaceholder": "e.g. Disney 2027, Emergency fund",
+      "type": "Account type",
+      "goalTarget": "Target amount",
+      "goalTargetPlaceholder": "Optional",
+      "goalTargetDate": "Target date",
+      "saving": "Creating...",
+      "save": "Create goal"
+    },
+    "transfer": {
+      "title": "Add money",
+      "goal": "Goal",
+      "amount": "Amount",
+      "date": "Date",
+      "description": "Description",
+      "descriptionPlaceholder": "Optional note",
+      "saving": "Saving...",
+      "save": "Add to goal",
+      "cancel": "Cancel",
+      "success": "Transfer saved"
+    },
+    "addMoney": "Add money",
+    "createGoal": "New goal",
+    "viewAll": "View all goals"
   },
   "recurring": {
     "title": "Recurring",

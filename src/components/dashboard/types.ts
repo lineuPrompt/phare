@@ -1,6 +1,7 @@
 export type DashboardSummary = {
   totalIncome: number;
   totalExpenses: number;
+  totalSavings: number;
   netCashFlow: number;
 };
 
@@ -12,11 +13,13 @@ export type SinkingFund = {
   current_balance: number;
 };
 
-export type Goal = {
+export type GoalAccount = {
+  id: string;
   name: string;
-  target_amount: number;
-  current_amount: number;
-  status: string;
+  type: string;
+  balance: number;
+  goalTarget: number | null;
+  goalTargetDate: string | null;
 };
 
 export type DashboardData = {
@@ -26,7 +29,7 @@ export type DashboardData = {
   summary?: DashboardSummary;
   categories?: { name: string; type: string; amount: number }[];
   sinkingFunds?: SinkingFund[];
-  goals?: Goal[];
+  goalAccounts?: GoalAccount[];
   review?: string | null;
   topRecommendation?: string | null;
   reviewDate?: string | null;

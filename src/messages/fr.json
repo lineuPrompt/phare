@@ -223,6 +223,7 @@
     "snapshot": "Votre portrait financier",
     "income": "Revenu mensuel",
     "expenses": "Dépenses mensuelles",
+    "savings": "Épargne ce mois-ci",
     "surplus": "Surplus mensuel",
     "deficit": "Déficit mensuel",
     "topPriority": "Votre priorité #1",
@@ -230,6 +231,8 @@
     "perMonth": "/mois",
     "perYear": "/an",
     "goals": "Vos objectifs",
+    "noGoals": "Aucun objectif d'épargne",
+    "createGoalCta": "Créez votre premier objectif d'épargne",
     "review": "Votre dernière revue",
     "reviewDate": "Rédigée le {date}",
     "noPlan": "Vous n'avez pas encore de plan.",
@@ -243,7 +246,8 @@
       "reviews": "Revues",
       "recurring": "Récurrents",
       "planner": "Planificateur",
-      "reconcile": "Audit"
+      "reconcile": "Audit",
+      "goals": "Objectifs"
     }
   },
   "expenses": {
@@ -313,6 +317,51 @@
     "savings": "Épargne",
     "remaining": "Reste en caisse",
     "empty": "Aucune transaction ce mois-ci."
+  },
+  "goals": {
+    "title": "Objectifs",
+    "loading": "Chargement de vos objectifs...",
+    "noGoals": "Aucun objectif d'épargne. Créez le vôtre ci-dessous.",
+    "type": {
+      "savings": "Épargne",
+      "tfsa": "CELI",
+      "rrsp": "REER"
+    },
+    "typeDesc": {
+      "savings": "Compte d'épargne ordinaire",
+      "tfsa": "Compte d'épargne libre d'impôt — la croissance est exempte d'impôt",
+      "rrsp": "Régime enregistré d'épargne-retraite — les cotisations réduisent le revenu imposable"
+    },
+    "balance": "Solde",
+    "of": "sur",
+    "saved": "économisé",
+    "noTarget": "Aucun objectif fixé",
+    "create": {
+      "title": "Créer un objectif d'épargne",
+      "name": "Nom",
+      "namePlaceholder": "ex. Disney 2027, Fonds d'urgence",
+      "type": "Type de compte",
+      "goalTarget": "Montant cible",
+      "goalTargetPlaceholder": "Optionnel",
+      "goalTargetDate": "Date cible",
+      "saving": "Création...",
+      "save": "Créer l'objectif"
+    },
+    "transfer": {
+      "title": "Ajouter de l'argent",
+      "goal": "Objectif",
+      "amount": "Montant",
+      "date": "Date",
+      "description": "Description",
+      "descriptionPlaceholder": "Note optionnelle",
+      "saving": "Enregistrement...",
+      "save": "Ajouter à l'objectif",
+      "cancel": "Annuler",
+      "success": "Virement enregistré"
+    },
+    "addMoney": "Ajouter",
+    "createGoal": "Nouvel objectif",
+    "viewAll": "Voir tous les objectifs"
   },
   "recurring": {
     "title": "Récurrents",

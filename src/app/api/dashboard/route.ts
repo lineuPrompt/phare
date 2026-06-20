@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { computeMonthTotals, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
+import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { logEvent, isFirstReturnToday } from '@/lib/eventLogger';
 
 export async function GET() {
@@ -52,11 +52,8 @@ export async function GET() {
       ? `${y + 1}-01-01`
       : `${y}-${String(m + 1).padStart(2, '0')}-01`;
 
-    // Fetch transactions and accounts in parallel.
-    // Note: legacy `goals` table is intentionally NOT queried here.
-    // Goal data is now represented as goal accounts (type in GOAL_ACCOUNT_TYPES).
-    // Account balances are omitted from goalAccounts — they will be wired when
-    // the goals UI calls computeGoalBalance with the account's full transaction history.
+    // Fetch month-scoped transactions, accounts, budgets, sinking funds, and
+    // conversation in parallel.
     const [txResult, acctResult, budgetResult, sfResult, convResult] =
       await Promise.all([
         supabase
@@ -92,15 +89,37 @@ export async function GET() {
           .maybeSingle(),
       ]);
 
-    // Headline totals come from the actual ledger, not the plan.
-    // Money-out = chequing expenses only (see dashboardHelpers.ts for the
-    // double-count rule).
     const allAccounts = acctResult.data ?? [];
+
+    // Headline totals from the actual ledger (three-bucket: income/expenses/savings).
     const summary = computeMonthTotals(txResult.data ?? [], allAccounts);
 
-    const goalAccounts = allAccounts
-      .filter((a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type))
-      .map((a) => ({ id: a.id, name: a.name, type: a.type, goalTarget: a.goal_target, goalTargetDate: a.goal_target_date }));
+    // Fetch FULL (all-time) transaction history for goal accounts so that
+    // computeGoalBalance sees every deposit, not just the active month.
+    // CONTRACT: computeGoalBalance requires full history — never pass a month slice.
+    const goalAccountList = allAccounts.filter(
+      (a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type)
+    );
+    const goalIds = goalAccountList.map((a) => a.id);
+
+    let goalTxData: { amount: number | string; type: string; account_id: string | null }[] = [];
+    if (goalIds.length > 0) {
+      const { data } = await supabase
+        .from('transactions')
+        .select('amount, type, account_id')
+        .eq('household_id', householdId)
+        .in('account_id', goalIds);
+      goalTxData = data ?? [];
+    }
+
+    const goalAccounts = goalAccountList.map((a) => ({
+      id:             a.id,
+      name:           a.name,
+      type:           a.type,
+      balance:        computeGoalBalance(goalTxData, a.id),
+      goalTarget:     a.goal_target ? Number(a.goal_target) : null,
+      goalTargetDate: a.goal_target_date ?? null,
+    }));
 
     // Budgets are kept as planned-comparison data only.
     type BudgetRow = { amount: number; category_id: string; categories: { name: string; type: string } | null };
@@ -113,8 +132,8 @@ export async function GET() {
 
     type Message = { role: string; type: string; content: string; locale?: string };
     const messages = (convResult.data?.messages as Message[] | null) ?? [];
-    const review            = messages.find((m) => m.type === 'monthly_review')?.content ?? null;
-    const topRecommendation = messages.find((m) => m.type === 'top_recommendation')?.content ?? null;
+    const review            = messages.find((msg) => msg.type === 'monthly_review')?.content ?? null;
+    const topRecommendation = messages.find((msg) => msg.type === 'top_recommendation')?.content ?? null;
 
     return NextResponse.json({
       hasPlan: true,
