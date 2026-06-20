@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
+import { logEvent, isFirstEvent } from '@/lib/eventLogger';
 
 async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -44,7 +45,10 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient();
-    const householdId = await getHousehold(supabase);
+    const { data: { user } } = await supabase.auth.getUser();
+    const householdId = user
+      ? (await supabase.from('users').select('household_id').eq('id', user.id).single()).data?.household_id ?? null
+      : null;
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const { data: account, error } = await supabase
@@ -65,6 +69,13 @@ export async function POST(request: Request) {
       console.error('Account create error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Log created_first_goal the first time a goal account is created.
+    const goalTypes = new Set<string>(GOAL_ACCOUNT_TYPES);
+    if (goalTypes.has(type) && await isFirstEvent(supabase, householdId, 'created_first_goal')) {
+      await logEvent(supabase, householdId, user?.id ?? null, 'created_first_goal', { account_type: type });
+    }
+
     return NextResponse.json({ account });
   } catch (error) {
     console.error('Account POST threw:', error);

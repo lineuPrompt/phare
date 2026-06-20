@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { recurrenceDates, bridgePaymentDate } from '@/lib/dateHelpers';
+import { logEvent, isFirstEvent } from '@/lib/eventLogger';
 
 // POST: create expense (single, monthly recurring, or installments)
 export async function POST(request: Request) {
@@ -98,6 +99,11 @@ export async function POST(request: Request) {
     if (insertError) {
       console.error('Insert error:', insertError);
       return NextResponse.json({ error: 'Failed to save expense' }, { status: 500 });
+    }
+
+    // Log created_first_expense the first time this household enters a transaction manually.
+    if (await isFirstEvent(supabase, householdId, 'created_first_expense')) {
+      await logEvent(supabase, householdId, user.id, 'created_first_expense', { type });
     }
 
     return NextResponse.json({ saved: true, count: rows.length });

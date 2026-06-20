@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { groupPlannerSections, PlannerTxRow } from '@/lib/plannerHelpers';
 import { bridgePaymentDate } from '@/lib/dateHelpers';
+import { logEvent } from '@/lib/eventLogger';
 
 /**
  * GET /api/planner?month=YYYY-MM
@@ -38,6 +39,9 @@ export async function GET(request: Request) {
       .from('household_members').select('id')
       .eq('household_id', householdId).eq('user_id', user.id).single();
     const memberId = memberRow?.id ?? null;
+
+    // Diary: planner view heartbeat (every load)
+    await logEvent(supabase, householdId, user.id, 'viewed_planner', { month: monthParam });
 
     // Month bounds
     const [y, m] = monthParam.split('-').map(Number);

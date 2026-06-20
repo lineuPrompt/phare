@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { formatLocalDate, formatLocalMonth, materializeRule, monthNameToNumber } from '@/lib/dateHelpers';
+import { logEvent } from '@/lib/eventLogger';
 
 type PlanCategory = {
   name: string;
@@ -252,6 +253,7 @@ export async function POST(request: Request) {
       ],
     });
 
+    await logEvent(supabase, householdId, user.id, 'completed_onboarding', { locale });
     return NextResponse.json({ saved: true });
   } catch (error) {
     console.error('Save plan error:', error);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { computeMonthTotals, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
+import { logEvent, isFirstReturnToday } from '@/lib/eventLogger';
 
 export async function GET() {
   try {
@@ -21,6 +22,16 @@ export async function GET() {
       return NextResponse.json({ error: 'No household' }, { status: 400 });
     }
     const householdId = userRow.household_id;
+
+    // Diary: once-per-UTC-day "user was active" heartbeat.
+    // Fire-and-forget — do not block the dashboard response.
+    isFirstReturnToday(supabase, householdId, user.id).then((first) => {
+      if (first) {
+        void logEvent(supabase, householdId, user.id, 'returned', {
+          date: new Date().toISOString().slice(0, 10),
+        });
+      }
+    }).catch(() => {});
 
     // Active month: determined by when the plan was last saved.
     const { data: latestBudget } = await supabase
