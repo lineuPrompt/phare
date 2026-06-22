@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase-server';
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { logEvent, isFirstReturnToday } from '@/lib/eventLogger';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
 
@@ -24,7 +24,6 @@ export async function GET() {
     const householdId = userRow.household_id;
 
     // Diary: once-per-UTC-day "user was active" heartbeat.
-    // Fire-and-forget — do not block the dashboard response.
     isFirstReturnToday(supabase, householdId, user.id).then((first) => {
       if (first) {
         void logEvent(supabase, householdId, user.id, 'returned', {
@@ -33,7 +32,7 @@ export async function GET() {
       }
     }).catch(() => {});
 
-    // Active month: determined by when the plan was last saved.
+    // Plan existence check: the latest budget row determines whether a plan has been saved.
     const { data: latestBudget } = await supabase
       .from('budgets')
       .select('month')
@@ -46,33 +45,51 @@ export async function GET() {
       return NextResponse.json({ hasPlan: false });
     }
 
-    const monthStart = latestBudget.month as string; // YYYY-MM-01
-    const [y, m] = monthStart.slice(0, 7).split('-').map(Number);
-    const monthEnd = m === 12
-      ? `${y + 1}-01-01`
-      : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+    // Actuals month: caller-selected (YYYY-MM) or the current calendar month.
+    // The dashboard shows actual income/expenses/net for this month so it
+    // advances automatically as the calendar rolls over.
+    const url = new URL(request.url);
+    const monthParam = url.searchParams.get('month');
+    let actualsMonth: string;
+    if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+      actualsMonth = `${monthParam}-01`;
+    } else {
+      const now = new Date();
+      const y = now.getFullYear();
+      const mo = now.getMonth() + 1;
+      actualsMonth = `${y}-${String(mo).padStart(2, '0')}-01`;
+    }
+    const [ay, am] = actualsMonth.slice(0, 7).split('-').map(Number);
+    const actualsMonthEnd = am === 12
+      ? `${ay + 1}-01-01`
+      : `${ay}-${String(am + 1).padStart(2, '0')}-01`;
 
-    // Fetch month-scoped transactions, accounts, budgets, sinking funds, and
-    // conversation in parallel.
+    // Plan month: the month of the most recent saved budget.
+    // Used only for budget-vs-actual comparison. Budgets don't exist for months
+    // that haven't been planned, so we never fake a budget for the current month.
+    const planMonth = latestBudget.month as string;
+
     const [txResult, acctResult, budgetResult, sfResult, convResult] =
       await Promise.all([
+        // Transactions for the ACTUALS month (not the plan month)
         supabase
           .from('transactions')
           .select('amount, type, account_id')
           .eq('household_id', householdId)
-          .gte('date', monthStart)
-          .lt('date', monthEnd),
+          .gte('date', actualsMonth)
+          .lt('date', actualsMonthEnd),
 
         supabase
           .from('accounts')
           .select('id, name, type, goal_target, goal_target_date')
           .eq('household_id', householdId),
 
+        // Budget comparison always references the plan month
         supabase
           .from('budgets')
           .select('amount, category_id, categories(name, type)')
           .eq('household_id', householdId)
-          .eq('month', monthStart),
+          .eq('month', planMonth),
 
         supabase
           .from('sinking_funds')
@@ -91,12 +108,11 @@ export async function GET() {
 
     const allAccounts = acctResult.data ?? [];
 
-    // Headline totals from the actual ledger (three-bucket: income/expenses/savings).
+    // Headline totals from the actual ledger for the displayed month.
     const summary = computeMonthTotals(txResult.data ?? [], allAccounts);
 
     // Fetch FULL (all-time) transaction history for goal accounts so that
     // computeGoalBalance sees every deposit, not just the active month.
-    // CONTRACT: computeGoalBalance requires full history — never pass a month slice.
     const goalAccountList = allAccounts.filter(
       (a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type)
     );
@@ -121,7 +137,6 @@ export async function GET() {
       goalTargetDate: a.goal_target_date ?? null,
     }));
 
-    // Budgets are kept as planned-comparison data only.
     type BudgetRow = { amount: number; category_id: string; categories: { name: string; type: string } | null };
     const budgetRows = (budgetResult.data as BudgetRow[] | null) ?? [];
     const categories = budgetRows.map((b) => ({
@@ -138,8 +153,9 @@ export async function GET() {
     return NextResponse.json({
       hasPlan: true,
       firstName:         (userRow.full_name || '').split(' ')[0],
-      month:             monthStart,
-      summary, // includes totalIncome, totalExpenses, totalSavings, netCashFlow
+      month:             actualsMonth,
+      planMonth,
+      summary,
       categories,
       sinkingFunds:  sfResult.data ?? [],
       goalAccounts,

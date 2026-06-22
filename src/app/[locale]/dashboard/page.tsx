@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter, usePathname } from 'next/navigation';
-import Link from 'next/link';
 import Navbar from '@/components/brand/Navbar';
 import TopPriorityCard from '@/components/dashboard/TopPriorityCard';
 import SnapshotCard from '@/components/dashboard/SnapshotCard';
@@ -14,17 +13,25 @@ import EmptyState from '@/components/dashboard/EmptyState';
 import { DashboardData } from '@/components/dashboard/types';
 import Sidebar from '@/components/dashboard/Sidebar';
 
+function calendarMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export default function DashboardPage() {
   const t = useTranslations('dashboard');
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
 
+  const [displayMonth, setDisplayMonth] = useState<string>(calendarMonth);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/dashboard')
+    setLoading(true);
+    setData(null);
+    fetch(`/api/dashboard?month=${displayMonth}`)
       .then(async (res) => {
         if (res.status === 401) {
           router.push(`/${locale}/signin`);
@@ -34,7 +41,23 @@ export default function DashboardPage() {
       })
       .then((d) => { if (d) setData(d); })
       .finally(() => setLoading(false));
-  }, [router, locale]);
+  }, [router, locale, displayMonth]);
+
+  const handlePrevMonth = () => {
+    const [y, m] = displayMonth.split('-').map(Number);
+    setDisplayMonth(m === 1
+      ? `${y - 1}-12`
+      : `${y}-${String(m - 1).padStart(2, '0')}`
+    );
+  };
+
+  const handleNextMonth = () => {
+    const [y, m] = displayMonth.split('-').map(Number);
+    setDisplayMonth(m === 12
+      ? `${y + 1}-01`
+      : `${y}-${String(m + 1).padStart(2, '0')}`
+    );
+  };
 
   if (loading) {
     return (
@@ -57,6 +80,8 @@ export default function DashboardPage() {
     );
   }
 
+  const isCurrentMonth = displayMonth === calendarMonth();
+
   return (
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
       <Navbar />
@@ -72,7 +97,16 @@ export default function DashboardPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {data.topRecommendation && <TopPriorityCard text={data.topRecommendation} />}
-              {data.summary && <SnapshotCard summary={data.summary} locale={locale} />}
+              {data.summary && (
+                <SnapshotCard
+                  summary={data.summary}
+                  locale={locale}
+                  month={displayMonth}
+                  onPrevMonth={handlePrevMonth}
+                  onNextMonth={handleNextMonth}
+                  isCurrentMonth={isCurrentMonth}
+                />
+              )}
               {data.goalAccounts !== undefined && (
                 <GoalsCard goals={data.goalAccounts} locale={locale} />
               )}

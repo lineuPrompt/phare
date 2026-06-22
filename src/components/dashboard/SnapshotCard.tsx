@@ -1,15 +1,63 @@
 import { useTranslations } from 'next-intl';
 import { DashboardSummary, formatCurrency } from './types';
 
-export default function SnapshotCard({ summary, locale }: { summary: DashboardSummary; locale: string }) {
+export default function SnapshotCard({
+  summary,
+  locale,
+  month,
+  onPrevMonth,
+  onNextMonth,
+  isCurrentMonth,
+}: {
+  summary: DashboardSummary;
+  locale: string;
+  month: string;          // YYYY-MM (not YYYY-MM-01)
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+  isCurrentMonth: boolean;
+}) {
   const t = useTranslations('dashboard');
   const surplus = summary.netCashFlow >= 0;
 
+  const [y, m] = month.split('-').map(Number);
+  const monthLabel = new Date(y, m - 1, 1).toLocaleDateString(
+    locale === 'fr' ? 'fr-CA' : 'en-CA',
+    { month: 'long', year: 'numeric' }
+  );
+
   return (
     <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
-      <h2 className="text-xl font-bold mb-6" style={{ color: '#0F2044' }}>
-        {t('snapshot')}
-      </h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-bold" style={{ color: '#0F2044' }}>
+          {t('snapshot')}
+        </h2>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onPrevMonth}
+            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors cursor-pointer text-lg leading-none"
+            style={{ color: '#6B7280' }}
+            aria-label="Previous month"
+          >
+            ‹
+          </button>
+          <span
+            className="text-sm font-medium capitalize"
+            style={{ color: '#374151', minWidth: '112px', textAlign: 'center' }}
+          >
+            {monthLabel}
+          </span>
+          <button
+            onClick={onNextMonth}
+            disabled={isCurrentMonth}
+            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default text-lg leading-none"
+            style={{ color: '#6B7280' }}
+            aria-label="Next month"
+          >
+            ›
+          </button>
+        </div>
+      </div>
+
       {/* Three main buckets */}
       <div className="grid grid-cols-3 gap-3 mb-3">
         <div className="rounded-xl p-4" style={{ background: '#F0FDFD' }}>
@@ -31,6 +79,7 @@ export default function SnapshotCard({ summary, locale }: { summary: DashboardSu
           </p>
         </div>
       </div>
+
       {/* Net cash flow — remaining after income − expenses − savings */}
       <div
         className="rounded-xl p-4"

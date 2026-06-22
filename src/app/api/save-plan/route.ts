@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { formatLocalDate, formatLocalMonth, materializeRule, monthNameToNumber } from '@/lib/dateHelpers';
 import { logEvent } from '@/lib/eventLogger';
+import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 
 type PlanCategory = {
   name: string;
@@ -71,7 +72,14 @@ export async function POST(request: Request) {
     await supabase.from('recurring_items').delete().eq('household_id', householdId);
     await supabase.from('categories').delete().eq('household_id', householdId);
     await supabase.from('sinking_funds').delete().eq('household_id', householdId);
-    await supabase.from('goals').delete().eq('household_id', householdId);
+    // Wipe goal accounts so a plan retry doesn't create duplicates.
+    // The upload flow already deletes all non-chequing accounts before calling
+    // save-plan, so this is a safety net for the retry path only.
+    await supabase
+      .from('accounts')
+      .delete()
+      .eq('household_id', householdId)
+      .in('type', [...GOAL_ACCOUNT_TYPES]);
 
     // ----- Seed the fixed category set -----
     const seedNames: string[] = plan.seedCategories ?? [
@@ -231,13 +239,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // ----- Goals -----
+    // ----- Goals: route into savings accounts so they appear on the Goals page -----
     if (plan.goals?.length) {
-      await supabase.from('goals').insert(
+      await supabase.from('accounts').insert(
         plan.goals.map((g: { name: string; targetAmount: number }) => ({
           household_id: householdId,
           name: g.name,
-          target_amount: g.targetAmount,
+          type: 'savings',
+          goal_target: g.targetAmount > 0 ? g.targetAmount : null,
         }))
       );
     }

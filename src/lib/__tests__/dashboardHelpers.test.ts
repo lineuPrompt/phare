@@ -5,6 +5,7 @@ import {
   TxRow,
   AccountRow,
 } from '../dashboardHelpers';
+import { reconcileMonth, ReconcileTxRow, ReconcileAccountRow } from '../reconcileHelpers';
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -404,5 +405,77 @@ describe('computeGoalBalance — full history contract', () => {
     expect(computeGoalBalance(allTime, SAVINGS_ID)).toBe(150);
     expect(computeGoalBalance(allTime, TFSA_ID)).toBe(275);
     expect(computeGoalBalance(allTime, RRSP_ID)).toBe(300);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cross-view reconciliation invariant
+//
+// Dashboard, Planner, and Reconcile all call computeMonthTotals with the same
+// transaction set for a given month.  This test makes that guarantee explicit:
+// given the same transactions, computeMonthTotals and reconcileMonth (which
+// delegates to computeMonthTotals internally) produce identical totals.
+// When the dashboard is unfrozen and reads the current calendar month, it will
+// always agree with the planner and reconcile screen for that same month.
+// ---------------------------------------------------------------------------
+
+const CROSS_CHQ  = 'x-chq';
+const CROSS_CARD = 'x-card';
+const CROSS_SAV  = 'x-sav';
+
+const crossAccounts: AccountRow[] = [
+  { id: CROSS_CHQ,  type: 'chequing'    },
+  { id: CROSS_CARD, type: 'credit_card' },
+  { id: CROSS_SAV,  type: 'savings'     },
+];
+
+const crossAccountsForReconcile: ReconcileAccountRow[] = [
+  { id: CROSS_CHQ,  type: 'chequing',    name: 'Chequing'  },
+  { id: CROSS_CARD, type: 'credit_card', name: 'Visa'      },
+  { id: CROSS_SAV,  type: 'savings',     name: 'Emergency' },
+];
+
+function rtx(overrides: Partial<ReconcileTxRow> & { amount: number; type: string }): ReconcileTxRow {
+  return { id: 'r-' + Math.random(), date: '2026-06-15', description: null,
+    account_id: CROSS_CHQ, is_bridge: false, ...overrides };
+}
+
+describe('cross-view reconciliation invariant — dashboard = planner = reconcile', () => {
+  it('computeMonthTotals totals match reconcileMonth path-1 totals for the same transaction set', () => {
+    const txns: ReconcileTxRow[] = [
+      rtx({ type: 'income',   account_id: CROSS_CHQ,  amount: 6000 }),
+      rtx({ type: 'expense',  account_id: CROSS_CHQ,  amount: 2500 }),
+      rtx({ type: 'expense',  account_id: CROSS_CARD, amount: 800  }), // card spend — excluded
+      rtx({ type: 'expense',  account_id: CROSS_CHQ,  amount: 800, is_bridge: true }), // bridge
+      rtx({ type: 'transfer', account_id: CROSS_CHQ,  amount: 400  }), // chequing→savings
+      rtx({ type: 'transfer', account_id: CROSS_SAV,  amount: 400  }), // savings inflow (ignored)
+    ];
+
+    // Path used by dashboard API
+    const dashboard = computeMonthTotals(txns, crossAccounts);
+
+    // Path used by reconcile screen (path 1 delegates to computeMonthTotals)
+    const reconcile = reconcileMonth(txns, crossAccountsForReconcile);
+
+    expect(dashboard.totalIncome).toBe(reconcile.totalIncome);
+    expect(dashboard.totalExpenses).toBe(reconcile.totalExpenses);
+    expect(dashboard.totalSavings).toBe(reconcile.totalSavings);
+    expect(dashboard.netCashFlow).toBe(reconcile.netFromBuckets);
+    // Both paths must agree (reconciled = true)
+    expect(reconcile.reconciled).toBe(true);
+  });
+
+  it('dashboard numbers are stable across different months — same txns give same totals', () => {
+    // Simulates: dashboard displays June, user navigates to May (different date range in the
+    // API query), but the math function itself is month-agnostic — the date filter is the
+    // caller's responsibility.  Given identical transaction arrays the result is identical.
+    const juneSet: TxRow[] = [
+      { type: 'income',  account_id: CROSS_CHQ, amount: 5500 },
+      { type: 'expense', account_id: CROSS_CHQ, amount: 3000 },
+    ];
+    const maySet: TxRow[] = [...juneSet]; // same data, different month in reality
+
+    expect(computeMonthTotals(juneSet, crossAccounts))
+      .toEqual(computeMonthTotals(maySet, crossAccounts));
   });
 });

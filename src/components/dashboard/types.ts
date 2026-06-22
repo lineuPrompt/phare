@@ -25,7 +25,8 @@ export type GoalAccount = {
 export type DashboardData = {
   hasPlan: boolean;
   firstName?: string;
-  month?: string;
+  month?: string;       // YYYY-MM-01 — the calendar month actuals are for
+  planMonth?: string;   // YYYY-MM-01 — the month the saved budget references
   summary?: DashboardSummary;
   categories?: { name: string; type: string; amount: number }[];
   sinkingFunds?: SinkingFund[];

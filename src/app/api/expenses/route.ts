@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { recurrenceDates, bridgePaymentDate } from '@/lib/dateHelpers';
 import { logEvent, isFirstEvent } from '@/lib/eventLogger';
+import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 
 // POST: create expense (single, monthly recurring, or installments)
 export async function POST(request: Request) {
@@ -146,7 +147,11 @@ export async function GET(request: Request) {
       .order('type', { ascending: true })
       .order('name', { ascending: true });
 
-    const accountList = accounts ?? [];
+    // Goal accounts (savings/tfsa/rrsp) are not spending accounts — they never
+    // appear as expense tabs and never accept logged expenses.
+    const accountList = (accounts ?? []).filter(
+      (a) => !(GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type)
+    );
     const selectedAccount =
       accountList.find((a) => a.id === accountParam) ??
       accountList.find((a) => a.type === 'chequing') ??
