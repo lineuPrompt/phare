@@ -14,7 +14,7 @@ type PlanCategory = {
 
 export async function POST(request: Request) {
   try {
-    const { plan, reviewText, locale } = await request.json();
+    const { plan, reviewText, locale, cardNames } = await request.json();
 
     const supabase = await createClient();
 
@@ -41,17 +41,14 @@ export async function POST(request: Request) {
       .single();
     const memberId = member?.id ?? null;
 
-    // ----- Resolve accounts: chequing (base) + first card if any -----
+    // ----- Resolve chequing account (required) -----
     const { data: accts } = await supabase
       .from('accounts')
       .select('id, type')
       .eq('household_id', householdId);
 
     const chequingId = accts?.find((a) => a.type === 'chequing')?.id ?? null;
-    const firstCardId = accts?.find((a) => a.type === 'credit_card')?.id ?? null;
-    // Variable spending defaults to the card if one exists, else chequing
-    const variableAccountId = firstCardId ?? chequingId;
-    if (!chequingId || !variableAccountId) {
+    if (!chequingId) {
       return NextResponse.json({ error: 'A chequing account is required before saving a plan' }, { status: 400 });
     }
 
@@ -61,7 +58,79 @@ export async function POST(request: Request) {
     const monthDate = `${currentMonth}-01`;
     const anchorDate = `${currentMonth}-01`;
 
-    // ----- Wipe existing plan data -----
+    // ----- Wipe non-chequing accounts and their transactions -----
+    // Done server-side so we can delete transactions first (the API guard blocks
+    // deletion when transactions exist, which caused duplicate cards/goals on re-onboarding).
+    const nonChequingIds = (accts ?? [])
+      .filter((a) => a.type !== 'chequing')
+      .map((a) => a.id);
+
+    if (nonChequingIds.length > 0) {
+      // Find goal-side transfer transaction IDs so we can also clean up their
+      // chequing-side peers (otherwise the planner shows orphaned transfer rows).
+      const goalAccountIds = (accts ?? [])
+        .filter((a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type))
+        .map((a) => a.id);
+
+      if (goalAccountIds.length > 0) {
+        const { data: goalTxs } = await supabase
+          .from('transactions')
+          .select('id')
+          .eq('household_id', householdId)
+          .in('account_id', goalAccountIds)
+          .eq('type', 'transfer');
+
+        const goalTxIds = (goalTxs ?? []).map((t) => t.id);
+        if (goalTxIds.length > 0) {
+          // Delete the chequing-side transfer rows that pointed to these goal transactions.
+          await supabase
+            .from('transactions')
+            .delete()
+            .eq('household_id', householdId)
+            .eq('account_id', chequingId)
+            .in('transfer_peer_id', goalTxIds);
+        }
+      }
+
+      // Delete all transactions on non-chequing accounts (card expenses, goal transfers).
+      await supabase
+        .from('transactions')
+        .delete()
+        .eq('household_id', householdId)
+        .in('account_id', nonChequingIds);
+
+      // Delete bridge lines on chequing that reference the old card accounts.
+      await supabase
+        .from('transactions')
+        .delete()
+        .eq('household_id', householdId)
+        .eq('is_bridge', true)
+        .in('bridge_source_account', nonChequingIds);
+
+      // Now safe to delete the accounts themselves.
+      await supabase
+        .from('accounts')
+        .delete()
+        .eq('household_id', householdId)
+        .neq('type', 'chequing');
+    }
+
+    // ----- Create new credit card accounts from the names supplied by the UI -----
+    // The first card becomes the variable-spending account; falls back to chequing.
+    let variableAccountId: string = chequingId;
+    for (const rawName of (cardNames as string[] | null | undefined) ?? []) {
+      const name = (rawName ?? '').trim() || 'Card';
+      const { data: newCard } = await supabase
+        .from('accounts')
+        .insert({ household_id: householdId, name, type: 'credit_card' })
+        .select('id')
+        .single();
+      if (newCard && variableAccountId === chequingId) {
+        variableAccountId = newCard.id;
+      }
+    }
+
+    // ----- Wipe remaining plan data -----
     await supabase.from('budgets').delete().eq('household_id', householdId);
     await supabase
       .from('transactions')
@@ -72,14 +141,6 @@ export async function POST(request: Request) {
     await supabase.from('recurring_items').delete().eq('household_id', householdId);
     await supabase.from('categories').delete().eq('household_id', householdId);
     await supabase.from('sinking_funds').delete().eq('household_id', householdId);
-    // Wipe goal accounts so a plan retry doesn't create duplicates.
-    // The upload flow already deletes all non-chequing accounts before calling
-    // save-plan, so this is a safety net for the retry path only.
-    await supabase
-      .from('accounts')
-      .delete()
-      .eq('household_id', householdId)
-      .in('type', [...GOAL_ACCOUNT_TYPES]);
 
     // ----- Seed the fixed category set -----
     const seedNames: string[] = plan.seedCategories ?? [

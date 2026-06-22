@@ -36,11 +36,15 @@ export default function UploadPage() {
   // Plan save state
   type PlanSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
   const [planSaveStatus, setPlanSaveStatus] = useState<PlanSaveStatus>('idle');
-  const [pendingSavePayload, setPendingSavePayload] = useState<{ plan: Plan; reviewText: string; locale: string } | null>(null);
+  const [pendingSavePayload, setPendingSavePayload] = useState<{
+    plan: Plan; reviewText: string; locale: string; cardNames: string[];
+  } | null>(null);
 
   const localeOf = () => (typeof window !== 'undefined' && window.location.pathname.startsWith('/fr') ? 'fr' : 'en');
 
-  const doSave = useCallback(async (payload: { plan: Plan; reviewText: string; locale: string }) => {
+  const doSave = useCallback(async (payload: {
+    plan: Plan; reviewText: string; locale: string; cardNames: string[];
+  }) => {
     setPlanSaveStatus('saving');
     try {
       const res = await fetch('/api/save-plan', {
@@ -56,7 +60,11 @@ export default function UploadPage() {
     }
   }, []);
 
-  const streamReview = useCallback(async (planData: Plan, planBody: Record<string, unknown>) => {
+  const streamReview = useCallback(async (
+    planData: Plan,
+    planBody: Record<string, unknown>,
+    resolvedCardNames: string[],
+  ) => {
     setReviewStreaming(true);
     setReviewText('');
     setPlanSaveStatus('idle');
@@ -80,7 +88,7 @@ export default function UploadPage() {
         setReviewText((prev) => prev + chunk);
       }
 
-      const savePayload = { plan: planData, reviewText: fullText, locale };
+      const savePayload = { plan: planData, reviewText: fullText, locale, cardNames: resolvedCardNames };
       setPendingSavePayload(savePayload);
       await doSave(savePayload);
     } catch (err) {
@@ -96,7 +104,7 @@ export default function UploadPage() {
     await doSave(pendingSavePayload);
   }, [pendingSavePayload, doSave]);
 
-  const buildPlan = useCallback(async (planBody: Record<string, unknown>) => {
+  const buildPlan = useCallback(async (planBody: Record<string, unknown>, resolvedCardNames: string[]) => {
     setStatus('analyzing');
     const planRes = await fetch('/api/plan', {
       method: 'POST',
@@ -110,7 +118,7 @@ export default function UploadPage() {
     const planData = await planRes.json();
     setPlan(planData.plan);
     setStatus('plan');
-    streamReview(planData.plan, planBody);
+    streamReview(planData.plan, planBody, resolvedCardNames);
   }, [streamReview]);
 
   const handleFile = useCallback(async (file: File) => {
@@ -193,31 +201,19 @@ export default function UploadPage() {
     }
   }, [formIncome, formExpenses]);
 
-const confirmAccounts = useCallback(async () => {
+  // Account step: just resolve the card names and kick off plan generation.
+  // All account wipe + recreation happens inside save-plan (server-side) so it
+  // can delete transactions before accounts — the API guard blocks deletion
+  // when an account still has transactions.
+  const confirmAccounts = useCallback(async () => {
     if (!pendingPlanBody) return;
     setCreatingAccounts(true);
     setError('');
     try {
-      // Clear existing card accounts first (re-onboarding replaces them; chequing is kept)
-      const existing = await fetch('/api/accounts').then((r) => r.json()).catch(() => null);
-      if (existing?.accounts) {
-        for (const acct of existing.accounts) {
-          if (acct.type !== 'chequing') {
-            await fetch(`/api/accounts/${acct.id}`, { method: 'DELETE' });
-          }
-        }
-      }
-
-      // Create the new card accounts
-      for (let i = 0; i < cardCount; i++) {
-        const name = (cardNames[i] || `Card ${i + 1}`).trim();
-        await fetch('/api/accounts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, type: 'credit_card' }),
-        });
-      }
-      await buildPlan(pendingPlanBody);
+      const resolvedCardNames = Array.from({ length: cardCount }, (_, i) =>
+        (cardNames[i] || `Card ${i + 1}`).trim()
+      );
+      await buildPlan(pendingPlanBody, resolvedCardNames);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
       setStatus('error');
