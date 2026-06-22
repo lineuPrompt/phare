@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { formatLocalDate, materializeFutureRule } from '@/lib/dateHelpers';
+import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 
 async function getContext(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -34,6 +35,12 @@ export async function GET() {
       .eq('household_id', ctx.householdId)
       .order('type', { ascending: true });
 
+    // Goal accounts (savings/tfsa/rrsp) cannot be the target of a recurring
+    // expense or income — they only receive money via transfers.
+    const spendingAccounts = (accounts ?? []).filter(
+      (a) => !(GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type)
+    );
+
     const { data: categories } = await supabase
       .from('categories')
       .select('id, name')
@@ -41,7 +48,7 @@ export async function GET() {
       .eq('type', 'expense')
       .order('name');
 
-    return NextResponse.json({ items: items ?? [], accounts: accounts ?? [], categories: categories ?? [] });
+    return NextResponse.json({ items: items ?? [], accounts: spendingAccounts, categories: categories ?? [] });
   } catch {
     return NextResponse.json({ error: 'Failed to load recurring items' }, { status: 500 });
   }
