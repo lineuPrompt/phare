@@ -5,7 +5,7 @@
  *   3. Recurring item edit — re-materialization produces correct dates, no duplicates
  */
 import { describe, it, expect } from 'vitest';
-import { computeMonthTotals, TxRow, AccountRow } from '../dashboardHelpers';
+import { computeMonthTotals, computeGoalBalance, TxRow, AccountRow } from '../dashboardHelpers';
 import { materializeFutureRule } from '../dateHelpers';
 
 // ---------------------------------------------------------------------------
@@ -277,5 +277,160 @@ describe('recurring item edit — re-materialization', () => {
 
     // After the cadence change, more income rows = higher income total
     expect(afterResult.totalIncome).toBeGreaterThan(beforeResult.totalIncome);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4. Income edit — amount change flows to income bucket
+// ---------------------------------------------------------------------------
+
+describe('income edit — amount change reflects in totals and reconciliation', () => {
+  it('editing income amount up increases totalIncome by the delta', () => {
+    const before: TxRow[] = [
+      { type: 'income',  account_id: CHEQUING_ID, amount: 3000 },
+      { type: 'expense', account_id: CHEQUING_ID, amount: 1200 },
+    ];
+    const after: TxRow[] = [
+      { type: 'income',  account_id: CHEQUING_ID, amount: 3500 }, // edited up by $500
+      { type: 'expense', account_id: CHEQUING_ID, amount: 1200 },
+    ];
+    const rb = computeMonthTotals(before, accounts);
+    const ra = computeMonthTotals(after, accounts);
+    expect(ra.totalIncome - rb.totalIncome).toBeCloseTo(500, 10);
+    expect(ra.totalExpenses).toBe(rb.totalExpenses); // expenses unchanged
+    expect(ra.netCashFlow - rb.netCashFlow).toBeCloseTo(500, 10);
+  });
+
+  it('editing income amount down decreases totalIncome by the delta', () => {
+    const before: TxRow[] = [
+      { type: 'income',  account_id: CHEQUING_ID, amount: 2750 },
+      { type: 'expense', account_id: CHEQUING_ID, amount: 800  },
+    ];
+    const after: TxRow[] = [
+      { type: 'income',  account_id: CHEQUING_ID, amount: 2500 }, // edited down by $250
+      { type: 'expense', account_id: CHEQUING_ID, amount: 800  },
+    ];
+    const rb = computeMonthTotals(before, accounts);
+    const ra = computeMonthTotals(after, accounts);
+    expect(rb.totalIncome - ra.totalIncome).toBeCloseTo(250, 10);
+    expect(ra.netCashFlow).toBeCloseTo(1700, 10);
+  });
+
+  it('reconciliation invariant holds after income amount edit', () => {
+    const txns: TxRow[] = [
+      { type: 'income',   account_id: CHEQUING_ID, amount: 2500 }, // post-edit amount
+      { type: 'expense',  account_id: CHEQUING_ID, amount: 900  },
+      { type: 'transfer', account_id: CHEQUING_ID, amount: 200  },
+      { type: 'transfer', account_id: SAVINGS_ID,  amount: 200  },
+    ];
+    const r = computeMonthTotals(txns, accounts);
+    expect(r.netCashFlow).toBeCloseTo(r.totalIncome - r.totalExpenses - r.totalSavings, 10);
+    expect(r.netCashFlow).toBeCloseTo(1400, 10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Income delete — removed row disappears from totals
+// ---------------------------------------------------------------------------
+
+describe('income delete — row removal reflects in totals and reconciliation', () => {
+  it('deleting a one-off income row reduces totalIncome to remaining items only', () => {
+    const before: TxRow[] = [
+      { type: 'income', account_id: CHEQUING_ID, amount: 5000 }, // salary
+      { type: 'income', account_id: CHEQUING_ID, amount: 500  }, // one-off bonus — to be deleted
+    ];
+    const after: TxRow[] = [
+      { type: 'income', account_id: CHEQUING_ID, amount: 5000 }, // salary only
+    ];
+    const rb = computeMonthTotals(before, accounts);
+    const ra = computeMonthTotals(after, accounts);
+    expect(rb.totalIncome).toBe(5500);
+    expect(ra.totalIncome).toBe(5000);
+  });
+
+  it('deleted income row does not appear in any other bucket', () => {
+    const after: TxRow[] = [
+      { type: 'income',  account_id: CHEQUING_ID, amount: 5000 },
+      { type: 'expense', account_id: CHEQUING_ID, amount: 2000 },
+    ];
+    const r = computeMonthTotals(after, accounts);
+    expect(r.totalExpenses).toBe(2000);
+    expect(r.totalSavings).toBe(0);
+  });
+
+  it('reconciliation invariant holds after income delete', () => {
+    const txns: TxRow[] = [
+      { type: 'income',   account_id: CHEQUING_ID, amount: 5000 }, // salary (bonus deleted)
+      { type: 'expense',  account_id: CHEQUING_ID, amount: 2000 },
+      { type: 'transfer', account_id: CHEQUING_ID, amount: 300  },
+      { type: 'transfer', account_id: SAVINGS_ID,  amount: 300  },
+    ];
+    const r = computeMonthTotals(txns, accounts);
+    expect(r.netCashFlow).toBeCloseTo(r.totalIncome - r.totalExpenses - r.totalSavings, 10);
+    expect(r.netCashFlow).toBe(2700);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. Transfer edit — amount change flows to savings bucket and reconciliation
+// ---------------------------------------------------------------------------
+
+describe('transfer edit — amount change reflects in savings and reconciliation', () => {
+  it('editing a transfer amount up increases totalSavings by the delta', () => {
+    const GOAL_ID = 'goal-1';
+    const goalAccounts: AccountRow[] = [
+      ...accounts,
+      { id: GOAL_ID, type: 'savings' },
+    ];
+
+    // Before: $200 transfer
+    const before: TxRow[] = [
+      { type: 'income',   account_id: CHEQUING_ID, amount: 5000 },
+      { type: 'expense',  account_id: CHEQUING_ID, amount: 2000 },
+      { type: 'transfer', account_id: CHEQUING_ID, amount: 200  }, // chequing-side
+      { type: 'transfer', account_id: GOAL_ID,     amount: 200  }, // goal-side
+    ];
+    // After: edited to $300
+    const after: TxRow[] = [
+      { type: 'income',   account_id: CHEQUING_ID, amount: 5000 },
+      { type: 'expense',  account_id: CHEQUING_ID, amount: 2000 },
+      { type: 'transfer', account_id: CHEQUING_ID, amount: 300  },
+      { type: 'transfer', account_id: GOAL_ID,     amount: 300  },
+    ];
+
+    const rb = computeMonthTotals(before, goalAccounts);
+    const ra = computeMonthTotals(after, goalAccounts);
+
+    expect(ra.totalSavings - rb.totalSavings).toBeCloseTo(100, 10);
+    expect(ra.netCashFlow - rb.netCashFlow).toBeCloseTo(-100, 10); // net drops by same delta
+  });
+
+  it('reconciliation invariant holds after transfer edit', () => {
+    const GOAL_ID = 'goal-1';
+    const goalAccounts: AccountRow[] = [
+      ...accounts,
+      { id: GOAL_ID, type: 'savings' },
+    ];
+    const txns: TxRow[] = [
+      { type: 'income',   account_id: CHEQUING_ID, amount: 5000 },
+      { type: 'expense',  account_id: CHEQUING_ID, amount: 2000 },
+      { type: 'transfer', account_id: CHEQUING_ID, amount: 300  }, // post-edit amount
+      { type: 'transfer', account_id: GOAL_ID,     amount: 300  },
+    ];
+    const r = computeMonthTotals(txns, goalAccounts);
+    expect(r.netCashFlow).toBeCloseTo(r.totalIncome - r.totalExpenses - r.totalSavings, 10);
+    expect(r.netCashFlow).toBe(2700); // 5000 − 2000 − 300
+  });
+
+  it('goal balance correctly reflects the edited transfer amount', () => {
+    const GOAL_ID = 'goal-1';
+    // The goal-side row uses computeGoalBalance, not computeMonthTotals
+    // Verify that after editing $200 → $300, computeGoalBalance returns 300
+    const txAfter: TxRow[] = [
+      { type: 'transfer', account_id: GOAL_ID, amount: 300 }, // edited row
+    ];
+    // contract: goal balance = sum of transfer inflows for that account
+    const balance = computeGoalBalance(txAfter, GOAL_ID);
+    expect(balance).toBe(300);
   });
 });

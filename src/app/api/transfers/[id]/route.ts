@@ -56,17 +56,22 @@ async function resolvePair(
   return { ids: [...ids], type };
 }
 
-// PATCH: update a transfer's amount on BOTH sides of the pair.
+// PATCH: update a transfer's amount, date, and/or description on BOTH sides of the pair.
 // Works correctly when given either the chequing-side or goal-side id,
 // and recovers from a broken peer link on either side.
-// Body: { amount }
+// Body: { amount, date?, description? }
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const { amount } = await request.json();
+    const body = await request.json();
+    const { amount, date, description } = body as {
+      amount: number;
+      date?: string;
+      description?: string | null;
+    };
 
     if (!amount || Number(amount) <= 0) {
       return NextResponse.json({ error: 'Amount must be positive' }, { status: 400 });
@@ -82,9 +87,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
     }
 
+    const patch: Record<string, unknown> = { amount: Number(amount) };
+    if (date) patch.date = date;
+    if (description !== undefined) patch.description = description?.trim() ?? null;
+
     const { error } = await supabase
       .from('transactions')
-      .update({ amount: Number(amount) })
+      .update(patch)
       .in('id', ids)
       .eq('household_id', householdId);
 

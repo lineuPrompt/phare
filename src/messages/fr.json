@@ -306,7 +306,12 @@
     "flow": {
       "in": "Entrées",
       "out": "Sorties",
-      "net": "Net"
+      "net": "Net",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "confirmTitle": "Supprimer ce revenu?",
+      "confirmDelete": "Supprimer",
+      "cancel": "Annuler"
     }
   },
   "planner": {
@@ -361,7 +366,15 @@
     },
     "addMoney": "Ajouter",
     "createGoal": "Nouvel objectif",
-    "viewAll": "Voir tous les objectifs"
+    "viewAll": "Voir tous les objectifs",
+    "history": "Historique des cotisations",
+    "noHistory": "Aucune cotisation pour l'instant.",
+    "editContribution": "Modifier",
+    "deleteContribution": "Supprimer",
+    "confirmDeleteTitle": "Supprimer cette cotisation?",
+    "confirmDeleteBtn": "Supprimer",
+    "cancelEdit": "Annuler",
+    "saveEdit": "Enregistrer"
   },
   "recurring": {
     "title": "Récurrents",

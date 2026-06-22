@@ -111,6 +111,8 @@ export default function ExpensesPage() {
                     totalSpent={data.totalSpent}
                     net={data.net}
                     locale={locale}
+                    accounts={data.accounts}
+                    onChanged={load}
                   />
                 ) : (
                   <GoalSetter month={selectedMonth} currentGoal={data.cardGoal} locale={locale} onSaved={load} />

@@ -25,24 +25,39 @@ export async function GET() {
 
     // Fetch FULL (all-time) transaction history for goal accounts.
     // CONTRACT: computeGoalBalance requires full history — never a month-scoped slice.
-    let txData: { amount: number | string; type: string; account_id: string | null }[] = [];
+    type TxResult = { id: string; amount: number | string; type: string; account_id: string | null; date: string; description: string | null };
+    let txData: TxResult[] = [];
     if (goalIds.length > 0) {
       const { data: txResult } = await supabase
         .from('transactions')
-        .select('amount, type, account_id')
+        .select('id, amount, type, account_id, date, description')
         .eq('household_id', householdId)
-        .in('account_id', goalIds);
-      txData = txResult ?? [];
+        .in('account_id', goalIds)
+        .order('date', { ascending: false });
+      txData = (txResult ?? []) as TxResult[];
     }
 
-    const goals = goalAccounts.map((a) => ({
-      id:             a.id,
-      name:           a.name,
-      type:           a.type,
-      balance:        computeGoalBalance(txData, a.id),
-      goalTarget:     a.goal_target ? Number(a.goal_target) : null,
-      goalTargetDate: a.goal_target_date ?? null,
-    }));
+    const goals = goalAccounts.map((a) => {
+      // Goal-side transfer rows: account_id = this goal, type = 'transfer'
+      const transfers = txData
+        .filter((tx) => tx.account_id === a.id && tx.type === 'transfer')
+        .map((tx) => ({
+          id:          tx.id,
+          date:        tx.date,
+          description: tx.description,
+          amount:      Number(tx.amount),
+        }));
+
+      return {
+        id:             a.id,
+        name:           a.name,
+        type:           a.type,
+        balance:        computeGoalBalance(txData, a.id),
+        goalTarget:     a.goal_target ? Number(a.goal_target) : null,
+        goalTargetDate: a.goal_target_date ?? null,
+        transfers,
+      };
+    });
 
     return NextResponse.json({ goals });
   } catch (error) {

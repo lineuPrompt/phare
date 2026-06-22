@@ -306,7 +306,12 @@
     "flow": {
       "in": "Money in",
       "out": "Money out",
-      "net": "Net"
+      "net": "Net",
+      "edit": "Edit",
+      "delete": "Delete",
+      "confirmTitle": "Delete this income entry?",
+      "confirmDelete": "Delete",
+      "cancel": "Cancel"
     }
   },
   "planner": {
@@ -361,7 +366,15 @@
     },
     "addMoney": "Add money",
     "createGoal": "New goal",
-    "viewAll": "View all goals"
+    "viewAll": "View all goals",
+    "history": "Contribution history",
+    "noHistory": "No contributions yet.",
+    "editContribution": "Edit",
+    "deleteContribution": "Delete",
+    "confirmDeleteTitle": "Delete this contribution?",
+    "confirmDeleteBtn": "Delete",
+    "cancelEdit": "Cancel",
+    "saveEdit": "Save"
   },
   "recurring": {
     "title": "Recurring",

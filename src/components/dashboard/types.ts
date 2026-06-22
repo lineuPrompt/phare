@@ -13,6 +13,13 @@ export type SinkingFund = {
   current_balance: number;
 };
 
+export type GoalTransfer = {
+  id: string;
+  date: string;
+  description: string | null;
+  amount: number;
+};
+
 export type GoalAccount = {
   id: string;
   name: string;
@@ -20,6 +27,7 @@ export type GoalAccount = {
   balance: number;
   goalTarget: number | null;
   goalTargetDate: string | null;
+  transfers: GoalTransfer[];
 };
 
 export type DashboardData = {
