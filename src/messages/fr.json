@@ -247,7 +247,8 @@
       "recurring": "Récurrents",
       "planner": "Planificateur",
       "reconcile": "Audit",
-      "goals": "Objectifs"
+      "goals": "Objectifs",
+      "household": "Foyer"
     }
   },
   "expenses": {
@@ -413,5 +414,31 @@
         "semimonthly": "Deux fois par mois"
       }
     }
+  },
+  "household": {
+    "title": "Membres du foyer",
+    "subtitle": "Gérez qui a accès aux données financières de votre foyer.",
+    "membersTitle": "Membres actuels",
+    "addTitle": "Ajouter un membre",
+    "email": "Courriel",
+    "fullName": "Nom complet",
+    "role": "Rôle",
+    "roleMember": "Membre",
+    "roleOwner": "Propriétaire",
+    "roleMemberDesc": "Peut consulter et gérer toutes les données. Ne peut pas gérer les membres.",
+    "roleOwnerDesc": "Accès complet, y compris la gestion des membres.",
+    "saving": "Ajout en cours...",
+    "save": "Ajouter le membre",
+    "successTitle": "Membre ajouté",
+    "successBody": "Envoyez ce lien de définition de mot de passe à {email}. Il expire après 24 heures.",
+    "copyLink": "Copier le lien",
+    "copied": "Copié!",
+    "linkNote": "Ce lien n'est affiché qu'une fois. Le membre doit cliquer dessus pour définir son mot de passe et se connecter.",
+    "noMembers": "Aucun autre membre pour l'instant.",
+    "you": "vous",
+    "ownerBadge": "Propriétaire",
+    "memberBadge": "Membre",
+    "notOwner": "Seul le propriétaire du foyer peut gérer les membres.",
+    "loading": "Chargement..."
   }
 }

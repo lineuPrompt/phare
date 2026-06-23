@@ -247,7 +247,8 @@
       "recurring": "Recurring",
       "planner": "Planner",
       "reconcile": "Audit",
-      "goals": "Goals"
+      "goals": "Goals",
+      "household": "Household"
     }
   },
   "expenses": {
@@ -413,5 +414,31 @@
         "semimonthly": "Twice a month"
       }
     }
+  },
+  "household": {
+    "title": "Household Members",
+    "subtitle": "Manage who has access to your household's financial data.",
+    "membersTitle": "Current members",
+    "addTitle": "Add a household member",
+    "email": "Email",
+    "fullName": "Full name",
+    "role": "Role",
+    "roleMember": "Member",
+    "roleOwner": "Owner",
+    "roleMemberDesc": "Can view and manage all financial data. Cannot manage members.",
+    "roleOwnerDesc": "Full access including member management.",
+    "saving": "Adding...",
+    "save": "Add member",
+    "successTitle": "Member added",
+    "successBody": "Send this set-password link to {email}. It expires after 24 hours.",
+    "copyLink": "Copy link",
+    "copied": "Copied!",
+    "linkNote": "This link is shown once. The member must click it to set their password and sign in.",
+    "noMembers": "No other members yet.",
+    "you": "you",
+    "ownerBadge": "Owner",
+    "memberBadge": "Member",
+    "notOwner": "Only the household owner can manage members.",
+    "loading": "Loading..."
   }
 }

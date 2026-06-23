@@ -1,12 +1,25 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
-export default function Sidebar({ locale }: { locale: string }) {
+export default function Sidebar({ locale, role: roleProp }: { locale: string; role?: string }) {
   const t = useTranslations('dashboard.nav');
   const pathname = usePathname();
+
+  // When the parent knows the role (e.g. the household page), use it directly.
+  // Otherwise fetch it once — this ensures the household link appears across all pages for owners.
+  const [role, setRole] = useState<string | null>(roleProp ?? null);
+
+  useEffect(() => {
+    if (roleProp !== undefined) return; // already provided
+    fetch('/api/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.role) setRole(d.role); })
+      .catch(() => {});
+  }, [roleProp]);
 
   const items = [
     { href: `/${locale}/dashboard`, label: t('overview'),  icon: '🏠' },
@@ -16,6 +29,9 @@ export default function Sidebar({ locale }: { locale: string }) {
     { href: `/${locale}/upload`,    label: t('upload'),    icon: '📄' },
     { href: `/${locale}/recurring`, label: t('recurring'), icon: '🔁' },
     { href: `/${locale}/reconcile`, label: t('reconcile'), icon: '🔍' },
+    ...(role === 'owner'
+      ? [{ href: `/${locale}/household`, label: t('household'), icon: '👨‍👩‍👧' }]
+      : []),
   ];
 
   const comingSoon = [
