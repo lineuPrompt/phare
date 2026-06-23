@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^grep -r \"use client\" /c/Users/lineu/source/repos/phare/src --include=\"\\*\\.ts\" --include=\"\\*\\.tsx\" -l \\| while read f; do grep -l \"createAdminClient\\\\\\|SUPABASE_SERVICE_ROLE\" \"\\$f\" 2>/dev/null; done$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

@@ -95,6 +95,10 @@ export async function POST(request: Request) {
     if (!email?.trim()) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
+    }
     if (!fullName?.trim()) {
       return NextResponse.json({ error: 'Full name is required' }, { status: 400 });
     }
@@ -141,13 +145,11 @@ export async function POST(request: Request) {
 
     if (linkError || !linkData?.properties?.action_link) {
       // Member was created but link failed. This is recoverable (owner can
-      // generate a new link later) but we surface the error rather than silently failing.
-      console.error('generateLink error:', linkError);
+      // use the Supabase dashboard → Authentication → Users → Send password recovery).
+      // Log the internal userId for ops debugging; do NOT expose it to the client.
+      console.error('generateLink error (userId for ops):', newUser.user?.id, linkError);
       return NextResponse.json(
-        {
-          error: 'Member created but failed to generate set-password link. Use Supabase dashboard to send a password reset.',
-          userId: newUser.user?.id,
-        },
+        { error: 'Member created but failed to generate set-password link. Use Supabase dashboard to send a password reset.' },
         { status: 500 }
       );
     }
