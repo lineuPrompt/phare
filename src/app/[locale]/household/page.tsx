@@ -29,9 +29,7 @@ export default function HouseholdPage() {
   const [role, setRole] = useState<'member' | 'owner'>('member');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [setPasswordLink, setSetPasswordLink] = useState('');
   const [addedEmail, setAddedEmail] = useState('');
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -60,7 +58,6 @@ export default function HouseholdPage() {
       if (!res.ok) { setError(data.error ?? 'Failed to add member'); return; }
 
       setAddedEmail(email.trim());
-      setSetPasswordLink(data.setPasswordLink);
       setEmail('');
       setFullName('');
       setRole('member');
@@ -74,13 +71,6 @@ export default function HouseholdPage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(setPasswordLink).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
   };
 
   if (loading) {
@@ -163,30 +153,16 @@ export default function HouseholdPage() {
               )}
             </section>
 
-            {/* Set-password link result (shown once after adding) */}
-            {setPasswordLink && (
+            {/* Email-sent confirmation (shown once after adding) */}
+            {addedEmail && (
               <section
-                className="rounded-2xl p-6 space-y-3"
+                className="rounded-2xl p-6 space-y-2"
                 style={{ background: '#F0FDF4', border: '1px solid #BBF7D0' }}
               >
                 <h2 className="font-semibold" style={{ color: '#15803D' }}>{t('successTitle')}</h2>
                 <p className="text-sm" style={{ color: '#166534' }}>
                   {t('successBody', { email: addedEmail })}
                 </p>
-                <div
-                  className="rounded-lg p-3 text-xs font-mono break-all"
-                  style={{ background: 'white', border: '1px solid #BBF7D0', color: '#374151' }}
-                >
-                  {setPasswordLink}
-                </div>
-                <p className="text-xs" style={{ color: '#6B7280' }}>{t('linkNote')}</p>
-                <button
-                  onClick={handleCopy}
-                  className="px-4 py-2 rounded-full text-sm font-medium"
-                  style={{ background: '#0F2044', color: 'white' }}
-                >
-                  {copied ? t('copied') : t('copyLink')}
-                </button>
               </section>
             )}
 

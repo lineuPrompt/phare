@@ -145,42 +145,34 @@ export async function POST(request: Request) {
     }
 
     // -----------------------------------------------------------------------
-    // 4. Generate a set-password link (type: recovery)
+    // 4. Send the set-password email via resetPasswordForEmail.
     //
-    // redirectTo must be derived from the incoming request origin so the link
-    // works in both dev (localhost:3000) and production. Without an explicit
-    // redirectTo, Supabase falls back to the project's "Site URL" setting
-    // (which may still be localhost) and the link/email become unusable in prod.
+    // Unlike generateLink (which returns a link for manual distribution),
+    // resetPasswordForEmail fires Supabase's built-in "Reset password" email
+    // directly to the member. They click the link, set their password, and
+    // land on the dashboard via /auth/callback.
     //
-    // Supabase also fires the password-reset email automatically via the
-    // project's SMTP settings. The link shown in the UI is a reliable backup
-    // the owner can copy and share directly.
+    // redirectTo must use the incoming request origin so it works in both
+    // dev (localhost:3000) and production without a separate env var.
+    //
+    // The email template can be customised in:
+    //   Supabase dashboard → Authentication → Email Templates → Reset Password
     // -----------------------------------------------------------------------
     const appOrigin = new URL(request.url).origin;
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-      type: 'recovery',
-      email: email.trim(),
-      options: {
-        redirectTo: `${appOrigin}/en/signin`,
-      },
-    });
+    const { error: emailError } = await admin.auth.resetPasswordForEmail(
+      email.trim(),
+      { redirectTo: `${appOrigin}/auth/callback?next=/en/dashboard` }
+    );
 
-    if (linkError || !linkData?.properties?.action_link) {
-      // Member was created but link failed. This is recoverable (owner can
-      // use the Supabase dashboard → Authentication → Users → Send password recovery).
-      // Log the internal userId for ops debugging; do NOT expose it to the client.
-      console.error('generateLink error (userId for ops):', newUser.user?.id, linkError);
+    if (emailError) {
+      console.error('resetPasswordForEmail error (userId for ops):', newUser.user?.id, emailError);
       return NextResponse.json(
-        { error: 'Member created but failed to generate set-password link. Use Supabase dashboard to send a password reset.' },
+        { error: 'Member created but failed to send set-password email. Use Supabase dashboard → Authentication → Users to send a password reset manually.' },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      userId: newUser.user?.id,
-      setPasswordLink: linkData.properties.action_link,
-    });
+    return NextResponse.json({ success: true });
   } catch (err) {
     console.error('Members POST threw:', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
