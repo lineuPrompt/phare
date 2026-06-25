@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import Navbar from '@/components/brand/Navbar';
 
@@ -11,6 +11,9 @@ export default function SignInPage() {
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
+
+  const searchParams = useSearchParams();
+  const callbackError = searchParams.get('error');
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
@@ -61,6 +64,16 @@ export default function SignInPage() {
         <p className="text-center mb-10" style={{ color: '#6B7280' }}>
           {mode === 'signin' ? t('signinSubtitle') : t('signupSubtitle')}
         </p>
+
+        {callbackError && (
+          <div className="rounded-xl px-4 py-3 mb-6 text-sm" style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626' }}>
+            {callbackError === 'no_tokens'
+              ? 'This link has expired or is invalid. Ask the household owner to resend your invite.'
+              : callbackError === 'link_expired'
+              ? 'This link has expired. Ask the household owner to resend your invite.'
+              : callbackError}
+          </div>
+        )}
 
         <div className="rounded-2xl bg-white p-8 space-y-4" style={{ border: '1px solid #E5E7EB' }}>
           {mode === 'signup' && (

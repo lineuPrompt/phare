@@ -2,63 +2,62 @@
 
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { createBrowserClient } from '@supabase/ssr';
+import { createClient } from '@/lib/supabase';
 
-// The provisioning email uses Supabase implicit flow: tokens land in the URL
-// hash fragment (#access_token=...&type=recovery). createBrowserClient defaults
-// to flowType:'pkce' and silently ignores hash fragments. Passing flowType:
-// 'implicit' here makes the client detect the hash on mount and fire
-// onAuthStateChange automatically — no manual setSession needed.
-//
-// The session is still written to cookies via @supabase/ssr's cookie storage,
-// so server components will see it on the next request.
 export default function AuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    // Read hash immediately so it's available even if the client clears it.
+    const hash = window.location.hash.slice(1);
+    const params = new URLSearchParams(hash);
+    const accessToken  = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    const tokenType    = params.get('type'); // 'recovery' for provisioning emails
+
     const next = searchParams.get('next') ?? '/en/dashboard';
 
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { auth: { flowType: 'implicit' } }
-    );
+    if (!accessToken || !refreshToken) {
+      router.replace('/en/signin?error=no_tokens');
+      return;
+    }
 
-    let settled = false;
-    let fallback: ReturnType<typeof setTimeout>;
+    const supabase = createClient();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (settled) return;
-        if (event === 'PASSWORD_RECOVERY' && session) {
-          settled = true;
-          clearTimeout(fallback);
-          // Member must set a password before using the app —
-          // without this they'd have no way to sign in again later.
+    // The @supabase/ssr browser client may have already processed the hash tokens
+    // during its async initialize(). Check for an existing session first so we
+    // don't call setSession concurrently with the client's own initialization.
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        // Client already established a session from the hash — just redirect.
+        if (tokenType === 'recovery') {
           router.replace(`/en/set-password?next=${encodeURIComponent(next)}`);
-        } else if (event === 'SIGNED_IN' && session) {
-          settled = true;
-          clearTimeout(fallback);
+        } else {
           router.replace(next);
         }
+        return;
       }
-    );
 
-    // Safety net: if no auth event fires (expired token, bad URL) redirect
-    // to sign-in with a clear message after 8 seconds.
-    fallback = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        subscription.unsubscribe();
-        router.replace('/en/signin?error=link_expired');
+      // No session yet — set it manually with the tokens from the hash.
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+
+      if (error) {
+        // Surface the real error in the URL so it's visible during debugging.
+        console.error('[auth/callback] setSession error:', error.message);
+        router.replace(`/en/signin?error=${encodeURIComponent(error.message)}`);
+        return;
       }
-    }, 8000);
 
-    return () => {
-      clearTimeout(fallback);
-      subscription.unsubscribe();
-    };
+      if (tokenType === 'recovery') {
+        router.replace(`/en/set-password?next=${encodeURIComponent(next)}`);
+      } else {
+        router.replace(next);
+      }
+    });
   }, [router, searchParams]);
 
   return (
