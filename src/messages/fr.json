@@ -431,6 +431,8 @@
     "save": "Ajouter le membre",
     "successTitle": "Membre ajouté",
     "successBody": "Un courriel de définition de mot de passe a été envoyé à {email}. Le membre cliquera sur le lien pour définir son mot de passe et se connecter.",
+    "resentTitle": "Courriel renvoyé",
+    "resentBody": "Un nouveau courriel de définition de mot de passe a été envoyé à {email}. Le lien précédent a peut-être expiré.",
     "noMembers": "Aucun autre membre pour l'instant.",
     "you": "vous",
     "ownerBadge": "Propriétaire",

@@ -129,13 +129,29 @@ export async function POST(request: Request) {
 
     if (createError) {
       console.error('Admin createUser error:', createError);
-      // Supabase returns "User already registered" when the email exists in auth.users.
-      // Surface this as a 409 with a clear message rather than a generic 500.
       const alreadyExists =
         createError.message.toLowerCase().includes('already registered') ||
         createError.message.toLowerCase().includes('already exists') ||
         (createError as { status?: number }).status === 422;
+
       if (alreadyExists) {
+        // Check if this email is already a member of the caller's own household.
+        // If yes: the previous invite email likely expired — resend it.
+        // If no:  the email belongs to a different household → 409.
+        const { data: existingRow } = await supabase
+          .from('users')
+          .select('household_id')
+          .eq('email', email.trim())
+          .single();
+
+        if (existingRow?.household_id === caller.householdId) {
+          const appOrigin = new URL(request.url).origin;
+          await admin.auth.resetPasswordForEmail(email.trim(), {
+            redirectTo: `${appOrigin}/auth/callback?next=/en/dashboard`,
+          });
+          return NextResponse.json({ success: true, resent: true });
+        }
+
         return NextResponse.json(
           { error: 'This email already has a Phare account. A person can only belong to one household — they would need to delete their existing account first.' },
           { status: 409 }
@@ -146,17 +162,9 @@ export async function POST(request: Request) {
 
     // -----------------------------------------------------------------------
     // 4. Send the set-password email via resetPasswordForEmail.
-    //
-    // Unlike generateLink (which returns a link for manual distribution),
-    // resetPasswordForEmail fires Supabase's built-in "Reset password" email
-    // directly to the member. They click the link, set their password, and
-    // land on the dashboard via /auth/callback.
-    //
-    // redirectTo must use the incoming request origin so it works in both
-    // dev (localhost:3000) and production without a separate env var.
-    //
-    // The email template can be customised in:
-    //   Supabase dashboard → Authentication → Email Templates → Reset Password
+    //    redirectTo must use the incoming request origin so it works in both
+    //    dev and prod without an extra env var.
+    //    Template: Supabase → Authentication → Email Templates → Reset Password
     // -----------------------------------------------------------------------
     const appOrigin = new URL(request.url).origin;
     const { error: emailError } = await admin.auth.resetPasswordForEmail(

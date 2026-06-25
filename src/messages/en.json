@@ -431,6 +431,8 @@
     "save": "Add member",
     "successTitle": "Member added",
     "successBody": "A set-password email has been sent to {email}. They'll click the link to set their password and sign in.",
+    "resentTitle": "Email resent",
+    "resentBody": "A new set-password email has been sent to {email}. The previous link may have expired.",
     "noMembers": "No other members yet.",
     "you": "you",
     "ownerBadge": "Owner",

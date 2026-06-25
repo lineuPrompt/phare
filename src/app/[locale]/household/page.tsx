@@ -57,7 +57,7 @@ export default function HouseholdPage() {
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Failed to add member'); return; }
 
-      setAddedEmail(email.trim());
+      setAddedEmail(data.resent ? `resent:${email.trim()}` : email.trim());
       setEmail('');
       setFullName('');
       setRole('member');
@@ -153,18 +153,26 @@ export default function HouseholdPage() {
               )}
             </section>
 
-            {/* Email-sent confirmation (shown once after adding) */}
-            {addedEmail && (
-              <section
-                className="rounded-2xl p-6 space-y-2"
-                style={{ background: '#F0FDF4', border: '1px solid #BBF7D0' }}
-              >
-                <h2 className="font-semibold" style={{ color: '#15803D' }}>{t('successTitle')}</h2>
-                <p className="text-sm" style={{ color: '#166534' }}>
-                  {t('successBody', { email: addedEmail })}
-                </p>
-              </section>
-            )}
+            {/* Email-sent confirmation (shown once after adding or resending) */}
+            {addedEmail && (() => {
+              const isResent = addedEmail.startsWith('resent:');
+              const displayEmail = isResent ? addedEmail.slice(7) : addedEmail;
+              return (
+                <section
+                  className="rounded-2xl p-6 space-y-2"
+                  style={{ background: '#F0FDF4', border: '1px solid #BBF7D0' }}
+                >
+                  <h2 className="font-semibold" style={{ color: '#15803D' }}>
+                    {isResent ? t('resentTitle') : t('successTitle')}
+                  </h2>
+                  <p className="text-sm" style={{ color: '#166534' }}>
+                    {isResent
+                      ? t('resentBody', { email: displayEmail })
+                      : t('successBody', { email: displayEmail })}
+                  </p>
+                </section>
+              );
+            })()}
 
             {/* Add member form */}
             <section className="rounded-2xl bg-white p-6 space-y-4" style={{ border: '1px solid #E5E7EB' }}>
