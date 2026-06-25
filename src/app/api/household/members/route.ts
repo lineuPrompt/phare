@@ -129,18 +129,40 @@ export async function POST(request: Request) {
 
     if (createError) {
       console.error('Admin createUser error:', createError);
+      // Supabase returns "User already registered" when the email exists in auth.users.
+      // Surface this as a 409 with a clear message rather than a generic 500.
+      const alreadyExists =
+        createError.message.toLowerCase().includes('already registered') ||
+        createError.message.toLowerCase().includes('already exists') ||
+        (createError as { status?: number }).status === 422;
+      if (alreadyExists) {
+        return NextResponse.json(
+          { error: 'This email already has a Phare account. A person can only belong to one household — they would need to delete their existing account first.' },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: createError.message }, { status: 500 });
     }
 
     // -----------------------------------------------------------------------
     // 4. Generate a set-password link (type: recovery)
     //
-    // The member receives this link, clicks it, sets their own password,
-    // and signs in. No plaintext credential is ever sent.
+    // redirectTo must be derived from the incoming request origin so the link
+    // works in both dev (localhost:3000) and production. Without an explicit
+    // redirectTo, Supabase falls back to the project's "Site URL" setting
+    // (which may still be localhost) and the link/email become unusable in prod.
+    //
+    // Supabase also fires the password-reset email automatically via the
+    // project's SMTP settings. The link shown in the UI is a reliable backup
+    // the owner can copy and share directly.
     // -----------------------------------------------------------------------
+    const appOrigin = new URL(request.url).origin;
     const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
       type: 'recovery',
       email: email.trim(),
+      options: {
+        redirectTo: `${appOrigin}/en/signin`,
+      },
     });
 
     if (linkError || !linkData?.properties?.action_link) {
