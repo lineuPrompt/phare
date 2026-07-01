@@ -191,12 +191,29 @@
     "form": {
       "title": "Nous n'avons pas pu lire ce fichier automatiquement",
       "subtitle": "Pas de souci — entrez vos chiffres ci-dessous et nous construirons votre plan.",
-      "income": "Revenu mensuel",
+      "income": "Sources de revenus",
+      "incomeHint": "Entrez ce qui arrive dans votre compte à chaque paie, puis choisissez la fréquence. Nous calculons le montant mensuel — pas besoin de faire les maths.",
       "expenses": "Dépenses mensuelles",
-      "sourcePlaceholder": "ex. Salaire",
+      "sourcePlaceholder": "ex. Salaire — Lino",
+      "amountPerPay": "Montant par paie",
+      "freq_weekly": "Hebdomadaire",
+      "freq_biweekly": "Aux 2 semaines",
+      "freq_semimonthly": "Deux fois par mois",
+      "freq_monthly": "Mensuel",
+      "perMonth": "/mois",
+      "combinedIncome": "Revenu combiné du foyer (optionnel)",
+      "combinedIncomePlaceholder": "ex. 134000",
+      "combinedIncomeHint": "Estimation annuelle — utilisée pour vérifier que vos revenus s'additionnent correctement",
       "expensePlaceholder": "ex. Hypothèque",
       "addLine": "+ Ajouter une ligne",
       "submit": "Construire mon plan"
+    },
+    "plausibility": {
+      "title": "Vérifiez vos revenus",
+      "incomeVsStated": "Vous avez mentionné un revenu combiné d'environ {stated}/an, mais les entrées s'additionnent à environ {computed}/an — est-ce exact ?",
+      "deficitNotFinanced": "Votre plan affiche un déficit de {deficit}/mois sans marge de crédit ni paiement de dette pour l'expliquer. Si votre revenu est sous-estimé, corrigez-le maintenant — un déficit sur papier doit être financé par quelque chose de réel.",
+      "correct": "Corriger mes revenus",
+      "confirm": "Ces chiffres sont corrects — continuer quand même"
     }
   },
   "auth": {
@@ -239,6 +256,8 @@
     "noPlanCta": "Téléversez votre budget pour commencer",
     "newPlan": "Téléverser un nouveau budget",
     "loading": "Chargement de votre plan...",
+    "regeneratePlan": "Régénérer le plan à partir des données actuelles",
+    "regenerating": "Régénération…",
     "nav": {
       "overview": "Aperçu",
       "upload": "Nouveau plan",

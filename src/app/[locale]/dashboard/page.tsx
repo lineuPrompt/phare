@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter, usePathname } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
@@ -27,11 +27,13 @@ export default function DashboardPage() {
   const [displayMonth, setDisplayMonth] = useState<string>(calendarMonth);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState('');
 
-  useEffect(() => {
+  const loadDashboard = useCallback((month: string) => {
     setLoading(true);
     setData(null);
-    fetch(`/api/dashboard?month=${displayMonth}`)
+    fetch(`/api/dashboard?month=${month}`)
       .then(async (res) => {
         if (res.status === 401) {
           router.push(`/${locale}/signin`);
@@ -41,7 +43,11 @@ export default function DashboardPage() {
       })
       .then((d) => { if (d) setData(d); })
       .finally(() => setLoading(false));
-  }, [router, locale, displayMonth]);
+  }, [router, locale]);
+
+  useEffect(() => {
+    loadDashboard(displayMonth);
+  }, [loadDashboard, displayMonth]);
 
   const handlePrevMonth = () => {
     const [y, m] = displayMonth.split('-').map(Number);
@@ -58,6 +64,28 @@ export default function DashboardPage() {
       : `${y}-${String(m + 1).padStart(2, '0')}`
     );
   };
+
+  const handleRegenerate = useCallback(async () => {
+    setRegenerating(true);
+    setRegenerateError('');
+    try {
+      const res = await fetch('/api/regenerate-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locale }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Regeneration failed');
+      }
+      // Reload dashboard so the new review + top recommendation appear.
+      loadDashboard(displayMonth);
+    } catch (err) {
+      setRegenerateError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setRegenerating(false);
+    }
+  }, [locale, displayMonth, loadDashboard]);
 
   if (loading) {
     return (
@@ -114,6 +142,21 @@ export default function DashboardPage() {
             </div>
 
             {data.review && <ReviewCard review={data.review} date={data.reviewDate ?? null} locale={locale} />}
+
+            {/* Regenerate plan */}
+            <div className="flex flex-col items-center gap-2 pt-2">
+              <button
+                onClick={handleRegenerate}
+                disabled={regenerating}
+                className="px-6 py-2.5 rounded-full text-sm font-medium cursor-pointer hover:opacity-80 transition-all disabled:opacity-50"
+                style={{ border: '1.5px solid #0F2044', color: '#0F2044' }}
+              >
+                {regenerating ? t('regenerating') : t('regeneratePlan')}
+              </button>
+              {regenerateError && (
+                <p className="text-sm" style={{ color: '#DC2626' }}>{regenerateError}</p>
+              )}
+            </div>
           </div>
         </div>
       </div>

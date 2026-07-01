@@ -191,12 +191,29 @@
     "form": {
       "title": "We couldn't read that file automatically",
       "subtitle": "No problem — enter your numbers below and we'll build your plan.",
-      "income": "Monthly Income",
+      "income": "Income sources",
+      "incomeHint": "Enter what lands in your bank account each pay, then pick the frequency. We compute the monthly figure — no math needed.",
       "expenses": "Monthly Expenses",
-      "sourcePlaceholder": "e.g. Salary",
+      "sourcePlaceholder": "e.g. Salary — Lino",
+      "amountPerPay": "Amount per pay",
+      "freq_weekly": "Weekly",
+      "freq_biweekly": "Bi-weekly (every 2 weeks)",
+      "freq_semimonthly": "Semi-monthly (twice a month)",
+      "freq_monthly": "Monthly",
+      "perMonth": "/mo",
+      "combinedIncome": "Combined household income (optional)",
+      "combinedIncomePlaceholder": "e.g. 134000",
+      "combinedIncomeHint": "Annual estimate — used to verify your income entries add up correctly",
       "expensePlaceholder": "e.g. Mortgage",
       "addLine": "+ Add another line",
       "submit": "Build my plan"
+    },
+    "plausibility": {
+      "title": "Double-check your income",
+      "incomeVsStated": "You mentioned a combined income around {stated}/year, but the entries add up to about {computed}/year — does that look right?",
+      "deficitNotFinanced": "Your plan shows a {deficit}/month shortfall with no credit line or debt payment to explain it. If your income is understated, correct it now — a deficit on paper needs to be financed by something real.",
+      "correct": "Fix my income",
+      "confirm": "These numbers are right — continue anyway"
     }
   },
   "auth": {
@@ -239,6 +256,8 @@
     "noPlanCta": "Upload your budget to get started",
     "newPlan": "Upload a new budget",
     "loading": "Loading your plan...",
+    "regeneratePlan": "Regenerate plan from current data",
+    "regenerating": "Regenerating…",
     "nav": {
       "overview": "Overview",
       "upload": "New plan",
