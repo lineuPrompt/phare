@@ -9,15 +9,24 @@
  * Expected sheets: Household, Monthly Income, Fixed Expenses,
  * Variable Expenses, Annual Expenses, Goals.
  *
- * Income is entered as MONTHLY amounts (the template instructs bi-weekly
- * users to multiply by 2.17), so there is no frequency conversion here.
+ * Income parsing supports two layouts:
+ *   Legacy (v1): col 0 = source, col 2 = monthly amount (user pre-computed)
+ *   Current (v2): col 0 = source, col 1 = paycheque amount, col 2 = frequency string
+ *                 → code computes monthly equivalent via monthlyIncomeEquivalent()
+ *
+ * The v2 layout is detected automatically: if col 2 is a recognized frequency
+ * string (weekly/bi-weekly/semi-monthly/monthly in EN or FR), v2 is used.
+ * Otherwise the row falls back to v1 (col 2 as monthly amount).
  */
 
 import * as XLSX from 'xlsx';
+import { monthlyIncomeEquivalent, IncomeFrequency } from './incomeHelpers';
 
 export interface ParsedLine {
   label: string;
-  amount: number;
+  amount: number;          // monthly equivalent — always safe to sum
+  rawAmount?: number;      // paycheque amount (v2 only)
+  frequency?: IncomeFrequency; // pay frequency (v2 only)
 }
 
 export interface SinkingFundLine {
@@ -76,6 +85,64 @@ function sheetRows(sheet: XLSX.WorkSheet): unknown[][] {
 }
 
 /**
+ * Map a string cell value to an IncomeFrequency if it's a recognized keyword.
+ * Supports both English and French labels used in the v2 template.
+ */
+function detectFrequency(value: unknown): IncomeFrequency | null {
+  if (typeof value !== 'string') return null;
+  const v = value.toLowerCase().trim();
+
+  if (v === 'weekly' || v === 'hebdomadaire') return 'weekly';
+  if (v === 'bi-weekly' || v === 'biweekly' || v === 'bi-hebdomadaire' || v === 'toutes les 2 semaines')
+    return 'biweekly';
+  if (v === 'semi-monthly' || v === 'semimonthly' || v === 'deux fois par mois' || v === 'semi-mensuel')
+    return 'semimonthly';
+  if (v === 'monthly' || v === 'mensuel' || v === 'mensuelle') return 'monthly';
+
+  return null;
+}
+
+/**
+ * Parse the Monthly Income sheet.
+ *
+ * Supports both v1 (monthly amount in col 2) and v2 (paycheque amount in col 1,
+ * frequency string in col 2) per-row — a mixed workbook is safe.
+ */
+function parseIncome(rows: unknown[][], startRow: number, skipWords: string[]): ParsedLine[] {
+  const items: ParsedLine[] = [];
+
+  for (let i = startRow; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row) continue;
+
+    const label = row[0];
+    if (typeof label !== 'string' || !label.trim()) continue;
+
+    const low = label.toLowerCase();
+    if (skipWords.some((w) => low.includes(w))) continue;
+
+    const freq = detectFrequency(row[2]);
+
+    if (freq !== null) {
+      // v2 layout: col 1 = paycheque amount, col 2 = frequency
+      const rawAmount = row[1];
+      if (typeof rawAmount === 'number' && Number.isFinite(rawAmount) && rawAmount !== 0) {
+        const monthly = monthlyIncomeEquivalent(rawAmount, freq);
+        items.push({ label: label.trim(), amount: monthly, rawAmount, frequency: freq });
+      }
+    } else {
+      // v1 layout: col 2 = monthly amount (user pre-computed)
+      const amount = row[2];
+      if (typeof amount === 'number' && Number.isFinite(amount) && amount !== 0) {
+        items.push({ label: label.trim(), amount });
+      }
+    }
+  }
+
+  return items;
+}
+
+/**
  * Generic section parser: from `startRow`, take the label at `labelCol`
  * and the numeric amount at `amountCol`. Skips rows whose label contains
  * any skip word (headers, titles) and rows with zero/blank amounts.
@@ -128,9 +195,9 @@ export function parseTemplate(buffer: Buffer): TemplateParseResult {
     }
   }
 
-  // --- Income: monthly amount in col 2, data from row index 5 ---
+  // --- Income: supports v1 (col 2 = monthly) and v2 (col 1 = paycheque, col 2 = frequency) ---
   const incomeRows = sheetRows(workbook.Sheets['Monthly Income']);
-  const income = parseSection(incomeRows, 0, 2, 5, ['source', 'income', 'revenu']);
+  const income = parseIncome(incomeRows, 5, ['source', 'income', 'revenu']);
 
   // --- Fixed expenses: amount in col 2, from row index 2 ---
   const fixedRows = sheetRows(workbook.Sheets['Fixed Expenses']);

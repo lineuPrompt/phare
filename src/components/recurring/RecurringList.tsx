@@ -4,22 +4,34 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RecurringItem, RecurringAccount, RecurringCategory, formatCurrency } from './types';
 
-export default function RecurringList({
-  items,
-  accounts,
-  categories,
-  locale,
-  onChanged,
-}: {
-  items: RecurringItem[];
+// ── RecurringRow ───────────────────────────────────────────────────────────
+//
+// This is a NAMED component defined at MODULE level (not inside RecurringList).
+// That one rule prevents the focus-loss bug: when the user types in an amount
+// field, only RecurringRow re-renders — not the parent — so React never tears
+// down and recreates the DOM node, and focus is preserved.
+//
+// If Row were a function inside RecurringList (the previous implementation),
+// every keystroke would cause RecurringList to re-render, redefine Row as a
+// new function reference, and React would unmount/remount the entire row,
+// destroying focus. Keeping Row here ensures its identity is stable.
+
+type RecurringRowProps = {
+  item: RecurringItem;
   accounts: RecurringAccount[];
   categories: RecurringCategory[];
   locale: string;
   onChanged: () => void;
-}) {
+};
+
+function RecurringRow({ item, accounts, categories, locale, onChanged }: RecurringRowProps) {
   const t = useTranslations('recurring.list');
-  const [confirmId, setConfirmId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Edit state — initialised when user clicks Edit
   const [editDesc, setEditDesc] = useState('');
   const [editAmount, setEditAmount] = useState('');
   const [editCadence, setEditCadence] = useState<'monthly' | 'biweekly' | 'semimonthly'>('monthly');
@@ -27,11 +39,10 @@ export default function RecurringList({
   const [editSecondDay, setEditSecondDay] = useState('30');
   const [editCategoryId, setEditCategoryId] = useState('');
   const [editAccountId, setEditAccountId] = useState('');
-  const [editType, setEditType] = useState<'income' | 'expense'>('expense');
-  const [saving, setSaving] = useState(false);
 
-  const startEdit = (item: RecurringItem) => {
-    setEditingId(item.id);
+  const inputStyle = { border: '1px solid #D1D5DB', color: '#0F2044' };
+
+  const startEdit = () => {
     setEditDesc(item.description);
     setEditAmount(String(item.amount));
     setEditCadence(item.cadence);
@@ -39,15 +50,15 @@ export default function RecurringList({
     setEditSecondDay(String(item.second_day ?? 30));
     setEditCategoryId(item.category_id ?? '');
     setEditAccountId(item.account_id);
-    setEditType(item.type as 'income' | 'expense');
+    setIsEditing(true);
   };
 
-  const cancelEdit = () => setEditingId(null);
+  const cancelEdit = () => setIsEditing(false);
 
-  const saveEdit = async (id: string) => {
+  const saveEdit = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/recurring/${id}`, {
+      const res = await fetch(`/api/recurring/${item.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -64,23 +75,214 @@ export default function RecurringList({
         console.error('Failed to update recurring item:', await res.json().catch(() => null));
         return;
       }
-      setEditingId(null);
+      setIsEditing(false);
       onChanged();
     } finally {
       setSaving(false);
     }
   };
 
-  const doDelete = async (id: string) => {
-    await fetch(`/api/recurring/${id}`, { method: 'DELETE' });
-    setConfirmId(null);
+  const doDelete = async () => {
+    await fetch(`/api/recurring/${item.id}`, { method: 'DELETE' });
+    setConfirmDelete(false);
     onChanged();
   };
 
-  const cadenceLabel = (c: string) => t(`cadence.${c}`);
+  const canSaveEdit =
+    editDesc.trim().length > 0 &&
+    parseFloat(editAmount) > 0 &&
+    editAccountId &&
+    (item.type === 'income' || editCategoryId);
 
-  const inputStyle = { border: '1px solid #D1D5DB', color: '#0F2044' };
-  const canSaveEdit = editDesc.trim().length > 0 && parseFloat(editAmount) > 0 && editAccountId && (editType === 'income' || editCategoryId);
+  if (isEditing) {
+    return (
+      <div className="py-3 px-2 rounded-lg space-y-3" style={{ background: '#F0FDFD', marginBottom: '4px' }}>
+        {/* Row 1: description + amount */}
+        <div className="flex flex-wrap gap-2">
+          <input
+            type="text"
+            value={editDesc}
+            onChange={(e) => setEditDesc(e.target.value)}
+            className="flex-1 min-w-[140px] px-2 py-1.5 rounded text-sm outline-none"
+            style={inputStyle}
+          />
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={editAmount}
+            onChange={(e) => setEditAmount(e.target.value)}
+            className="w-28 px-2 py-1.5 rounded text-sm outline-none"
+            style={inputStyle}
+          />
+        </div>
+        {/* Row 2: cadence + anchor date */}
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={editCadence}
+            onChange={(e) => setEditCadence(e.target.value as typeof editCadence)}
+            className="px-2 py-1.5 rounded text-sm outline-none bg-white"
+            style={inputStyle}
+          >
+            <option value="monthly">{t('cadence.monthly')}</option>
+            <option value="biweekly">{t('cadence.biweekly')}</option>
+            <option value="semimonthly">{t('cadence.semimonthly')}</option>
+          </select>
+          <input
+            type="date"
+            value={editAnchorDate}
+            onChange={(e) => setEditAnchorDate(e.target.value)}
+            className="px-2 py-1.5 rounded text-sm outline-none"
+            style={inputStyle}
+          />
+          {editCadence === 'semimonthly' && (
+            <input
+              type="number"
+              min="1"
+              max="31"
+              value={editSecondDay}
+              onChange={(e) => setEditSecondDay(e.target.value)}
+              className="w-20 px-2 py-1.5 rounded text-sm outline-none"
+              style={inputStyle}
+              title={t('secondDay')}
+            />
+          )}
+        </div>
+        {/* Row 3: account + category */}
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={editAccountId}
+            onChange={(e) => setEditAccountId(e.target.value)}
+            className="px-2 py-1.5 rounded text-sm outline-none bg-white"
+            style={inputStyle}
+          >
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.type === 'chequing' ? '🏦' : '💳'} {a.name}
+              </option>
+            ))}
+          </select>
+          {item.type === 'expense' && categories.length > 0 && (
+            <select
+              value={editCategoryId}
+              onChange={(e) => setEditCategoryId(e.target.value)}
+              className="px-2 py-1.5 rounded text-sm outline-none bg-white"
+              style={inputStyle}
+            >
+              <option value="">{t('noCategory')}</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+          <div className="flex gap-1 ml-auto">
+            <button
+              onClick={saveEdit}
+              disabled={!canSaveEdit || saving}
+              className="px-3 py-1.5 rounded text-sm font-medium text-white cursor-pointer disabled:opacity-40"
+              style={{ background: '#0F2044' }}
+            >
+              {saving ? '…' : t('save')}
+            </button>
+            <button
+              onClick={cancelEdit}
+              className="px-3 py-1.5 rounded text-sm cursor-pointer"
+              style={{ color: '#6B7280' }}
+            >
+              {t('cancel')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div
+        className="flex items-center gap-3 py-3 px-2 group"
+        style={{ borderBottom: '1px solid #F3F4F6' }}
+      >
+        <div className="flex-1 min-w-0">
+          <p className="font-medium truncate" style={{ color: '#0F2044' }}>{item.description}</p>
+          <p className="text-xs" style={{ color: '#9CA3AF' }}>
+            {t(`cadence.${item.cadence}`)}
+            {item.categories?.name ? ` · ${item.categories.name}` : ''}
+            {item.accounts?.name ? ` · ${item.accounts.type === 'chequing' ? '🏦' : '💳'} ${item.accounts.name}` : ''}
+          </p>
+        </div>
+        <span
+          className="font-bold shrink-0 w-24 text-right"
+          style={{ color: item.type === 'income' ? '#16A34A' : '#0F2044' }}
+        >
+          {item.type === 'income' ? '+' : ''}{formatCurrency(Number(item.amount), locale)}
+        </span>
+        <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={startEdit}
+            className="px-2 py-1 rounded text-xs cursor-pointer"
+            style={{ color: '#2ABFBF' }}
+          >
+            {t('edit')}
+          </button>
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="px-2 py-1 rounded text-xs cursor-pointer"
+            style={{ color: '#DC2626' }}
+          >
+            {t('delete')}
+          </button>
+        </div>
+      </div>
+
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50 p-4"
+          style={{ background: 'rgba(15,32,68,0.4)' }}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-sm w-full"
+            style={{ boxShadow: '0 8px 24px rgba(15,32,68,0.15)' }}
+          >
+            <p className="font-semibold mb-2" style={{ color: '#0F2044' }}>{t('confirmTitle')}</p>
+            <p className="text-sm mb-5" style={{ color: '#6B7280' }}>{t('confirmBody')}</p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={doDelete}
+                className="w-full py-2.5 rounded-full text-white text-sm font-medium cursor-pointer"
+                style={{ background: '#DC2626' }}
+              >
+                {t('confirmDelete')}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="w-full py-2.5 rounded-full text-sm font-medium cursor-pointer"
+                style={{ color: '#6B7280' }}
+              >
+                {t('cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── RecurringList ──────────────────────────────────────────────────────────
+
+export default function RecurringList({
+  items,
+  accounts,
+  categories,
+  locale,
+  onChanged,
+}: {
+  items: RecurringItem[];
+  accounts: RecurringAccount[];
+  categories: RecurringCategory[];
+  locale: string;
+  onChanged: () => void;
+}) {
+  const t = useTranslations('recurring.list');
 
   if (!items.length) {
     return (
@@ -93,128 +295,41 @@ export default function RecurringList({
   const income = items.filter((i) => i.type === 'income');
   const expense = items.filter((i) => i.type === 'expense');
 
-  const Row = ({ item }: { item: RecurringItem }) => {
-    const isEditing = editingId === item.id;
-
-    if (isEditing) {
-      return (
-        <div className="py-3 px-2 rounded-lg space-y-3" style={{ background: '#F0FDFD', marginBottom: '4px' }}>
-          {/* Row 1: description + amount */}
-          <div className="flex flex-wrap gap-2">
-            <input type="text" value={editDesc} onChange={(e) => setEditDesc(e.target.value)}
-              className="flex-1 min-w-[140px] px-2 py-1.5 rounded text-sm outline-none" style={inputStyle} />
-            <input type="number" step="0.01" min="0" value={editAmount} onChange={(e) => setEditAmount(e.target.value)}
-              className="w-28 px-2 py-1.5 rounded text-sm outline-none" style={inputStyle} />
-          </div>
-          {/* Row 2: cadence + anchor date */}
-          <div className="flex flex-wrap gap-2">
-            <select value={editCadence}
-              onChange={(e) => setEditCadence(e.target.value as typeof editCadence)}
-              className="px-2 py-1.5 rounded text-sm outline-none bg-white" style={inputStyle}>
-              <option value="monthly">{t('cadence.monthly')}</option>
-              <option value="biweekly">{t('cadence.biweekly')}</option>
-              <option value="semimonthly">{t('cadence.semimonthly')}</option>
-            </select>
-            <input type="date" value={editAnchorDate} onChange={(e) => setEditAnchorDate(e.target.value)}
-              className="px-2 py-1.5 rounded text-sm outline-none" style={inputStyle} />
-            {editCadence === 'semimonthly' && (
-              <input type="number" min="1" max="31" value={editSecondDay}
-                onChange={(e) => setEditSecondDay(e.target.value)}
-                className="w-20 px-2 py-1.5 rounded text-sm outline-none" style={inputStyle}
-                title={t('secondDay')} />
-            )}
-          </div>
-          {/* Row 3: account + category */}
-          <div className="flex flex-wrap gap-2">
-            <select value={editAccountId} onChange={(e) => setEditAccountId(e.target.value)}
-              className="px-2 py-1.5 rounded text-sm outline-none bg-white" style={inputStyle}>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>{a.type === 'chequing' ? '🏦' : '💳'} {a.name}</option>
-              ))}
-            </select>
-            {/* Category — only shown for expense items */}
-            {item.type === 'expense' && categories.length > 0 && (
-              <select value={editCategoryId} onChange={(e) => setEditCategoryId(e.target.value)}
-                className="px-2 py-1.5 rounded text-sm outline-none bg-white" style={inputStyle}>
-                <option value="">{t('noCategory')}</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            )}
-            <div className="flex gap-1 ml-auto">
-              <button onClick={() => saveEdit(item.id)} disabled={!canSaveEdit || saving}
-                className="px-3 py-1.5 rounded text-sm font-medium text-white cursor-pointer disabled:opacity-40"
-                style={{ background: '#0F2044' }}>
-                {saving ? '…' : t('save')}
-              </button>
-              <button onClick={cancelEdit}
-                className="px-3 py-1.5 rounded text-sm cursor-pointer" style={{ color: '#6B7280' }}>
-                {t('cancel')}
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex items-center gap-3 py-3 px-2 group" style={{ borderBottom: '1px solid #F3F4F6' }}>
-        <div className="flex-1 min-w-0">
-          <p className="font-medium truncate" style={{ color: '#0F2044' }}>{item.description}</p>
-          <p className="text-xs" style={{ color: '#9CA3AF' }}>
-            {cadenceLabel(item.cadence)}
-            {item.categories?.name ? ` · ${item.categories.name}` : ''}
-            {item.accounts?.name ? ` · ${item.accounts.type === 'chequing' ? '🏦' : '💳'} ${item.accounts.name}` : ''}
-          </p>
-        </div>
-        <span className="font-bold shrink-0 w-24 text-right" style={{ color: item.type === 'income' ? '#16A34A' : '#0F2044' }}>
-          {item.type === 'income' ? '+' : ''}{formatCurrency(Number(item.amount), locale)}
-        </span>
-        <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={() => startEdit(item)}
-            className="px-2 py-1 rounded text-xs cursor-pointer" style={{ color: '#2ABFBF' }}>
-            {t('edit')}
-          </button>
-          <button onClick={() => setConfirmId(item.id)}
-            className="px-2 py-1 rounded text-xs cursor-pointer" style={{ color: '#DC2626' }}>
-            {t('delete')}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-6">
       {income.length > 0 && (
         <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>
-          <h3 className="text-sm font-bold mb-3 uppercase tracking-wide" style={{ color: '#16A34A' }}>{t('incomeTitle')}</h3>
-          {income.map((i) => <Row key={i.id} item={i} />)}
+          <h3 className="text-sm font-bold mb-3 uppercase tracking-wide" style={{ color: '#16A34A' }}>
+            {t('incomeTitle')}
+          </h3>
+          {income.map((i) => (
+            <RecurringRow
+              key={i.id}
+              item={i}
+              accounts={accounts}
+              categories={categories}
+              locale={locale}
+              onChanged={onChanged}
+            />
+          ))}
         </div>
       )}
 
       {expense.length > 0 && (
         <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>
-          <h3 className="text-sm font-bold mb-3 uppercase tracking-wide" style={{ color: '#6B7280' }}>{t('expenseTitle')}</h3>
-          {expense.map((i) => <Row key={i.id} item={i} />)}
-        </div>
-      )}
-
-      {confirmId && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(15,32,68,0.4)' }}>
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full" style={{ boxShadow: '0 8px 24px rgba(15,32,68,0.15)' }}>
-            <p className="font-semibold mb-2" style={{ color: '#0F2044' }}>{t('confirmTitle')}</p>
-            <p className="text-sm mb-5" style={{ color: '#6B7280' }}>{t('confirmBody')}</p>
-            <div className="flex flex-col gap-2">
-              <button onClick={() => doDelete(confirmId)}
-                className="w-full py-2.5 rounded-full text-white text-sm font-medium cursor-pointer" style={{ background: '#DC2626' }}>
-                {t('confirmDelete')}
-              </button>
-              <button onClick={() => setConfirmId(null)}
-                className="w-full py-2.5 rounded-full text-sm font-medium cursor-pointer" style={{ color: '#6B7280' }}>
-                {t('cancel')}
-              </button>
-            </div>
-          </div>
+          <h3 className="text-sm font-bold mb-3 uppercase tracking-wide" style={{ color: '#6B7280' }}>
+            {t('expenseTitle')}
+          </h3>
+          {expense.map((i) => (
+            <RecurringRow
+              key={i.id}
+              item={i}
+              accounts={accounts}
+              categories={categories}
+              locale={locale}
+              onChanged={onChanged}
+            />
+          ))}
         </div>
       )}
     </div>

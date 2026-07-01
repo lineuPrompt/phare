@@ -8,9 +8,12 @@ import ModeSelector from '@/components/onboarding/ModeSelector';
 import AccountStep from '@/components/onboarding/AccountStep';
 import ManualForm from '@/components/onboarding/ManualForm';
 import PlanDisplay from '@/components/onboarding/PlanDisplay';
-import { Plan, FormLine } from '@/components/onboarding/types';
+import { Plan, FormLine, IncomeFormLine } from '@/components/onboarding/types';
+import { monthlyIncomeEquivalent } from '@/lib/incomeHelpers';
+import { runPlausibilityGuard, PlausibilityResult } from '@/lib/plausibilityGuard';
+import { formatCAD } from '@/components/onboarding/types';
 
-type Status = 'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form' | 'accounts';
+type Status = 'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form' | 'accounts' | 'plausibility_check';
 
 export default function UploadPage() {
   const t = useTranslations('upload');
@@ -23,9 +26,15 @@ export default function UploadPage() {
   const [reviewStreaming, setReviewStreaming] = useState(false);
 
   // Manual form
-  const [formIncome, setFormIncome] = useState<FormLine[]>([{ label: '', amount: '' }]);
+  const [formIncome, setFormIncome] = useState<IncomeFormLine[]>([{ label: '', amount: '', frequency: 'monthly' }]);
   const [formExpenses, setFormExpenses] = useState<FormLine[]>([{ label: '', amount: '' }]);
+  const [statedCombinedAnnual, setStatedCombinedAnnual] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
+
+  // Plausibility check
+  const [plausibilityResult, setPlausibilityResult] = useState<Extract<PlausibilityResult, { ok: false }> | null>(null);
+  // The calculated body built during submitForm, held until plausibility is confirmed.
+  const [pendingCalculated, setPendingCalculated] = useState<Record<string, unknown> | null>(null);
 
   // Account step
   const [cardCount, setCardCount] = useState(1);
@@ -171,25 +180,55 @@ export default function UploadPage() {
     if (file) handleFile(file);
   }, [handleFile]);
 
+  /**
+   * Build the calculated body from the manual form — applying frequency conversion
+   * so the AI and the plan receive real monthly equivalents, never raw paycheque amounts.
+   */
+  const buildCalculated = useCallback(() => {
+    const incomeLines = formIncome
+      .filter((l) => l.label.trim() && l.amount)
+      .map((l) => ({
+        label: l.label.trim(),
+        amount: monthlyIncomeEquivalent(parseFloat(l.amount), l.frequency),
+      }));
+
+    const expenseLines = formExpenses
+      .filter((l) => l.label.trim() && l.amount)
+      .map((l) => ({ label: l.label.trim(), amount: parseFloat(l.amount) }));
+
+    const incomeTotal = incomeLines.reduce((s, l) => s + l.amount, 0);
+    const expenseTotal = expenseLines.reduce((s, l) => s + l.amount, 0);
+
+    return {
+      income: { detected: incomeLines.length > 0, lines: incomeLines, total: Math.round(incomeTotal * 100) / 100 },
+      expenses: { detected: expenseLines.length > 0, lines: expenseLines, total: Math.round(expenseTotal * 100) / 100 },
+      netCashFlow: Math.round((incomeTotal - expenseTotal) * 100) / 100,
+      excludedLines: [],
+      confidence: 'high',
+    };
+  }, [formIncome, formExpenses]);
+
   const submitForm = useCallback(async () => {
     setFormSubmitting(true);
     setError('');
     try {
-      const income = formIncome.filter((l) => l.label.trim() && l.amount)
-        .map((l) => ({ label: l.label.trim(), amount: parseFloat(l.amount) }));
-      const expenses = formExpenses.filter((l) => l.label.trim() && l.amount)
-        .map((l) => ({ label: l.label.trim(), amount: parseFloat(l.amount) }));
+      const calculated = buildCalculated();
 
-      const incomeTotal = income.reduce((s, l) => s + l.amount, 0);
-      const expenseTotal = expenses.reduce((s, l) => s + l.amount, 0);
+      const stated = parseFloat(statedCombinedAnnual) || null;
+      const guard = runPlausibilityGuard({
+        computedMonthlyIncome: calculated.income.total,
+        netCashFlow: calculated.netCashFlow,
+        expenseLines: calculated.expenses.lines,
+        statedCombinedAnnual: stated,
+      });
 
-      const calculated = {
-        income: { detected: income.length > 0, lines: income, total: incomeTotal },
-        expenses: { detected: expenses.length > 0, lines: expenses, total: expenseTotal },
-        netCashFlow: incomeTotal - expenseTotal,
-        excludedLines: [],
-        confidence: 'high',
-      };
+      if (!guard.ok) {
+        // Store what we built and show the confirmation step before proceeding.
+        setPendingCalculated({ source: 'calculated', calculated });
+        setPlausibilityResult(guard);
+        setStatus('plausibility_check');
+        return;
+      }
 
       setPendingPlanBody({ source: 'calculated', calculated });
       setStatus('accounts');
@@ -199,12 +238,24 @@ export default function UploadPage() {
     } finally {
       setFormSubmitting(false);
     }
-  }, [formIncome, formExpenses]);
+  }, [buildCalculated, statedCombinedAnnual]);
 
-  // Account step: just resolve the card names and kick off plan generation.
-  // All account wipe + recreation happens inside save-plan (server-side) so it
-  // can delete transactions before accounts — the API guard blocks deletion
-  // when an account still has transactions.
+  /** User confirmed the plausibility warning — proceed with original numbers. */
+  const confirmPlausibility = useCallback(() => {
+    if (!pendingCalculated) return;
+    setPendingPlanBody(pendingCalculated);
+    setPlausibilityResult(null);
+    setPendingCalculated(null);
+    setStatus('accounts');
+  }, [pendingCalculated]);
+
+  /** User wants to go back and fix income after seeing the plausibility warning. */
+  const rejectPlausibility = useCallback(() => {
+    setPlausibilityResult(null);
+    setPendingCalculated(null);
+    setStatus('form');
+  }, []);
+
   const confirmAccounts = useCallback(async () => {
     if (!pendingPlanBody) return;
     setCreatingAccounts(true);
@@ -221,6 +272,14 @@ export default function UploadPage() {
       setCreatingAccounts(false);
     }
   }, [pendingPlanBody, cardCount, cardNames, buildPlan]);
+
+  const startOver = useCallback(() => {
+    setStatus('idle');
+    setPlan(null);
+    setReviewText('');
+    setPlanSaveStatus('idle');
+    setPendingSavePayload(null);
+  }, []);
 
   return (
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
@@ -261,9 +320,21 @@ export default function UploadPage() {
           <ManualForm
             income={formIncome} setIncome={setFormIncome}
             expenses={formExpenses} setExpenses={setFormExpenses}
+            statedCombinedAnnual={statedCombinedAnnual}
+            setStatedCombinedAnnual={setStatedCombinedAnnual}
             submitting={formSubmitting}
             onSubmit={submitForm}
             onCancel={() => setStatus('idle')}
+          />
+        )}
+
+        {/* Plausibility check confirmation step */}
+        {status === 'plausibility_check' && plausibilityResult && (
+          <PlausibilityCheck
+            result={plausibilityResult}
+            onConfirm={confirmPlausibility}
+            onCorrect={rejectPlausibility}
+            t={t}
           />
         )}
 
@@ -285,10 +356,72 @@ export default function UploadPage() {
             reviewStreaming={reviewStreaming}
             planSaveStatus={planSaveStatus}
             onRetrySave={retrySave}
-            onStartOver={() => { setStatus('idle'); setPlan(null); setReviewText(''); setPlanSaveStatus('idle'); setPendingSavePayload(null); }}
+            onStartOver={startOver}
           />
         )}
       </div>
     </main>
+  );
+}
+
+// ── Plausibility Check Step ────────────────────────────────────────────────
+
+function PlausibilityCheck({
+  result,
+  onConfirm,
+  onCorrect,
+  t,
+}: {
+  result: Extract<PlausibilityResult, { ok: false }>;
+  onConfirm: () => void;
+  onCorrect: () => void;
+  t: ReturnType<typeof useTranslations<'upload'>>;
+}) {
+  return (
+    <div className="rounded-2xl p-8 space-y-6" style={{ background: '#FFFBEB', border: '1.5px solid #F5A623' }}>
+      <div>
+        <p className="text-lg font-bold mb-2" style={{ color: '#0F2044' }}>
+          {t('plausibility.title')}
+        </p>
+        <div className="space-y-3">
+          {result.issues.map((issue, i) => (
+            <div key={i} className="rounded-xl p-4" style={{ background: 'white', border: '1px solid #FDE68A' }}>
+              {issue.prong === 'income_vs_stated' && (
+                <p style={{ color: '#374151' }}>
+                  {t('plausibility.incomeVsStated', {
+                    stated: formatCAD(issue.statedAnnual),
+                    computed: formatCAD(issue.computedAnnual),
+                  })}
+                </p>
+              )}
+              {issue.prong === 'deficit_not_financed' && (
+                <p style={{ color: '#374151' }}>
+                  {t('plausibility.deficitNotFinanced', {
+                    deficit: formatCAD(issue.monthlyDeficit),
+                  })}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button
+          onClick={onCorrect}
+          className="flex-1 px-6 py-3 rounded-full font-semibold cursor-pointer hover:opacity-90 transition-all"
+          style={{ background: '#0F2044', color: 'white' }}
+        >
+          {t('plausibility.correct')}
+        </button>
+        <button
+          onClick={onConfirm}
+          className="flex-1 px-6 py-3 rounded-full font-semibold cursor-pointer hover:opacity-90 transition-all"
+          style={{ border: '2px solid #0F2044', color: '#0F2044' }}
+        >
+          {t('plausibility.confirm')}
+        </button>
+      </div>
+    </div>
   );
 }
