@@ -9,23 +9,34 @@
  * Expected sheets: Household, Monthly Income, Fixed Expenses,
  * Variable Expenses, Annual Expenses, Goals.
  *
- * Income parsing supports two layouts:
- *   Legacy (v1): col 0 = source, col 2 = monthly amount (user pre-computed)
- *   Current (v2): col 0 = source, col 1 = paycheque amount, col 2 = frequency string
- *                 → code computes monthly equivalent via monthlyIncomeEquivalent()
+ * Income parsing supports two layouts. Version is detected ONCE from the
+ * header rows (0–4) of the Monthly Income sheet before any data row is read.
+ * No per-row version inference is ever performed.
  *
- * The v2 layout is detected automatically: if col 2 is a recognized frequency
- * string (weekly/bi-weekly/semi-monthly/monthly in EN or FR), v2 is used.
- * Otherwise the row falls back to v1 (col 2 as monthly amount).
+ *   v1 (legacy): col 0 = source name, col 2 = pre-computed monthly amount
+ *   v2 (current): col 0 = source name, col 1 = paycheque amount, col 2 = frequency string
+ *                 → code calls monthlyIncomeEquivalent() to get the monthly figure
+ *
+ * Version signal: a header row whose col 2 is exactly "Frequency" or "Fréquence"
+ * (case-insensitive) means v2.  Anything else means v1.  This is an unambiguous
+ * structural marker — it lives in the template's column-label row, not in data cells.
+ *
+ * Why this matters: a per-row heuristic (the approach that was here before) could
+ * silently misparse a v1 template if a data cell in col 2 happened to contain a
+ * frequency-like word (e.g. a description "Salary – paid monthly").  That would
+ * pick up col 1 as the paycheque amount instead of col 2 as the monthly total —
+ * the exact silent-wrong-income failure this build exists to prevent.
  */
 
 import * as XLSX from 'xlsx';
 import { monthlyIncomeEquivalent, IncomeFrequency } from './incomeHelpers';
 
+export type IncomeSheetVersion = 'v1' | 'v2';
+
 export interface ParsedLine {
   label: string;
-  amount: number;          // monthly equivalent — always safe to sum
-  rawAmount?: number;      // paycheque amount (v2 only)
+  amount: number;           // monthly equivalent — always safe to sum
+  rawAmount?: number;       // paycheque amount (v2 only)
   frequency?: IncomeFrequency; // pay frequency (v2 only)
 }
 
@@ -45,6 +56,7 @@ export interface GoalLine {
 
 export interface TemplateParseResult {
   isTemplate: boolean;
+  incomeLayout: IncomeSheetVersion; // which column layout was detected and used
   household: Record<string, string>;
   income: { lines: ParsedLine[]; total: number };
   fixedExpenses: { lines: ParsedLine[]; total: number };
@@ -67,6 +79,10 @@ const TEMPLATE_SHEETS = [
   'Goals',
 ];
 
+// Data rows start at row index 5 in the Monthly Income sheet.
+// Rows 0–4 are the header area we inspect for the version marker.
+const INCOME_DATA_START_ROW = 5;
+
 /**
  * Detect whether an uploaded workbook is the Phare template
  * by checking for the expected sheet names.
@@ -85,10 +101,34 @@ function sheetRows(sheet: XLSX.WorkSheet): unknown[][] {
 }
 
 /**
- * Map a string cell value to an IncomeFrequency if it's a recognized keyword.
- * Supports both English and French labels used in the v2 template.
+ * Determine which income column layout to use by inspecting the header area
+ * (rows 0 through INCOME_DATA_START_ROW − 1) of the Monthly Income sheet.
+ *
+ * A header row whose col 2 is exactly "Frequency" or "Fréquence"
+ * (case-insensitive, trimmed) is the v2 marker.  Everything else is v1.
+ *
+ * This function is exported so it can be unit-tested directly.
  */
-function detectFrequency(value: unknown): IncomeFrequency | null {
+export function detectIncomeSheetVersion(rows: unknown[][]): IncomeSheetVersion {
+  for (let i = 0; i < Math.min(INCOME_DATA_START_ROW, rows.length); i++) {
+    const row = rows[i];
+    if (!row) continue;
+    const col2 = row[2];
+    if (typeof col2 === 'string') {
+      const v = col2.toLowerCase().trim();
+      if (v === 'frequency' || v === 'fréquence' || v === 'frequence') {
+        return 'v2';
+      }
+    }
+  }
+  return 'v1';
+}
+
+/**
+ * Map a string data-cell value to an IncomeFrequency.
+ * Used only in v2 mode on DATA rows (never on header rows and never for version detection).
+ */
+function parseFrequencyCell(value: unknown): IncomeFrequency | null {
   if (typeof value !== 'string') return null;
   const v = value.toLowerCase().trim();
 
@@ -103,12 +143,19 @@ function detectFrequency(value: unknown): IncomeFrequency | null {
 }
 
 /**
- * Parse the Monthly Income sheet.
+ * Parse data rows of the Monthly Income sheet using the pre-determined version.
+ * No version inference is performed here — version was already decided by the header.
  *
- * Supports both v1 (monthly amount in col 2) and v2 (paycheque amount in col 1,
- * frequency string in col 2) per-row — a mixed workbook is safe.
+ * v1: col 2 is the monthly amount (user pre-computed). Col 1 is ignored.
+ * v2: col 1 is the paycheque amount; col 2 is the frequency string.
+ *     If col 2 is not a valid frequency string, the row is skipped (not silently wrong).
  */
-function parseIncome(rows: unknown[][], startRow: number, skipWords: string[]): ParsedLine[] {
+function parseIncome(
+  rows: unknown[][],
+  version: IncomeSheetVersion,
+  startRow: number,
+  skipWords: string[],
+): ParsedLine[] {
   const items: ParsedLine[] = [];
 
   for (let i = startRow; i < rows.length; i++) {
@@ -121,17 +168,17 @@ function parseIncome(rows: unknown[][], startRow: number, skipWords: string[]): 
     const low = label.toLowerCase();
     if (skipWords.some((w) => low.includes(w))) continue;
 
-    const freq = detectFrequency(row[2]);
-
-    if (freq !== null) {
-      // v2 layout: col 1 = paycheque amount, col 2 = frequency
+    if (version === 'v2') {
       const rawAmount = row[1];
+      const freq = parseFrequencyCell(row[2]);
+      // Skip rows with no valid frequency string — they're data entry errors, not v1 rows.
+      if (freq === null) continue;
       if (typeof rawAmount === 'number' && Number.isFinite(rawAmount) && rawAmount !== 0) {
         const monthly = monthlyIncomeEquivalent(rawAmount, freq);
         items.push({ label: label.trim(), amount: monthly, rawAmount, frequency: freq });
       }
     } else {
-      // v1 layout: col 2 = monthly amount (user pre-computed)
+      // v1: col 2 is the monthly amount
       const amount = row[2];
       if (typeof amount === 'number' && Number.isFinite(amount) && amount !== 0) {
         items.push({ label: label.trim(), amount });
@@ -195,9 +242,10 @@ export function parseTemplate(buffer: Buffer): TemplateParseResult {
     }
   }
 
-  // --- Income: supports v1 (col 2 = monthly) and v2 (col 1 = paycheque, col 2 = frequency) ---
+  // --- Income: version detected from header rows ONCE, then applied to all data rows ---
   const incomeRows = sheetRows(workbook.Sheets['Monthly Income']);
-  const income = parseIncome(incomeRows, 5, ['source', 'income', 'revenu']);
+  const incomeLayout = detectIncomeSheetVersion(incomeRows);
+  const income = parseIncome(incomeRows, incomeLayout, INCOME_DATA_START_ROW, ['source', 'income', 'revenu']);
 
   // --- Fixed expenses: amount in col 2, from row index 2 ---
   const fixedRows = sheetRows(workbook.Sheets['Fixed Expenses']);
@@ -260,6 +308,7 @@ export function parseTemplate(buffer: Buffer): TemplateParseResult {
 
   return {
     isTemplate: true,
+    incomeLayout,
     household,
     income: { lines: income, total: incomeTotal },
     fixedExpenses: { lines: fixed, total: fixedTotal },
@@ -277,6 +326,7 @@ export function parseTemplate(buffer: Buffer): TemplateParseResult {
 function emptyResult(isTemplate: boolean): TemplateParseResult {
   return {
     isTemplate,
+    incomeLayout: 'v1',
     household: {},
     income: { lines: [], total: 0 },
     fixedExpenses: { lines: [], total: 0 },
