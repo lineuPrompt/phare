@@ -194,7 +194,7 @@
       "income": "Income sources",
       "incomeHint": "Enter what lands in your bank account each pay, then pick the frequency. We compute the monthly figure — no math needed.",
       "expenses": "Monthly Expenses",
-      "sourcePlaceholder": "e.g. Salary — Lino",
+      "sourcePlaceholder": "e.g. Salary — Partner 1",
       "amountPerPay": "Amount per pay",
       "freq_weekly": "Weekly",
       "freq_biweekly": "Bi-weekly (every 2 weeks)",

@@ -194,7 +194,7 @@
       "income": "Sources de revenus",
       "incomeHint": "Entrez ce qui arrive dans votre compte à chaque paie, puis choisissez la fréquence. Nous calculons le montant mensuel — pas besoin de faire les maths.",
       "expenses": "Dépenses mensuelles",
-      "sourcePlaceholder": "ex. Salaire — Lino",
+      "sourcePlaceholder": "ex. Salaire — Partenaire 1",
       "amountPerPay": "Montant par paie",
       "freq_weekly": "Hebdomadaire",
       "freq_biweekly": "Aux 2 semaines",
