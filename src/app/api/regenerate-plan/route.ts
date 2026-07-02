@@ -2,18 +2,37 @@
  * POST /api/regenerate-plan
  *
  * Re-runs the financial plan and review against the household's CURRENT live
- * data (recurring items + category budgets), then saves a new conversation row.
- * Does NOT touch accounts, transactions, or budgets — this is interpretation
- * only.
+ * data, then saves a new conversation row.
  *
- * This is the foundation for monthly review delivery: the review always reads
- * current data, never onboarding-time data.
+ * INCOME SOURCE OF TRUTH
+ * ----------------------
+ * Income comes from the transactions table for the current calendar month —
+ * the same rows the Expenses page sums via computeMonthTotals. This is the
+ * only correct source because:
+ *
+ *   - recurring_items stores per-paycheque amounts (e.g. $2,749 bi-weekly)
+ *   - summing recurring_items.amount without frequency multiplication produces
+ *     one-of-each-source: $2,749 + $2,742 + $383 = $5,874 ← the exact bug
+ *   - transactions are materialized at save time with the real cadence, so a
+ *     bi-weekly earner already has 2 or 3 rows in the month — exactly what the
+ *     ledger shows (e.g. 3-paycheque July = $14,115)
+ *
+ * The AI receives pre-computed verified numbers. It never derives, sums, or
+ * re-smoothes income. The prompt explicitly forbids recalculation.
+ *
+ * EXPENSE SOURCE
+ * --------------
+ * Expenses come from planned amounts (budgets + fixed recurring items), not
+ * actual spending — this is the plan/review context: "you budgeted $X, here
+ * is how you are tracking." This is intentionally different from income, which
+ * uses the actual ledger for the month.
  */
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { anthropic } from '@/lib/anthropic';
 import { assembleCalculatedBudget, dedupeSinkingFunds } from '@/lib/planHelpers';
+import { computeMonthTotals } from '@/lib/dashboardHelpers';
 
 const SEED_CATEGORIES = [
   'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
@@ -25,6 +44,11 @@ type Category = { name: string; budgeted: number; type: string };
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** Return YYYY-MM-DD for the first day of the given month (0-indexed month). */
+function firstOfMonth(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, '0')}-01`;
 }
 
 export async function POST(request: Request) {
@@ -49,13 +73,39 @@ export async function POST(request: Request) {
     }
     const householdId = userRow.household_id;
 
-    // ── Read current live data ──────────────────────────────────────────────
+    // ── Current calendar month boundaries ───────────────────────────────────
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-indexed
+    const monthStart = firstOfMonth(year, month);
+    const monthEnd = firstOfMonth(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1);
 
-    const [recurringResult, budgetsResult, sfResult] = await Promise.all([
+    // ── Read live data ───────────────────────────────────────────────────────
+    //
+    // Income: transactions for this month (ledger, same as Expenses page).
+    //   DO NOT read from recurring_items for income — see module comment.
+    //
+    // Expenses: planned amounts from budgets + fixed recurring items.
+
+    const [incomeTxResult, acctResult, recurringExpResult, budgetsResult, sfResult] = await Promise.all([
+      supabase
+        .from('transactions')
+        .select('amount, type, description, account_id')
+        .eq('household_id', householdId)
+        .eq('type', 'income')
+        .gte('date', monthStart)
+        .lt('date', monthEnd),
+
+      supabase
+        .from('accounts')
+        .select('id, type')
+        .eq('household_id', householdId),
+
       supabase
         .from('recurring_items')
         .select('description, amount, type, cadence')
         .eq('household_id', householdId)
+        .eq('type', 'expense')
         .eq('active', true),
 
       supabase
@@ -69,24 +119,38 @@ export async function POST(request: Request) {
         .eq('household_id', householdId),
     ]);
 
-    const recurringItems = recurringResult.data ?? [];
+    const incomeTxns = incomeTxResult.data ?? [];
+    const accounts = acctResult.data ?? [];
+    const fixedRecurringExpenses = recurringExpResult.data ?? [];
     const budgetRows = budgetsResult.data ?? [];
     const sinkingFunds = sfResult.data ?? [];
 
-    // Income: recurring items stored at their monthly equivalent (cadence='monthly').
-    const incomeLines = recurringItems
-      .filter((r) => r.type === 'income')
-      .map((r) => ({ label: r.description, amount: round(Number(r.amount)) }));
+    // ── Income: ledger total (same function as Expenses page) ───────────────
+    const { totalIncome: incomeTotal } = computeMonthTotals(
+      incomeTxns.map((tx) => ({
+        amount: Number(tx.amount),
+        type: tx.type,
+        account_id: tx.account_id,
+      })),
+      accounts,
+    );
 
-    const incomeTotal = round(incomeLines.reduce((s, l) => s + l.amount, 0));
+    // Aggregate per-source for AI context (Lineu: $8,247 in July, not 3 × $2,749 lines)
+    const incomeBySource = new Map<string, number>();
+    for (const tx of incomeTxns) {
+      const label = tx.description ?? 'Income';
+      incomeBySource.set(label, round((incomeBySource.get(label) ?? 0) + Number(tx.amount)));
+    }
+    const incomeLines = Array.from(incomeBySource.entries())
+      .map(([label, amount]) => ({ label, amount }))
+      .sort((a, b) => b.amount - a.amount);
 
-    // Expenses: fixed recurring expenses + variable category budgets.
-    const fixedExpenseLines = recurringItems
-      .filter((r) => r.type === 'expense')
-      .map((r) => ({ label: r.description, amount: round(Number(r.amount)) }));
+    // ── Expenses: planned (budgets + fixed recurring items) ─────────────────
+    const fixedExpenseLines = fixedRecurringExpenses.map((r) => ({
+      label: r.description,
+      amount: round(Number(r.amount)),
+    }));
 
-    // Supabase returns the joined categories relation as an object or null.
-    // Cast through unknown to avoid the generated-type array/object mismatch.
     type BudgetRow = { amount: unknown; categories: { name: string; type: string } | null };
     const variableExpenseLines = (budgetRows as unknown as BudgetRow[])
       .filter((b) => b.categories?.type === 'expense')
@@ -108,14 +172,17 @@ export async function POST(request: Request) {
 
     const aiContext = `Net cash flow: $${netCashFlow}/month (income $${incomeTotal}, expenses $${expenseTotal})
 Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts)
-Income lines: ${JSON.stringify(incomeLines)}
-Expense lines: ${JSON.stringify(allExpenseLines)}
+Income lines (actual ${monthStart.slice(0, 7)} ledger): ${JSON.stringify(incomeLines)}
+Expense lines (planned budget): ${JSON.stringify(allExpenseLines)}
 No goals or sinking funds provided — suggest based on expense labels and typical Canadian annual costs.`;
 
-    // ── Generate plan (AI interpretation only — numbers already computed) ───
+    // ── Generate plan (AI interprets pre-computed verified numbers only) ────
+    //
+    // The numbers in aiContext are VERIFIED by code. The AI is explicitly told
+    // not to change or recalculate them. It only classifies and interprets.
 
     const categoryList = SEED_CATEGORIES.join(', ');
-    const planPrompt = `You are Phare, an AI financial coach for Canadian families. The numbers below are VERIFIED — computed in code from the family's data. Do not change or recalculate them.
+    const planPrompt = `You are Phare, an AI financial coach for Canadian families. The numbers below are VERIFIED — computed in code from the family's ledger. Do not change or recalculate them.
 
 ${aiContext}
 
@@ -147,7 +214,6 @@ Rules:
     const planText = planMessage.content[0].type === 'text' ? planMessage.content[0].text : '';
     const aiPart = JSON.parse(planText.replace(/```json|```/g, '').trim());
 
-    // Map sinking funds from DB if available, otherwise use AI suggestions
     const finalSinkingFunds = sinkingFunds.length > 0
       ? sinkingFunds.map((sf) => ({
           name: sf.name,
@@ -186,7 +252,7 @@ Rules:
       topRecommendation: aiPart.topRecommendation ?? '',
     };
 
-    // ── Generate review (blocking, not streamed) ────────────────────────────
+    // ── Generate review (blocking) ───────────────────────────────────────────
 
     const reviewPrompt = `You are Phare, an AI financial coach for Canadian families. Write this family's monthly review in ${lang}.
 
@@ -208,7 +274,7 @@ Start with what is going well, then what to watch, then the one thing to do this
 
     const reviewText = reviewMessage.content[0].type === 'text' ? reviewMessage.content[0].text : '';
 
-    // ── Save new conversation row ───────────────────────────────────────────
+    // ── Save conversation row ───────────────────────────────────────────────
 
     await supabase.from('conversations').insert({
       household_id: householdId,

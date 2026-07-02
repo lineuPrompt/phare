@@ -409,6 +409,90 @@ describe('computeGoalBalance — full history contract', () => {
 });
 
 // ---------------------------------------------------------------------------
+// computeMonthTotals — bi-weekly + semi-monthly income (windfall month)
+//
+// Regression suite for the regenerate-plan income bug:
+//   recurring_items.amount = per-paycheque amount (e.g. $2,749 bi-weekly)
+//   Summing raw amounts = $2,749 + $2,742 + $383 = $5,874 (the bug)
+//   Correct source     = transactions for the month (materialized paycheques)
+//
+// Trial household (real numbers):
+//   Lineu  — bi-weekly salary $2,749/paycheque  (2 or 3 paycheques/month)
+//   Julia  — semi-monthly salary $2,742/paycheque (always 2/month)
+//   Benefits — monthly $383
+// ---------------------------------------------------------------------------
+
+describe('computeMonthTotals — bi-weekly + semi-monthly income (windfall month)', () => {
+  const chequingAcct: AccountRow = { id: CHEQUING_ID, type: 'chequing' };
+
+  // The one-of-each-source bug amount: what regenerate-plan used to return
+  // when reading recurring_items.amount without frequency multiplication.
+  const BUG_AMOUNT = 2749 + 2742 + 383; // 5874
+
+  it('3-paycheque July: income = 3×biweekly + 2×semimonthly + 1×monthly = $14,114', () => {
+    // Lineu bi-weekly × 3, Julia semi-monthly × 2, benefits × 1
+    const txns: TxRow[] = [
+      { type: 'income', account_id: CHEQUING_ID, amount: 2749 }, // Lineu paycheque 1
+      { type: 'income', account_id: CHEQUING_ID, amount: 2749 }, // Lineu paycheque 2
+      { type: 'income', account_id: CHEQUING_ID, amount: 2749 }, // Lineu paycheque 3 (windfall)
+      { type: 'income', account_id: CHEQUING_ID, amount: 2742 }, // Julia paycheque 1
+      { type: 'income', account_id: CHEQUING_ID, amount: 2742 }, // Julia paycheque 2
+      { type: 'income', account_id: CHEQUING_ID, amount: 383  }, // Benefits
+    ];
+    const { totalIncome } = computeMonthTotals(txns, [chequingAcct]);
+    expect(totalIncome).toBe(14114); // 3×2749 + 2×2742 + 383
+    expect(totalIncome).not.toBe(BUG_AMOUNT); // NOT the one-of-each-source bug total
+    // 3-paycheque month yields the higher figure vs 2-paycheque month
+    expect(totalIncome).toBeGreaterThan(11365); // the 2-paycheque month amount
+  });
+
+  it('2-paycheque month: income = 2×biweekly + 2×semimonthly + 1×monthly = $11,365', () => {
+    const txns: TxRow[] = [
+      { type: 'income', account_id: CHEQUING_ID, amount: 2749 }, // Lineu paycheque 1
+      { type: 'income', account_id: CHEQUING_ID, amount: 2749 }, // Lineu paycheque 2
+      { type: 'income', account_id: CHEQUING_ID, amount: 2742 }, // Julia paycheque 1
+      { type: 'income', account_id: CHEQUING_ID, amount: 2742 }, // Julia paycheque 2
+      { type: 'income', account_id: CHEQUING_ID, amount: 383  }, // Benefits
+    ];
+    const { totalIncome } = computeMonthTotals(txns, [chequingAcct]);
+    expect(totalIncome).toBe(11365); // ≈ the $11,150 figure cited in the bug report
+    expect(totalIncome).not.toBe(BUG_AMOUNT); // NOT the bug amount
+    expect(totalIncome).toBeLessThan(14114);  // lower than 3-paycheque windfall month
+  });
+
+  it('REGRESSION — ledger income ($11,365) is never the same as one-of-each-source ($5,874)', () => {
+    // Confirms the root cause of the regenerate-plan bug:
+    //   old code: sum recurring_items.amount without frequency = $5,874 → reports deficit
+    //   fix:      sum transactions for month                  = $11,365 → reports surplus
+    const recurringRawAmounts = [2749, 2742, 383]; // per-paycheque amounts from recurring_items
+    const bugTotal = recurringRawAmounts.reduce((s, a) => s + a, 0);
+    expect(bugTotal).toBe(BUG_AMOUNT); // confirms the bug number: $5,874
+
+    // Real ledger for a normal 2-paycheque month
+    const txns: TxRow[] = [
+      { type: 'income', account_id: CHEQUING_ID, amount: 2749 },
+      { type: 'income', account_id: CHEQUING_ID, amount: 2749 },
+      { type: 'income', account_id: CHEQUING_ID, amount: 2742 },
+      { type: 'income', account_id: CHEQUING_ID, amount: 2742 },
+      { type: 'income', account_id: CHEQUING_ID, amount: 383  },
+    ];
+    const { totalIncome, netCashFlow } = computeMonthTotals(txns, [chequingAcct]);
+
+    // Income must be the ledger amount, not the bug amount
+    expect(totalIncome).not.toBe(bugTotal);
+    expect(totalIncome).toBeGreaterThan(bugTotal * 1.9); // nearly double — bi-weekly counted twice
+
+    // With $9,600 in planned expenses the review was seeing a deficit.
+    // With real ledger income a surplus must be evident.
+    const plannedExpenses = 9600; // approximate from the bug report context
+    const surplusFromLedger = totalIncome - plannedExpenses;
+    const deficitFromBug    = bugTotal - plannedExpenses;
+    expect(surplusFromLedger).toBeGreaterThan(0); // surplus ✓
+    expect(deficitFromBug).toBeLessThan(0);        // bug said deficit ✗ ← the reported $142/month deficit
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Cross-view reconciliation invariant
 //
 // Dashboard, Planner, and Reconcile all call computeMonthTotals with the same
