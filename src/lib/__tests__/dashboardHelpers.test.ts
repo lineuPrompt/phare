@@ -493,6 +493,91 @@ describe('computeMonthTotals — bi-weekly + semi-monthly income (windfall month
 });
 
 // ---------------------------------------------------------------------------
+// computeMonthTotals — bi-weekly expense frequency (plan/review input)
+//
+// Mirror of the income windfall tests, applied to the expense side.
+// Before this fix, regenerate-plan read recurring_items.amount directly for
+// expenses (one-of-each-source, no cadence applied). A bi-weekly mortgage of
+// $1,200/payment would be counted as $1,200 instead of $2,400 or $3,600,
+// understating expenses and inflating the apparent surplus.
+// ---------------------------------------------------------------------------
+
+describe('computeMonthTotals — bi-weekly expense frequency (plan/review input)', () => {
+  const chequingAcct: AccountRow = { id: CHEQUING_ID, type: 'chequing' };
+
+  it('bi-weekly expense: 2-payment month counts both payments', () => {
+    // $1,200 bi-weekly mortgage → 2 chequing rows this month
+    const txns: TxRow[] = [
+      { type: 'income',  account_id: CHEQUING_ID, amount: 5000 },
+      { type: 'expense', account_id: CHEQUING_ID, amount: 1200 }, // mortgage pay 1
+      { type: 'expense', account_id: CHEQUING_ID, amount: 1200 }, // mortgage pay 2
+      { type: 'expense', account_id: CHEQUING_ID, amount: 800  }, // other expenses
+    ];
+    const { totalExpenses } = computeMonthTotals(txns, [chequingAcct]);
+    expect(totalExpenses).toBe(3200); // $1,200 × 2 + $800
+    expect(totalExpenses).not.toBe(2000); // NOT one-of-each ($1,200 + $800)
+  });
+
+  it('bi-weekly expense: 3-payment month counts all three', () => {
+    const txns: TxRow[] = [
+      { type: 'income',  account_id: CHEQUING_ID, amount: 6000 },
+      { type: 'expense', account_id: CHEQUING_ID, amount: 1200 }, // mortgage pay 1
+      { type: 'expense', account_id: CHEQUING_ID, amount: 1200 }, // mortgage pay 2
+      { type: 'expense', account_id: CHEQUING_ID, amount: 1200 }, // mortgage pay 3 (windfall)
+      { type: 'expense', account_id: CHEQUING_ID, amount: 800  }, // other expenses
+    ];
+    const { totalExpenses } = computeMonthTotals(txns, [chequingAcct]);
+    expect(totalExpenses).toBe(4400); // $1,200 × 3 + $800
+    expect(totalExpenses).toBeGreaterThan(3200); // higher than 2-payment month
+  });
+
+  it('net cash flow equals income − expenses − savings (ledger identity)', () => {
+    // Verifies that the review headline is the ledger net, not a mixed actual/planned figure
+    const txns: TxRow[] = [
+      { type: 'income',   account_id: CHEQUING_ID, amount: 11365 },
+      { type: 'expense',  account_id: CHEQUING_ID, amount: 2400  }, // bi-weekly mortgage × 2
+      { type: 'expense',  account_id: CHEQUING_ID, amount: 5484  }, // other chequing expenses
+      { type: 'transfer', account_id: CHEQUING_ID, amount: 500   }, // savings transfer (chequing side)
+      { type: 'transfer', account_id: SAVINGS_ID,  amount: 500   }, // savings transfer (goal side — ignored)
+    ];
+    const { totalIncome, totalExpenses, totalSavings, netCashFlow } =
+      computeMonthTotals(txns, [chequingAcct, { id: SAVINGS_ID, type: 'savings' }]);
+    // Net = income − expenses − savings
+    expect(netCashFlow).toBeCloseTo(totalIncome - totalExpenses - totalSavings, 10);
+    expect(netCashFlow).toBe(2981); // 11365 − (2400 + 5484) − 500
+  });
+
+  it('REGRESSION — bi-weekly overspending: cannot be reported as surplus', () => {
+    // Income: $5,000/month
+    // Expenses: $1,200 bi-weekly mortgage (2 payments = $2,400) + $3,200 other = $5,600 total
+    //
+    // Bug (one-of-each from recurring_items): expenses = $1,200 + $3,200 = $4,400
+    //   → net = $5,000 − $4,400 = +$600 (falsely reported surplus)
+    //
+    // Fix (transactions): expenses = $2,400 + $3,200 = $5,600
+    //   → net = $5,000 − $5,600 = −$600 (correct deficit)
+    const txns: TxRow[] = [
+      { type: 'income',  account_id: CHEQUING_ID, amount: 5000 },
+      { type: 'expense', account_id: CHEQUING_ID, amount: 1200 }, // mortgage pay 1
+      { type: 'expense', account_id: CHEQUING_ID, amount: 1200 }, // mortgage pay 2
+      { type: 'expense', account_id: CHEQUING_ID, amount: 3200 }, // other expenses
+    ];
+    const { totalExpenses, netCashFlow } = computeMonthTotals(txns, [chequingAcct]);
+
+    // Transaction-based: both mortgage payments counted → correct deficit
+    expect(totalExpenses).toBe(5600);
+    expect(netCashFlow).toBe(-600); // deficit
+
+    // What the old bug would produce (one-of-each recurring_item amount):
+    const bugExpenses = 1200 + 3200; // only one mortgage payment from recurring_items
+    const bugNet = 5000 - bugExpenses;
+    expect(bugExpenses).toBe(4400);
+    expect(bugNet).toBe(600); // bug falsely showed +$600 surplus for an overspending household
+    expect(netCashFlow).not.toBe(bugNet); // ledger net ≠ bug net
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Cross-view reconciliation invariant
 //
 // Dashboard, Planner, and Reconcile all call computeMonthTotals with the same

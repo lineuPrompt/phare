@@ -57,6 +57,7 @@ export interface GoalLine {
 export interface TemplateParseResult {
   isTemplate: boolean;
   incomeLayout: IncomeSheetVersion; // which column layout was detected and used
+  incomeSkippedRows: number;         // v2 rows with an unrecognised frequency string — always 0 in v1 mode
   household: Record<string, string>;
   income: { lines: ParsedLine[]; total: number };
   fixedExpenses: { lines: ParsedLine[]; total: number };
@@ -116,7 +117,9 @@ export function detectIncomeSheetVersion(rows: unknown[][]): IncomeSheetVersion 
     const col2 = row[2];
     if (typeof col2 === 'string') {
       const v = col2.toLowerCase().trim();
-      if (v === 'frequency' || v === 'fréquence' || v === 'frequence') {
+      // Use includes() so the bilingual combined header "Frequency / Fréquence"
+      // (and any future variant) is matched, not just the bare single-language word.
+      if (v.includes('frequency') || v.includes('fréquence') || v.includes('frequence')) {
         return 'v2';
       }
     }
@@ -127,16 +130,21 @@ export function detectIncomeSheetVersion(rows: unknown[][]): IncomeSheetVersion 
 /**
  * Map a string data-cell value to an IncomeFrequency.
  * Used only in v2 mode on DATA rows (never on header rows and never for version detection).
+ * Exported so tests can verify accepted strings directly.
  */
-function parseFrequencyCell(value: unknown): IncomeFrequency | null {
+export function parseFrequencyCell(value: unknown): IncomeFrequency | null {
   if (typeof value !== 'string') return null;
   const v = value.toLowerCase().trim();
 
   if (v === 'weekly' || v === 'hebdomadaire') return 'weekly';
-  if (v === 'bi-weekly' || v === 'biweekly' || v === 'bi-hebdomadaire' || v === 'toutes les 2 semaines')
-    return 'biweekly';
-  if (v === 'semi-monthly' || v === 'semimonthly' || v === 'deux fois par mois' || v === 'semi-mensuel')
-    return 'semimonthly';
+  if (
+    v === 'bi-weekly' || v === 'biweekly' || v === 'bi weekly' ||
+    v === 'bi-hebdomadaire' || v === 'toutes les 2 semaines'
+  ) return 'biweekly';
+  if (
+    v === 'semi-monthly' || v === 'semimonthly' || v === 'semi monthly' ||
+    v === 'deux fois par mois' || v === 'semi-mensuel'
+  ) return 'semimonthly';
   if (v === 'monthly' || v === 'mensuel' || v === 'mensuelle') return 'monthly';
 
   return null;
@@ -148,15 +156,19 @@ function parseFrequencyCell(value: unknown): IncomeFrequency | null {
  *
  * v1: col 2 is the monthly amount (user pre-computed). Col 1 is ignored.
  * v2: col 1 is the paycheque amount; col 2 is the frequency string.
- *     If col 2 is not a valid frequency string, the row is skipped (not silently wrong).
+ *     If col 2 is not a valid frequency string, the row is skipped and counted.
+ *
+ * Returns parsed lines plus a count of v2 rows that were skipped due to an
+ * unrecognised frequency string (always 0 in v1 mode).
  */
 function parseIncome(
   rows: unknown[][],
   version: IncomeSheetVersion,
   startRow: number,
   skipWords: string[],
-): ParsedLine[] {
+): { lines: ParsedLine[]; skippedCount: number } {
   const items: ParsedLine[] = [];
+  let skippedCount = 0;
 
   for (let i = startRow; i < rows.length; i++) {
     const row = rows[i];
@@ -171,8 +183,11 @@ function parseIncome(
     if (version === 'v2') {
       const rawAmount = row[1];
       const freq = parseFrequencyCell(row[2]);
-      // Skip rows with no valid frequency string — they're data entry errors, not v1 rows.
-      if (freq === null) continue;
+      if (freq === null) {
+        // Row has a label but an unrecognised (or missing) frequency — data entry error.
+        skippedCount++;
+        continue;
+      }
       if (typeof rawAmount === 'number' && Number.isFinite(rawAmount) && rawAmount !== 0) {
         const monthly = monthlyIncomeEquivalent(rawAmount, freq);
         items.push({ label: label.trim(), amount: monthly, rawAmount, frequency: freq });
@@ -186,7 +201,7 @@ function parseIncome(
     }
   }
 
-  return items;
+  return { lines: items, skippedCount };
 }
 
 /**
@@ -245,7 +260,9 @@ export function parseTemplate(buffer: Buffer): TemplateParseResult {
   // --- Income: version detected from header rows ONCE, then applied to all data rows ---
   const incomeRows = sheetRows(workbook.Sheets['Monthly Income']);
   const incomeLayout = detectIncomeSheetVersion(incomeRows);
-  const income = parseIncome(incomeRows, incomeLayout, INCOME_DATA_START_ROW, ['source', 'income', 'revenu']);
+  const { lines: income, skippedCount: incomeSkippedRows } = parseIncome(
+    incomeRows, incomeLayout, INCOME_DATA_START_ROW, ['source', 'income', 'revenu'],
+  );
 
   // --- Fixed expenses: amount in col 2, from row index 2 ---
   const fixedRows = sheetRows(workbook.Sheets['Fixed Expenses']);
@@ -309,6 +326,7 @@ export function parseTemplate(buffer: Buffer): TemplateParseResult {
   return {
     isTemplate: true,
     incomeLayout,
+    incomeSkippedRows,
     household,
     income: { lines: income, total: incomeTotal },
     fixedExpenses: { lines: fixed, total: fixedTotal },
@@ -327,6 +345,7 @@ function emptyResult(isTemplate: boolean): TemplateParseResult {
   return {
     isTemplate,
     incomeLayout: 'v1',
+    incomeSkippedRows: 0,
     household: {},
     income: { lines: [], total: 0 },
     fixedExpenses: { lines: [], total: 0 },

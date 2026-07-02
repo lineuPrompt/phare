@@ -4,28 +4,35 @@
  * Re-runs the financial plan and review against the household's CURRENT live
  * data, then saves a new conversation row.
  *
- * INCOME SOURCE OF TRUTH
- * ----------------------
- * Income comes from the transactions table for the current calendar month —
- * the same rows the Expenses page sums via computeMonthTotals. This is the
- * only correct source because:
+ * SINGLE SOURCE OF TRUTH: transactions for the current calendar month
+ * -------------------------------------------------------------------
+ * Both income AND expenses come from the materialized transactions table via
+ * a single computeMonthTotals() call — the identical function the Expenses
+ * page uses.  Nothing is read from recurring_items or budgets for the
+ * headline figures or the AI context.
  *
- *   - recurring_items stores per-paycheque amounts (e.g. $2,749 bi-weekly)
- *   - summing recurring_items.amount without frequency multiplication produces
- *     one-of-each-source: $2,749 + $2,742 + $383 = $5,874 ← the exact bug
- *   - transactions are materialized at save time with the real cadence, so a
- *     bi-weekly earner already has 2 or 3 rows in the month — exactly what the
- *     ledger shows (e.g. 3-paycheque July = $14,115)
+ * Why NOT recurring_items:
+ *   recurring_items stores per-period amounts with real cadences.
+ *   Summing r.amount without applying cadence gives one-of-each-source:
+ *     income  →  $2,749 + $2,742 + $383 = $5,874  (should be $11,365)
+ *     expense →  $1,200 bi-weekly mortgage counted once (should be $2,400+)
+ *   Both bugs produce a wrong net that can flip surplus ↔ deficit.
  *
- * The AI receives pre-computed verified numbers. It never derives, sums, or
- * re-smoothes income. The prompt explicitly forbids recalculation.
+ * Why transactions:
+ *   materializeRule() already ran at save time with the real cadence, so a
+ *   bi-weekly item already has 2 or 3 rows in the month.  No frequency math
+ *   is needed at read time — the correct count is in the DB.
  *
- * EXPENSE SOURCE
- * --------------
- * Expenses come from planned amounts (budgets + fixed recurring items), not
- * actual spending — this is the plan/review context: "you budgeted $X, here
- * is how you are tracking." This is intentionally different from income, which
- * uses the actual ledger for the month.
+ * The AI receives pre-computed verified numbers. It is explicitly told not
+ * to change or recalculate them. It only classifies and interprets.
+ *
+ * EXPENSE LINES for the AI context
+ * ---------------------------------
+ * Chequing expenses only — mirrors the computeMonthTotals rule that prevents
+ * card/bridge double-counting.  This means card purchases appear as a single
+ * bridge-payment line (e.g. "Visa payment: $1,847") rather than individual
+ * merchant transactions.  The total remains correct; line granularity is a
+ * known limitation acceptable for the review context.
  */
 
 import { NextResponse } from 'next/server';
@@ -73,26 +80,19 @@ export async function POST(request: Request) {
     }
     const householdId = userRow.household_id;
 
-    // ── Current calendar month boundaries ───────────────────────────────────
+    // ── Current calendar month boundaries ────────────────────────────────────
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth(); // 0-indexed
     const monthStart = firstOfMonth(year, month);
     const monthEnd = firstOfMonth(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1);
 
-    // ── Read live data ───────────────────────────────────────────────────────
-    //
-    // Income: transactions for this month (ledger, same as Expenses page).
-    //   DO NOT read from recurring_items for income — see module comment.
-    //
-    // Expenses: planned amounts from budgets + fixed recurring items.
-
-    const [incomeTxResult, acctResult, recurringExpResult, budgetsResult, sfResult] = await Promise.all([
+    // ── Three queries — no recurring_items, no budgets for headline figures ──
+    const [allTxResult, acctResult, sfResult] = await Promise.all([
       supabase
         .from('transactions')
         .select('amount, type, description, account_id')
         .eq('household_id', householdId)
-        .eq('type', 'income')
         .gte('date', monthStart)
         .lt('date', monthEnd),
 
@@ -102,67 +102,64 @@ export async function POST(request: Request) {
         .eq('household_id', householdId),
 
       supabase
-        .from('recurring_items')
-        .select('description, amount, type, cadence')
-        .eq('household_id', householdId)
-        .eq('type', 'expense')
-        .eq('active', true),
-
-      supabase
-        .from('budgets')
-        .select('amount, categories(name, type)')
-        .eq('household_id', householdId),
-
-      supabase
         .from('sinking_funds')
         .select('name, annual_amount, monthly_provision, due_month')
         .eq('household_id', householdId),
     ]);
 
-    const incomeTxns = incomeTxResult.data ?? [];
+    const allTxns = allTxResult.data ?? [];
     const accounts = acctResult.data ?? [];
-    const fixedRecurringExpenses = recurringExpResult.data ?? [];
-    const budgetRows = budgetsResult.data ?? [];
     const sinkingFunds = sfResult.data ?? [];
 
-    // ── Income: ledger total (same function as Expenses page) ───────────────
-    const { totalIncome: incomeTotal } = computeMonthTotals(
-      incomeTxns.map((tx) => ({
-        amount: Number(tx.amount),
-        type: tx.type,
-        account_id: tx.account_id,
-      })),
-      accounts,
+    // ── One call for all four buckets (same function as Expenses page) ───────
+    const { totalIncome: incomeTotal, totalExpenses: expenseTotal, totalSavings, netCashFlow } =
+      computeMonthTotals(
+        allTxns.map((tx) => ({
+          amount: Number(tx.amount),
+          type: tx.type,
+          account_id: tx.account_id,
+        })),
+        accounts,
+      );
+
+    const chequingIds = new Set(
+      accounts.filter((a) => a.type === 'chequing').map((a) => a.id),
     );
 
-    // Aggregate per-source for AI context (Lineu: $8,247 in July, not 3 × $2,749 lines)
+    // ── Income lines: aggregate by source for AI context ─────────────────────
+    // (e.g. Lineu bi-weekly appears 3× in July → one aggregated line: $8,247)
     const incomeBySource = new Map<string, number>();
-    for (const tx of incomeTxns) {
-      const label = tx.description ?? 'Income';
-      incomeBySource.set(label, round((incomeBySource.get(label) ?? 0) + Number(tx.amount)));
+    for (const tx of allTxns) {
+      if (tx.type === 'income') {
+        const label = tx.description ?? 'Income';
+        incomeBySource.set(label, round((incomeBySource.get(label) ?? 0) + Number(tx.amount)));
+      }
     }
     const incomeLines = Array.from(incomeBySource.entries())
       .map(([label, amount]) => ({ label, amount }))
       .sort((a, b) => b.amount - a.amount);
 
-    // ── Expenses: planned (budgets + fixed recurring items) ─────────────────
-    const fixedExpenseLines = fixedRecurringExpenses.map((r) => ({
-      label: r.description,
-      amount: round(Number(r.amount)),
-    }));
+    // ── Expense lines: chequing only, aggregate by description ───────────────
+    // Mirrors computeMonthTotals — avoids card/bridge double-count.
+    const expenseByLabel = new Map<string, number>();
+    for (const tx of allTxns) {
+      if (
+        tx.type === 'expense' &&
+        tx.account_id !== null &&
+        chequingIds.has(tx.account_id)
+      ) {
+        const label = tx.description ?? 'Expense';
+        expenseByLabel.set(label, round((expenseByLabel.get(label) ?? 0) + Number(tx.amount)));
+      }
+    }
+    const expenseLines = Array.from(expenseByLabel.entries())
+      .map(([label, amount]) => ({ label, amount }))
+      .sort((a, b) => b.amount - a.amount);
 
-    type BudgetRow = { amount: unknown; categories: { name: string; type: string } | null };
-    const variableExpenseLines = (budgetRows as unknown as BudgetRow[])
-      .filter((b) => b.categories?.type === 'expense')
-      .map((b) => ({ label: b.categories!.name, amount: round(Number(b.amount)) }));
-
-    const allExpenseLines = [...fixedExpenseLines, ...variableExpenseLines];
-    const expenseTotal = round(allExpenseLines.reduce((s, l) => s + l.amount, 0));
-    const netCashFlow = round(incomeTotal - expenseTotal);
-
+    // ── Assemble calculated object ────────────────────────────────────────────
     const calculated = {
-      income: { detected: incomeLines.length > 0, lines: incomeLines, total: incomeTotal },
-      expenses: { detected: allExpenseLines.length > 0, lines: allExpenseLines, total: expenseTotal },
+      income:   { detected: incomeLines.length > 0,  lines: incomeLines,  total: incomeTotal  },
+      expenses: { detected: expenseLines.length > 0, lines: expenseLines, total: expenseTotal },
       netCashFlow,
       excludedLines: [],
       confidence: 'high',
@@ -170,40 +167,39 @@ export async function POST(request: Request) {
 
     const monthlyBudget = assembleCalculatedBudget(calculated);
 
-    const aiContext = `Net cash flow: $${netCashFlow}/month (income $${incomeTotal}, expenses $${expenseTotal})
-Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts)
-Income lines (actual ${monthStart.slice(0, 7)} ledger): ${JSON.stringify(incomeLines)}
-Expense lines (planned budget): ${JSON.stringify(allExpenseLines)}
-No goals or sinking funds provided — suggest based on expense labels and typical Canadian annual costs.`;
+    const currentMonthLabel = monthStart.slice(0, 7); // YYYY-MM
+    const aiContext =
+      `Net cash flow: $${netCashFlow}/month ` +
+      `(income $${incomeTotal}, expenses $${expenseTotal}, savings $${totalSavings})\n` +
+      `Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts)\n` +
+      `All figures are ACTUAL ${currentMonthLabel} ledger — computed from materialized transactions, ` +
+      `NOT from planned budgets or per-period recurring amounts.\n` +
+      `Income lines: ${JSON.stringify(incomeLines)}\n` +
+      `Expense lines (chequing, avoids card double-count): ${JSON.stringify(expenseLines)}\n` +
+      `No goals provided — suggest based on expense labels and typical Canadian annual costs.`;
 
-    // ── Generate plan (AI interprets pre-computed verified numbers only) ────
-    //
-    // The numbers in aiContext are VERIFIED by code. The AI is explicitly told
-    // not to change or recalculate them. It only classifies and interprets.
-
+    // ── Generate plan (AI interprets verified numbers only) ──────────────────
     const categoryList = SEED_CATEGORIES.join(', ');
-    const planPrompt = `You are Phare, an AI financial coach for Canadian families. The numbers below are VERIFIED — computed in code from the family's ledger. Do not change or recalculate them.
-
-${aiContext}
-
-Write ALL text in ${lang}.
-
-Return ONLY valid JSON:
-{"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],"lineClassifications":[{"label":"","category":"","isFixed":true}],"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"topRecommendation":""}
-
-Rules:
-- All goal names, descriptions, and topRecommendation text in ${lang}.
-- lineClassifications: for EACH expense line label provided, return an object with:
-  - "label": the exact expense line label as given
-  - "category": which ONE of these fits best: ${categoryList}. Use the English category name exactly as written here.
-  - "isFixed": true if it is a fixed recurring bill paid every month; false if variable day-to-day spending.
-- Classify income lines too: category "Income", isFixed true.
-- Suggest 3-6 sinking funds for likely Canadian annual expenses inferred from the expense labels.
-- goals: suggest 2-3 sensible goals based on their situation (emergency fund of 3 months expenses, RESP if children evident, debt payoff if debt evident).
-- Canadian context: RRSP, RESP, TFSA, CESG.
-- If net cash flow is negative, topRecommendation must address that first.
-- If no debt is evident, set debtPayoff to null.
-- topRecommendation: one specific sentence with a dollar amount.`;
+    const planPrompt =
+      `You are Phare, an AI financial coach for Canadian families. The numbers below are VERIFIED — ` +
+      `computed in code from the family's ledger. Do not change or recalculate them.\n\n` +
+      `${aiContext}\n\n` +
+      `Write ALL text in ${lang}.\n\n` +
+      `Return ONLY valid JSON:\n` +
+      `{"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],"lineClassifications":[{"label":"","category":"","isFixed":true}],"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"topRecommendation":""}\n\n` +
+      `Rules:\n` +
+      `- All goal names, descriptions, and topRecommendation text in ${lang}.\n` +
+      `- lineClassifications: for EACH expense line label provided, return an object with:\n` +
+      `  - "label": the exact expense line label as given\n` +
+      `  - "category": which ONE of these fits best: ${categoryList}. Use the English category name exactly as written here.\n` +
+      `  - "isFixed": true if it is a fixed recurring bill paid every month; false if variable day-to-day spending.\n` +
+      `- Classify income lines too: category "Income", isFixed true.\n` +
+      `- Suggest 3-6 sinking funds for likely Canadian annual expenses inferred from the expense labels.\n` +
+      `- goals: suggest 2-3 sensible goals based on their situation (emergency fund of 3 months expenses, RESP if children evident, debt payoff if debt evident).\n` +
+      `- Canadian context: RRSP, RESP, TFSA, CESG.\n` +
+      `- If net cash flow is negative, topRecommendation must address that first.\n` +
+      `- If no debt is evident, set debtPayoff to null.\n` +
+      `- topRecommendation: one specific sentence with a dollar amount.`;
 
     const planMessage = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -252,19 +248,16 @@ Rules:
       topRecommendation: aiPart.topRecommendation ?? '',
     };
 
-    // ── Generate review (blocking) ───────────────────────────────────────────
-
-    const reviewPrompt = `You are Phare, an AI financial coach for Canadian families. Write this family's monthly review in ${lang}.
-
-Their plan:
-${JSON.stringify(plan)}
-
-Write four paragraphs maximum. Specific numbers. One clear recommendation. Plain language. It must feel like a letter from a trusted financial advisor, not a report.
-
-Good tone: "June was a solid month overall. You stayed within budget in four of five categories..."
-Bad tone: "Based on a comprehensive analysis of your financial data..."
-
-Start with what is going well, then what to watch, then the one thing to do this month. Write ONLY the review text, no preamble, no headings.`;
+    // ── Generate review (blocking) ────────────────────────────────────────────
+    const reviewPrompt =
+      `You are Phare, an AI financial coach for Canadian families. Write this family's monthly review in ${lang}.\n\n` +
+      `Their plan:\n${JSON.stringify(plan)}\n\n` +
+      `Write four paragraphs maximum. Specific numbers. One clear recommendation. Plain language. ` +
+      `It must feel like a letter from a trusted financial advisor, not a report.\n\n` +
+      `Good tone: "June was a solid month overall. You stayed within budget in four of five categories..."\n` +
+      `Bad tone: "Based on a comprehensive analysis of your financial data..."\n\n` +
+      `Start with what is going well, then what to watch, then the one thing to do this month. ` +
+      `Write ONLY the review text, no preamble, no headings.`;
 
     const reviewMessage = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -274,8 +267,7 @@ Start with what is going well, then what to watch, then the one thing to do this
 
     const reviewText = reviewMessage.content[0].type === 'text' ? reviewMessage.content[0].text : '';
 
-    // ── Save conversation row ───────────────────────────────────────────────
-
+    // ── Save conversation row ─────────────────────────────────────────────────
     await supabase.from('conversations').insert({
       household_id: householdId,
       user_id: user.id,

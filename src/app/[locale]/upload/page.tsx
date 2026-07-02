@@ -11,6 +11,7 @@ import PlanDisplay from '@/components/onboarding/PlanDisplay';
 import { Plan, FormLine, IncomeFormLine } from '@/components/onboarding/types';
 import { monthlyIncomeEquivalent } from '@/lib/incomeHelpers';
 import { runPlausibilityGuard, PlausibilityResult } from '@/lib/plausibilityGuard';
+import { TemplateParseResult } from '@/lib/templateParser';
 import { formatCAD } from '@/components/onboarding/types';
 
 type Status = 'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form' | 'accounts' | 'plausibility_check';
@@ -33,7 +34,8 @@ export default function UploadPage() {
 
   // Plausibility check
   const [plausibilityResult, setPlausibilityResult] = useState<Extract<PlausibilityResult, { ok: false }> | null>(null);
-  // The calculated body built during submitForm, held until plausibility is confirmed.
+  const [skippedIncomeRows, setSkippedIncomeRows] = useState(0);
+  // The calculated body built during submitForm (or the template planBody), held until plausibility is confirmed.
   const [pendingCalculated, setPendingCalculated] = useState<Record<string, unknown> | null>(null);
 
   // Account step
@@ -155,11 +157,35 @@ export default function UploadPage() {
         return;
       }
 
-      const planBody =
-        uploadData.source === 'template'
-          ? { source: 'template', parsed: uploadData.parsed }
-          : { source: 'calculated', calculated: uploadData.calculated };
+      if (uploadData.source === 'template') {
+        const parsed = uploadData.parsed as TemplateParseResult;
+        const allExpenseLines = [
+          ...(parsed.fixedExpenses?.lines ?? []),
+          ...(parsed.variableExpenses?.lines ?? []),
+        ];
+        const guard = runPlausibilityGuard({
+          computedMonthlyIncome: parsed.income.total,
+          netCashFlow: parsed.summary.netCashFlow,
+          expenseLines: allExpenseLines,
+          statedCombinedAnnual: null,
+        });
+        const skipped = parsed.incomeSkippedRows ?? 0;
+        const planBody: Record<string, unknown> = { source: 'template', parsed };
 
+        if (!guard.ok || skipped > 0) {
+          setPendingCalculated(planBody);
+          setSkippedIncomeRows(skipped);
+          if (!guard.ok) setPlausibilityResult(guard);
+          setStatus('plausibility_check');
+          return;
+        }
+
+        setPendingPlanBody(planBody);
+        setStatus('accounts');
+        return;
+      }
+
+      const planBody = { source: 'calculated', calculated: uploadData.calculated };
       setPendingPlanBody(planBody);
       setStatus('accounts');
     } catch (err) {
@@ -246,6 +272,7 @@ export default function UploadPage() {
     setPendingPlanBody(pendingCalculated);
     setPlausibilityResult(null);
     setPendingCalculated(null);
+    setSkippedIncomeRows(0);
     setStatus('accounts');
   }, [pendingCalculated]);
 
@@ -253,8 +280,10 @@ export default function UploadPage() {
   const rejectPlausibility = useCallback(() => {
     setPlausibilityResult(null);
     setPendingCalculated(null);
-    setStatus('form');
-  }, []);
+    setSkippedIncomeRows(0);
+    // Template uploads go back to idle (re-upload); manual form goes back to form.
+    setStatus(pendingCalculated && 'parsed' in (pendingCalculated as Record<string, unknown>) ? 'idle' : 'form');
+  }, [pendingCalculated]);
 
   const confirmAccounts = useCallback(async () => {
     if (!pendingPlanBody) return;
@@ -328,10 +357,11 @@ export default function UploadPage() {
           />
         )}
 
-        {/* Plausibility check confirmation step */}
-        {status === 'plausibility_check' && plausibilityResult && (
+        {/* Plausibility check / skipped-row warning step */}
+        {status === 'plausibility_check' && (plausibilityResult || skippedIncomeRows > 0) && (
           <PlausibilityCheck
             result={plausibilityResult}
+            skippedIncomeRows={skippedIncomeRows}
             onConfirm={confirmPlausibility}
             onCorrect={rejectPlausibility}
             t={t}
@@ -368,11 +398,13 @@ export default function UploadPage() {
 
 function PlausibilityCheck({
   result,
+  skippedIncomeRows,
   onConfirm,
   onCorrect,
   t,
 }: {
-  result: Extract<PlausibilityResult, { ok: false }>;
+  result: Extract<PlausibilityResult, { ok: false }> | null;
+  skippedIncomeRows: number;
   onConfirm: () => void;
   onCorrect: () => void;
   t: ReturnType<typeof useTranslations<'upload'>>;
@@ -384,7 +416,14 @@ function PlausibilityCheck({
           {t('plausibility.title')}
         </p>
         <div className="space-y-3">
-          {result.issues.map((issue, i) => (
+          {skippedIncomeRows > 0 && (
+            <div className="rounded-xl p-4" style={{ background: 'white', border: '1px solid #FDE68A' }}>
+              <p style={{ color: '#374151' }}>
+                {t('plausibility.skippedIncomeRows', { count: skippedIncomeRows })}
+              </p>
+            </div>
+          )}
+          {result?.issues.map((issue, i) => (
             <div key={i} className="rounded-xl p-4" style={{ background: 'white', border: '1px solid #FDE68A' }}>
               {issue.prong === 'income_vs_stated' && (
                 <p style={{ color: '#374151' }}>

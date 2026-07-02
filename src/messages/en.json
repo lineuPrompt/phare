@@ -210,6 +210,7 @@
     },
     "plausibility": {
       "title": "Double-check your income",
+      "skippedIncomeRows": "{count, plural, one {1 income row could not be read — check the Frequency column spelling (accepted: weekly, bi-weekly, semi-monthly, monthly).} other {# income rows could not be read — check the Frequency column spelling (accepted: weekly, bi-weekly, semi-monthly, monthly).}}",
       "incomeVsStated": "You mentioned a combined income around {stated}/year, but the entries add up to about {computed}/year — does that look right?",
       "deficitNotFinanced": "Your plan shows a {deficit}/month shortfall with no credit line or debt payment to explain it. If your income is understated, correct it now — a deficit on paper needs to be financed by something real.",
       "correct": "Fix my income",

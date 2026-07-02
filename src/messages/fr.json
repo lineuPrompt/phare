@@ -210,6 +210,7 @@
     },
     "plausibility": {
       "title": "Vérifiez vos revenus",
+      "skippedIncomeRows": "{count, plural, one {1 ligne de revenu n'a pas pu être lue — vérifiez l'orthographe de la colonne Fréquence (valeurs acceptées : weekly, bi-weekly, semi-monthly, monthly).} other {# lignes de revenu n'ont pas pu être lues — vérifiez l'orthographe de la colonne Fréquence (valeurs acceptées : weekly, bi-weekly, semi-monthly, monthly).}}",
       "incomeVsStated": "Vous avez mentionné un revenu combiné d'environ {stated}/an, mais les entrées s'additionnent à environ {computed}/an — est-ce exact ?",
       "deficitNotFinanced": "Votre plan affiche un déficit de {deficit}/mois sans marge de crédit ni paiement de dette pour l'expliquer. Si votre revenu est sous-estimé, corrigez-le maintenant — un déficit sur papier doit être financé par quelque chose de réel.",
       "correct": "Corriger mes revenus",
