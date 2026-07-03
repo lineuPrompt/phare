@@ -35,13 +35,10 @@ CREATE TABLE IF NOT EXISTS card_envelope_items (
   category_id    uuid          NOT NULL REFERENCES categories(id)  ON DELETE CASCADE,
   monthly_amount numeric(10,2) NOT NULL,
   created_at     timestamptz   NOT NULL DEFAULT now(),
-  updated_at     timestamptz   NOT NULL DEFAULT now(),
   UNIQUE (household_id, account_id, category_id)
 );
 
-CREATE OR REPLACE TRIGGER set_card_envelope_items_updated_at
-  BEFORE UPDATE ON card_envelope_items
-  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+-- No updated_at trigger needed: rows are replaced via DELETE+INSERT, never UPDATEd in place.
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_card_envelope_items_household
