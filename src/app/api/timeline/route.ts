@@ -128,11 +128,7 @@ export async function GET(request: Request) {
 
     const { data: rawTxns } = await supabase
       .from('transactions')
-      .select(
-        'id, date, description, amount, type, ' +
-        'recurring_item_id, recurrence_id, installment_label, ' +
-        'transfer_peer_id, is_bridge, bridge_source_account'
-      )
+      .select('id, date, description, amount, type, recurring_item_id, recurrence_id, installment_label, transfer_peer_id, is_bridge, bridge_source_account')
       .eq('household_id', householdId)
       .eq('account_id', chequingId)
       .gte('date', fetchStart)
