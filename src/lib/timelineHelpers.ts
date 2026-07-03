@@ -185,7 +185,6 @@ export function buildCashTimeline(params: {
   const days: TimelineDay[] = [];
   let running: number | null = null;
   let openingBalance = 0;
-  let closingBalance = 0;
   let todayBalance: number | null = null;
   let openingCaptured = false;
 
@@ -228,11 +227,15 @@ export function buildCashTimeline(params: {
         endOfDayBalance: running,
         isNegative: running < 0,
       });
-      closingBalance = running;
     }
 
     cursor = advanceDay(cursor);
   }
+
+  // running is always non-null here: anchors[] is non-empty (verified above) and
+  // the loop visits walkStart (= anchors[0].date ≤ windowEnd), setting running there.
+  // Deriving closingBalance post-loop avoids a silent $0 if days[] were somehow empty.
+  const closingBalance = running !== null ? running : anchors[0].balance;
 
   // Dip: minimum end-of-day balance from today (exclusive) to the next income
   // entry in the window (inclusive). Only computed when today is in the window.

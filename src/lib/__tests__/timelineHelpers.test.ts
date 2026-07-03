@@ -520,7 +520,44 @@ describe('buildCashTimeline — dip detection', () => {
   });
 });
 
-// ── 13. Rounding ─────────────────────────────────────────────────────────────
+// ── 13. closingBalance — no silent $0 ────────────────────────────────────────
+
+describe('buildCashTimeline — closingBalance with zero transactions', () => {
+  it('(a) anchor on last day of window, zero transactions → opening/closing/today all equal anchor', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-07-31', 1234.56)],
+      transactions: [],
+      windowStart: '2026-07-01',
+      windowEnd:   '2026-07-31',
+      today: '2026-07-31',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.openingBalance).toBe(1234.56);
+    expect(result.closingBalance).toBe(1234.56);
+    expect(result.todayBalance).toBe(1234.56);
+  });
+
+  it('(b) anchor mid-window, zero transactions in window → opening/closing equal anchor', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-07-15', 800)],
+      transactions: [],
+      windowStart: '2026-07-01',
+      windowEnd:   '2026-07-31',
+      today: '2026-07-20',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.openingBalance).toBe(800);
+    expect(result.closingBalance).toBe(800);
+    expect(result.todayBalance).toBe(800);
+    // All days from July 15 to July 31 are present with the anchor balance
+    expect(result.days.every(d => d.endOfDayBalance === 800)).toBe(true);
+    expect(result.days[0].date).toBe('2026-07-15');
+  });
+});
+
+// ── 14. Rounding ─────────────────────────────────────────────────────────────
 
 describe('buildCashTimeline — rounding', () => {
   it('rounds after each accumulation step to prevent floating-point drift', () => {
