@@ -152,7 +152,7 @@ export async function ensureBridgesForWindow(params: {
     const existingBridgeAccounts = new Set<string>(
       (existingBridges ?? [])
         .map((r: { bridge_source_account: string | null }) => r.bridge_source_account)
-        .filter((id): id is string => id !== null)
+        .filter((id: string | null): id is string => id !== null)
     );
 
     const rows = computeBridgeInserts({
