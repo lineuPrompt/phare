@@ -115,7 +115,7 @@ export default function ExpensesPage() {
                     onChanged={load}
                   />
                 ) : (
-                  <GoalSetter month={selectedMonth} currentGoal={data.cardGoal} locale={locale} onSaved={load} />
+                  <GoalSetter month={selectedMonth} accountId={data.selectedAccount?.id ?? ''} currentGoal={data.cardGoal} locale={locale} onSaved={load} />
                 )}
 
                 <ExpenseForm

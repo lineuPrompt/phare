@@ -268,7 +268,8 @@
       "planner": "Planificateur",
       "reconcile": "Audit",
       "goals": "Objectifs",
-      "household": "Foyer"
+      "household": "Foyer",
+      "cards": "Cartes"
     }
   },
   "expenses": {
@@ -333,6 +334,50 @@
       "confirmTitle": "Supprimer ce revenu?",
       "confirmDelete": "Supprimer",
       "cancel": "Annuler"
+    }
+  },
+  "cards": {
+    "title": "Enveloppes de cartes",
+    "loading": "Chargement...",
+    "noCards": "Aucune carte de crédit configurée.",
+    "noCardsHint": "Ajoutez vos cartes dans la page Dépenses.",
+    "decision": {
+      "totalGoal": "Objectif mensuel",
+      "spent": "Dépensé",
+      "remaining": "Restant",
+      "noGoal": "Aucun objectif défini",
+      "category": "Catégorie",
+      "subBudget": "Enveloppe",
+      "actual": "Dépensé",
+      "difference": "Reste",
+      "status": "Statut",
+      "over": "Dépassé",
+      "ok": "OK",
+      "total": "TOTAL",
+      "withinGoal": "Dans l'objectif",
+      "overGoal": "Objectif dépassé",
+      "uncategorized": "Sans catégorie",
+      "noEnvelope": "Aucune enveloppe définie — ajoutez des catégories ci-dessous pour suivre vos dépenses par catégorie."
+    },
+    "editor": {
+      "title": "Modifier l'enveloppe",
+      "totalGoal": "Objectif de dépenses mensuel",
+      "totalGoalPlaceholder": "ex. 3000",
+      "categories": "Répartition par catégorie",
+      "addCategory": "Ajouter une catégorie...",
+      "amount": "Montant / mois",
+      "removeCategory": "Retirer",
+      "sumWarning": "Le total des catégories ({sum}) dépasse l'objectif de la carte ({goal}). L'objectif de la carte a priorité — ajustez au besoin.",
+      "statementCloseDay": "Jour de fermeture du relevé",
+      "paymentDay": "Jour d'échéance du paiement",
+      "save": "Enregistrer l'enveloppe",
+      "saving": "Enregistrement...",
+      "cancel": "Annuler"
+    },
+    "grid": {
+      "title": "Historique 12 mois",
+      "total": "Total dépensé",
+      "goal": "Objectif"
     }
   },
   "planner": {

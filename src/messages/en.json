@@ -268,7 +268,8 @@
       "planner": "Planner",
       "reconcile": "Audit",
       "goals": "Goals",
-      "household": "Household"
+      "household": "Household",
+      "cards": "Cards"
     }
   },
   "expenses": {
@@ -333,6 +334,50 @@
       "confirmTitle": "Delete this income entry?",
       "confirmDelete": "Delete",
       "cancel": "Cancel"
+    }
+  },
+  "cards": {
+    "title": "Card Envelopes",
+    "loading": "Loading...",
+    "noCards": "No credit cards set up yet.",
+    "noCardsHint": "Add your credit cards in the Expenses page.",
+    "decision": {
+      "totalGoal": "Monthly goal",
+      "spent": "Spent",
+      "remaining": "Remaining",
+      "noGoal": "No goal set",
+      "category": "Category",
+      "subBudget": "Envelope",
+      "actual": "Spent",
+      "difference": "Left",
+      "status": "Status",
+      "over": "Over",
+      "ok": "OK",
+      "total": "TOTAL",
+      "withinGoal": "Within goal",
+      "overGoal": "Over goal",
+      "uncategorized": "Uncategorized",
+      "noEnvelope": "No envelope set — add categories below to track spending by category."
+    },
+    "editor": {
+      "title": "Edit envelope",
+      "totalGoal": "Monthly spending goal",
+      "totalGoalPlaceholder": "e.g. 3000",
+      "categories": "Category allocations",
+      "addCategory": "Add category...",
+      "amount": "Amount / month",
+      "removeCategory": "Remove",
+      "sumWarning": "Category totals ({sum}) exceed the card goal ({goal}). The card goal takes priority — adjust if needed.",
+      "statementCloseDay": "Statement close day",
+      "paymentDay": "Payment due day",
+      "save": "Save envelope",
+      "saving": "Saving...",
+      "cancel": "Cancel"
+    },
+    "grid": {
+      "title": "12-month history",
+      "total": "Total spent",
+      "goal": "Goal"
     }
   },
   "planner": {

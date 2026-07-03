@@ -6,11 +6,13 @@ import { formatCurrency } from './types';
 
 export default function GoalSetter({
   month,
+  accountId,
   currentGoal,
   locale,
   onSaved,
 }: {
   month: string;
+  accountId: string;
   currentGoal: number | null;
   locale: string;
   onSaved: () => void;
@@ -27,7 +29,7 @@ export default function GoalSetter({
     const res = await fetch('/api/card-goal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ month, cardGoal: goal }),
+      body: JSON.stringify({ month, cardGoal: goal, accountId }),
     });
     setSaving(false);
     if (res.ok) {

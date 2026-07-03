@@ -1,6 +1,12 @@
 export type ExpenseCategory = { id: string; name: string; type: string };
 
-export type Account = { id: string; name: string; type: string };
+export type Account = {
+  id: string;
+  name: string;
+  type: string;
+  statement_close_day?: number | null;
+  payment_day?: number | null;
+};
 
 export type Expense = {
   id: string;

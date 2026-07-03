@@ -246,12 +246,6 @@ export async function GET(request: Request) {
     const incomeTxns = (allTxns ?? []).filter((t) => t.type === 'income');
     const totalIncome = Math.round(incomeTxns.reduce((s, t) => s + Number(t.amount), 0) * 100) / 100;
 
-    const { data: budgets } = await supabase
-      .from('budgets')
-      .select('amount, category_id, categories(name, type)')
-      .eq('household_id', householdId)
-      .eq('month', monthStart);
-
     const { data: categories } = await supabase
       .from('categories')
       .select('id, name, type')
@@ -259,17 +253,51 @@ export async function GET(request: Request) {
       .eq('type', 'expense')
       .order('name');
 
-    const { data: goalRow } = await supabase
-      .from('monthly_goals')
-      .select('card_goal, month')
-      .eq('household_id', householdId)
-      .lte('month', monthStart)
-      .order('month', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Budget source: card_envelope_items for card/LOC accounts; general budgets table for chequing.
+    const isCard = selectedAccount?.type === 'credit_card' || selectedAccount?.type === 'line_of_credit';
+    type BudgetRow = { amount: number; category_id: string; categories: { name: string; type: string } | null };
+    let budgetItems: BudgetRow[] = [];
+
+    if (isCard && selectedAccount) {
+      const { data: envItems } = await supabase
+        .from('card_envelope_items')
+        .select('monthly_amount, category_id, categories(name, type)')
+        .eq('household_id', householdId)
+        .eq('account_id', selectedAccount.id);
+      budgetItems = (envItems ?? []).map((d) => ({
+        amount: Number(d.monthly_amount),
+        category_id: d.category_id as string,
+        categories: d.categories as unknown as { name: string; type: string } | null,
+      }));
+    } else {
+      const { data: budgets } = await supabase
+        .from('budgets')
+        .select('amount, category_id, categories(name, type)')
+        .eq('household_id', householdId)
+        .eq('month', monthStart);
+      budgetItems = (budgets ?? []).map((d) => ({
+        amount: Number(d.amount),
+        category_id: d.category_id as string,
+        categories: d.categories as unknown as { name: string; type: string } | null,
+      }));
+    }
+
+    // Card goal: per-card (carry-forward); chequing has no goal.
+    let goalRow: { card_goal: number } | null = null;
+    if (isCard && selectedAccount) {
+      const { data } = await supabase
+        .from('monthly_goals')
+        .select('card_goal')
+        .eq('household_id', householdId)
+        .eq('account_id', selectedAccount.id)
+        .lte('month', monthStart)
+        .order('month', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      goalRow = data;
+    }
 
     type Txn = { amount: number; category_id: string | null; is_bridge?: boolean };
-    type BudgetRow = { amount: number; category_id: string; categories: { name: string; type: string } | null };
 
     // Bridge lines don't belong to a spending category — exclude from category rollup
     const spentByCategory = new Map<string, number>();
@@ -278,7 +306,7 @@ export async function GET(request: Request) {
       spentByCategory.set(t.category_id, (spentByCategory.get(t.category_id) ?? 0) + Number(t.amount));
     }
 
-    const summaryRows = ((budgets as BudgetRow[] | null) ?? [])
+    const summaryRows = budgetItems
       .filter((b) => b.categories?.type === 'expense')
       .map((b) => {
         const spent = spentByCategory.get(b.category_id) ?? 0;
