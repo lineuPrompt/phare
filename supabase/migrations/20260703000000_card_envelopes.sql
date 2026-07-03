@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS card_envelope_items (
 
 CREATE OR REPLACE TRIGGER set_card_envelope_items_updated_at
   BEFORE UPDATE ON card_envelope_items
-  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_card_envelope_items_household
