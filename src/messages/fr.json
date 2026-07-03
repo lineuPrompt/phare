@@ -480,6 +480,43 @@
       }
     }
   },
+  "timeline": {
+    "loading": "Chargement de votre flux de trésorerie...",
+    "noAnchor": {
+      "title": "Aucun solde enregistré",
+      "body": "Entrez le solde de votre compte chèques pour aujourd'hui afin de démarrer votre flux de trésorerie.",
+      "cta": "Définir le solde d'ouverture"
+    },
+    "anchor": {
+      "setTitle": "Définir un point de contrôle",
+      "editTitle": "Modifier le point de contrôle",
+      "date": "Date",
+      "balance": "Solde (CAD)",
+      "balancePlaceholder": "ex. 2450,00",
+      "balanceHint": "Votre solde réel dans le compte chèques à cette date.",
+      "futureDateError": "La date ne peut pas être dans le futur.",
+      "saving": "Enregistrement...",
+      "save": "Enregistrer le point de contrôle",
+      "delete": "Supprimer",
+      "confirmDeleteTitle": "Supprimer ce point de contrôle?",
+      "confirmDeleteBody": "Les soldes avant le prochain point de contrôle seront recalculés.",
+      "confirmDelete": "Supprimer",
+      "cancel": "Annuler"
+    },
+    "dipCallout": {
+      "label": "Solde minimal avant la prochaine paie",
+      "on": "le"
+    },
+    "day": {
+      "today": "Aujourd'hui",
+      "openingBalance": "Solde d'ouverture",
+      "closingBalance": "Solde de clôture"
+    },
+    "entry": {
+      "bridge": "Paiement de carte",
+      "installment": "Versement {label}"
+    }
+  },
   "household": {
     "title": "Membres du foyer",
     "subtitle": "Gérez qui a accès aux données financières de votre foyer.",

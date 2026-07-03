@@ -35,6 +35,39 @@
 
 import { formatLocalDate } from './dateHelpers';
 
+// ── Anchor selection ──────────────────────────────────────────────────────────
+
+/**
+ * Selects the anchors that buildCashTimeline needs for a given window.
+ *
+ * Returns: the latest anchor at or before windowStart (which becomes the walk
+ * start — transactions are fetched from its date onward), PLUS all anchors
+ * strictly inside the window (corrective anchors), sorted ascending.
+ *
+ * An anchor exactly on windowStart counts as pre-window (date ≤ windowStart).
+ *
+ * Returns [] when no qualifying anchors exist → buildCashTimeline will return
+ * { ok: false, reason: 'no_anchor' }.
+ *
+ * The caller should use result[0].date as the transaction fetch start date
+ * (never anchors[0].date of the full history, which grows unboundedly).
+ */
+export function selectAnchorsForTimeline(
+  allAnchors: TimelineAnchor[],
+  windowStart: string,  // YYYY-MM-DD (first day of the displayed month)
+  windowEnd: string,    // YYYY-MM-DD (last day of the navigable range)
+): TimelineAnchor[] {
+  const sorted = [...allAnchors].sort((a, b) => a.date.localeCompare(b.date));
+
+  // Latest anchor at or before windowStart (the effective pre-window anchor)
+  const preWindow = [...sorted].reverse().find((a) => a.date <= windowStart);
+
+  // All anchors strictly inside the window (corrective anchors)
+  const inWindow = sorted.filter((a) => a.date > windowStart && a.date <= windowEnd);
+
+  return [...(preWindow ? [preWindow] : []), ...inWindow];
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type TimelineAnchor = {
@@ -232,10 +265,16 @@ export function buildCashTimeline(params: {
     cursor = advanceDay(cursor);
   }
 
-  // running is always non-null here: anchors[] is non-empty (verified above) and
-  // the loop visits walkStart (= anchors[0].date ≤ windowEnd), setting running there.
-  // Deriving closingBalance post-loop avoids a silent $0 if days[] were somehow empty.
-  const closingBalance = running !== null ? running : anchors[0].balance;
+  // Invariant: running must be non-null here. anchors[] is non-empty (checked above)
+  // and the loop visits walkStart (= anchors[0].date ≤ windowEnd), setting running at
+  // that point. If this throws, a caller broke one of those preconditions.
+  if (running === null) {
+    throw new Error(
+      `buildCashTimeline invariant violated: running balance is null after loop. ` +
+      `walkStart=${walkStart} windowEnd=${windowEnd} — the loop should have visited the anchor date.`
+    );
+  }
+  const closingBalance = running;
 
   // Dip: minimum end-of-day balance from today (exclusive) to the next income
   // entry in the window (inclusive). Only computed when today is in the window.

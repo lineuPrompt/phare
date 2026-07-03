@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCashTimeline, TimelineAnchor, TimelineTx } from '../timelineHelpers';
+import { buildCashTimeline, selectAnchorsForTimeline, TimelineAnchor, TimelineTx } from '../timelineHelpers';
 
 // ── Factories ─────────────────────────────────────────────────────────────────
 
@@ -576,5 +576,135 @@ describe('buildCashTimeline — rounding', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.days.find(d => d.date === '2026-07-03')!.endOfDayBalance).toBe(99.99);
+  });
+});
+
+// ── 15. selectAnchorsForTimeline ──────────────────────────────────────────────
+
+describe('selectAnchorsForTimeline', () => {
+  const pool: TimelineAnchor[] = [
+    { date: '2026-04-01', balance: 500  },
+    { date: '2026-05-01', balance: 1500 },
+    { date: '2026-06-01', balance: 2000 },
+    { date: '2026-07-10', balance: 1200 }, // inside window
+    { date: '2026-08-01', balance: 3000 }, // after windowEnd
+  ];
+  const WIN_START = '2026-07-01';
+  const WIN_END   = '2026-07-31';
+
+  it('returns the latest pre-window anchor + all in-window anchors, sorted ascending', () => {
+    const result = selectAnchorsForTimeline(pool, WIN_START, WIN_END);
+    expect(result).toHaveLength(2);
+    expect(result[0].date).toBe('2026-06-01');
+    expect(result[1].date).toBe('2026-07-10');
+  });
+
+  it('selects only the latest pre-window anchor (not all of them)', () => {
+    const result = selectAnchorsForTimeline(pool, WIN_START, WIN_END);
+    expect(result[0].date).toBe('2026-06-01'); // not April or May
+    expect(result[0].balance).toBe(2000);
+  });
+
+  it('anchor exactly on windowStart is treated as pre-window', () => {
+    const result = selectAnchorsForTimeline(
+      [{ date: '2026-07-01', balance: 999 }],
+      '2026-07-01', '2026-07-31'
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].date).toBe('2026-07-01');
+  });
+
+  it('excludes anchors after windowEnd', () => {
+    const result = selectAnchorsForTimeline(
+      [{ date: '2026-07-01', balance: 1000 }, { date: '2026-08-01', balance: 2000 }],
+      '2026-07-01', '2026-07-31'
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].date).toBe('2026-07-01');
+  });
+
+  it('returns [] when no anchors exist', () => {
+    expect(selectAnchorsForTimeline([], WIN_START, WIN_END)).toEqual([]);
+  });
+
+  it('returns [] when all anchors are after windowEnd', () => {
+    const result = selectAnchorsForTimeline(
+      [{ date: '2026-08-01', balance: 1000 }],
+      '2026-07-01', '2026-07-31'
+    );
+    expect(result).toEqual([]);
+  });
+
+  it('returns only in-window anchor when no pre-window anchor exists (mid-window case)', () => {
+    const result = selectAnchorsForTimeline(
+      [{ date: '2026-07-15', balance: 750 }],
+      '2026-07-01', '2026-07-31'
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].date).toBe('2026-07-15');
+  });
+});
+
+// ── 16. Pipeline integration — selectAnchorsForTimeline → buildCashTimeline ──
+
+describe('selectAnchorsForTimeline + buildCashTimeline pipeline', () => {
+  it('no-anchor state end-to-end: empty selection → no_anchor refusal', () => {
+    const selected = selectAnchorsForTimeline([], '2026-07-01', '2026-07-31');
+    const result = buildCashTimeline({
+      anchors: selected,
+      transactions: [],
+      windowStart: '2026-07-01',
+      windowEnd:   '2026-07-31',
+      today: '2026-07-03',
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('no_anchor');
+  });
+
+  it('mid-window first-anchor end-to-end: renders from anchor, not refused', () => {
+    const selected = selectAnchorsForTimeline(
+      [{ date: '2026-07-15', balance: 2500 }],
+      '2026-07-01', '2026-07-31'
+    );
+    const result = buildCashTimeline({
+      anchors: selected,
+      transactions: [
+        tx({ date: '2026-07-20', amount: 300, type: 'expense' }),
+      ],
+      windowStart: '2026-07-01',
+      windowEnd:   '2026-07-31',
+      today: '2026-07-15',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.balancesStartDate).toBe('2026-07-15');
+    expect(result.openingBalance).toBe(2500);
+    expect(result.closingBalance).toBe(2200); // 2500 - 300
+    expect(result.days.some(d => d.date < '2026-07-15')).toBe(false);
+  });
+
+  it('pre-window anchor: transaction fetch from anchor date derives correct opening balance', () => {
+    // Simulates the API fetching from anchor date (June 1) not just windowStart (July 1)
+    const selected = selectAnchorsForTimeline(
+      [{ date: '2026-06-01', balance: 3000 }],
+      '2026-07-01', '2026-07-31'
+    );
+    const result = buildCashTimeline({
+      anchors: selected,
+      transactions: [
+        // Pre-window transactions fetched because selected[0].date = June 1
+        tx({ date: '2026-06-15', amount: 1000, type: 'expense' }),
+        tx({ date: '2026-06-30', amount: 200,  type: 'expense' }),
+        // In-window
+        tx({ date: '2026-07-10', amount: 5000, type: 'income' }),
+      ],
+      windowStart: '2026-07-01',
+      windowEnd:   '2026-07-31',
+      today: '2026-07-03',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.openingBalance).toBe(1800); // 3000 - 1000 - 200
+    expect(result.days.find(d => d.date === '2026-07-10')!.endOfDayBalance).toBe(6800);
   });
 });
