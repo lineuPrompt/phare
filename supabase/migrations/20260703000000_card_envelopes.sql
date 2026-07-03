@@ -46,7 +46,9 @@ CREATE INDEX IF NOT EXISTS idx_card_envelope_items_household
 CREATE INDEX IF NOT EXISTS idx_card_envelope_items_account
   ON card_envelope_items (account_id);
 
--- Row Level Security (same pattern as every other table)
+-- Row Level Security — inline the lookup to avoid search_path dependency on auth_household_id()
 ALTER TABLE card_envelope_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "card_envelope_items_all" ON card_envelope_items
-  FOR ALL USING (household_id = auth_household_id());
+  FOR ALL USING (
+    household_id = (SELECT household_id FROM public.users WHERE id = auth.uid())
+  );
