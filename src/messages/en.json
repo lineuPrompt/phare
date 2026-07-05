@@ -180,7 +180,14 @@
       "reviewError": "We couldn't generate your review just now. Please try again.",
       "saving": "Saving your plan...",
       "saveError": "Could not save your plan.",
-      "saveRetry": "Retry"
+      "saveRetry": "Retry",
+      "replaceConfirm": {
+        "title": "Replace data from your previous import?",
+        "body": "{count, plural, one {This will replace 1 recurring item and its transactions from your last import with this new plan.} other {This will replace # recurring items and their transactions from your last import with this new plan.}}",
+        "legacy": "{count, plural, one {We also found 1 older recurring item from before we tracked imports. It won't be touched — review it on the Recurring page if it looks out of date.} other {We also found # older recurring items from before we tracked imports. They won't be touched — review them on the Recurring page if they look out of date.}}",
+        "cancel": "Cancel",
+        "confirm": "Replace"
+      }
     },
     "mode": {
       "own": "My own file",

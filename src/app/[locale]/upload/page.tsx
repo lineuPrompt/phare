@@ -44,26 +44,42 @@ export default function UploadPage() {
   const [pendingPlanBody, setPendingPlanBody] = useState<Record<string, unknown> | null>(null);
   const [creatingAccounts, setCreatingAccounts] = useState(false);
 
+  // Import provenance — which real file (if any) is behind this onboarding save.
+  type FileMeta = { fileName: string; fileType: 'csv' | 'excel' } | null;
+  const [fileMeta, setFileMeta] = useState<FileMeta>(null);
+
   // Plan save state
   type PlanSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
   const [planSaveStatus, setPlanSaveStatus] = useState<PlanSaveStatus>('idle');
   const [pendingSavePayload, setPendingSavePayload] = useState<{
-    plan: Plan; reviewText: string; locale: string; cardNames: string[];
+    plan: Plan; reviewText: string; locale: string; cardNames: string[]; fileMeta: FileMeta;
+  } | null>(null);
+  const [confirmReplaceFlag, setConfirmReplaceFlag] = useState(false);
+  const [replaceConfirmation, setReplaceConfirmation] = useState<{
+    totalRecurring: number; provenancedRecurring: number; legacyRecurring: number;
   } | null>(null);
 
   const localeOf = () => (typeof window !== 'undefined' && window.location.pathname.startsWith('/fr') ? 'fr' : 'en');
 
-  const doSave = useCallback(async (payload: {
-    plan: Plan; reviewText: string; locale: string; cardNames: string[];
-  }) => {
+  const doSave = useCallback(async (
+    payload: { plan: Plan; reviewText: string; locale: string; cardNames: string[]; fileMeta: FileMeta },
+    confirmReplace: boolean,
+  ) => {
     setPlanSaveStatus('saving');
     try {
       const res = await fetch('/api/save-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, confirmReplace }),
       });
       if (!res.ok) throw new Error('Save failed');
+      const data = await res.json();
+      if (data?.needsConfirmation) {
+        setReplaceConfirmation(data.counts);
+        setPlanSaveStatus('idle');
+        return;
+      }
+      setReplaceConfirmation(null);
       setPlanSaveStatus('saved');
     } catch (err) {
       console.error('Plan save error:', err);
@@ -99,21 +115,32 @@ export default function UploadPage() {
         setReviewText((prev) => prev + chunk);
       }
 
-      const savePayload = { plan: planData, reviewText: fullText, locale, cardNames: resolvedCardNames };
+      const savePayload = { plan: planData, reviewText: fullText, locale, cardNames: resolvedCardNames, fileMeta };
       setPendingSavePayload(savePayload);
-      await doSave(savePayload);
+      setConfirmReplaceFlag(false);
+      await doSave(savePayload, false);
     } catch (err) {
       console.error('Review streaming error:', err);
       setReviewText(t('plan.reviewError'));
     } finally {
       setReviewStreaming(false);
     }
-  }, [t, doSave]);
+  }, [t, doSave, fileMeta]);
 
   const retrySave = useCallback(async () => {
     if (!pendingSavePayload) return;
-    await doSave(pendingSavePayload);
+    await doSave(pendingSavePayload, confirmReplaceFlag);
+  }, [pendingSavePayload, confirmReplaceFlag, doSave]);
+
+  const confirmReplaceAndSave = useCallback(async () => {
+    if (!pendingSavePayload) return;
+    setConfirmReplaceFlag(true);
+    await doSave(pendingSavePayload, true);
   }, [pendingSavePayload, doSave]);
+
+  const cancelReplace = useCallback(() => {
+    setReplaceConfirmation(null);
+  }, []);
 
   const buildPlan = useCallback(async (planBody: Record<string, unknown>, resolvedCardNames: string[]) => {
     setStatus('analyzing');
@@ -135,6 +162,8 @@ export default function UploadPage() {
   const handleFile = useCallback(async (file: File) => {
     setStatus('uploading');
     setError('');
+    const fileName = file.name.toLowerCase();
+    const detectedFileMeta: FileMeta = { fileName: file.name, fileType: fileName.endsWith('.csv') ? 'csv' : 'excel' };
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -153,9 +182,14 @@ export default function UploadPage() {
         return;
       }
       if (uploadData.source === 'needs_form') {
+        // The file couldn't be parsed confidently — the numbers that end up
+        // saved will come from the manual form below, not from this file.
+        setFileMeta(null);
         setStatus('form');
         return;
       }
+
+      setFileMeta(detectedFileMeta);
 
       if (uploadData.source === 'template') {
         const parsed = uploadData.parsed as TemplateParseResult;
@@ -237,6 +271,7 @@ export default function UploadPage() {
   const submitForm = useCallback(async () => {
     setFormSubmitting(true);
     setError('');
+    setFileMeta(null); // manual form — numbers are typed, not extracted from any file
     try {
       const calculated = buildCalculated();
 
@@ -308,6 +343,9 @@ export default function UploadPage() {
     setReviewText('');
     setPlanSaveStatus('idle');
     setPendingSavePayload(null);
+    setFileMeta(null);
+    setConfirmReplaceFlag(false);
+    setReplaceConfirmation(null);
   }, []);
 
   return (
@@ -324,7 +362,7 @@ export default function UploadPage() {
             mode={mode} setMode={setMode}
             dragOver={dragOver} setDragOver={setDragOver}
             onDrop={onDrop} onFileSelect={onFileSelect}
-            onManual={() => setStatus('form')}
+            onManual={() => { setFileMeta(null); setStatus('form'); }}
           />
         )}
 
@@ -387,6 +425,9 @@ export default function UploadPage() {
             planSaveStatus={planSaveStatus}
             onRetrySave={retrySave}
             onStartOver={startOver}
+            replaceConfirmation={replaceConfirmation}
+            onConfirmReplace={confirmReplaceAndSave}
+            onCancelReplace={cancelReplace}
           />
         )}
       </div>

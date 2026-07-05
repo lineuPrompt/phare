@@ -10,6 +10,9 @@ export default function PlanDisplay({
   planSaveStatus,
   onRetrySave,
   onStartOver,
+  replaceConfirmation,
+  onConfirmReplace,
+  onCancelReplace,
 }: {
   plan: Plan;
   reviewText: string;
@@ -17,6 +20,9 @@ export default function PlanDisplay({
   planSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
   onRetrySave: () => void;
   onStartOver: () => void;
+  replaceConfirmation: { totalRecurring: number; provenancedRecurring: number; legacyRecurring: number } | null;
+  onConfirmReplace: () => void;
+  onCancelReplace: () => void;
 }) {
   const t = useTranslations('upload');
 
@@ -143,6 +149,38 @@ export default function PlanDisplay({
           )}
         </div>
       </div>
+
+      {replaceConfirmation && (
+        <div className="rounded-2xl p-8 space-y-4" style={{ background: '#FFFBEB', border: '1.5px solid #F5A623' }}>
+          <p className="text-lg font-bold" style={{ color: '#0F2044' }}>{t('plan.replaceConfirm.title')}</p>
+          <p style={{ color: '#374151' }}>
+            {t('plan.replaceConfirm.body', { count: replaceConfirmation.provenancedRecurring })}
+          </p>
+          {replaceConfirmation.legacyRecurring > 0 && (
+            <div className="rounded-xl p-4" style={{ background: 'white', border: '1px solid #FDE68A' }}>
+              <p style={{ color: '#374151' }}>
+                {t('plan.replaceConfirm.legacy', { count: replaceConfirmation.legacyRecurring })}
+              </p>
+            </div>
+          )}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={onCancelReplace}
+              className="flex-1 px-6 py-3 rounded-full font-semibold cursor-pointer hover:opacity-90 transition-all"
+              style={{ border: '2px solid #0F2044', color: '#0F2044' }}
+            >
+              {t('plan.replaceConfirm.cancel')}
+            </button>
+            <button
+              onClick={onConfirmReplace}
+              className="flex-1 px-6 py-3 rounded-full font-semibold cursor-pointer hover:opacity-90 transition-all"
+              style={{ background: '#0F2044', color: 'white' }}
+            >
+              {t('plan.replaceConfirm.confirm')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {planSaveStatus === 'saving' && (
         <p className="text-center text-sm" style={{ color: '#9CA3AF' }}>{t('plan.saving')}</p>

@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { formatLocalDate, formatLocalMonth, materializeRule, monthNameToNumber } from '@/lib/dateHelpers';
+import { formatLocalMonth, materializeRule, monthNameToNumber } from '@/lib/dateHelpers';
 import { logEvent } from '@/lib/eventLogger';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
+import {
+  buildFileImportRow,
+  resolveTransactionSource,
+  needsReplaceConfirmation,
+  missingSeedCategories,
+  type FileMeta,
+} from '@/lib/importProvenance';
 
 type PlanCategory = {
   name: string;
@@ -14,7 +21,14 @@ type PlanCategory = {
 
 export async function POST(request: Request) {
   try {
-    const { plan, reviewText, locale, cardNames } = await request.json();
+    const { plan, reviewText, locale, cardNames, fileMeta, confirmReplace } = await request.json() as {
+      plan: { monthlyBudget: { categories: PlanCategory[] }; seedCategories?: string[]; sinkingFunds?: { name: string; annualAmount: number; dueMonth: string }[]; goals?: { name: string; targetAmount: number }[]; topRecommendation: string };
+      reviewText: string;
+      locale: string;
+      cardNames: string[];
+      fileMeta: FileMeta;
+      confirmReplace?: boolean;
+    };
 
     const supabase = await createClient();
 
@@ -52,8 +66,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'A chequing account is required before saving a plan' }, { status: 400 });
     }
 
+    // ----- Prior-data guard: never wipe an existing plan silently -----
+    // Every prior save-plan run left a recurring_items/budgets/sinking_funds
+    // footprint (whether it came from a file or the manual form). If any of
+    // that still exists, the UI must show an explicit bilingual confirmation
+    // before this call is allowed to replace it.
+    const [{ count: priorRecurringCount }, { count: priorBudgetsCount }, { count: priorSinkingCount }] = await Promise.all([
+      supabase.from('recurring_items').select('id', { count: 'exact', head: true }).eq('household_id', householdId),
+      supabase.from('budgets').select('id', { count: 'exact', head: true }).eq('household_id', householdId),
+      supabase.from('sinking_funds').select('id', { count: 'exact', head: true }).eq('household_id', householdId),
+    ]);
+    const hasPriorData = (priorRecurringCount ?? 0) > 0 || (priorBudgetsCount ?? 0) > 0 || (priorSinkingCount ?? 0) > 0;
+
+    if (needsReplaceConfirmation(hasPriorData, confirmReplace)) {
+      const { data: recurringRowsForCount } = await supabase
+        .from('recurring_items')
+        .select('id, file_import_id')
+        .eq('household_id', householdId);
+      const provenancedRecurring = (recurringRowsForCount ?? []).filter((r) => r.file_import_id !== null).length;
+      const legacyRecurring = (recurringRowsForCount ?? []).filter((r) => r.file_import_id === null).length;
+
+      return NextResponse.json({
+        needsConfirmation: true,
+        counts: {
+          totalRecurring: priorRecurringCount ?? 0,
+          provenancedRecurring,
+          legacyRecurring,
+        },
+      });
+    }
+
     const now = new Date();
-    const today = formatLocalDate(now);
     const currentMonth = formatLocalMonth(now);
     const monthDate = `${currentMonth}-01`;
     const anchorDate = `${currentMonth}-01`;
@@ -61,6 +104,14 @@ export async function POST(request: Request) {
     // ----- Wipe non-chequing accounts and their transactions -----
     // Done server-side so we can delete transactions first (the API guard blocks
     // deletion when transactions exist, which caused duplicate cards/goals on re-onboarding).
+    //
+    // KNOWN ISSUE (pre-existing, not fixed by this pass): this still deletes
+    // ALL transactions on every card/LOC account unconditionally, including
+    // ones the user entered or categorized by hand after onboarding on the
+    // Cards/Expenses pages. Card accounts and their manual history have no
+    // provenance tagging yet (only recurring_items/transactions/budgets/
+    // sinking_funds do, per Phase B scope). Flagged for a follow-up rather
+    // than folded in here.
     const nonChequingIds = (accts ?? [])
       .filter((a) => a.type !== 'chequing')
       .map((a) => a.id);
@@ -130,40 +181,94 @@ export async function POST(request: Request) {
       }
     }
 
-    // ----- Wipe remaining plan data -----
-    await supabase.from('budgets').delete().eq('household_id', householdId);
-    await supabase
-      .from('transactions')
-      .delete()
+    // ----- Record this onboarding save as a provenance row -----
+    // Every save-plan run gets one, file-backed or not (file_type:'manual'
+    // when there is no upload). That is the whole trick: rows this run
+    // creates carry file_import_id; rows added later one at a time via the
+    // Recurring page or ledger never do, so they're structurally immune to
+    // the replace below.
+    const { data: importRow, error: importError } = await supabase
+      .from('file_imports')
+      .insert(buildFileImportRow(fileMeta, householdId, user.id))
+      .select('id')
+      .single();
+    if (importError || !importRow) {
+      console.error('Save plan file_imports insert error:', importError);
+      return NextResponse.json({ error: 'Failed to record import' }, { status: 500 });
+    }
+    const fileImportId: string = importRow.id;
+    const transactionSource = resolveTransactionSource(fileMeta);
+
+    // ----- Replace prior onboarding-plan-generated recurring items -----
+    // Scoped to file_import_id IS NOT NULL: a row with no provenance was
+    // either added ad-hoc (Recurring page) or predates provenance tracking,
+    // and must never be touched here (surfaced to the user as `legacyRecurring`
+    // in the confirmation step above instead of being silently kept or dropped).
+    const { data: priorRecurring } = await supabase
+      .from('recurring_items')
+      .select('id')
       .eq('household_id', householdId)
-      .not('recurring_item_id', 'is', null)
-      .gte('date', today);
-    await supabase.from('recurring_items').delete().eq('household_id', householdId);
-    await supabase.from('categories').delete().eq('household_id', householdId);
+      .not('file_import_id', 'is', null);
+    const priorRecurringIds = (priorRecurring ?? []).map((r) => r.id);
+
+    if (priorRecurringIds.length > 0) {
+      // Delete ALL of their materialized transactions — past and future —
+      // not just date >= today. Deleting only future rows left past-dated
+      // rows orphaned (recurring_item_id set NULL by the FK) on every
+      // re-onboarding; that orphan leak is what caused ledger duplication.
+      await supabase
+        .from('transactions')
+        .delete()
+        .eq('household_id', householdId)
+        .in('recurring_item_id', priorRecurringIds);
+
+      await supabase.from('recurring_items').delete().in('id', priorRecurringIds);
+    }
+
+    // ----- Replace plan-output artifacts -----
+    // budgets and sinking_funds are written ONLY by this route (verified: no
+    // other endpoint inserts/updates/deletes them) — full replacement here is
+    // correct, not a scope violation, since nothing else can be silently
+    // destroying user-owned data. Already gated by the confirmation step above.
+    await supabase.from('budgets').delete().eq('household_id', householdId);
     await supabase.from('sinking_funds').delete().eq('household_id', householdId);
 
-    // ----- Seed the fixed category set -----
+    // ----- Seed any missing categories (idempotent — never delete) -----
+    // Categories are user-editable and referenced by manually-created
+    // budgets/card-envelopes/transactions; wiping them on every re-onboarding
+    // destroyed custom categories and cascade-deleted their envelope items.
+    const { data: existingCats } = await supabase
+      .from('categories')
+      .select('name')
+      .eq('household_id', householdId);
+
+    // ----- Seed the fixed category set (idempotent) -----
     const seedNames: string[] = plan.seedCategories ?? [
       'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
       'Utilities & Subscriptions', 'Childcare', 'Shopping',
       'Health & Personal', 'Installments', 'Unexpected',
     ];
 
-    const { data: seededCats } = await supabase
-      .from('categories')
-      .insert(seedNames.map((name) => ({
+    const toSeed = missingSeedCategories((existingCats ?? []).map((c) => c.name), seedNames);
+    if (toSeed.length > 0) {
+      await supabase.from('categories').insert(toSeed.map((name) => ({
         household_id: householdId,
         name,
         type: 'expense',
         is_sinking_fund: false,
-      })))
-      .select('id, name');
+      })));
+    }
+
+    const { data: allCats } = await supabase
+      .from('categories')
+      .select('id, name')
+      .eq('household_id', householdId);
 
     const catByName = new Map<string, string>();
-    for (const c of seededCats ?? []) {
+    for (const c of allCats ?? []) {
       catByName.set(c.name.trim().toLowerCase(), c.id);
     }
-    const unexpectedId = catByName.get('unexpected') ?? (seededCats?.[0]?.id ?? null);
+    const unexpectedId = catByName.get('unexpected') ?? (allCats?.[0]?.id ?? null);
     const resolveCat = (seed?: string) =>
       (seed && catByName.get(seed.trim().toLowerCase())) || unexpectedId;
 
@@ -190,6 +295,7 @@ export async function POST(request: Request) {
           anchor_date: anchorDate,
           second_day: null,
           account_id: chequingId,
+          file_import_id: fileImportId,
         });
         continue;
       }
@@ -209,6 +315,7 @@ export async function POST(request: Request) {
           anchor_date: anchorDate,
           second_day: null,
           account_id: chequingId,
+          file_import_id: fileImportId,
         });
       } else {
         // Variable expense → contributes to its category's budget (lands on card)
@@ -261,9 +368,10 @@ export async function POST(request: Request) {
             description: item.description,
             date: d,
             type: item.type,
-            source: 'manual',
+            source: transactionSource,
             recurring_item_id: item.id,
             account_id: item.account_id,
+            file_import_id: fileImportId,
           });
         }
       }
@@ -283,6 +391,7 @@ export async function POST(request: Request) {
       category_id: categoryId,
       month: monthDate,
       amount: Math.round(amount * 100) / 100,
+      file_import_id: fileImportId,
     }));
     if (budgetRows.length) {
       await supabase.from('budgets').insert(budgetRows);
@@ -296,6 +405,7 @@ export async function POST(request: Request) {
           name: f.name,
           annual_amount: f.annualAmount,
           due_month: monthNameToNumber(f.dueMonth),
+          file_import_id: fileImportId,
         }))
       );
     }

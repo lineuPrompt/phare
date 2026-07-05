@@ -180,7 +180,14 @@
       "reviewError": "Nous n'avons pas pu générer votre revue pour le moment. Veuillez réessayer.",
       "saving": "Enregistrement du plan...",
       "saveError": "Impossible d'enregistrer votre plan.",
-      "saveRetry": "Réessayer"
+      "saveRetry": "Réessayer",
+      "replaceConfirm": {
+        "title": "Remplacer les données de votre import précédent?",
+        "body": "{count, plural, one {Ceci remplacera 1 élément récurrent et ses transactions provenant de votre dernier import par ce nouveau plan.} other {Ceci remplacera # éléments récurrents et leurs transactions provenant de votre dernier import par ce nouveau plan.}}",
+        "legacy": "{count, plural, one {Nous avons aussi trouvé 1 élément récurrent plus ancien datant d'avant le suivi des imports. Il ne sera pas touché — vérifiez-le dans la page Récurrences s'il semble désuet.} other {Nous avons aussi trouvé # éléments récurrents plus anciens datant d'avant le suivi des imports. Ils ne seront pas touchés — vérifiez-les dans la page Récurrences s'ils semblent désuets.}}",
+        "cancel": "Annuler",
+        "confirm": "Remplacer"
+      }
     },
     "mode": {
       "own": "Mon propre fichier",
