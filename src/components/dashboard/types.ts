@@ -42,6 +42,10 @@ export type DashboardData = {
   review?: string | null;
   topRecommendation?: string | null;
   reviewDate?: string | null;
+  // Income recurring items with a real cadence/amount but no known pay date
+  // yet — not materialized, so this month's income can look lower than the
+  // plan's total until a pay date is set on the Recurring page.
+  unanchoredIncomeCount?: number;
 };
 
 export function formatCurrency(amount: number, locale: string) {

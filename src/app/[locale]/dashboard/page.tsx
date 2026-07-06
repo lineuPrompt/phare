@@ -133,6 +133,7 @@ export default function DashboardPage() {
                   onPrevMonth={handlePrevMonth}
                   onNextMonth={handleNextMonth}
                   isCurrentMonth={isCurrentMonth}
+                  unanchoredIncomeCount={data.unanchoredIncomeCount}
                 />
               )}
               {data.goalAccounts !== undefined && (

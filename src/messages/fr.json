@@ -185,6 +185,7 @@
         "title": "Remplacer les données de votre import précédent?",
         "body": "{count, plural, one {Ceci remplacera 1 élément récurrent et ses transactions provenant de votre dernier import par ce nouveau plan.} other {Ceci remplacera # éléments récurrents et leurs transactions provenant de votre dernier import par ce nouveau plan.}}",
         "legacy": "{count, plural, one {Nous avons aussi trouvé 1 élément récurrent plus ancien datant d'avant le suivi des imports. Il ne sera pas touché — vérifiez-le dans la page Récurrences s'il semble désuet.} other {Nous avons aussi trouvé # éléments récurrents plus anciens datant d'avant le suivi des imports. Ils ne seront pas touchés — vérifiez-les dans la page Récurrences s'ils semblent désuets.}}",
+        "accountsReuseTitle": "Comptes qui seront conservés et réutilisés (correspondance par nom) :",
         "accountsDeleteTitle": "Comptes qui seront supprimés et recréés :",
         "accountsPreserveTitle": "Comptes qui seront conservés tels quels :",
         "reason": {
@@ -197,7 +198,34 @@
         "confirm": "Remplacer"
       },
       "unmatchedMembers": "{count, plural, one {Le nom de membre d'une source de revenu ne correspondait à personne dans votre foyer — elle vous a été attribuée. Vérifiez-la dans la page Récurrences.} other {Le nom de membre de # sources de revenu ne correspondait à personne dans votre foyer — elles vous ont été attribuées. Vérifiez-les dans la page Récurrences.}}",
-      "needsPayDate": "{count, plural, one {1 source de revenu a besoin d'une vraie date de paie avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.} other {# sources de revenu ont besoin d'une vraie date de paie avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.}}"
+      "needsPayDate": "{count, plural, one {1 source de revenu a besoin d'une vraie date de paie avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.} other {# sources de revenu ont besoin d'une vraie date de paie avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.}}",
+      "anchorStep": {
+        "title": "Quand ces revenus sont-ils versés?",
+        "subtitle": "Ajoutez une vraie date de paie pour chaque source de revenu afin qu'elle apparaisse aux bons jours. Vous pouvez en ignorer et les définir plus tard dans la page Récurrences.",
+        "cadence": {
+          "weekly": "Hebdomadaire",
+          "biweekly": "Aux 2 semaines",
+          "semimonthly": "Deux fois par mois"
+        },
+        "perPaycheque": "/paie",
+        "nextPayDateLabel": "Prochaine paie",
+        "nextPayDateWindow": "Doit être dans les {days} prochains jours — c'est ce qui en fait la *prochaine* paie.",
+        "day1Label": "Première paie (jour du mois)",
+        "day2Label": "Deuxième paie (jour du mois)",
+        "shortMonthNote": "30 ou 31? Dans les mois plus courts (comme février), cela tombe plutôt le dernier jour.",
+        "setPayDate": "Définir la date de paie",
+        "saving": "Enregistrement...",
+        "savedConfirm": "Date de paie définie.",
+        "continue": "Continuer",
+        "skipNote": "Tout champ laissé vide reste marqué « date de paie requise » — vous pourrez l'ajouter plus tard dans la page Récurrences.",
+        "error": {
+          "past": "Cette date est déjà passée.",
+          "tooFar": "C'est à plus de {days} jours — la prochaine paie devrait être plus proche.",
+          "range": "Entrez un jour entre 1 et 31.",
+          "same": "Les deux dates de paie doivent être différentes.",
+          "generic": "Une erreur est survenue. Veuillez réessayer."
+        }
+      }
     },
     "mode": {
       "own": "Mon propre fichier",
@@ -261,6 +289,7 @@
     "savings": "Épargne ce mois-ci",
     "surplus": "Surplus mensuel",
     "deficit": "Déficit mensuel",
+    "unanchoredIncome": "{count, plural, one {1 source de revenu en attente d'une date de paie — pas encore dans le registre de ce mois-ci.} other {# sources de revenu en attente de dates de paie — pas encore dans le registre de ce mois-ci.}}",
     "topPriority": "Votre priorité #1",
     "sinkingFunds": "Fonds de prévoyance",
     "perMonth": "/mois",

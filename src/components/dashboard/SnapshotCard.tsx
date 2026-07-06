@@ -1,4 +1,5 @@
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 import { DashboardSummary, formatCurrency } from './types';
 
 export default function SnapshotCard({
@@ -8,6 +9,7 @@ export default function SnapshotCard({
   onPrevMonth,
   onNextMonth,
   isCurrentMonth,
+  unanchoredIncomeCount,
 }: {
   summary: DashboardSummary;
   locale: string;
@@ -15,6 +17,7 @@ export default function SnapshotCard({
   onPrevMonth: () => void;
   onNextMonth: () => void;
   isCurrentMonth: boolean;
+  unanchoredIncomeCount?: number;
 }) {
   const t = useTranslations('dashboard');
   const surplus = summary.netCashFlow >= 0;
@@ -57,6 +60,16 @@ export default function SnapshotCard({
           </button>
         </div>
       </div>
+
+      {!!unanchoredIncomeCount && unanchoredIncomeCount > 0 && (
+        <Link
+          href={`/${locale}/recurring`}
+          className="block rounded-xl p-3 mb-3 text-sm hover:opacity-80 transition-opacity"
+          style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E' }}
+        >
+          {t('unanchoredIncome', { count: unanchoredIncomeCount })}
+        </Link>
+      )}
 
       {/* Three main buckets */}
       <div className="grid grid-cols-3 gap-3 mb-3">

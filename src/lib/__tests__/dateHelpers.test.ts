@@ -174,6 +174,31 @@ describe('occurrencesInMonth', () => {
     const result = occurrencesInMonth(rule, '2026-06');
     expect(result).toEqual(['2026-06-03', '2026-06-17']);
   });
+
+  // --- weekly ---
+  it('weekly: four paycheques in a normal month', () => {
+    // anchor Aug 5 2026 (Wed) → Aug 5, 12, 19, 26 (4 Wednesdays before the 5th one on Sep 2)
+    const rule = { cadence: 'weekly' as const, anchorDate: '2026-08-05' };
+    expect(occurrencesInMonth(rule, '2026-08')).toEqual(['2026-08-05', '2026-08-12', '2026-08-19', '2026-08-26']);
+  });
+
+  it('weekly: FIVE paycheques in a windfall month', () => {
+    // anchor Jul 1 2026 (Wed) → Jul 1, 8, 15, 22, 29 — five Wednesdays in July
+    const rule = { cadence: 'weekly' as const, anchorDate: '2026-07-01' };
+    expect(occurrencesInMonth(rule, '2026-07')).toEqual(['2026-07-01', '2026-07-08', '2026-07-15', '2026-07-22', '2026-07-29']);
+  });
+
+  it('weekly: works months after the anchor', () => {
+    const rule = { cadence: 'weekly' as const, anchorDate: '2026-07-01' };
+    const result = occurrencesInMonth(rule, '2026-09');
+    expect(result).toEqual(['2026-09-02', '2026-09-09', '2026-09-16', '2026-09-23', '2026-09-30']);
+  });
+
+  it('weekly: works months before the anchor date itself', () => {
+    const rule = { cadence: 'weekly' as const, anchorDate: '2026-07-01' };
+    const result = occurrencesInMonth(rule, '2026-06');
+    expect(result).toEqual(['2026-06-03', '2026-06-10', '2026-06-17', '2026-06-24']);
+  });
 });
 
 describe('materializeRule', () => {
@@ -220,6 +245,25 @@ describe('materializeRule', () => {
       const curr = new Date(dates[i] + 'T00:00:00');
       const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
       expect(diff).toBe(14);
+    }
+  });
+
+  it('weekly: produces 52 occurrences across 12 months', () => {
+    const rule = { cadence: 'weekly' as const, anchorDate: '2026-01-02' };
+    const dates = materializeRule(rule, '2026-01', 12);
+    // 365 days / 7 ≈ 52 pay periods in a year
+    expect(dates.length).toBeGreaterThanOrEqual(52);
+    expect(dates.length).toBeLessThanOrEqual(53);
+  });
+
+  it('weekly: every date is 7 days after the previous', () => {
+    const rule = { cadence: 'weekly' as const, anchorDate: '2026-07-01' };
+    const dates = materializeRule(rule, '2026-07', 3);
+    for (let i = 1; i < dates.length; i++) {
+      const prev = new Date(dates[i - 1] + 'T00:00:00');
+      const curr = new Date(dates[i] + 'T00:00:00');
+      const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+      expect(diff).toBe(7);
     }
   });
 

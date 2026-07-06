@@ -185,6 +185,7 @@
         "title": "Replace data from your previous import?",
         "body": "{count, plural, one {This will replace 1 recurring item and its transactions from your last import with this new plan.} other {This will replace # recurring items and their transactions from your last import with this new plan.}}",
         "legacy": "{count, plural, one {We also found 1 older recurring item from before we tracked imports. It won't be touched — review it on the Recurring page if it looks out of date.} other {We also found # older recurring items from before we tracked imports. They won't be touched — review them on the Recurring page if they look out of date.}}",
+        "accountsReuseTitle": "Accounts that will be kept and reused (matched by name):",
         "accountsDeleteTitle": "Accounts that will be removed and recreated:",
         "accountsPreserveTitle": "Accounts that will be kept as-is:",
         "reason": {
@@ -197,7 +198,34 @@
         "confirm": "Replace"
       },
       "unmatchedMembers": "{count, plural, one {1 income source's Member name didn't match anyone in your household — it was assigned to you. Check it on the Recurring page.} other {# income sources' Member names didn't match anyone in your household — they were assigned to you. Check them on the Recurring page.}}",
-      "needsPayDate": "{count, plural, one {1 income source needs a real pay date before it shows up day-by-day — add one on the Recurring page.} other {# income sources need a real pay date before they show up day-by-day — add one on the Recurring page.}}"
+      "needsPayDate": "{count, plural, one {1 income source needs a real pay date before it shows up day-by-day — add one on the Recurring page.} other {# income sources need a real pay date before they show up day-by-day — add one on the Recurring page.}}",
+      "anchorStep": {
+        "title": "When do these get paid?",
+        "subtitle": "Add a real pay date for each income source so it shows up on the right days. You can skip any of these and set them later on the Recurring page.",
+        "cadence": {
+          "weekly": "Weekly",
+          "biweekly": "Every 2 weeks",
+          "semimonthly": "Twice a month"
+        },
+        "perPaycheque": "/paycheque",
+        "nextPayDateLabel": "Next payday",
+        "nextPayDateWindow": "Must be within the next {days} days — that's what makes it the *next* payday.",
+        "day1Label": "First payday (day of month)",
+        "day2Label": "Second payday (day of month)",
+        "shortMonthNote": "30th or 31st? In shorter months (like February), it lands on the last day instead.",
+        "setPayDate": "Set pay date",
+        "saving": "Saving...",
+        "savedConfirm": "Pay date set.",
+        "continue": "Continue",
+        "skipNote": "Anything left blank stays flagged as \"needs a pay date\" — you can add it later on the Recurring page.",
+        "error": {
+          "past": "That date has already passed.",
+          "tooFar": "That's more than {days} days away — the next payday should be sooner than that.",
+          "range": "Enter a day between 1 and 31.",
+          "same": "The two paydays must be different days.",
+          "generic": "Something went wrong. Please try again."
+        }
+      }
     },
     "mode": {
       "own": "My own file",
@@ -261,6 +289,7 @@
     "savings": "Saved this month",
     "surplus": "Monthly surplus",
     "deficit": "Monthly deficit",
+    "unanchoredIncome": "{count, plural, one {1 income source awaiting a pay date — not yet in this month's ledger.} other {# income sources awaiting pay dates — not yet in this month's ledger.}}",
     "topPriority": "Your #1 priority",
     "sinkingFunds": "Sinking funds",
     "perMonth": "/month",

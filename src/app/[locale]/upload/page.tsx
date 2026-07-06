@@ -8,13 +8,14 @@ import ModeSelector from '@/components/onboarding/ModeSelector';
 import AccountStep from '@/components/onboarding/AccountStep';
 import ManualForm from '@/components/onboarding/ManualForm';
 import PlanDisplay from '@/components/onboarding/PlanDisplay';
+import AnchorDateStep, { NeedsPayDateItem } from '@/components/onboarding/AnchorDateStep';
 import { Plan, FormLine, IncomeFormLine } from '@/components/onboarding/types';
 import { monthlyIncomeEquivalent } from '@/lib/incomeHelpers';
 import { runPlausibilityGuard, PlausibilityResult } from '@/lib/plausibilityGuard';
 import { TemplateParseResult } from '@/lib/templateParser';
 import { formatCAD } from '@/components/onboarding/types';
 
-type Status = 'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form' | 'accounts' | 'plausibility_check';
+type Status = 'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form' | 'accounts' | 'plausibility_check' | 'anchor_dates';
 
 export default function UploadPage() {
   const t = useTranslations('upload');
@@ -60,12 +61,13 @@ export default function UploadPage() {
     totalRecurring: number; provenancedRecurring: number; legacyRecurring: number;
     accountsToDelete: { id: string; name: string }[];
     accountsToPreserve: { id: string; name: string; reason: AccountPreserveReason }[];
+    accountsToReuse: { id: string; name: string }[];
   } | null>(null);
   // Visible, never-silent fallbacks from the save — member names that didn't
   // match anyone in the household, and income rows still missing a real pay date.
   const [saveNotices, setSaveNotices] = useState<{
     unmatchedMembers: { label: string; attemptedMember: string }[];
-    needsPayDate: { id: string; description: string }[];
+    needsPayDate: NeedsPayDateItem[];
   } | null>(null);
 
   const localeOf = () => (typeof window !== 'undefined' && window.location.pathname.startsWith('/fr') ? 'fr' : 'en');
@@ -89,11 +91,15 @@ export default function UploadPage() {
         return;
       }
       setReplaceConfirmation(null);
+      const needsPayDate: NeedsPayDateItem[] = data?.needsPayDate ?? [];
       setSaveNotices({
         unmatchedMembers: data?.unmatchedMembers ?? [],
-        needsPayDate: data?.needsPayDate ?? [],
+        needsPayDate,
       });
       setPlanSaveStatus('saved');
+      if (needsPayDate.length > 0) {
+        setStatus('anchor_dates');
+      }
     } catch (err) {
       console.error('Plan save error:', err);
       setPlanSaveStatus('error');
@@ -429,6 +435,13 @@ export default function UploadPage() {
               {t('tryAgain')}
             </button>
           </div>
+        )}
+
+        {status === 'anchor_dates' && saveNotices && (
+          <AnchorDateStep
+            items={saveNotices.needsPayDate}
+            onDone={() => setStatus('plan')}
+          />
         )}
 
         {status === 'plan' && plan && (

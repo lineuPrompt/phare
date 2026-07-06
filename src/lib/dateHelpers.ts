@@ -59,10 +59,11 @@ export function recurrenceDates(baseDate: string, count: number): string[] {
  * - monthly: once a month, on the anchor's day (clamped to month end)
  * - semimonthly: twice a month, on anchorDay and secondDay (clamped)
  * - biweekly: every 14 days from the anchor date; returns any that land in the month
+ * - weekly: every 7 days from the anchor date; returns any that land in the month
  */
 export function occurrencesInMonth(
   rule: {
-    cadence: 'monthly' | 'biweekly' | 'semimonthly';
+    cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
     anchorDate: string;      // YYYY-MM-DD
     secondDay?: number | null;
   },
@@ -86,7 +87,8 @@ export function occurrencesInMonth(
     return days.map(clampDay);
   }
 
-  // biweekly: step 14 days from anchor, collect those landing in target month
+  // weekly/biweekly: step 7 or 14 days from anchor, collect those landing in target month
+  const step = rule.cadence === 'weekly' ? 7 : 14;
   const anchor = new Date(rule.anchorDate + 'T00:00:00');
   const monthStart = new Date(ty, tm - 1, 1);
   const monthEnd = new Date(ty, tm - 1, lastDay);
@@ -94,13 +96,13 @@ export function occurrencesInMonth(
   const dates: string[] = [];
   const cursor = new Date(anchor);
 
-  // Wind forward/backward to near the month in 14-day steps
-  while (cursor > monthStart) cursor.setDate(cursor.getDate() - 14);
-  while (cursor < monthStart) cursor.setDate(cursor.getDate() + 14);
+  // Wind forward/backward to near the month in step-sized increments
+  while (cursor > monthStart) cursor.setDate(cursor.getDate() - step);
+  while (cursor < monthStart) cursor.setDate(cursor.getDate() + step);
 
   while (cursor <= monthEnd) {
     dates.push(cursor.toISOString().slice(0, 10));
-    cursor.setDate(cursor.getDate() + 14);
+    cursor.setDate(cursor.getDate() + step);
   }
 
   return dates;
@@ -113,7 +115,7 @@ export function occurrencesInMonth(
  */
 export function materializeRule(
   rule: {
-    cadence: 'monthly' | 'biweekly' | 'semimonthly';
+    cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
     anchorDate: string;
     secondDay?: number | null;
   },
@@ -148,7 +150,7 @@ export function formatLocalMonth(date: Date): string {
 
 export function materializeFutureRule(
   rule: {
-    cadence: 'monthly' | 'biweekly' | 'semimonthly';
+    cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
     anchorDate: string;
     secondDay?: number | null;
   },

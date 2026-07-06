@@ -25,6 +25,7 @@ export default function PlanDisplay({
     totalRecurring: number; provenancedRecurring: number; legacyRecurring: number;
     accountsToDelete: { id: string; name: string }[];
     accountsToPreserve: { id: string; name: string; reason: 'not_from_import' | 'has_transactions' | 'has_envelope_budget' | 'has_monthly_goal' }[];
+    accountsToReuse: { id: string; name: string }[];
   } | null;
   onConfirmReplace: () => void;
   onCancelReplace: () => void;
@@ -170,6 +171,15 @@ export default function PlanDisplay({
               <p style={{ color: '#374151' }}>
                 {t('plan.replaceConfirm.legacy', { count: replaceConfirmation.legacyRecurring })}
               </p>
+            </div>
+          )}
+
+          {replaceConfirmation.accountsToReuse.length > 0 && (
+            <div className="rounded-xl p-4" style={{ background: 'white', border: '1px solid #BAE6FD' }}>
+              <p className="font-semibold mb-1" style={{ color: '#0369A1' }}>{t('plan.replaceConfirm.accountsReuseTitle')}</p>
+              <ul className="list-disc list-inside" style={{ color: '#374151' }}>
+                {replaceConfirmation.accountsToReuse.map((a) => <li key={a.id}>{a.name}</li>)}
+              </ul>
             </div>
           )}
 

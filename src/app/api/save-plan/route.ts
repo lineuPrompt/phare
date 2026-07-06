@@ -8,9 +8,10 @@ import {
   resolveTransactionSource,
   needsReplaceConfirmation,
   missingSeedCategories,
-  planAccountReplace,
+  planAccountActions,
   type FileMeta,
   type AccountProvenanceInfo,
+  type DesiredAccount,
 } from '@/lib/importProvenance';
 import { resolveMemberId, type IncomeFrequency } from '@/lib/incomeHelpers';
 
@@ -81,17 +82,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'A chequing account is required before saving a plan' }, { status: 400 });
     }
 
-    // ----- Build the account replace plan (which cards/goal accounts are safe
-    // to delete vs. must survive because they carry real activity) -----
-    // An account is only ever a delete candidate if it came from a prior
-    // save-plan run (file_import_id set); anything with no provenance, or
-    // with transactions (including bridge history), an envelope sub-budget,
-    // or a monthly goal, is preserved outright.
+    // ----- What this save wants to exist: cards from the UI + goal accounts
+    // from the plan. Built once, used to decide reuse vs. create vs. delete
+    // vs. preserve for every non-chequing account in a single pass. -----
+    const desiredAccounts: DesiredAccount[] = [
+      ...((cardNames as string[] | null | undefined) ?? []).map((rawName) => ({
+        name: (rawName ?? '').trim() || 'Card',
+        type: 'credit_card' as const,
+      })),
+      ...(plan.goals ?? []).map((g: { name: string }) => ({ name: g.name, type: 'savings' as const })),
+    ];
+
+    // ----- Build the account action plan (reuse by name match; otherwise
+    // delete if safe or preserve if it carries real activity) -----
     const nonChequingAccts = (accts ?? []).filter((a) => a.type !== 'chequing');
     const nonChequingIds = nonChequingAccts.map((a) => a.id);
 
     async function buildAccountPlan() {
-      if (nonChequingIds.length === 0) return planAccountReplace([]);
+      if (nonChequingIds.length === 0) return planAccountActions(desiredAccounts, []);
 
       const [{ data: txRows }, { data: bridgeRows }, { data: envRows }, { data: goalRows }] = await Promise.all([
         supabase.from('transactions').select('account_id').eq('household_id', householdId).in('account_id', nonChequingIds),
@@ -116,13 +124,14 @@ export async function POST(request: Request) {
       const infos: AccountProvenanceInfo[] = nonChequingAccts.map((a) => ({
         id: a.id,
         name: a.name,
+        type: a.type as AccountProvenanceInfo['type'],
         file_import_id: a.file_import_id ?? null,
         transactionCount: (txByAccount.get(a.id) ?? 0) + (bridgeByAccount.get(a.id) ?? 0),
         envelopeItemCount: envByAccount.get(a.id) ?? 0,
         monthlyGoalCount: goalByAccount.get(a.id) ?? 0,
       }));
 
-      return planAccountReplace(infos);
+      return planAccountActions(desiredAccounts, infos);
     }
 
     // ----- Prior-data guard: never wipe an existing plan silently -----
@@ -155,6 +164,7 @@ export async function POST(request: Request) {
           legacyRecurring,
           accountsToDelete: accountPlan.toDelete,
           accountsToPreserve: accountPlan.toPreserve,
+          accountsToReuse: accountPlan.toReuse.map((a) => ({ id: a.id, name: a.name })),
         },
       });
     }
@@ -196,7 +206,7 @@ export async function POST(request: Request) {
         }
       }
 
-      // toDelete accounts are guaranteed (by planAccountReplace) to have zero
+      // toDelete accounts are guaranteed (by planAccountActions) to have zero
       // transactions and zero bridge references — the FK on transactions.account_id
       // is ON DELETE RESTRICT, so this errors loudly instead of silently
       // orphaning anything if that guarantee were ever wrong.
@@ -225,21 +235,33 @@ export async function POST(request: Request) {
     const fileImportId: string = importRow.id;
     const transactionSource = resolveTransactionSource(fileMeta);
 
-    // ----- Create new credit card accounts from the names supplied by the UI -----
-    // The first card becomes the variable-spending account; falls back to chequing.
-    // Tagged with this run's provenance — if never used, a later re-onboarding
-    // is free to replace it; if the user starts spending on it, it's preserved.
-    let variableAccountId: string = chequingId;
-    for (const rawName of (cardNames as string[] | null | undefined) ?? []) {
-      const name = (rawName ?? '').trim() || 'Card';
-      const { data: newCard } = await supabase
+    // ----- Reuse, create, and refresh non-chequing accounts per the plan -----
+    // A name match (cardNames or plan.goals, case/whitespace-insensitive)
+    // reuses the existing account instead of creating a duplicate. Only an
+    // account with no manual history gets its provenance refreshed to this
+    // run — one with real activity (or none at all) keeps its provenance
+    // exactly as it was.
+    if (accountPlan.toReuse.some((a) => a.refreshProvenance)) {
+      await supabase
         .from('accounts')
-        .insert({ household_id: householdId, name, type: 'credit_card', file_import_id: fileImportId })
-        .select('id')
-        .single();
-      if (newCard && variableAccountId === chequingId) {
-        variableAccountId = newCard.id;
-      }
+        .update({ file_import_id: fileImportId })
+        .in('id', accountPlan.toReuse.filter((a) => a.refreshProvenance).map((a) => a.id));
+    }
+
+    if (accountPlan.toCreate.length > 0) {
+      const goalsByName = new Map((plan.goals ?? []).map((g: { name: string; targetAmount: number }) => [g.name.trim().toLowerCase(), g]));
+      await supabase.from('accounts').insert(
+        accountPlan.toCreate.map((a) => {
+          const goal = a.type === 'savings' ? goalsByName.get(a.name.trim().toLowerCase()) : undefined;
+          return {
+            household_id: householdId,
+            name: a.name,
+            type: a.type,
+            file_import_id: fileImportId,
+            ...(a.type === 'savings' ? { goal_target: goal && goal.targetAmount > 0 ? goal.targetAmount : null } : {}),
+          };
+        })
+      );
     }
 
     // ----- Replace prior onboarding-plan-generated recurring items -----
@@ -324,7 +346,8 @@ export async function POST(request: Request) {
     const budgetByCat = new Map<string, number>();
     // Visible, never-silent flags for the save-plan response.
     const unmatchedMembers: { label: string; attemptedMember: string }[] = [];
-    const needsPayDate: { id: string; description: string }[] = [];
+    const needsPayDate: { id: string; description: string; cadence: string; amount: number; member: string | null }[] = [];
+    const memberNameById = new Map((allMembers ?? []).map((m) => [m.id, m.name]));
 
     for (const cat of (plan.monthlyBudget.categories as PlanCategory[])) {
       if (sinkingFundNames.has(cat.name.trim().toLowerCase())) continue;
@@ -391,7 +414,7 @@ export async function POST(request: Request) {
       const { data: insertedItems, error: recurringError } = await supabase
         .from('recurring_items')
         .insert(recurringRows)
-        .select('id, description, amount, type, cadence, anchor_date, second_day, category_id, account_id');
+        .select('id, description, amount, type, cadence, anchor_date, second_day, category_id, account_id, member_id');
 
       if (recurringError) {
         console.error('Save plan recurring insert error:', recurringError);
@@ -405,7 +428,13 @@ export async function POST(request: Request) {
           // Real cadence and amount are saved; there is just no known pay
           // date yet to place dated instances on. Nothing to materialize —
           // and nothing to fabricate.
-          needsPayDate.push({ id: item.id, description: item.description });
+          needsPayDate.push({
+            id: item.id,
+            description: item.description,
+            cadence: item.cadence,
+            amount: Number(item.amount),
+            member: item.member_id ? memberNameById.get(item.member_id) ?? null : null,
+          });
           continue;
         }
 
@@ -423,7 +452,7 @@ export async function POST(request: Request) {
 
         const dates = materializeRule(
           {
-            cadence: item.cadence as 'monthly' | 'biweekly' | 'semimonthly',
+            cadence: item.cadence as 'monthly' | 'biweekly' | 'semimonthly' | 'weekly',
             anchorDate: item.anchor_date,
             secondDay: item.second_day,
           },
@@ -481,18 +510,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // ----- Goals: route into savings accounts so they appear on the Goals page -----
-    if (plan.goals?.length) {
-      await supabase.from('accounts').insert(
-        plan.goals.map((g: { name: string; targetAmount: number }) => ({
-          household_id: householdId,
-          name: g.name,
-          type: 'savings',
-          goal_target: g.targetAmount > 0 ? g.targetAmount : null,
-          file_import_id: fileImportId,
-        }))
-      );
-    }
+    // Goal accounts are handled above with cards, in the reuse/create pass —
+    // a name match reuses the existing (possibly funded) goal account
+    // instead of creating a duplicate savings account for it.
 
     // ----- Review -----
     await supabase.from('conversations').insert({

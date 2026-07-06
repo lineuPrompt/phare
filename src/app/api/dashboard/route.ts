@@ -69,7 +69,7 @@ export async function GET(request: Request) {
     // that haven't been planned, so we never fake a budget for the current month.
     const planMonth = latestBudget.month as string;
 
-    const [txResult, acctResult, budgetResult, sfResult, convResult] =
+    const [txResult, acctResult, budgetResult, sfResult, convResult, unanchoredIncomeResult] =
       await Promise.all([
         // Transactions for the ACTUALS month (not the plan month)
         supabase
@@ -104,6 +104,17 @@ export async function GET(request: Request) {
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
+
+        // Income recurring items with no known pay date yet — real cadence
+        // and amount are saved, but nothing is materialized for them, so
+        // this month's actual income total can understate the plan's total.
+        supabase
+          .from('recurring_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('household_id', householdId)
+          .eq('type', 'income')
+          .eq('active', true)
+          .is('anchor_date', null),
       ]);
 
     const allAccounts = acctResult.data ?? [];
@@ -162,6 +173,7 @@ export async function GET(request: Request) {
       review,
       topRecommendation,
       reviewDate:        convResult.data?.created_at ?? null,
+      unanchoredIncomeCount: unanchoredIncomeResult.count ?? 0,
     });
   } catch (error) {
     console.error('Dashboard error:', error);

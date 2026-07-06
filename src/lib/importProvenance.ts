@@ -65,38 +65,86 @@ export function missingSeedCategories(existingNames: string[], seedNames: string
 }
 
 // ---------------------------------------------------------------------------
-// Card/LOC account replace-on-reimport (Phase B2)
+// Card/goal account reuse, create, delete, and preserve on re-onboarding
+// (Phase B2 + the duplicate-account fix)
 // ---------------------------------------------------------------------------
 
 export type AccountPreserveReason = 'not_from_import' | 'has_transactions' | 'has_envelope_budget' | 'has_monthly_goal';
+// The full set accounts.type can hold (see accounts_type_check). Reuse only
+// ever matches 'credit_card' (cardNames) or 'savings' (plan.goals) — other
+// existing types (line_of_credit, tfsa, rrsp) simply never match a desired
+// entry and fall through to the ordinary delete/preserve decision.
+export type AccountKind = 'chequing' | 'credit_card' | 'line_of_credit' | 'savings' | 'tfsa' | 'rrsp';
 
 export type AccountProvenanceInfo = {
   id: string;
   name: string;
+  type: AccountKind;
   file_import_id: string | null;
-  transactionCount: number;   // includes bridge-sourced rows on chequing
+  transactionCount: number;   // includes bridge-sourced rows on chequing, and goal-transfer rows
   envelopeItemCount: number;
   monthlyGoalCount: number;
 };
 
-export type AccountReplacePlan = {
+export type DesiredAccount = { name: string; type: AccountKind };
+
+export type AccountActionPlan = {
   toDelete: { id: string; name: string }[];
   toPreserve: { id: string; name: string; reason: AccountPreserveReason }[];
+  toReuse: { id: string; name: string; type: AccountKind; refreshProvenance: boolean }[];
+  toCreate: DesiredAccount[];
 };
 
-/**
- * A non-chequing account is only safe to delete on a confirmed re-onboarding
- * if it came from a prior save-plan run (file_import_id set) AND carries no
- * activity of its own since. Any real activity — manual transactions
- * (including bridge history), envelope sub-budgets, or a monthly goal — was
- * put there by the user, not by the import, and must survive regardless of
- * how the account itself was created.
- */
-export function planAccountReplace(accounts: AccountProvenanceInfo[]): AccountReplacePlan {
-  const toDelete: AccountReplacePlan['toDelete'] = [];
-  const toPreserve: AccountReplacePlan['toPreserve'] = [];
+// "Has history that must never be silently re-tagged as import-owned" —
+// either real activity, or the account was never import-managed to begin
+// with (manually added). Both cases keep their provenance exactly as-is on reuse.
+function hasManualHistory(a: AccountProvenanceInfo): boolean {
+  return a.file_import_id === null || a.transactionCount > 0 || a.envelopeItemCount > 0 || a.monthlyGoalCount > 0;
+}
 
-  for (const a of accounts) {
+/**
+ * Decides what happens to every non-chequing account on a confirmed
+ * re-onboarding, resolving reuse BEFORE delete/preserve so a name match
+ * never results in delete-then-recreate duplication:
+ *
+ *  - A desired account (from cardNames / plan.goals) matching an existing
+ *    account of the same type by name (case/whitespace-insensitive) is
+ *    REUSED, never recreated. If the match has no manual data of its own,
+ *    its provenance is refreshed to this run (still import-managed); if it
+ *    does, provenance is left exactly as-is — reuse never touches a row
+ *    with real history.
+ *  - A desired account with no match is created fresh, tagged to this run.
+ *  - Any remaining (unclaimed) existing account is deleted if it came from
+ *    a prior import and has no activity of its own, or preserved otherwise
+ *    (manually added, or has transactions/envelope items/a monthly goal).
+ */
+export function planAccountActions(
+  desired: DesiredAccount[],
+  existing: AccountProvenanceInfo[]
+): AccountActionPlan {
+  const claimed = new Set<string>();
+  const toReuse: AccountActionPlan['toReuse'] = [];
+  const toCreate: AccountActionPlan['toCreate'] = [];
+
+  for (const want of desired) {
+    const normalized = want.name.trim().toLowerCase();
+    const match = existing.find(
+      (a) => a.type === want.type && !claimed.has(a.id) && a.name.trim().toLowerCase() === normalized
+    );
+    if (match) {
+      claimed.add(match.id);
+      toReuse.push({ id: match.id, name: match.name, type: want.type, refreshProvenance: !hasManualHistory(match) });
+    } else {
+      toCreate.push(want);
+    }
+  }
+
+  const toDelete: AccountActionPlan['toDelete'] = [];
+  const toPreserve: AccountActionPlan['toPreserve'] = [];
+
+  for (const a of existing) {
+    if (claimed.has(a.id)) continue; // being reused — not a delete or preserve decision
+
     if (a.file_import_id === null) {
       toPreserve.push({ id: a.id, name: a.name, reason: 'not_from_import' });
     } else if (a.monthlyGoalCount > 0) {
@@ -110,5 +158,5 @@ export function planAccountReplace(accounts: AccountProvenanceInfo[]): AccountRe
     }
   }
 
-  return { toDelete, toPreserve };
+  return { toDelete, toPreserve, toReuse, toCreate };
 }
