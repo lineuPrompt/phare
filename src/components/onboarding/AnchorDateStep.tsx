@@ -12,7 +12,14 @@ export type NeedsPayDateItem = {
   cadence: string;   // 'biweekly' | 'semimonthly' | 'weekly' (monthly never appears here)
   amount: number;
   member: string | null;
+  memberId: string | null;
+  isHousehold: boolean;
+  attemptedName: string | null;
 };
+
+// Sentinel dropdown value for household-level attribution — never collides
+// with a real household_members uuid.
+const HOUSEHOLD_VALUE = '__household__';
 
 type ItemState = {
   nextPayDate: string;
@@ -20,13 +27,16 @@ type ItemState = {
   day2: string;
   status: 'idle' | 'saving' | 'saved' | 'error';
   error: string;
+  memberValue: string;
 };
 
 export default function AnchorDateStep({
   items,
+  members,
   onDone,
 }: {
   items: NeedsPayDateItem[];
+  members: { id: string; name: string }[];
   onDone: () => void;
 }) {
   const t = useTranslations('upload.plan.anchorStep');
@@ -34,7 +44,13 @@ export default function AnchorDateStep({
   const currentMonth = formatLocalMonth(new Date());
 
   const [state, setState] = useState<Record<string, ItemState>>(() =>
-    Object.fromEntries(items.map((i) => [i.id, { nextPayDate: '', day1: '', day2: '30', status: 'idle', error: '' }]))
+    Object.fromEntries(items.map((i) => [
+      i.id,
+      {
+        nextPayDate: '', day1: '', day2: '30', status: 'idle', error: '',
+        memberValue: i.isHousehold ? HOUSEHOLD_VALUE : (i.memberId ?? ''),
+      },
+    ]))
   );
 
   const update = (id: string, patch: Partial<ItemState>) =>
@@ -68,10 +84,11 @@ export default function AnchorDateStep({
 
     update(item.id, { status: 'saving', error: '' });
     try {
+      const memberId = s.memberValue === HOUSEHOLD_VALUE ? null : (s.memberValue || null);
       const res = await fetch(`/api/recurring/${item.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ anchorDate, secondDay }),
+        body: JSON.stringify({ anchorDate, secondDay, memberId }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
       update(item.id, { status: 'saved', error: '' });
@@ -92,13 +109,35 @@ export default function AnchorDateStep({
       <div className="space-y-4">
         {items.map((item) => {
           const s = state[item.id];
-          const label = item.member ? `${item.description} — ${item.member}` : item.description;
           return (
             <div key={item.id} className="rounded-xl p-4" style={{ background: '#FAFAF8', border: '1px solid #E5E7EB' }}>
-              <p className="font-medium mb-1" style={{ color: '#0F2044' }}>{label}</p>
+              <p className="font-medium mb-1" style={{ color: '#0F2044' }}>{item.description}</p>
               <p className="text-xs mb-3" style={{ color: '#9CA3AF' }}>
                 {t(`cadence.${item.cadence}`)} · {formatCAD(item.amount)}{t('perPaycheque')}
               </p>
+
+              {item.attemptedName && (
+                <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ background: '#FFFBEB', color: '#92400E', border: '1px solid #FDE68A' }}>
+                  {t('fallbackFlag', { name: item.attemptedName })}
+                </p>
+              )}
+
+              {s.status !== 'saved' && (
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <label className="text-sm" style={{ color: '#6B7280' }}>{t('memberLabel')}</label>
+                  <select
+                    value={s.memberValue}
+                    onChange={(e) => update(item.id, { memberValue: e.target.value })}
+                    className="px-3 py-1.5 rounded-lg text-sm outline-none"
+                    style={inputStyle}
+                  >
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                    <option value={HOUSEHOLD_VALUE}>{t('householdOption')}</option>
+                  </select>
+                </div>
+              )}
 
               {s.status === 'saved' ? (
                 <p className="text-sm font-medium" style={{ color: '#16A34A' }}>{t('savedConfirm')}</p>

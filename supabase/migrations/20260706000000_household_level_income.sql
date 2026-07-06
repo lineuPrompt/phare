@@ -1,0 +1,14 @@
+-- =============================================================================
+-- Phare — Build 3 Phase C follow-up: household-level income attribution
+-- Strictly additive. No table is dropped; only a NOT NULL is relaxed.
+--
+-- PENDING APPLICATION — do not apply to production without founder sign-off.
+--
+-- Some income (e.g. child benefits) belongs to the household as a whole, not
+-- to any one member. recurring_items.member_id was already nullable for this.
+-- transactions.member_id was NOT NULL, which would have made materializing a
+-- household-level recurring_item impossible — this drops that constraint so
+-- a household-attributed transaction can exist with member_id = NULL instead
+-- of being forced onto a person it doesn't belong to.
+-- =============================================================================
+ALTER TABLE transactions ALTER COLUMN member_id DROP NOT NULL;

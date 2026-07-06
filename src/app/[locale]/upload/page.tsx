@@ -69,6 +69,8 @@ export default function UploadPage() {
     unmatchedMembers: { label: string; attemptedMember: string }[];
     needsPayDate: NeedsPayDateItem[];
   } | null>(null);
+  // Household members for the anchor step's attribution dropdown.
+  const [householdMembers, setHouseholdMembers] = useState<{ id: string; name: string }[]>([]);
 
   const localeOf = () => (typeof window !== 'undefined' && window.location.pathname.startsWith('/fr') ? 'fr' : 'en');
 
@@ -96,6 +98,7 @@ export default function UploadPage() {
         unmatchedMembers: data?.unmatchedMembers ?? [],
         needsPayDate,
       });
+      setHouseholdMembers(data?.householdMembers ?? []);
       setPlanSaveStatus('saved');
       if (needsPayDate.length > 0) {
         setStatus('anchor_dates');
@@ -440,6 +443,7 @@ export default function UploadPage() {
         {status === 'anchor_dates' && saveNotices && (
           <AnchorDateStep
             items={saveNotices.needsPayDate}
+            members={householdMembers}
             onDone={() => setStatus('plan')}
           />
         )}

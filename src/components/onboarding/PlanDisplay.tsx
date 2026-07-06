@@ -225,9 +225,16 @@ export default function PlanDisplay({
       {planSaveStatus === 'saved' && saveNotices && (saveNotices.unmatchedMembers.length > 0 || saveNotices.needsPayDate.length > 0) && (
         <div className="rounded-2xl p-6 space-y-3" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
           {saveNotices.unmatchedMembers.length > 0 && (
-            <p style={{ color: '#374151' }}>
-              {t('plan.unmatchedMembers', { count: saveNotices.unmatchedMembers.length })}
-            </p>
+            <div>
+              <p style={{ color: '#374151' }}>
+                {t('plan.unmatchedMembers', { count: saveNotices.unmatchedMembers.length })}
+              </p>
+              <ul className="list-disc list-inside mt-1" style={{ color: '#92400E' }}>
+                {saveNotices.unmatchedMembers.map((m, i) => (
+                  <li key={i}>{t('plan.unmatchedMemberItem', { name: m.attemptedMember })}</li>
+                ))}
+              </ul>
+            </div>
           )}
           {saveNotices.needsPayDate.length > 0 && (
             <p style={{ color: '#374151' }}>

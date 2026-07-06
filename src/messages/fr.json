@@ -198,6 +198,7 @@
         "confirm": "Remplacer"
       },
       "unmatchedMembers": "{count, plural, one {Le nom de membre d'une source de revenu ne correspondait à personne dans votre foyer — elle vous a été attribuée. Vérifiez-la dans la page Récurrences.} other {Le nom de membre de # sources de revenu ne correspondait à personne dans votre foyer — elles vous ont été attribuées. Vérifiez-les dans la page Récurrences.}}",
+      "unmatchedMemberItem": "« {name} » ne correspondait à personne — attribué à vous.",
       "needsPayDate": "{count, plural, one {1 source de revenu a besoin d'une vraie date de paie avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.} other {# sources de revenu ont besoin d'une vraie date de paie avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.}}",
       "anchorStep": {
         "title": "Quand ces revenus sont-ils versés?",
@@ -208,6 +209,9 @@
           "semimonthly": "Deux fois par mois"
         },
         "perPaycheque": "/paie",
+        "memberLabel": "Attribué à",
+        "householdOption": "Ménage",
+        "fallbackFlag": "« {name} » ne correspondait à personne — attribué à vous.",
         "nextPayDateLabel": "Prochaine paie",
         "nextPayDateWindow": "Doit être dans les {days} prochains jours — c'est ce qui en fait la *prochaine* paie.",
         "day1Label": "Première paie (jour du mois)",

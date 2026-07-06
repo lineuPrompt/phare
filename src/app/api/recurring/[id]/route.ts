@@ -57,6 +57,10 @@ export async function PATCH(
     const newSecondDay   = body.secondDay  !== undefined ? (body.secondDay ?? null) : current.second_day;
     const newCategoryId  = body.categoryId !== undefined ? (body.categoryId || null) : current.category_id;
     const newAccountId   = body.accountId  ?? current.account_id;
+    // memberId is explicitly nullable (household-level attribution) — only
+    // fall back to the current value when the field is entirely absent from
+    // the request body, never when it was sent as null on purpose.
+    const newMemberId    = 'memberId' in body ? (body.memberId ?? null) : current.member_id;
 
     if (!['monthly', 'biweekly', 'semimonthly', 'weekly'].includes(newCadence)) {
       return NextResponse.json({ error: 'Invalid cadence' }, { status: 400 });
@@ -82,6 +86,20 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid account' }, { status: 400 });
     }
 
+    // Verify the reassigned member (if any) belongs to this household —
+    // null is always valid (household-level attribution).
+    if (newMemberId !== null) {
+      const { data: memberRow } = await supabase
+        .from('household_members')
+        .select('id')
+        .eq('id', newMemberId)
+        .eq('household_id', householdId)
+        .single();
+      if (!memberRow) {
+        return NextResponse.json({ error: 'Invalid member' }, { status: 400 });
+      }
+    }
+
     // 1. Update the rule
     const { data: updatedItem, error: ruleErr } = await supabase
       .from('recurring_items')
@@ -93,6 +111,7 @@ export async function PATCH(
         second_day:  newSecondDay,
         category_id: newCategoryId,
         account_id:  newAccountId,
+        member_id:   newMemberId,
       })
       .eq('id', id)
       .eq('household_id', householdId)

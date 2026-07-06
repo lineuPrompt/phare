@@ -198,6 +198,7 @@
         "confirm": "Replace"
       },
       "unmatchedMembers": "{count, plural, one {1 income source's Member name didn't match anyone in your household — it was assigned to you. Check it on the Recurring page.} other {# income sources' Member names didn't match anyone in your household — they were assigned to you. Check them on the Recurring page.}}",
+      "unmatchedMemberItem": "“{name}” didn't match anyone — assigned to you.",
       "needsPayDate": "{count, plural, one {1 income source needs a real pay date before it shows up day-by-day — add one on the Recurring page.} other {# income sources need a real pay date before they show up day-by-day — add one on the Recurring page.}}",
       "anchorStep": {
         "title": "When do these get paid?",
@@ -208,6 +209,9 @@
           "semimonthly": "Twice a month"
         },
         "perPaycheque": "/paycheque",
+        "memberLabel": "Assigned to",
+        "householdOption": "Household",
+        "fallbackFlag": "“{name}” didn’t match anyone — assigned to you.",
         "nextPayDateLabel": "Next payday",
         "nextPayDateWindow": "Must be within the next {days} days — that's what makes it the *next* payday.",
         "day1Label": "First payday (day of month)",

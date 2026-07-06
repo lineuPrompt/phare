@@ -346,8 +346,13 @@ export async function POST(request: Request) {
     const budgetByCat = new Map<string, number>();
     // Visible, never-silent flags for the save-plan response.
     const unmatchedMembers: { label: string; attemptedMember: string }[] = [];
-    const needsPayDate: { id: string; description: string; cadence: string; amount: number; member: string | null }[] = [];
+    const needsPayDate: { id: string; description: string; cadence: string; amount: number; member: string | null; memberId: string | null; isHousehold: boolean; attemptedName: string | null }[] = [];
     const memberNameById = new Map((allMembers ?? []).map((m) => [m.id, m.name]));
+    // Per-income-line resolution detail, keyed by description — recurringRows
+    // only carries DB columns, so this is how the anchor step (built after
+    // insert, from insertedItems) learns whether a row was a household
+    // attribution or an unmatched-name fallback worth visibly flagging.
+    const incomeMetaByDescription = new Map<string, { isHousehold: boolean; attemptedName: string | null }>();
 
     for (const cat of (plan.monthlyBudget.categories as PlanCategory[])) {
       if (sinkingFundNames.has(cat.name.trim().toLowerCase())) continue;
@@ -361,11 +366,12 @@ export async function POST(request: Request) {
         const amount = cat.rawAmount ?? cat.budgeted;
         const isMonthly = cadence === 'monthly';
 
-        const { memberId: resolvedMemberId, usedFallback, unmatchedName } =
+        const { memberId: resolvedMemberId, usedFallback, unmatchedName, isHousehold } =
           resolveMemberId(cat.member, allMembers ?? [], memberId);
         if (usedFallback && unmatchedName) {
           unmatchedMembers.push({ label: cat.name, attemptedMember: unmatchedName });
         }
+        incomeMetaByDescription.set(cat.name, { isHousehold, attemptedName: usedFallback ? unmatchedName : null });
 
         recurringRows.push({
           household_id: householdId,
@@ -428,12 +434,16 @@ export async function POST(request: Request) {
           // Real cadence and amount are saved; there is just no known pay
           // date yet to place dated instances on. Nothing to materialize —
           // and nothing to fabricate.
+          const meta = incomeMetaByDescription.get(item.description);
           needsPayDate.push({
             id: item.id,
             description: item.description,
             cadence: item.cadence,
             amount: Number(item.amount),
             member: item.member_id ? memberNameById.get(item.member_id) ?? null : null,
+            memberId: item.member_id,
+            isHousehold: meta?.isHousehold ?? false,
+            attemptedName: meta?.attemptedName ?? null,
           });
           continue;
         }
@@ -462,7 +472,12 @@ export async function POST(request: Request) {
         for (const d of dates) {
           txnRows.push({
             household_id: householdId,
-            member_id: memberId,
+            // The item's own resolved member (null for household-level
+            // income) — never the uploading user's id. Hardcoding memberId
+            // here was the bug: it silently re-attributed every materialized
+            // transaction to whoever ran onboarding, even when the recurring
+            // item itself correctly resolved to a different member.
+            member_id: item.member_id,
             category_id: item.category_id,
             amount: item.amount,
             description: item.description,
@@ -526,7 +541,7 @@ export async function POST(request: Request) {
     });
 
     await logEvent(supabase, householdId, user.id, 'completed_onboarding', { locale });
-    return NextResponse.json({ saved: true, unmatchedMembers, needsPayDate });
+    return NextResponse.json({ saved: true, unmatchedMembers, needsPayDate, householdMembers: allMembers ?? [] });
   } catch (error) {
     console.error('Save plan error:', error);
     return NextResponse.json({ error: 'Failed to save plan' }, { status: 500 });
