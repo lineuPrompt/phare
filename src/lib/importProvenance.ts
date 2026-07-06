@@ -26,7 +26,7 @@ export function resolveTransactionSource(fileMeta: FileMeta): 'manual' | 'csv' |
   return fileMeta?.fileType ?? 'manual';
 }
 
-/**
+/***
  * A destructive re-onboarding replace should never run silently once the
  * household already has plan data. confirmReplace is the explicit go-ahead
  * from the bilingual confirmation step in the UI.
