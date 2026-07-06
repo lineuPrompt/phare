@@ -8,7 +8,14 @@ const SEED_CATEGORIES = [
   'Health & Personal', 'Installments', 'Unexpected',
 ] as const;
 
-type Category = { name: string; budgeted: number; type: string };
+type Category = {
+  name: string;
+  budgeted: number;
+  type: string;
+  rawAmount?: number;
+  frequency?: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
+  member?: string;
+};
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;
@@ -38,8 +45,9 @@ export async function POST(request: NextRequest) {
         totalExpenses: p.summary.monthlyExpenses,
         totalSavings: p.summary.netCashFlow,
         categories: [
-          ...p.income.lines.map((l: { label: string; amount: number }) => ({
+          ...p.income.lines.map((l: { label: string; amount: number; rawAmount?: number; frequency?: Category['frequency']; member?: string }) => ({
             name: l.label, budgeted: l.amount, type: 'income',
+            rawAmount: l.rawAmount, frequency: l.frequency, member: l.member,
           })),
           ...p.fixedExpenses.lines.map((l: { label: string; amount: number }) => ({
             name: l.label, budgeted: l.amount, type: 'expense',

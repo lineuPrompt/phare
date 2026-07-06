@@ -55,8 +55,17 @@ export default function UploadPage() {
     plan: Plan; reviewText: string; locale: string; cardNames: string[]; fileMeta: FileMeta;
   } | null>(null);
   const [confirmReplaceFlag, setConfirmReplaceFlag] = useState(false);
+  type AccountPreserveReason = 'not_from_import' | 'has_transactions' | 'has_envelope_budget' | 'has_monthly_goal';
   const [replaceConfirmation, setReplaceConfirmation] = useState<{
     totalRecurring: number; provenancedRecurring: number; legacyRecurring: number;
+    accountsToDelete: { id: string; name: string }[];
+    accountsToPreserve: { id: string; name: string; reason: AccountPreserveReason }[];
+  } | null>(null);
+  // Visible, never-silent fallbacks from the save — member names that didn't
+  // match anyone in the household, and income rows still missing a real pay date.
+  const [saveNotices, setSaveNotices] = useState<{
+    unmatchedMembers: { label: string; attemptedMember: string }[];
+    needsPayDate: { id: string; description: string }[];
   } | null>(null);
 
   const localeOf = () => (typeof window !== 'undefined' && window.location.pathname.startsWith('/fr') ? 'fr' : 'en');
@@ -80,6 +89,10 @@ export default function UploadPage() {
         return;
       }
       setReplaceConfirmation(null);
+      setSaveNotices({
+        unmatchedMembers: data?.unmatchedMembers ?? [],
+        needsPayDate: data?.needsPayDate ?? [],
+      });
       setPlanSaveStatus('saved');
     } catch (err) {
       console.error('Plan save error:', err);
@@ -346,6 +359,7 @@ export default function UploadPage() {
     setFileMeta(null);
     setConfirmReplaceFlag(false);
     setReplaceConfirmation(null);
+    setSaveNotices(null);
   }, []);
 
   return (
@@ -428,6 +442,7 @@ export default function UploadPage() {
             replaceConfirmation={replaceConfirmation}
             onConfirmReplace={confirmReplaceAndSave}
             onCancelReplace={cancelReplace}
+            saveNotices={saveNotices}
           />
         )}
       </div>

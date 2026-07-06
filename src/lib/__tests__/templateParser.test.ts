@@ -407,6 +407,44 @@ describe('parseTemplate — v2 income parsing (end-to-end)', () => {
     expect(result.incomeSkippedRows).toBe(2);  // caller can surface this — not a silent $0
   });
 
+  // Regression fixture from the Build 3 Phase A/B onboarding-import bug:
+  // the shipped template's real Monthly Income sheet has FOUR income rows
+  // (two salary rows for the same person on different pay schedules, plus
+  // two monthly child-benefit rows) and a "Member / Membre" column (col 3)
+  // that must be captured, not dropped.
+  it('BUILD 3 — four-row shipped-template fixture: member captured, snapshot income is exactly $11,155.03 on two consecutive parses', () => {
+    const incomeRows = makeV2IncomeRows([
+      ['Salary / Salaire', 2397.85, 'bi-weekly', 'Lineu', 'One paycheque; paid every 2 weeks (26/yr)'],
+      ['Salary / Salaire', 2787.97, 'semi-monthly', 'Julia', 'One paycheque; paid 15th & 30th (24/yr)'],
+      ['Child benefit / Quebec', 203.50, 'monthly', null, 'CCB'],
+      ['Child benefit / Federal', 180.25, 'monthly', null, 'CCB'],
+    ]);
+    const buf = buildMinimalWorkbook(incomeRows);
+
+    // Parsing is pure and deterministic — "two consecutive imports of the
+    // same file" must produce the identical snapshot both times.
+    const first = parseTemplate(buf);
+    const second = parseTemplate(buf);
+
+    for (const result of [first, second]) {
+      expect(result.incomeLayout).toBe('v2');
+      expect(result.income.lines).toHaveLength(4);
+      expect(result.incomeSkippedRows).toBe(0);
+      expect(result.income.total).toBe(11155.03);
+      expect(result.summary.monthlyIncome).toBe(11155.03);
+    }
+
+    expect(first.income.lines[0]).toEqual({
+      label: 'Salary / Salaire', amount: 5195.34, rawAmount: 2397.85, frequency: 'biweekly', member: 'Lineu',
+    });
+    expect(first.income.lines[1]).toEqual({
+      label: 'Salary / Salaire', amount: 5575.94, rawAmount: 2787.97, frequency: 'semimonthly', member: 'Julia',
+    });
+    // Child-benefit rows have no Member cell — member is correctly absent, not fabricated.
+    expect(first.income.lines[2].member).toBeUndefined();
+    expect(first.income.lines[3].member).toBeUndefined();
+  });
+
   it('v1 template (no frequency header): parses col 2 as monthly amount; incomeSkippedRows is 0', () => {
     const incomeRows: unknown[][] = [
       [null, null, null],

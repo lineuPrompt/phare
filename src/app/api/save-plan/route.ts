@@ -8,8 +8,11 @@ import {
   resolveTransactionSource,
   needsReplaceConfirmation,
   missingSeedCategories,
+  planAccountReplace,
   type FileMeta,
+  type AccountProvenanceInfo,
 } from '@/lib/importProvenance';
+import { resolveMemberId, type IncomeFrequency } from '@/lib/incomeHelpers';
 
 type PlanCategory = {
   name: string;
@@ -17,6 +20,10 @@ type PlanCategory = {
   type: string;
   seedCategory?: string;
   isFixed?: boolean;
+  // Income identity (template v2 income lines only) — see api/plan/route.ts.
+  rawAmount?: number;
+  frequency?: IncomeFrequency;
+  member?: string;
 };
 
 export async function POST(request: Request) {
@@ -55,10 +62,18 @@ export async function POST(request: Request) {
       .single();
     const memberId = member?.id ?? null;
 
+    // All household members, for matching the template's "Member" column
+    // against a real person. Fallback for unmatched/blank rows is the
+    // current onboarding user (memberId above) — always reported, never silent.
+    const { data: allMembers } = await supabase
+      .from('household_members')
+      .select('id, name')
+      .eq('household_id', householdId);
+
     // ----- Resolve chequing account (required) -----
     const { data: accts } = await supabase
       .from('accounts')
-      .select('id, type')
+      .select('id, type, name, file_import_id')
       .eq('household_id', householdId);
 
     const chequingId = accts?.find((a) => a.type === 'chequing')?.id ?? null;
@@ -66,17 +81,62 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'A chequing account is required before saving a plan' }, { status: 400 });
     }
 
+    // ----- Build the account replace plan (which cards/goal accounts are safe
+    // to delete vs. must survive because they carry real activity) -----
+    // An account is only ever a delete candidate if it came from a prior
+    // save-plan run (file_import_id set); anything with no provenance, or
+    // with transactions (including bridge history), an envelope sub-budget,
+    // or a monthly goal, is preserved outright.
+    const nonChequingAccts = (accts ?? []).filter((a) => a.type !== 'chequing');
+    const nonChequingIds = nonChequingAccts.map((a) => a.id);
+
+    async function buildAccountPlan() {
+      if (nonChequingIds.length === 0) return planAccountReplace([]);
+
+      const [{ data: txRows }, { data: bridgeRows }, { data: envRows }, { data: goalRows }] = await Promise.all([
+        supabase.from('transactions').select('account_id').eq('household_id', householdId).in('account_id', nonChequingIds),
+        supabase.from('transactions').select('bridge_source_account').eq('household_id', householdId).in('bridge_source_account', nonChequingIds),
+        supabase.from('card_envelope_items').select('account_id').eq('household_id', householdId).in('account_id', nonChequingIds),
+        supabase.from('monthly_goals').select('account_id').eq('household_id', householdId).in('account_id', nonChequingIds),
+      ]);
+
+      const tally = (rows: Record<string, unknown>[] | null, key: string) => {
+        const m = new Map<string, number>();
+        for (const r of rows ?? []) {
+          const id = r[key] as string | null;
+          if (id) m.set(id, (m.get(id) ?? 0) + 1);
+        }
+        return m;
+      };
+      const txByAccount = tally(txRows, 'account_id');
+      const bridgeByAccount = tally(bridgeRows, 'bridge_source_account');
+      const envByAccount = tally(envRows, 'account_id');
+      const goalByAccount = tally(goalRows, 'account_id');
+
+      const infos: AccountProvenanceInfo[] = nonChequingAccts.map((a) => ({
+        id: a.id,
+        name: a.name,
+        file_import_id: a.file_import_id ?? null,
+        transactionCount: (txByAccount.get(a.id) ?? 0) + (bridgeByAccount.get(a.id) ?? 0),
+        envelopeItemCount: envByAccount.get(a.id) ?? 0,
+        monthlyGoalCount: goalByAccount.get(a.id) ?? 0,
+      }));
+
+      return planAccountReplace(infos);
+    }
+
     // ----- Prior-data guard: never wipe an existing plan silently -----
     // Every prior save-plan run left a recurring_items/budgets/sinking_funds
     // footprint (whether it came from a file or the manual form). If any of
-    // that still exists, the UI must show an explicit bilingual confirmation
-    // before this call is allowed to replace it.
+    // that — or any non-chequing account — still exists, the UI must show an
+    // explicit bilingual confirmation before this call is allowed to replace it.
     const [{ count: priorRecurringCount }, { count: priorBudgetsCount }, { count: priorSinkingCount }] = await Promise.all([
       supabase.from('recurring_items').select('id', { count: 'exact', head: true }).eq('household_id', householdId),
       supabase.from('budgets').select('id', { count: 'exact', head: true }).eq('household_id', householdId),
       supabase.from('sinking_funds').select('id', { count: 'exact', head: true }).eq('household_id', householdId),
     ]);
-    const hasPriorData = (priorRecurringCount ?? 0) > 0 || (priorBudgetsCount ?? 0) > 0 || (priorSinkingCount ?? 0) > 0;
+    const hasPriorData = (priorRecurringCount ?? 0) > 0 || (priorBudgetsCount ?? 0) > 0
+      || (priorSinkingCount ?? 0) > 0 || nonChequingIds.length > 0;
 
     if (needsReplaceConfirmation(hasPriorData, confirmReplace)) {
       const { data: recurringRowsForCount } = await supabase
@@ -85,6 +145,7 @@ export async function POST(request: Request) {
         .eq('household_id', householdId);
       const provenancedRecurring = (recurringRowsForCount ?? []).filter((r) => r.file_import_id !== null).length;
       const legacyRecurring = (recurringRowsForCount ?? []).filter((r) => r.file_import_id === null).length;
+      const accountPlan = await buildAccountPlan();
 
       return NextResponse.json({
         needsConfirmation: true,
@@ -92,6 +153,8 @@ export async function POST(request: Request) {
           totalRecurring: priorRecurringCount ?? 0,
           provenancedRecurring,
           legacyRecurring,
+          accountsToDelete: accountPlan.toDelete,
+          accountsToPreserve: accountPlan.toPreserve,
         },
       });
     }
@@ -101,34 +164,24 @@ export async function POST(request: Request) {
     const monthDate = `${currentMonth}-01`;
     const anchorDate = `${currentMonth}-01`;
 
-    // ----- Wipe non-chequing accounts and their transactions -----
-    // Done server-side so we can delete transactions first (the API guard blocks
-    // deletion when transactions exist, which caused duplicate cards/goals on re-onboarding).
-    //
-    // KNOWN ISSUE (pre-existing, not fixed by this pass): this still deletes
-    // ALL transactions on every card/LOC account unconditionally, including
-    // ones the user entered or categorized by hand after onboarding on the
-    // Cards/Expenses pages. Card accounts and their manual history have no
-    // provenance tagging yet (only recurring_items/transactions/budgets/
-    // sinking_funds do, per Phase B scope). Flagged for a follow-up rather
-    // than folded in here.
-    const nonChequingIds = (accts ?? [])
-      .filter((a) => a.type !== 'chequing')
-      .map((a) => a.id);
+    // ----- Replace only the non-chequing accounts safe to replace -----
+    // Everything in accountPlan.toPreserve — manually added accounts, or
+    // imported ones with real activity since — is left completely alone:
+    // not deleted, transactions untouched, envelope items/goals untouched.
+    const accountPlan = await buildAccountPlan();
+    const deleteAccountIds = accountPlan.toDelete.map((a) => a.id);
 
-    if (nonChequingIds.length > 0) {
-      // Find goal-side transfer transaction IDs so we can also clean up their
-      // chequing-side peers (otherwise the planner shows orphaned transfer rows).
-      const goalAccountIds = (accts ?? [])
-        .filter((a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type))
-        .map((a) => a.id);
+    if (deleteAccountIds.length > 0) {
+      const goalAccountIdsToDelete = deleteAccountIds.filter((id) =>
+        (accts ?? []).some((a) => a.id === id && (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type))
+      );
 
-      if (goalAccountIds.length > 0) {
+      if (goalAccountIdsToDelete.length > 0) {
         const { data: goalTxs } = await supabase
           .from('transactions')
           .select('id')
           .eq('household_id', householdId)
-          .in('account_id', goalAccountIds)
+          .in('account_id', goalAccountIdsToDelete)
           .eq('type', 'transfer');
 
         const goalTxIds = (goalTxs ?? []).map((t) => t.id);
@@ -143,42 +196,15 @@ export async function POST(request: Request) {
         }
       }
 
-      // Delete all transactions on non-chequing accounts (card expenses, goal transfers).
-      await supabase
-        .from('transactions')
-        .delete()
-        .eq('household_id', householdId)
-        .in('account_id', nonChequingIds);
-
-      // Delete bridge lines on chequing that reference the old card accounts.
-      await supabase
-        .from('transactions')
-        .delete()
-        .eq('household_id', householdId)
-        .eq('is_bridge', true)
-        .in('bridge_source_account', nonChequingIds);
-
-      // Now safe to delete the accounts themselves.
+      // toDelete accounts are guaranteed (by planAccountReplace) to have zero
+      // transactions and zero bridge references — the FK on transactions.account_id
+      // is ON DELETE RESTRICT, so this errors loudly instead of silently
+      // orphaning anything if that guarantee were ever wrong.
       await supabase
         .from('accounts')
         .delete()
         .eq('household_id', householdId)
-        .neq('type', 'chequing');
-    }
-
-    // ----- Create new credit card accounts from the names supplied by the UI -----
-    // The first card becomes the variable-spending account; falls back to chequing.
-    let variableAccountId: string = chequingId;
-    for (const rawName of (cardNames as string[] | null | undefined) ?? []) {
-      const name = (rawName ?? '').trim() || 'Card';
-      const { data: newCard } = await supabase
-        .from('accounts')
-        .insert({ household_id: householdId, name, type: 'credit_card' })
-        .select('id')
-        .single();
-      if (newCard && variableAccountId === chequingId) {
-        variableAccountId = newCard.id;
-      }
+        .in('id', deleteAccountIds);
     }
 
     // ----- Record this onboarding save as a provenance row -----
@@ -198,6 +224,23 @@ export async function POST(request: Request) {
     }
     const fileImportId: string = importRow.id;
     const transactionSource = resolveTransactionSource(fileMeta);
+
+    // ----- Create new credit card accounts from the names supplied by the UI -----
+    // The first card becomes the variable-spending account; falls back to chequing.
+    // Tagged with this run's provenance — if never used, a later re-onboarding
+    // is free to replace it; if the user starts spending on it, it's preserved.
+    let variableAccountId: string = chequingId;
+    for (const rawName of (cardNames as string[] | null | undefined) ?? []) {
+      const name = (rawName ?? '').trim() || 'Card';
+      const { data: newCard } = await supabase
+        .from('accounts')
+        .insert({ household_id: householdId, name, type: 'credit_card', file_import_id: fileImportId })
+        .select('id')
+        .single();
+      if (newCard && variableAccountId === chequingId) {
+        variableAccountId = newCard.id;
+      }
+    }
 
     // ----- Replace prior onboarding-plan-generated recurring items -----
     // Scoped to file_import_id IS NOT NULL: a row with no provenance was
@@ -279,20 +322,40 @@ export async function POST(request: Request) {
 
     const recurringRows: Record<string, unknown>[] = [];
     const budgetByCat = new Map<string, number>();
+    // Visible, never-silent flags for the save-plan response.
+    const unmatchedMembers: { label: string; attemptedMember: string }[] = [];
+    const needsPayDate: { id: string; description: string }[] = [];
 
     for (const cat of (plan.monthlyBudget.categories as PlanCategory[])) {
       if (sinkingFundNames.has(cat.name.trim().toLowerCase())) continue;
 
       if (cat.type === 'income') {
+        // Real cadence + true per-paycheque amount, when the parser gave us
+        // one (template v2 income lines). The "calculated" (own-file/manual
+        // form) path has no frequency/member info yet — falls back to the
+        // pre-existing monthly-lump behaviour, unchanged.
+        const cadence = cat.frequency ?? 'monthly';
+        const amount = cat.rawAmount ?? cat.budgeted;
+        const isMonthly = cadence === 'monthly';
+
+        const { memberId: resolvedMemberId, usedFallback, unmatchedName } =
+          resolveMemberId(cat.member, allMembers ?? [], memberId);
+        if (usedFallback && unmatchedName) {
+          unmatchedMembers.push({ label: cat.name, attemptedMember: unmatchedName });
+        }
+
         recurringRows.push({
           household_id: householdId,
-          member_id: memberId,
+          member_id: resolvedMemberId,
           category_id: null,
           description: cat.name,
-          amount: cat.budgeted,
+          amount,
           type: 'income',
-          cadence: 'monthly',
-          anchor_date: anchorDate,
+          cadence,
+          // A non-monthly cadence needs a real pay date (next paycheque /
+          // the two semi-monthly days) — guessing one would fabricate a
+          // schedule, so it stays unknown until a real anchor exists.
+          anchor_date: isMonthly ? anchorDate : null,
           second_day: null,
           account_id: chequingId,
           file_import_id: fileImportId,
@@ -338,6 +401,14 @@ export async function POST(request: Request) {
       const txnRows: Record<string, unknown>[] = [];
 
       for (const item of insertedItems ?? []) {
+        if (!item.anchor_date) {
+          // Real cadence and amount are saved; there is just no known pay
+          // date yet to place dated instances on. Nothing to materialize —
+          // and nothing to fabricate.
+          needsPayDate.push({ id: item.id, description: item.description });
+          continue;
+        }
+
         const { error: cleanupError } = await supabase
           .from('transactions')
           .delete()
@@ -418,6 +489,7 @@ export async function POST(request: Request) {
           name: g.name,
           type: 'savings',
           goal_target: g.targetAmount > 0 ? g.targetAmount : null,
+          file_import_id: fileImportId,
         }))
       );
     }
@@ -434,7 +506,7 @@ export async function POST(request: Request) {
     });
 
     await logEvent(supabase, householdId, user.id, 'completed_onboarding', { locale });
-    return NextResponse.json({ saved: true });
+    return NextResponse.json({ saved: true, unmatchedMembers, needsPayDate });
   } catch (error) {
     console.error('Save plan error:', error);
     return NextResponse.json({ error: 'Failed to save plan' }, { status: 500 });

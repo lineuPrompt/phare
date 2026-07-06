@@ -5,6 +5,8 @@ import {
   needsReplaceConfirmation,
   partitionByProvenance,
   missingSeedCategories,
+  planAccountReplace,
+  type AccountProvenanceInfo,
 } from '../importProvenance';
 
 describe('buildFileImportRow', () => {
@@ -98,5 +100,58 @@ describe('missingSeedCategories', () => {
   it('does not exclude anything based on a user-added custom category', () => {
     const result = missingSeedCategories(['Housing', 'Transportation', 'Unexpected', 'Pet Care'], seed);
     expect(result).toEqual([]);
+  });
+});
+
+describe('planAccountReplace', () => {
+  const base: AccountProvenanceInfo = {
+    id: 'a1', name: 'Card', file_import_id: 'imp1',
+    transactionCount: 0, envelopeItemCount: 0, monthlyGoalCount: 0,
+  };
+
+  it('deletes a fresh, untouched card that came from a prior import', () => {
+    const { toDelete, toPreserve } = planAccountReplace([base]);
+    expect(toDelete).toEqual([{ id: 'a1', name: 'Card' }]);
+    expect(toPreserve).toEqual([]);
+  });
+
+  it('preserves an account the user added manually (no import provenance at all)', () => {
+    const account = { ...base, file_import_id: null };
+    const { toDelete, toPreserve } = planAccountReplace([account]);
+    expect(toDelete).toEqual([]);
+    expect(toPreserve).toEqual([{ id: 'a1', name: 'Card', reason: 'not_from_import' }]);
+  });
+
+  it('preserves an imported card that has manual transactions (including bridge history)', () => {
+    const account = { ...base, transactionCount: 3 };
+    const { toPreserve } = planAccountReplace([account]);
+    expect(toPreserve).toEqual([{ id: 'a1', name: 'Card', reason: 'has_transactions' }]);
+  });
+
+  it('preserves an imported card that has an envelope sub-budget', () => {
+    const account = { ...base, envelopeItemCount: 1 };
+    const { toPreserve } = planAccountReplace([account]);
+    expect(toPreserve).toEqual([{ id: 'a1', name: 'Card', reason: 'has_envelope_budget' }]);
+  });
+
+  it('preserves an imported card that has a monthly goal set', () => {
+    const account = { ...base, monthlyGoalCount: 1 };
+    const { toPreserve } = planAccountReplace([account]);
+    expect(toPreserve).toEqual([{ id: 'a1', name: 'Card', reason: 'has_monthly_goal' }]);
+  });
+
+  it('partitions a mixed household correctly and preserves list order', () => {
+    const accounts: AccountProvenanceInfo[] = [
+      { ...base, id: 'fresh', name: 'Fresh Card' },
+      { ...base, id: 'used', name: 'Used Card', transactionCount: 5 },
+      { ...base, id: 'manual', name: 'Manual Card', file_import_id: null },
+    ];
+    const { toDelete, toPreserve } = planAccountReplace(accounts);
+    expect(toDelete.map((a) => a.id)).toEqual(['fresh']);
+    expect(toPreserve.map((a) => a.id)).toEqual(['used', 'manual']);
+  });
+
+  it('returns empty plans for an empty account list', () => {
+    expect(planAccountReplace([])).toEqual({ toDelete: [], toPreserve: [] });
   });
 });

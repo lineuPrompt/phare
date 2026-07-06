@@ -63,3 +63,52 @@ export function missingSeedCategories(existingNames: string[], seedNames: string
   const existing = new Set(existingNames.map((n) => n.trim().toLowerCase()));
   return seedNames.filter((n) => !existing.has(n.trim().toLowerCase()));
 }
+
+// ---------------------------------------------------------------------------
+// Card/LOC account replace-on-reimport (Phase B2)
+// ---------------------------------------------------------------------------
+
+export type AccountPreserveReason = 'not_from_import' | 'has_transactions' | 'has_envelope_budget' | 'has_monthly_goal';
+
+export type AccountProvenanceInfo = {
+  id: string;
+  name: string;
+  file_import_id: string | null;
+  transactionCount: number;   // includes bridge-sourced rows on chequing
+  envelopeItemCount: number;
+  monthlyGoalCount: number;
+};
+
+export type AccountReplacePlan = {
+  toDelete: { id: string; name: string }[];
+  toPreserve: { id: string; name: string; reason: AccountPreserveReason }[];
+};
+
+/**
+ * A non-chequing account is only safe to delete on a confirmed re-onboarding
+ * if it came from a prior save-plan run (file_import_id set) AND carries no
+ * activity of its own since. Any real activity — manual transactions
+ * (including bridge history), envelope sub-budgets, or a monthly goal — was
+ * put there by the user, not by the import, and must survive regardless of
+ * how the account itself was created.
+ */
+export function planAccountReplace(accounts: AccountProvenanceInfo[]): AccountReplacePlan {
+  const toDelete: AccountReplacePlan['toDelete'] = [];
+  const toPreserve: AccountReplacePlan['toPreserve'] = [];
+
+  for (const a of accounts) {
+    if (a.file_import_id === null) {
+      toPreserve.push({ id: a.id, name: a.name, reason: 'not_from_import' });
+    } else if (a.monthlyGoalCount > 0) {
+      toPreserve.push({ id: a.id, name: a.name, reason: 'has_monthly_goal' });
+    } else if (a.envelopeItemCount > 0) {
+      toPreserve.push({ id: a.id, name: a.name, reason: 'has_envelope_budget' });
+    } else if (a.transactionCount > 0) {
+      toPreserve.push({ id: a.id, name: a.name, reason: 'has_transactions' });
+    } else {
+      toDelete.push({ id: a.id, name: a.name });
+    }
+  }
+
+  return { toDelete, toPreserve };
+}

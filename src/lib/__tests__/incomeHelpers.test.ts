@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { monthlyIncomeEquivalent } from '../incomeHelpers';
+import { monthlyIncomeEquivalent, resolveMemberId } from '../incomeHelpers';
 
 describe('monthlyIncomeEquivalent', () => {
   it('weekly: multiplies by 52/12', () => {
@@ -46,5 +46,43 @@ describe('monthlyIncomeEquivalent', () => {
 
   it('handles zero', () => {
     expect(monthlyIncomeEquivalent(0, 'biweekly')).toBe(0);
+  });
+});
+
+describe('resolveMemberId', () => {
+  const members = [
+    { id: 'm1', name: 'Lineu' },
+    { id: 'm2', name: 'Julia' },
+  ];
+
+  it('matches an exact name', () => {
+    const result = resolveMemberId('Lineu', members, 'fallback');
+    expect(result).toEqual({ memberId: 'm1', usedFallback: false, unmatchedName: null });
+  });
+
+  it('matches case- and whitespace-insensitively', () => {
+    const result = resolveMemberId('  julia  ', members, 'fallback');
+    expect(result).toEqual({ memberId: 'm2', usedFallback: false, unmatchedName: null });
+  });
+
+  it('falls back and reports the unmatched name when the name does not match anyone', () => {
+    const result = resolveMemberId('Someone Else', members, 'fallback');
+    expect(result).toEqual({ memberId: 'fallback', usedFallback: true, unmatchedName: 'Someone Else' });
+  });
+
+  it('falls back silently-to-the-caller-but-flagged when no name was given at all', () => {
+    const result = resolveMemberId(undefined, members, 'fallback');
+    expect(result).toEqual({ memberId: 'fallback', usedFallback: true, unmatchedName: null });
+  });
+
+  it('falls back on an empty/whitespace-only name', () => {
+    const result = resolveMemberId('   ', members, 'fallback');
+    expect(result).toEqual({ memberId: 'fallback', usedFallback: true, unmatchedName: null });
+  });
+
+  it('fallback can be null (no household member row for the current user)', () => {
+    const result = resolveMemberId(undefined, members, null);
+    expect(result.memberId).toBeNull();
+    expect(result.usedFallback).toBe(true);
   });
 });

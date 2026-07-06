@@ -14,7 +14,8 @@
  * No per-row version inference is ever performed.
  *
  *   v1 (legacy): col 0 = source name, col 2 = pre-computed monthly amount
- *   v2 (current): col 0 = source name, col 1 = paycheque amount, col 2 = frequency string
+ *   v2 (current): col 0 = source name, col 1 = paycheque amount, col 2 = frequency string,
+ *                 col 3 = member name (optional — whose income this is)
  *                 → code calls monthlyIncomeEquivalent() to get the monthly figure
  *
  * Version signal: a header row whose col 2 is exactly "Frequency" or "Fréquence"
@@ -38,6 +39,7 @@ export interface ParsedLine {
   amount: number;           // monthly equivalent — always safe to sum
   rawAmount?: number;       // paycheque amount (v2 only)
   frequency?: IncomeFrequency; // pay frequency (v2 only)
+  member?: string;          // "Member / Membre" column (v2 income rows only)
 }
 
 export interface SinkingFundLine {
@@ -188,9 +190,11 @@ function parseIncome(
         skippedCount++;
         continue;
       }
+      const memberCell = row[3];
+      const member = typeof memberCell === 'string' && memberCell.trim() ? memberCell.trim() : undefined;
       if (typeof rawAmount === 'number' && Number.isFinite(rawAmount) && rawAmount !== 0) {
         const monthly = monthlyIncomeEquivalent(rawAmount, freq);
-        items.push({ label: label.trim(), amount: monthly, rawAmount, frequency: freq });
+        items.push({ label: label.trim(), amount: monthly, rawAmount, frequency: freq, member });
       }
     } else {
       // v1: col 2 is the monthly amount

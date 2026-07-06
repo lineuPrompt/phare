@@ -185,9 +185,19 @@
         "title": "Remplacer les données de votre import précédent?",
         "body": "{count, plural, one {Ceci remplacera 1 élément récurrent et ses transactions provenant de votre dernier import par ce nouveau plan.} other {Ceci remplacera # éléments récurrents et leurs transactions provenant de votre dernier import par ce nouveau plan.}}",
         "legacy": "{count, plural, one {Nous avons aussi trouvé 1 élément récurrent plus ancien datant d'avant le suivi des imports. Il ne sera pas touché — vérifiez-le dans la page Récurrences s'il semble désuet.} other {Nous avons aussi trouvé # éléments récurrents plus anciens datant d'avant le suivi des imports. Ils ne seront pas touchés — vérifiez-les dans la page Récurrences s'ils semblent désuets.}}",
+        "accountsDeleteTitle": "Comptes qui seront supprimés et recréés :",
+        "accountsPreserveTitle": "Comptes qui seront conservés tels quels :",
+        "reason": {
+          "not_from_import": "vous l'avez ajouté manuellement",
+          "has_transactions": "il contient des transactions",
+          "has_envelope_budget": "il a des budgets par catégorie configurés",
+          "has_monthly_goal": "il a un objectif mensuel défini"
+        },
         "cancel": "Annuler",
         "confirm": "Remplacer"
-      }
+      },
+      "unmatchedMembers": "{count, plural, one {Le nom de membre d'une source de revenu ne correspondait à personne dans votre foyer — elle vous a été attribuée. Vérifiez-la dans la page Récurrences.} other {Le nom de membre de # sources de revenu ne correspondait à personne dans votre foyer — elles vous ont été attribuées. Vérifiez-les dans la page Récurrences.}}",
+      "needsPayDate": "{count, plural, one {1 source de revenu a besoin d'une vraie date de paie avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.} other {# sources de revenu ont besoin d'une vraie date de paie avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.}}"
     },
     "mode": {
       "own": "Mon propre fichier",
@@ -483,8 +493,11 @@
       "cadence": {
         "monthly": "Mensuel",
         "biweekly": "Aux 2 semaines",
-        "semimonthly": "Deux fois par mois"
-      }
+        "semimonthly": "Deux fois par mois",
+        "weekly": "Hebdomadaire"
+      },
+      "perPaycheque": "{amount}/paie",
+      "needsPayDate": "date de paie requise"
     }
   },
   "timeline": {

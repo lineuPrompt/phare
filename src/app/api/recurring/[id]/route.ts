@@ -58,7 +58,10 @@ export async function PATCH(
     const newCategoryId  = body.categoryId !== undefined ? (body.categoryId || null) : current.category_id;
     const newAccountId   = body.accountId  ?? current.account_id;
 
-    if (!['monthly', 'biweekly', 'semimonthly'].includes(newCadence)) {
+    // 'weekly' is a storable cadence (Build 3 onboarding income can have it)
+    // but materializeRule doesn't support it yet — handled below by simply
+    // not materializing, same as any item with no known anchor date yet.
+    if (!['monthly', 'biweekly', 'semimonthly', 'weekly'].includes(newCadence)) {
       return NextResponse.json({ error: 'Invalid cadence' }, { status: 400 });
     }
     if (!newDescription) {
@@ -119,12 +122,17 @@ export async function PATCH(
       return NextResponse.json({ error: deleteErr.message }, { status: 500 });
     }
 
-    // 3. Re-materialize with new cadence params
-    const dates = materializeFutureRule(
-      { cadence: newCadence, anchorDate: newAnchorDate, secondDay: newSecondDay },
-      todayStr,
-      12
-    );
+    // 3. Re-materialize — only when there's a known anchor date and a
+    // cadence materializeRule actually supports. No anchor yet (or 'weekly',
+    // not yet supported) means no dated instances, not a fabricated guess.
+    const canMaterialize = !!newAnchorDate && ['monthly', 'biweekly', 'semimonthly'].includes(newCadence);
+    const dates = canMaterialize
+      ? materializeFutureRule(
+          { cadence: newCadence as 'monthly' | 'biweekly' | 'semimonthly', anchorDate: newAnchorDate, secondDay: newSecondDay },
+          todayStr,
+          12
+        )
+      : [];
 
     // 4. Insert fresh rows with new field values
     if (dates.length) {

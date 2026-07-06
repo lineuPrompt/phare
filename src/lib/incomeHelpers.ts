@@ -22,3 +22,29 @@ export function monthlyIncomeEquivalent(amount: number, frequency: IncomeFrequen
     case 'monthly':     return round2(amount);
   }
 }
+
+/**
+ * Resolves which household member an income row belongs to.
+ *
+ * Matches the template's "Member" name against real household_members by
+ * exact name (case/whitespace-insensitive). Falls back to the current
+ * onboarding user when there's no name to match, or the name doesn't match
+ * anyone in the household — but the fallback is always reported back
+ * (usedFallback / unmatchedName) so the caller can surface it, never apply
+ * it silently.
+ */
+export function resolveMemberId(
+  memberName: string | undefined,
+  members: { id: string; name: string }[],
+  fallbackMemberId: string | null
+): { memberId: string | null; usedFallback: boolean; unmatchedName: string | null } {
+  const trimmed = memberName?.trim();
+  if (trimmed) {
+    const match = members.find((m) => m.name.trim().toLowerCase() === trimmed.toLowerCase());
+    if (match) {
+      return { memberId: match.id, usedFallback: false, unmatchedName: null };
+    }
+    return { memberId: fallbackMemberId, usedFallback: true, unmatchedName: trimmed };
+  }
+  return { memberId: fallbackMemberId, usedFallback: true, unmatchedName: null };
+}

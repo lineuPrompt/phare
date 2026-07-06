@@ -3,7 +3,17 @@ export type Plan = {
     totalIncome: number;
     totalExpenses: number;
     totalSavings: number;
-    categories: { name: string; budgeted: number; type: string }[];
+    categories: {
+      name: string;
+      budgeted: number;
+      type: string;
+      // Income identity — set only for template-parsed (v2) income lines.
+      // budgeted stays the monthly equivalent for plan display; rawAmount/
+      // frequency/member are the source of truth save-plan stores.
+      rawAmount?: number;
+      frequency?: IncomeFrequency;
+      member?: string;
+    }[];
   };
   sinkingFunds: {
     name: string;

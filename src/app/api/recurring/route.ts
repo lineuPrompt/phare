@@ -24,7 +24,7 @@ export async function GET() {
 
     const { data: items } = await supabase
       .from('recurring_items')
-      .select('id, description, amount, type, cadence, anchor_date, second_day, active, category_id, account_id, categories(name), accounts(name, type)')
+      .select('id, description, amount, type, cadence, anchor_date, second_day, active, category_id, account_id, member_id, categories(name), accounts(name, type), household_members(name)')
       .eq('household_id', ctx.householdId)
       .order('type', { ascending: true })
       .order('description', { ascending: true });

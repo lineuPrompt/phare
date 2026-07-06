@@ -13,6 +13,7 @@ export default function PlanDisplay({
   replaceConfirmation,
   onConfirmReplace,
   onCancelReplace,
+  saveNotices,
 }: {
   plan: Plan;
   reviewText: string;
@@ -20,9 +21,17 @@ export default function PlanDisplay({
   planSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
   onRetrySave: () => void;
   onStartOver: () => void;
-  replaceConfirmation: { totalRecurring: number; provenancedRecurring: number; legacyRecurring: number } | null;
+  replaceConfirmation: {
+    totalRecurring: number; provenancedRecurring: number; legacyRecurring: number;
+    accountsToDelete: { id: string; name: string }[];
+    accountsToPreserve: { id: string; name: string; reason: 'not_from_import' | 'has_transactions' | 'has_envelope_budget' | 'has_monthly_goal' }[];
+  } | null;
   onConfirmReplace: () => void;
   onCancelReplace: () => void;
+  saveNotices: {
+    unmatchedMembers: { label: string; attemptedMember: string }[];
+    needsPayDate: { id: string; description: string }[];
+  } | null;
 }) {
   const t = useTranslations('upload');
 
@@ -163,6 +172,27 @@ export default function PlanDisplay({
               </p>
             </div>
           )}
+
+          {replaceConfirmation.accountsToDelete.length > 0 && (
+            <div className="rounded-xl p-4" style={{ background: 'white', border: '1px solid #FECACA' }}>
+              <p className="font-semibold mb-1" style={{ color: '#DC2626' }}>{t('plan.replaceConfirm.accountsDeleteTitle')}</p>
+              <ul className="list-disc list-inside" style={{ color: '#374151' }}>
+                {replaceConfirmation.accountsToDelete.map((a) => <li key={a.id}>{a.name}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {replaceConfirmation.accountsToPreserve.length > 0 && (
+            <div className="rounded-xl p-4" style={{ background: 'white', border: '1px solid #BBF7D0' }}>
+              <p className="font-semibold mb-1" style={{ color: '#16A34A' }}>{t('plan.replaceConfirm.accountsPreserveTitle')}</p>
+              <ul className="list-disc list-inside" style={{ color: '#374151' }}>
+                {replaceConfirmation.accountsToPreserve.map((a) => (
+                  <li key={a.id}>{a.name} — {t(`plan.replaceConfirm.reason.${a.reason}`)}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row gap-3">
             <button
               onClick={onCancelReplace}
@@ -179,6 +209,21 @@ export default function PlanDisplay({
               {t('plan.replaceConfirm.confirm')}
             </button>
           </div>
+        </div>
+      )}
+
+      {planSaveStatus === 'saved' && saveNotices && (saveNotices.unmatchedMembers.length > 0 || saveNotices.needsPayDate.length > 0) && (
+        <div className="rounded-2xl p-6 space-y-3" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+          {saveNotices.unmatchedMembers.length > 0 && (
+            <p style={{ color: '#374151' }}>
+              {t('plan.unmatchedMembers', { count: saveNotices.unmatchedMembers.length })}
+            </p>
+          )}
+          {saveNotices.needsPayDate.length > 0 && (
+            <p style={{ color: '#374151' }}>
+              {t('plan.needsPayDate', { count: saveNotices.needsPayDate.length })}
+            </p>
+          )}
         </div>
       )}
 

@@ -34,7 +34,7 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
   // Edit state — initialised when user clicks Edit
   const [editDesc, setEditDesc] = useState('');
   const [editAmount, setEditAmount] = useState('');
-  const [editCadence, setEditCadence] = useState<'monthly' | 'biweekly' | 'semimonthly'>('monthly');
+  const [editCadence, setEditCadence] = useState<'monthly' | 'biweekly' | 'semimonthly' | 'weekly'>('monthly');
   const [editAnchorDate, setEditAnchorDate] = useState('');
   const [editSecondDay, setEditSecondDay] = useState('30');
   const [editCategoryId, setEditCategoryId] = useState('');
@@ -46,7 +46,7 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
     setEditDesc(item.description);
     setEditAmount(String(item.amount));
     setEditCadence(item.cadence);
-    setEditAnchorDate(item.anchor_date);
+    setEditAnchorDate(item.anchor_date ?? '');
     setEditSecondDay(String(item.second_day ?? 30));
     setEditCategoryId(item.category_id ?? '');
     setEditAccountId(item.account_id);
@@ -65,7 +65,7 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
           description: editDesc.trim(),
           amount: parseFloat(editAmount),
           cadence: editCadence,
-          anchorDate: editAnchorDate,
+          anchorDate: editAnchorDate || null,
           secondDay: editCadence === 'semimonthly' ? parseInt(editSecondDay, 10) : null,
           categoryId: editCategoryId || null,
           accountId: editAccountId,
@@ -127,6 +127,7 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
             <option value="monthly">{t('cadence.monthly')}</option>
             <option value="biweekly">{t('cadence.biweekly')}</option>
             <option value="semimonthly">{t('cadence.semimonthly')}</option>
+            <option value="weekly">{t('cadence.weekly')}</option>
           </select>
           <input
             type="date"
@@ -202,11 +203,18 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
         style={{ borderBottom: '1px solid #F3F4F6' }}
       >
         <div className="flex-1 min-w-0">
-          <p className="font-medium truncate" style={{ color: '#0F2044' }}>{item.description}</p>
+          <p className="font-medium truncate" style={{ color: '#0F2044' }}>
+            {item.description}
+            {item.household_members?.name ? ` — ${item.household_members.name}` : ''}
+          </p>
           <p className="text-xs" style={{ color: '#9CA3AF' }}>
             {t(`cadence.${item.cadence}`)}
+            {item.type === 'income' && item.cadence !== 'monthly'
+              ? ` (${t('perPaycheque', { amount: formatCurrency(Number(item.amount), locale) })})`
+              : ''}
             {item.categories?.name ? ` · ${item.categories.name}` : ''}
             {item.accounts?.name ? ` · ${item.accounts.type === 'chequing' ? '🏦' : '💳'} ${item.accounts.name}` : ''}
+            {!item.anchor_date ? ` · ⚠ ${t('needsPayDate')}` : ''}
           </p>
         </div>
         <span
