@@ -199,16 +199,17 @@
       },
       "unmatchedMembers": "{count, plural, one {Le nom de membre d'une source de revenu ne correspondait à personne dans votre foyer — elle vous a été attribuée. Vérifiez-la dans la page Récurrences.} other {Le nom de membre de # sources de revenu ne correspondait à personne dans votre foyer — elles vous ont été attribuées. Vérifiez-les dans la page Récurrences.}}",
       "unmatchedMemberItem": "« {name} » ne correspondait à personne — attribué à vous.",
-      "needsPayDate": "{count, plural, one {1 source de revenu a besoin d'une vraie date de paie avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.} other {# sources de revenu ont besoin d'une vraie date de paie avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.}}",
+      "needsPayDate": "{count, plural, one {1 source de revenu ou facture a besoin d'une vraie date avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.} other {# sources de revenu ou factures ont besoin d'une vraie date avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.}}",
       "anchorStep": {
-        "title": "Quand ces revenus sont-ils versés?",
-        "subtitle": "Ajoutez une vraie date de paie pour chaque source de revenu afin qu'elle apparaisse aux bons jours. Vous pouvez en ignorer et les définir plus tard dans la page Récurrences.",
+        "title": "Quand ces montants sont-ils versés?",
+        "subtitle": "Ajoutez une vraie date pour chacun d'eux afin qu'il apparaisse aux bons jours — une paie que vous recevez, ou une facture que vous payez. Vous pouvez en ignorer et les définir plus tard dans la page Récurrences.",
         "cadence": {
           "weekly": "Hebdomadaire",
           "biweekly": "Aux 2 semaines",
           "semimonthly": "Deux fois par mois"
         },
         "perPaycheque": "/paie",
+        "perPayment": "/paiement",
         "memberLabel": "Attribué à",
         "householdOption": "Ménage",
         "fallbackFlag": "« {name} » ne correspondait à personne — attribué à vous.",

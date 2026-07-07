@@ -5,16 +5,19 @@ function round2(n: number): number {
 }
 
 /**
- * Converts a per-paycheque amount to a monthly equivalent.
+ * Converts a per-payment amount to a monthly equivalent. Used for both income
+ * (per-paycheque) and fixed expenses (per-payment, e.g. a bi-weekly mortgage
+ * payment) — the math is identical either direction, so there is exactly one
+ * conversion point for the whole app.
  *
  * weekly:      52 pays/year ÷ 12 months
  * biweekly:    26 pays/year ÷ 12 months — NOT 2× per month; produces two windfall months/year
  * semimonthly: exactly 2× per month = 24 pays/year (no windfall, always predictable)
  * monthly:     1× per month
  *
- * Code owns this math. The user enters the paycheque amount; code computes the monthly figure.
+ * Code owns this math. The user enters the per-payment amount; code computes the monthly figure.
  */
-export function monthlyIncomeEquivalent(amount: number, frequency: IncomeFrequency): number {
+export function monthlyEquivalent(amount: number, frequency: IncomeFrequency): number {
   switch (frequency) {
     case 'weekly':      return round2(amount * 52 / 12);
     case 'biweekly':    return round2(amount * 26 / 12);

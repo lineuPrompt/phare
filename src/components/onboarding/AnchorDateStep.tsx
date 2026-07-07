@@ -11,6 +11,7 @@ export type NeedsPayDateItem = {
   description: string;
   cadence: string;   // 'biweekly' | 'semimonthly' | 'weekly' (monthly never appears here)
   amount: number;
+  type: 'income' | 'expense';
   member: string | null;
   memberId: string | null;
   isHousehold: boolean;
@@ -113,7 +114,7 @@ export default function AnchorDateStep({
             <div key={item.id} className="rounded-xl p-4" style={{ background: '#FAFAF8', border: '1px solid #E5E7EB' }}>
               <p className="font-medium mb-1" style={{ color: '#0F2044' }}>{item.description}</p>
               <p className="text-xs mb-3" style={{ color: '#9CA3AF' }}>
-                {t(`cadence.${item.cadence}`)} · {formatCAD(item.amount)}{t('perPaycheque')}
+                {t(`cadence.${item.cadence}`)} · {formatCAD(item.amount)}{t(item.type === 'income' ? 'perPaycheque' : 'perPayment')}
               </p>
 
               {item.attemptedName && (

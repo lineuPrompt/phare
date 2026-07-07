@@ -5,6 +5,8 @@ import {
   parseSection,
   detectIncomeSheetVersion,
   parseFrequencyCell,
+  detectFixedExpenseVersion,
+  parseExpenseFrequencyCell,
   parseTemplate,
 } from '../templateParser';
 
@@ -309,7 +311,7 @@ describe('parseFrequencyCell', () => {
 // verify parseTemplate produces the correct income total.
 // ---------------------------------------------------------------------------
 
-function buildMinimalWorkbook(incomeRows: unknown[][]): Buffer {
+function buildMinimalWorkbook(incomeRows: unknown[][], fixedExpenseRows?: unknown[][]): Buffer {
   const wb = XLSX.utils.book_new();
 
   const addSheet = (name: string, data: unknown[][] = []) => {
@@ -318,8 +320,8 @@ function buildMinimalWorkbook(incomeRows: unknown[][]): Buffer {
 
   addSheet('Household');
   addSheet('Monthly Income', incomeRows);
-  // Fixed Expenses: parseSection(rows, 0, 2, startRow=2, skipWords)
-  addSheet('Fixed Expenses', [[], [], ['Rent', null, 1200]]);
+  // Fixed Expenses (legacy layout by default): parseFixedExpenses(rows, 'legacy', startRow=2, skipWords)
+  addSheet('Fixed Expenses', fixedExpenseRows ?? [[], [], ['Rent', null, 1200]]);
   // Variable Expenses: parseSection(rows, 0, 1, startRow=3, skipWords)
   addSheet('Variable Expenses', [[], [], [], ['Groceries', 800]]);
   // Annual Expenses: startRow=5, label=col0, annual=col1, dueMonth=col3
@@ -461,5 +463,173 @@ describe('parseTemplate — v2 income parsing (end-to-end)', () => {
     expect(result.incomeLayout).toBe('v1');
     expect(result.income.total).toBe(6000);
     expect(result.incomeSkippedRows).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectFixedExpenseVersion / parseExpenseFrequencyCell
+// ---------------------------------------------------------------------------
+// Same structural-marker approach as income: version is decided from the
+// header area only (col 3 of rows 0..headerRowCount-1), never from data rows.
+// ---------------------------------------------------------------------------
+
+describe('detectFixedExpenseVersion', () => {
+  it('returns legacy when no header row has a frequency column label', () => {
+    const rows = [['Expense / Dépense', 'Category / Catégorie', 'Amount / Montant', 'Account / Compte', 'Notes']];
+    expect(detectFixedExpenseVersion(rows, 3)).toBe('legacy');
+  });
+
+  it('returns v3 when a header row has "Frequency" in col 3', () => {
+    const rows = [['Expense', 'Category', 'Amount per payment', 'Frequency', 'Account', 'Notes']];
+    expect(detectFixedExpenseVersion(rows, 3)).toBe('v3');
+  });
+
+  it('returns v3 for the bilingual combined header "Frequency / Fréquence", case-insensitive', () => {
+    const rows = [['Expense', 'Category', 'Amount', 'FREQUENCY / FRÉQUENCE', 'Account', 'Notes']];
+    expect(detectFixedExpenseVersion(rows, 3)).toBe('v3');
+  });
+
+  it('a data row (beyond headerRowCount) with "Frequency" in col 3 does not trigger v3', () => {
+    const rows = [
+      ['Expense / Dépense', 'Category / Catégorie', 'Amount / Montant', 'Account / Compte', 'Notes'], // header, row 0
+      [null, null, null, null, null], // row 1
+      [null, null, null, null, null], // row 2
+      ['Mortgage', 'Housing', 1500, 'Frequency', 'Chequing'], // row 3 — a data row, out of header window
+    ];
+    expect(detectFixedExpenseVersion(rows, 3)).toBe('legacy');
+  });
+
+  it('returns legacy for an empty rows array', () => {
+    expect(detectFixedExpenseVersion([], 3)).toBe('legacy');
+  });
+});
+
+describe('parseExpenseFrequencyCell', () => {
+  it('treats a blank cell as monthly (unlike income, which requires an explicit value)', () => {
+    expect(parseExpenseFrequencyCell(null)).toBe('monthly');
+    expect(parseExpenseFrequencyCell(undefined)).toBe('monthly');
+    expect(parseExpenseFrequencyCell('')).toBe('monthly');
+    expect(parseExpenseFrequencyCell('   ')).toBe('monthly');
+  });
+
+  it('accepts the same frequency strings as income', () => {
+    expect(parseExpenseFrequencyCell('bi-weekly')).toBe('biweekly');
+    expect(parseExpenseFrequencyCell('semi-monthly')).toBe('semimonthly');
+    expect(parseExpenseFrequencyCell('weekly')).toBe('weekly');
+    expect(parseExpenseFrequencyCell('monthly')).toBe('monthly');
+  });
+
+  it('rejects an unrecognised, non-blank string (does not guess)', () => {
+    expect(parseExpenseFrequencyCell('fortnightly')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseTemplate — v3 fixed-expense frequency parsing (end-to-end)
+// Phase D: the income-frequency bug's expense-side twin. A bi-weekly
+// mortgage payment of $1,500 must convert to $3,250/month
+// (1500 × 26 / 12 = 3250), not collapse to $1,500/month.
+// ---------------------------------------------------------------------------
+
+describe('parseTemplate — v3 fixed-expense parsing (end-to-end)', () => {
+  // Minimal v1 income sheet — income is not the focus of these tests.
+  const flatIncomeRows: unknown[][] = [
+    [null, null, null], [null, null, null], [null, null, null], [null, null, null],
+    [null, null, 'Monthly Amount'],
+  ];
+
+  // The v3 layout: col0=Expense, col1=Category, col2=Amount per payment,
+  // col3=Frequency, col4=Account, col5=Notes.
+  function makeV3FixedExpenseRows(dataRows: unknown[][]): unknown[][] {
+    return [
+      ['FIXED MONTHLY EXPENSES / DÉPENSES FIXES MENSUELLES'],
+      [null],
+      ['Expense / Dépense', 'Category / Catégorie', 'Amount per payment / Montant par paiement', 'Frequency / Fréquence', 'Account / Compte', 'Notes'],
+      ...dataRows,
+    ];
+  }
+
+  it('a bi-weekly $1,500 payment converts to $3,250/month, not $1,500/month', () => {
+    const fixedRows = makeV3FixedExpenseRows([
+      ['Mortgage / Hypothèque', 'Housing', 1500, 'bi-weekly', 'Chequing', null],
+    ]);
+    const buf = buildMinimalWorkbook(flatIncomeRows, fixedRows);
+    const result = parseTemplate(buf);
+
+    expect(result.fixedExpenseLayout).toBe('v3');
+    expect(result.fixedExpenses.lines).toEqual([
+      { label: 'Mortgage / Hypothèque', amount: 3250, rawAmount: 1500, frequency: 'biweekly' },
+    ]);
+    expect(result.fixedExpenses.total).toBe(3250);
+  });
+
+  it('a blank frequency cell defaults to monthly', () => {
+    const fixedRows = makeV3FixedExpenseRows([
+      ['Internet', 'Utilities & Subscriptions', 80, null, 'Chequing', null],
+    ]);
+    const buf = buildMinimalWorkbook(flatIncomeRows, fixedRows);
+    const result = parseTemplate(buf);
+
+    expect(result.fixedExpenseLayout).toBe('v3');
+    expect(result.fixedExpenses.lines).toEqual([
+      { label: 'Internet', amount: 80, rawAmount: 80, frequency: 'monthly' },
+    ]);
+    expect(result.fixedExpenseSkippedRows).toBe(0);
+  });
+
+  it('an unrecognised, non-blank frequency string is skipped and counted, not silently dropped or guessed', () => {
+    const fixedRows = makeV3FixedExpenseRows([
+      ['Mortgage', 'Housing', 1500, 'bi-weekly', 'Chequing', null],   // valid → contributes
+      ['Gym', 'Health & Personal', 40, 'fortnightly', 'Chequing', null], // invalid → skipped, counted
+    ]);
+    const buf = buildMinimalWorkbook(flatIncomeRows, fixedRows);
+    const result = parseTemplate(buf);
+
+    expect(result.fixedExpenses.lines).toHaveLength(1);
+    expect(result.fixedExpenseSkippedRows).toBe(1);
+  });
+
+  it('legacy template (no frequency header) still parses col 2 as a monthly amount, unchanged', () => {
+    const fixedRows = [
+      ['FIXED MONTHLY EXPENSES'],
+      [null],
+      ['Expense / Dépense', 'Category / Catégorie', 'Amount / Montant', 'Account / Compte', 'Notes'],
+      ['Mortgage', 'Housing', 1500, 'Chequing', null],
+      ['Car payment', 'Transportation', 420, 'Chequing', null],
+    ];
+    const buf = buildMinimalWorkbook(flatIncomeRows, fixedRows);
+    const result = parseTemplate(buf);
+
+    expect(result.fixedExpenseLayout).toBe('legacy');
+    expect(result.fixedExpenses.total).toBe(1920);
+    expect(result.fixedExpenseSkippedRows).toBe(0);
+  });
+
+  // The founder's fixture: three bi-weekly fixed expenses (mortgage + two car
+  // payments) that were previously collapsing to their per-payment amount
+  // once a month, understating fixed expenses by thousands per month.
+  it("FOUNDER'S FIXTURE — three bi-weekly lines convert correctly; total monthly fixed expenses is exact", () => {
+    const fixedRows = makeV3FixedExpenseRows([
+      ['Mortgage / Hypothèque', 'Housing', 1500, 'bi-weekly', 'Chequing', null],       // 1500 × 26/12 = 3250
+      ['Car payment 1 / Paiement auto 1', 'Transportation', 350, 'bi-weekly', 'Chequing', null], // 350 × 26/12 = 758.33
+      ['Car payment 2 / Paiement auto 2', 'Transportation', 275, 'bi-weekly', 'Chequing', null], // 275 × 26/12 = 595.83
+      ['Home insurance / Assurance maison', 'Housing', 120, null, 'Chequing', null],   // blank → monthly, 120
+    ]);
+    const buf = buildMinimalWorkbook(flatIncomeRows, fixedRows);
+    const result = parseTemplate(buf);
+
+    expect(result.fixedExpenseLayout).toBe('v3');
+    expect(result.fixedExpenseSkippedRows).toBe(0);
+    expect(result.fixedExpenses.lines).toHaveLength(4);
+
+    const mortgage = result.fixedExpenses.lines.find((l) => l.label.startsWith('Mortgage'))!;
+    const car1 = result.fixedExpenses.lines.find((l) => l.label.includes('auto 1'))!;
+    const car2 = result.fixedExpenses.lines.find((l) => l.label.includes('auto 2'))!;
+    expect(mortgage.amount).toBe(3250);
+    expect(car1.amount).toBe(758.33);
+    expect(car2.amount).toBe(595.83);
+
+    // 3250 + 758.33 + 595.83 + 120 = 4724.16
+    expect(result.fixedExpenses.total).toBe(4724.16);
   });
 });

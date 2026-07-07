@@ -49,8 +49,9 @@ export async function POST(request: NextRequest) {
             name: l.label, budgeted: l.amount, type: 'income',
             rawAmount: l.rawAmount, frequency: l.frequency, member: l.member,
           })),
-          ...p.fixedExpenses.lines.map((l: { label: string; amount: number }) => ({
+          ...p.fixedExpenses.lines.map((l: { label: string; amount: number; rawAmount?: number; frequency?: Category['frequency'] }) => ({
             name: l.label, budgeted: l.amount, type: 'expense',
+            rawAmount: l.rawAmount, frequency: l.frequency,
           })),
           ...p.variableExpenses.lines.map((l: { label: string; amount: number }) => ({
             name: l.label, budgeted: l.amount, type: 'expense',

@@ -10,7 +10,7 @@ import ManualForm from '@/components/onboarding/ManualForm';
 import PlanDisplay from '@/components/onboarding/PlanDisplay';
 import AnchorDateStep, { NeedsPayDateItem } from '@/components/onboarding/AnchorDateStep';
 import { Plan, FormLine, IncomeFormLine } from '@/components/onboarding/types';
-import { monthlyIncomeEquivalent } from '@/lib/incomeHelpers';
+import { monthlyEquivalent } from '@/lib/incomeHelpers';
 import { runPlausibilityGuard, PlausibilityResult } from '@/lib/plausibilityGuard';
 import { TemplateParseResult } from '@/lib/templateParser';
 import { formatCAD } from '@/components/onboarding/types';
@@ -271,7 +271,7 @@ export default function UploadPage() {
       .filter((l) => l.label.trim() && l.amount)
       .map((l) => ({
         label: l.label.trim(),
-        amount: monthlyIncomeEquivalent(parseFloat(l.amount), l.frequency),
+        amount: monthlyEquivalent(parseFloat(l.amount), l.frequency),
       }));
 
     const expenseLines = formExpenses

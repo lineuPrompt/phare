@@ -199,16 +199,17 @@
       },
       "unmatchedMembers": "{count, plural, one {1 income source's Member name didn't match anyone in your household — it was assigned to you. Check it on the Recurring page.} other {# income sources' Member names didn't match anyone in your household — they were assigned to you. Check them on the Recurring page.}}",
       "unmatchedMemberItem": "“{name}” didn't match anyone — assigned to you.",
-      "needsPayDate": "{count, plural, one {1 income source needs a real pay date before it shows up day-by-day — add one on the Recurring page.} other {# income sources need a real pay date before they show up day-by-day — add one on the Recurring page.}}",
+      "needsPayDate": "{count, plural, one {1 income source or bill needs a real date before it shows up day-by-day — add one on the Recurring page.} other {# income sources or bills need a real date before they show up day-by-day — add one on the Recurring page.}}",
       "anchorStep": {
         "title": "When do these get paid?",
-        "subtitle": "Add a real pay date for each income source so it shows up on the right days. You can skip any of these and set them later on the Recurring page.",
+        "subtitle": "Add a real date for each of these so it shows up on the right days — a paycheque you receive, or a bill you pay. You can skip any of these and set them later on the Recurring page.",
         "cadence": {
           "weekly": "Weekly",
           "biweekly": "Every 2 weeks",
           "semimonthly": "Twice a month"
         },
         "perPaycheque": "/paycheque",
+        "perPayment": "/payment",
         "memberLabel": "Assigned to",
         "householdOption": "Household",
         "fallbackFlag": "“{name}” didn’t match anyone — assigned to you.",

@@ -43,7 +43,7 @@ export type FormLine = { label: string; amount: string };
 export type IncomeFrequency = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
 
 // Income form line — captures the paycheque amount and frequency separately.
-// monthlyIncomeEquivalent() in src/lib/incomeHelpers.ts converts to monthly.
+// monthlyEquivalent() in src/lib/incomeHelpers.ts converts to monthly.
 export type IncomeFormLine = {
   label: string;
   amount: string;       // raw paycheque amount (what lands in the bank each pay)

@@ -21,7 +21,8 @@ type PlanCategory = {
   type: string;
   seedCategory?: string;
   isFixed?: boolean;
-  // Income identity (template v2 income lines only) — see api/plan/route.ts.
+  // Per-payment identity: template v2 income lines and v3 fixed-expense
+  // lines only (member is income-only) — see api/plan/route.ts.
   rawAmount?: number;
   frequency?: IncomeFrequency;
   member?: string;
@@ -346,7 +347,7 @@ export async function POST(request: Request) {
     const budgetByCat = new Map<string, number>();
     // Visible, never-silent flags for the save-plan response.
     const unmatchedMembers: { label: string; attemptedMember: string }[] = [];
-    const needsPayDate: { id: string; description: string; cadence: string; amount: number; member: string | null; memberId: string | null; isHousehold: boolean; attemptedName: string | null }[] = [];
+    const needsPayDate: { id: string; description: string; cadence: string; amount: number; type: 'income' | 'expense'; member: string | null; memberId: string | null; isHousehold: boolean; attemptedName: string | null }[] = [];
     const memberNameById = new Map((allMembers ?? []).map((m) => [m.id, m.name]));
     // Per-income-line resolution detail, keyed by description — recurringRows
     // only carries DB columns, so this is how the anchor step (built after
@@ -395,16 +396,28 @@ export async function POST(request: Request) {
       const categoryId = resolveCat(cat.seedCategory);
 
       if (cat.isFixed) {
-        // Fixed expense → recurring item, paid from chequing
+        // Fixed expense → recurring item, paid from chequing. Real cadence +
+        // true per-payment amount when the parser gave us one (template v3
+        // fixed-expense lines) — same conversion point as income (Phase C).
+        // No member resolution here: the template has no per-expense member
+        // column, so expenses stay attributed to whoever is running onboarding.
+        const cadence = cat.frequency ?? 'monthly';
+        const amount = cat.rawAmount ?? cat.budgeted;
+        const isMonthly = cadence === 'monthly';
+
         recurringRows.push({
           household_id: householdId,
           member_id: memberId,
           category_id: categoryId,
           description: cat.name,
-          amount: cat.budgeted,
+          amount,
           type: 'expense',
-          cadence: 'monthly',
-          anchor_date: anchorDate,
+          cadence,
+          // Same rule as income: a non-monthly cadence needs a real anchor
+          // date (next payment date) — guessing one would fabricate a
+          // schedule, so it stays unknown until a real one is captured via
+          // the anchor step.
+          anchor_date: isMonthly ? anchorDate : null,
           second_day: null,
           account_id: chequingId,
           file_import_id: fileImportId,
@@ -440,6 +453,7 @@ export async function POST(request: Request) {
             description: item.description,
             cadence: item.cadence,
             amount: Number(item.amount),
+            type: item.type,
             member: item.member_id ? memberNameById.get(item.member_id) ?? null : null,
             memberId: item.member_id,
             isHousehold: meta?.isHousehold ?? false,

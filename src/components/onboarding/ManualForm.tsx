@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { FormLine, IncomeFormLine, IncomeFrequency, formatCAD } from './types';
-import { monthlyIncomeEquivalent } from '@/lib/incomeHelpers';
+import { monthlyEquivalent } from '@/lib/incomeHelpers';
 
 const FREQUENCIES: IncomeFrequency[] = ['weekly', 'biweekly', 'semimonthly', 'monthly'];
 
@@ -47,7 +47,7 @@ export default function ManualForm({
           {income.map((line, i) => {
             const rawAmt = parseFloat(line.amount);
             const monthly = (!isNaN(rawAmt) && rawAmt > 0)
-              ? monthlyIncomeEquivalent(rawAmt, line.frequency)
+              ? monthlyEquivalent(rawAmt, line.frequency)
               : null;
 
             return (

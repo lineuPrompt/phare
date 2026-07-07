@@ -16,7 +16,7 @@
  *   v1 (legacy): col 0 = source name, col 2 = pre-computed monthly amount
  *   v2 (current): col 0 = source name, col 1 = paycheque amount, col 2 = frequency string,
  *                 col 3 = member name (optional — whose income this is)
- *                 → code calls monthlyIncomeEquivalent() to get the monthly figure
+ *                 → code calls monthlyEquivalent() to get the monthly figure
  *
  * Version signal: a header row whose col 2 is exactly "Frequency" or "Fréquence"
  * (case-insensitive) means v2.  Anything else means v1.  This is an unambiguous
@@ -27,18 +27,35 @@
  * frequency-like word (e.g. a description "Salary – paid monthly").  That would
  * pick up col 1 as the paycheque amount instead of col 2 as the monthly total —
  * the exact silent-wrong-income failure this build exists to prevent.
+ *
+ * Fixed Expenses parsing supports two layouts, same idea, same reason (a
+ * fixed expense can be paid on a non-monthly cadence too — e.g. a bi-weekly
+ * mortgage payment — and collapsing it to "the number in the amount column,
+ * once a month" silently understates it):
+ *
+ *   legacy: col 0 = expense name, col 1 = category, col 2 = pre-computed
+ *           monthly amount, col 3 = account, col 4 = notes
+ *   v3 (current): col 0 = expense name, col 1 = category, col 2 = amount per
+ *           payment, col 3 = frequency string (blank = monthly — unlike
+ *           income, which requires an explicit value), col 4 = account,
+ *           col 5 = notes
+ *           → code calls monthlyEquivalent() to get the monthly figure
+ *
+ * Version signal: a header row whose col 3 is exactly "Frequency" or
+ * "Fréquence" (case-insensitive) means v3. Anything else means legacy.
  */
 
 import * as XLSX from 'xlsx';
-import { monthlyIncomeEquivalent, IncomeFrequency } from './incomeHelpers';
+import { monthlyEquivalent, IncomeFrequency } from './incomeHelpers';
 
 export type IncomeSheetVersion = 'v1' | 'v2';
+export type FixedExpenseSheetVersion = 'legacy' | 'v3';
 
 export interface ParsedLine {
   label: string;
   amount: number;           // monthly equivalent — always safe to sum
-  rawAmount?: number;       // paycheque amount (v2 only)
-  frequency?: IncomeFrequency; // pay frequency (v2 only)
+  rawAmount?: number;       // per-payment amount (income v2 / fixed expenses v3 only)
+  frequency?: IncomeFrequency; // payment frequency (income v2 / fixed expenses v3 only)
   member?: string;          // "Member / Membre" column (v2 income rows only)
 }
 
@@ -60,6 +77,8 @@ export interface TemplateParseResult {
   isTemplate: boolean;
   incomeLayout: IncomeSheetVersion; // which column layout was detected and used
   incomeSkippedRows: number;         // v2 rows with an unrecognised frequency string — always 0 in v1 mode
+  fixedExpenseLayout: FixedExpenseSheetVersion; // which column layout was detected and used
+  fixedExpenseSkippedRows: number;   // v3 rows with an unrecognised (non-blank) frequency string — always 0 in legacy mode
   household: Record<string, string>;
   income: { lines: ParsedLine[]; total: number };
   fixedExpenses: { lines: ParsedLine[]; total: number };
@@ -85,6 +104,13 @@ const TEMPLATE_SHEETS = [
 // Data rows start at row index 5 in the Monthly Income sheet.
 // Rows 0–4 are the header area we inspect for the version marker.
 const INCOME_DATA_START_ROW = 5;
+
+// Data rows start at row index 3 in the Fixed Expenses sheet — row 2 holds
+// the column-label header row ("Expense / Dépense", "Category / Catégorie", ...).
+// Rows 0–2 are the header area we inspect for the version marker; row 2 in
+// particular is where the "Frequency / Fréquence" column label (v3) or its
+// absence (legacy) actually lives.
+const FIXED_EXPENSE_DATA_START_ROW = 3;
 
 /**
  * Detect whether an uploaded workbook is the Phare template
@@ -193,11 +219,103 @@ function parseIncome(
       const memberCell = row[3];
       const member = typeof memberCell === 'string' && memberCell.trim() ? memberCell.trim() : undefined;
       if (typeof rawAmount === 'number' && Number.isFinite(rawAmount) && rawAmount !== 0) {
-        const monthly = monthlyIncomeEquivalent(rawAmount, freq);
+        const monthly = monthlyEquivalent(rawAmount, freq);
         items.push({ label: label.trim(), amount: monthly, rawAmount, frequency: freq, member });
       }
     } else {
       // v1: col 2 is the monthly amount
+      const amount = row[2];
+      if (typeof amount === 'number' && Number.isFinite(amount) && amount !== 0) {
+        items.push({ label: label.trim(), amount });
+      }
+    }
+  }
+
+  return { lines: items, skippedCount };
+}
+
+/**
+ * Determine which Fixed Expenses column layout to use by inspecting the
+ * header area (rows 0 through startRow − 1) of the Fixed Expenses sheet.
+ *
+ * A header row whose col 3 is exactly "Frequency" or "Fréquence"
+ * (case-insensitive, trimmed, substring match for bilingual combined
+ * headers) is the v3 marker. Everything else is legacy — same rule as
+ * detectIncomeSheetVersion, applied to the column the frequency column
+ * actually lives in on this sheet.
+ */
+export function detectFixedExpenseVersion(rows: unknown[][], headerRowCount: number): FixedExpenseSheetVersion {
+  for (let i = 0; i < Math.min(headerRowCount, rows.length); i++) {
+    const row = rows[i];
+    if (!row) continue;
+    const col3 = row[3];
+    if (typeof col3 === 'string') {
+      const v = col3.toLowerCase().trim();
+      if (v.includes('frequency') || v.includes('fréquence') || v.includes('frequence')) {
+        return 'v3';
+      }
+    }
+  }
+  return 'legacy';
+}
+
+/**
+ * Map a Fixed Expenses frequency cell to an IncomeFrequency. Unlike income
+ * (parseFrequencyCell), a blank/missing cell here means "monthly" — most
+ * fixed expenses are monthly and existing v1/v2 templates never had this
+ * column at all, so requiring an explicit "monthly" in every row would be
+ * a needless regression. A non-blank but unrecognised string is still
+ * rejected (null) — guessing a cadence from garbage input is worse than
+ * asking, same principle as income.
+ */
+export function parseExpenseFrequencyCell(value: unknown): IncomeFrequency | null {
+  if (value == null) return 'monthly';
+  if (typeof value === 'string' && !value.trim()) return 'monthly';
+  return parseFrequencyCell(value);
+}
+
+/**
+ * Parse data rows of the Fixed Expenses sheet using the pre-determined version.
+ *
+ * legacy: col 2 is the monthly amount (user pre-computed).
+ * v3: col 2 is the per-payment amount; col 3 is the frequency string
+ *     (blank = monthly). A non-blank, unrecognised frequency string is
+ *     skipped and counted — same treatment as an income row with a bad
+ *     frequency string.
+ */
+function parseFixedExpenses(
+  rows: unknown[][],
+  version: FixedExpenseSheetVersion,
+  startRow: number,
+  skipWords: string[],
+): { lines: ParsedLine[]; skippedCount: number } {
+  const items: ParsedLine[] = [];
+  let skippedCount = 0;
+
+  for (let i = startRow; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row) continue;
+
+    const label = row[0];
+    if (typeof label !== 'string' || !label.trim()) continue;
+
+    const low = label.toLowerCase();
+    if (skipWords.some((w) => low.includes(w))) continue;
+
+    if (version === 'v3') {
+      const rawAmount = row[2];
+      const freq = parseExpenseFrequencyCell(row[3]);
+      if (freq === null) {
+        // Row has a label but an unrecognised, non-blank frequency — data entry error.
+        skippedCount++;
+        continue;
+      }
+      if (typeof rawAmount === 'number' && Number.isFinite(rawAmount) && rawAmount !== 0) {
+        const monthly = monthlyEquivalent(rawAmount, freq);
+        items.push({ label: label.trim(), amount: monthly, rawAmount, frequency: freq });
+      }
+    } else {
+      // legacy: col 2 is the monthly amount
       const amount = row[2];
       if (typeof amount === 'number' && Number.isFinite(amount) && amount !== 0) {
         items.push({ label: label.trim(), amount });
@@ -268,9 +386,12 @@ export function parseTemplate(buffer: Buffer): TemplateParseResult {
     incomeRows, incomeLayout, INCOME_DATA_START_ROW, ['source', 'income', 'revenu'],
   );
 
-  // --- Fixed expenses: amount in col 2, from row index 2 ---
+  // --- Fixed expenses: version detected from header rows ONCE, then applied to all data rows ---
   const fixedRows = sheetRows(workbook.Sheets['Fixed Expenses']);
-  const fixed = parseSection(fixedRows, 0, 2, 2, ['expense', 'dépense']);
+  const fixedExpenseLayout = detectFixedExpenseVersion(fixedRows, FIXED_EXPENSE_DATA_START_ROW);
+  const { lines: fixed, skippedCount: fixedExpenseSkippedRows } = parseFixedExpenses(
+    fixedRows, fixedExpenseLayout, FIXED_EXPENSE_DATA_START_ROW, ['expense', 'dépense'],
+  );
 
   // --- Variable expenses: budget in col 1, from row index 3 ---
   const varRows = sheetRows(workbook.Sheets['Variable Expenses']);
@@ -331,6 +452,8 @@ export function parseTemplate(buffer: Buffer): TemplateParseResult {
     isTemplate: true,
     incomeLayout,
     incomeSkippedRows,
+    fixedExpenseLayout,
+    fixedExpenseSkippedRows,
     household,
     income: { lines: income, total: incomeTotal },
     fixedExpenses: { lines: fixed, total: fixedTotal },
@@ -350,6 +473,8 @@ function emptyResult(isTemplate: boolean): TemplateParseResult {
     isTemplate,
     incomeLayout: 'v1',
     incomeSkippedRows: 0,
+    fixedExpenseLayout: 'legacy',
+    fixedExpenseSkippedRows: 0,
     household: {},
     income: { lines: [], total: 0 },
     fixedExpenses: { lines: [], total: 0 },
