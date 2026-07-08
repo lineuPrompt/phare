@@ -7,9 +7,12 @@ export type Plan = {
       name: string;
       budgeted: number;
       type: string;
-      // Income identity — set only for template-parsed (v2) income lines.
-      // budgeted stays the monthly equivalent for plan display; rawAmount/
-      // frequency/member are the source of truth save-plan stores.
+      // Per-payment identity — set for template-parsed (v2 income / v3
+      // expense) lines with a real cadence. budgeted is the monthly
+      // equivalent — used for display only when frequency is 'monthly' or
+      // absent; a non-monthly item is unanchored at this stage (the anchor
+      // step runs after save) and PlanDisplay shows rawAmount + frequency
+      // instead, never the average as a stand-in for a real month figure.
       rawAmount?: number;
       frequency?: IncomeFrequency;
       member?: string;

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { formatLocalDate, materializeFutureRule } from '@/lib/dateHelpers';
+import { formatLocalDate, materializeFromMonthStart } from '@/lib/dateHelpers';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 
 async function getContext(supabase: Awaited<ReturnType<typeof createClient>>) {
@@ -110,21 +110,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to create recurring item' }, { status: 500 });
     }
 
-    // 2. Materialize 12 months forward from current month
+    // 2. Materialize 12 months forward from the start of the current month —
+    // not from today. A new rule whose anchor lands earlier this month (e.g.
+    // added mid-month for a bill already paid on the 1st) still needs that
+    // occurrence recorded; months are real, not just their remainder.
     const today = formatLocalDate(new Date());
-    const dates = materializeFutureRule(
+    const monthStart = `${today.slice(0, 7)}-01`;
+    const dates = materializeFromMonthStart(
       { cadence, anchorDate, secondDay: secondDay ?? null },
       today,
       12
     );
 
-    // 3. Idempotently write future transaction rows, linked back to the rule
+    // 3. Idempotently write this-month-onward transaction rows, linked back to the rule
     const { error: deleteError } = await supabase
       .from('transactions')
       .delete()
       .eq('household_id', ctx.householdId)
       .eq('recurring_item_id', item.id)
-      .gte('date', today);
+      .gte('date', monthStart);
 
     if (deleteError) {
       console.error('Materialize cleanup error:', deleteError);

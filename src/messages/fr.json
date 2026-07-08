@@ -6,6 +6,12 @@
     "signUp": "Commencer",
     "loading": "Chargement..."
   },
+  "awaitingDates": {
+    "income": "{count, plural, one {1 source de revenu} other {# sources de revenu}}",
+    "bills": "{count, plural, one {1 facture} other {# factures}}",
+    "and": "et",
+    "suffix": "en attente d'une date de paiement — pas encore dans le registre de ce mois-ci."
+  },
   "landing": {
     "badge": "Coach financier IA pour les familles canadiennes",
     "hero": {
@@ -200,7 +206,7 @@
       },
       "unmatchedMembers": "{count, plural, one {Le nom de membre d'une source de revenu ne correspondait à personne dans votre foyer — elle vous a été attribuée. Vérifiez-la dans la page Récurrences.} other {Le nom de membre de # sources de revenu ne correspondait à personne dans votre foyer — elles vous ont été attribuées. Vérifiez-les dans la page Récurrences.}}",
       "unmatchedMemberItem": "« {name} » ne correspondait à personne — attribué à vous.",
-      "needsPayDate": "{count, plural, one {1 source de revenu ou facture a besoin d'une vraie date avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.} other {# sources de revenu ou factures ont besoin d'une vraie date avant d'apparaître jour par jour — ajoutez-en une dans la page Récurrences.}}",
+      "needsDateFlag": "définissez une date de paiement pour voir ce mois-ci",
       "anchorStep": {
         "title": "Quand ces montants sont-ils versés?",
         "subtitle": "Ajoutez une vraie date pour chacun d'eux afin qu'il apparaisse aux bons jours — une paie que vous recevez, ou une facture que vous payez. Vous pouvez en ignorer et les définir plus tard dans la page Récurrences.",
@@ -295,7 +301,6 @@
     "savings": "Épargne ce mois-ci",
     "surplus": "Surplus mensuel",
     "deficit": "Déficit mensuel",
-    "unanchoredIncome": "{count, plural, one {1 source de revenu en attente d'une date de paie — pas encore dans le registre de ce mois-ci.} other {# sources de revenu en attente de dates de paie — pas encore dans le registre de ce mois-ci.}}",
     "topPriority": "Votre priorité #1",
     "sinkingFunds": "Fonds de prévoyance",
     "perMonth": "/mois",
@@ -532,6 +537,8 @@
         "weekly": "Hebdomadaire"
       },
       "perPaycheque": "{amount}/paie",
+      "perPayment": "{amount}/paiement",
+      "average": "≈ {amount}/mois en moyenne",
       "needsPayDate": "date de paie requise"
     }
   },

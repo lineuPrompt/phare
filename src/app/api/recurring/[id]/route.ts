@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { formatLocalDate, materializeFutureRule } from '@/lib/dateHelpers';
+import { formatLocalDate, materializeFromMonthStart } from '@/lib/dateHelpers';
 
 async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -18,12 +18,18 @@ async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) 
  * current value (loaded from DB before the update).
  *
  * Re-materialization strategy (idempotent, no-duplicate):
- *   1. Delete all future linked rows (WHERE recurring_item_id = id AND date >= today).
- *      Keyed by recurring_item_id, so exactly the linked set is removed.
- *   2. materializeFutureRule with the NEW cadence params.
+ *   1. Delete all this-month-onward linked rows (WHERE recurring_item_id = id
+ *      AND date >= start of the current month). Keyed by recurring_item_id,
+ *      so exactly the linked set is removed.
+ *   2. materializeFromMonthStart with the NEW cadence params — the current
+ *      month is regenerated in full under the new rule, not just its
+ *      not-yet-occurred remainder. Months are real: a rule edited or
+ *      anchored mid-month must produce an internally consistent month, not a
+ *      mix of pre-edit and post-edit occurrences.
  *   3. Insert fresh rows with new description/amount/category/account.
  *
- * Past rows (date < today) are untouched as history.
+ * Rows before the current month (date < start of this month) are untouched
+ * as history.
  */
 export async function PATCH(
   request: Request,
@@ -124,14 +130,17 @@ export async function PATCH(
     }
 
     const todayStr = formatLocalDate(new Date());
+    const monthStartStr = `${todayStr.slice(0, 7)}-01`;
 
-    // 2. Delete all future linked rows (keyed by recurring_item_id — no orphan risk)
+    // 2. Delete all this-month-onward linked rows (keyed by recurring_item_id
+    // — no orphan risk). Month start, not today: the whole current month is
+    // regenerated under the new rule, not just its not-yet-occurred remainder.
     const { error: deleteErr } = await supabase
       .from('transactions')
       .delete()
       .eq('household_id', householdId)
       .eq('recurring_item_id', id)
-      .gte('date', todayStr);
+      .gte('date', monthStartStr);
 
     if (deleteErr) {
       console.error('Recurring PATCH txn cleanup error:', deleteErr);
@@ -142,7 +151,7 @@ export async function PATCH(
     // yet means no dated instances, not a fabricated guess.
     const canMaterialize = !!newAnchorDate;
     const dates = canMaterialize
-      ? materializeFutureRule(
+      ? materializeFromMonthStart(
           { cadence: newCadence as 'monthly' | 'biweekly' | 'semimonthly' | 'weekly', anchorDate: newAnchorDate, secondDay: newSecondDay },
           todayStr,
           12

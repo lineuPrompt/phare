@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { computeMonthTotals, computeGoalBalance, TxRow, AccountRow } from '../dashboardHelpers';
-import { materializeFutureRule } from '../dateHelpers';
+import { materializeFromMonthStart } from '../dateHelpers';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -157,12 +157,12 @@ describe('recurring item edit — re-materialization', () => {
   const MONTHS     = 12;
 
   it('changing cadence from monthly to biweekly produces a different date set', () => {
-    const monthlyDates = materializeFutureRule(
+    const monthlyDates = materializeFromMonthStart(
       { cadence: 'monthly', anchorDate: ANCHOR, secondDay: null },
       TODAY,
       MONTHS
     );
-    const biweeklyDates = materializeFutureRule(
+    const biweeklyDates = materializeFromMonthStart(
       { cadence: 'biweekly', anchorDate: ANCHOR, secondDay: null },
       TODAY,
       MONTHS
@@ -174,12 +174,12 @@ describe('recurring item edit — re-materialization', () => {
   });
 
   it('changing cadence from monthly to semimonthly produces more dates', () => {
-    const monthlyDates = materializeFutureRule(
+    const monthlyDates = materializeFromMonthStart(
       { cadence: 'monthly', anchorDate: ANCHOR, secondDay: null },
       TODAY,
       MONTHS
     );
-    const semiDates = materializeFutureRule(
+    const semiDates = materializeFromMonthStart(
       { cadence: 'semimonthly', anchorDate: ANCHOR, secondDay: 30 },
       TODAY,
       MONTHS
@@ -190,7 +190,7 @@ describe('recurring item edit — re-materialization', () => {
 
   it('re-materialized date set contains no duplicates', () => {
     for (const cadence of ['monthly', 'biweekly', 'semimonthly'] as const) {
-      const dates = materializeFutureRule(
+      const dates = materializeFromMonthStart(
         { cadence, anchorDate: ANCHOR, secondDay: cadence === 'semimonthly' ? 30 : null },
         TODAY,
         MONTHS
@@ -200,28 +200,45 @@ describe('recurring item edit — re-materialization', () => {
     }
   });
 
-  it('re-materialized dates are all >= today (past rows excluded)', () => {
+  it('re-materialized dates are all >= the start of the current month (months prior to it excluded)', () => {
+    // Months are real: an edit made mid-month (TODAY = 2026-06-19) still
+    // regenerates the WHOLE current month, including any occurrence earlier
+    // than today (e.g. a monthly rule anchored on the 15th → June 15, which
+    // is before TODAY but still this month) — it must not be dropped. Only
+    // months strictly before the current one stay untouched.
+    const monthStart = TODAY.slice(0, 7) + '-01';
     for (const cadence of ['monthly', 'biweekly', 'semimonthly'] as const) {
-      const dates = materializeFutureRule(
+      const dates = materializeFromMonthStart(
         { cadence, anchorDate: ANCHOR, secondDay: cadence === 'semimonthly' ? 30 : null },
         TODAY,
         MONTHS
       );
       for (const d of dates) {
-        expect(d >= TODAY).toBe(true);
+        expect(d >= monthStart).toBe(true);
       }
     }
   });
 
-  it('editing amount does not change future date count (dates are cadence-only)', () => {
-    // materializeFutureRule only takes cadence params — amount is applied at row insert time.
-    // This test asserts that changing amount has zero effect on the date set.
-    const datesOld = materializeFutureRule(
+  it('a monthly occurrence earlier this month than today is still included, not dropped', () => {
+    // ANCHOR day-of-month is 15; TODAY is the 19th — June 15 is before TODAY
+    // but still June, so it must be present.
+    const dates = materializeFromMonthStart(
       { cadence: 'monthly', anchorDate: ANCHOR, secondDay: null },
       TODAY,
       MONTHS
     );
-    const datesNew = materializeFutureRule(
+    expect(dates).toContain('2026-06-15');
+  });
+
+  it('editing amount does not change future date count (dates are cadence-only)', () => {
+    // materializeFromMonthStart only takes cadence params — amount is applied at row insert time.
+    // This test asserts that changing amount has zero effect on the date set.
+    const datesOld = materializeFromMonthStart(
+      { cadence: 'monthly', anchorDate: ANCHOR, secondDay: null },
+      TODAY,
+      MONTHS
+    );
+    const datesNew = materializeFromMonthStart(
       { cadence: 'monthly', anchorDate: ANCHOR, secondDay: null }, // same cadence, different amount in rows
       TODAY,
       MONTHS
@@ -238,8 +255,8 @@ describe('recurring item edit — re-materialization', () => {
     // (idempotency guard — if delete-then-insert is run twice, second run sees no future rows
     //  to delete, but re-inserts the same count → total stays identical).
     const rule = { cadence: 'monthly' as const, anchorDate: ANCHOR, secondDay: null };
-    const run1 = materializeFutureRule(rule, TODAY, MONTHS);
-    const run2 = materializeFutureRule(rule, TODAY, MONTHS);
+    const run1 = materializeFromMonthStart(rule, TODAY, MONTHS);
+    const run2 = materializeFromMonthStart(rule, TODAY, MONTHS);
     expect(run1.length).toBe(run2.length);
     expect(run1).toEqual(run2);
   });
@@ -247,12 +264,12 @@ describe('recurring item edit — re-materialization', () => {
   it('reconciliation invariant holds after a recurring item is re-materialized', () => {
     // Before edit: one monthly income row per future month
     // After edit (cadence → biweekly, still income): more rows, but all still income
-    const oldDates = materializeFutureRule(
+    const oldDates = materializeFromMonthStart(
       { cadence: 'monthly', anchorDate: ANCHOR, secondDay: null },
       TODAY,
       MONTHS
     );
-    const newDates = materializeFutureRule(
+    const newDates = materializeFromMonthStart(
       { cadence: 'biweekly', anchorDate: ANCHOR, secondDay: null },
       TODAY,
       MONTHS

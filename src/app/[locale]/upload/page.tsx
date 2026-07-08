@@ -467,6 +467,7 @@ export default function UploadPage() {
             onCancelReplace={cancelReplace}
             saveNotices={saveNotices}
             saveErrorMessage={saveErrorMessage}
+            locale={localeOf()}
           />
         )}
       </div>

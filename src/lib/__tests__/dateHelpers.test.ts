@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   formatLocalDate,
   formatLocalMonth,
-  materializeFutureRule,
+  materializeFromMonthStart,
   materializeRule,
   monthNameToNumber,
   occurrencesInMonth,
@@ -283,29 +283,66 @@ describe('formatLocalDate and formatLocalMonth', () => {
   });
 });
 
-describe('materializeFutureRule', () => {
-  it('filters out occurrences before today in the current month', () => {
+describe('materializeFromMonthStart', () => {
+  // Months are real, not averaged: a payment that already happened earlier
+  // this month — before an anchor was set or an edit was made today — is
+  // still a real occurrence for this month. The old materializeFutureRule
+  // filtered anything before "today", which silently dropped these.
+
+  it('keeps an occurrence earlier this month, before the reference date (monthly)', () => {
     const rule = { cadence: 'monthly' as const, anchorDate: '2026-06-01' };
-    expect(materializeFutureRule(rule, '2026-06-18', 3)).toEqual([
+    expect(materializeFromMonthStart(rule, '2026-06-18', 3)).toEqual([
+      '2026-06-01',
       '2026-07-01',
       '2026-08-01',
     ]);
   });
 
-  it('keeps an occurrence that lands today', () => {
-    const rule = { cadence: 'monthly' as const, anchorDate: '2026-06-18' };
-    expect(materializeFutureRule(rule, '2026-06-18', 2)).toEqual([
-      '2026-06-18',
-      '2026-07-18',
+  it('mid-month bi-weekly anchor → both July occurrences appear, with correct dates', () => {
+    // Anchored on the 20th (e.g. the anchor step was completed on the 20th).
+    // The true cadence's earlier July occurrence (the 6th) is 14 days before
+    // the anchor and must still appear — the old code would have dropped it
+    // since 2026-07-06 < the reference date 2026-07-20.
+    const rule = { cadence: 'biweekly' as const, anchorDate: '2026-07-20' };
+    expect(materializeFromMonthStart(rule, '2026-07-20', 1)).toEqual([
+      '2026-07-06',
+      '2026-07-20',
     ]);
   });
 
-  it('keeps only future semimonthly occurrences in the current month', () => {
-    const rule = { cadence: 'semimonthly' as const, anchorDate: '2026-06-01', secondDay: 20 };
-    expect(materializeFutureRule(rule, '2026-06-18', 2)).toEqual([
-      '2026-06-20',
+  it('a genuine three-payment bi-weekly month materializes all three, including the ones before the reference date', () => {
+    const rule = { cadence: 'biweekly' as const, anchorDate: '2026-07-01' };
+    // Reference date after the 1st and 15th — both must still appear, not just the 29th.
+    expect(materializeFromMonthStart(rule, '2026-07-20', 1)).toEqual([
       '2026-07-01',
-      '2026-07-20',
+      '2026-07-15',
+      '2026-07-29',
+    ]);
+  });
+
+  it('semi-monthly anchored after the 15th still includes the 15th', () => {
+    // buildSemimonthlyAnchor always puts the earlier day-of-month in
+    // anchorDate — here day 15 — even when the anchoring action itself
+    // happens on, say, the 20th.
+    const rule = { cadence: 'semimonthly' as const, anchorDate: '2026-07-15', secondDay: 30 };
+    expect(materializeFromMonthStart(rule, '2026-07-20', 1)).toEqual([
+      '2026-07-15',
+      '2026-07-30',
+    ]);
+  });
+
+  it('anchor on the 1st produces no duplicate for that date', () => {
+    const rule = { cadence: 'biweekly' as const, anchorDate: '2026-07-01' };
+    const dates = materializeFromMonthStart(rule, '2026-07-01', 1);
+    expect(dates).toEqual(['2026-07-01', '2026-07-15', '2026-07-29']);
+    expect(new Set(dates).size).toBe(dates.length);
+  });
+
+  it('still returns future months in full', () => {
+    const rule = { cadence: 'monthly' as const, anchorDate: '2026-06-18' };
+    expect(materializeFromMonthStart(rule, '2026-06-18', 2)).toEqual([
+      '2026-06-18',
+      '2026-07-18',
     ]);
   });
 });

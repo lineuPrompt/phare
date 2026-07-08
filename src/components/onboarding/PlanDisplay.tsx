@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
 import { Plan, formatCAD } from './types';
 
 export default function PlanDisplay({
@@ -15,6 +16,7 @@ export default function PlanDisplay({
   onCancelReplace,
   saveNotices,
   saveErrorMessage,
+  locale,
 }: {
   plan: Plan;
   reviewText: string;
@@ -32,9 +34,10 @@ export default function PlanDisplay({
   onCancelReplace: () => void;
   saveNotices: {
     unmatchedMembers: { label: string; attemptedMember: string }[];
-    needsPayDate: { id: string; description: string }[];
+    needsPayDate: { id: string; description: string; type: 'income' | 'expense' }[];
   } | null;
   saveErrorMessage: string | null;
+  locale: string;
 }) {
   const t = useTranslations('upload');
 
@@ -66,14 +69,29 @@ export default function PlanDisplay({
         </div>
 
         <div className="space-y-2">
-          {plan.monthlyBudget.categories.map((cat, i) => (
-            <div key={i} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid #F3F4F6' }}>
-              <span style={{ color: '#0F2044' }}>{cat.name}</span>
-              <span className="font-medium" style={{ color: cat.type === 'income' ? '#16A34A' : '#6B7280' }}>
-                {formatCAD(cat.budgeted)}
-              </span>
-            </div>
-          ))}
+          {plan.monthlyBudget.categories.map((cat, i) => {
+            // Non-monthly items have no anchor yet at this stage (the anchor
+            // step runs after save) — so there is no real "this month" figure
+            // to show. Showing the monthly-equivalent average here as if it
+            // were this month's number is exactly the bug: display the real
+            // per-payment amount and cadence instead, flagged as needing a
+            // date, never the average as a stand-in.
+            const isUnanchoredNonMonthly = !!cat.frequency && cat.frequency !== 'monthly' && cat.rawAmount != null;
+            return (
+              <div key={i} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid #F3F4F6' }}>
+                <span style={{ color: '#0F2044' }}>{cat.name}</span>
+                {isUnanchoredNonMonthly ? (
+                  <span className="text-sm text-right" style={{ color: '#92400E' }}>
+                    {formatCAD(cat.rawAmount!)} {t(`plan.anchorStep.cadence.${cat.frequency}`)} — {t('plan.needsDateFlag')}
+                  </span>
+                ) : (
+                  <span className="font-medium" style={{ color: cat.type === 'income' ? '#16A34A' : '#6B7280' }}>
+                    {formatCAD(cat.budgeted)}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -239,9 +257,12 @@ export default function PlanDisplay({
             </div>
           )}
           {saveNotices.needsPayDate.length > 0 && (
-            <p style={{ color: '#374151' }}>
-              {t('plan.needsPayDate', { count: saveNotices.needsPayDate.length })}
-            </p>
+            <AwaitingDatesNotice
+              incomeCount={saveNotices.needsPayDate.filter((i) => i.type === 'income').length}
+              expenseCount={saveNotices.needsPayDate.filter((i) => i.type === 'expense').length}
+              href={`/${locale}/recurring`}
+              style={{ color: '#374151', textDecoration: 'underline' }}
+            />
           )}
         </div>
       )}

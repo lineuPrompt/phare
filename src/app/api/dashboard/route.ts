@@ -69,7 +69,7 @@ export async function GET(request: Request) {
     // that haven't been planned, so we never fake a budget for the current month.
     const planMonth = latestBudget.month as string;
 
-    const [txResult, acctResult, budgetResult, sfResult, convResult, unanchoredIncomeResult] =
+    const [txResult, acctResult, budgetResult, sfResult, convResult, unanchoredIncomeResult, unanchoredExpenseResult] =
       await Promise.all([
         // Transactions for the ACTUALS month (not the plan month)
         supabase
@@ -105,14 +105,24 @@ export async function GET(request: Request) {
           .limit(1)
           .maybeSingle(),
 
-        // Income recurring items with no known pay date yet — real cadence
-        // and amount are saved, but nothing is materialized for them, so
-        // this month's actual income total can understate the plan's total.
+        // Income and expense recurring items with no known pay date yet —
+        // real cadence and amount are saved, but nothing is materialized for
+        // them, so this month's actual totals can understate the plan's.
+        // Both types, not just income — a bill with no anchor understates
+        // expenses exactly the same way an unanchored paycheque understates income.
         supabase
           .from('recurring_items')
           .select('id', { count: 'exact', head: true })
           .eq('household_id', householdId)
           .eq('type', 'income')
+          .eq('active', true)
+          .is('anchor_date', null),
+
+        supabase
+          .from('recurring_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('household_id', householdId)
+          .eq('type', 'expense')
           .eq('active', true)
           .is('anchor_date', null),
       ]);
@@ -174,6 +184,7 @@ export async function GET(request: Request) {
       topRecommendation,
       reviewDate:        convResult.data?.created_at ?? null,
       unanchoredIncomeCount: unanchoredIncomeResult.count ?? 0,
+      unanchoredExpenseCount: unanchoredExpenseResult.count ?? 0,
     });
   } catch (error) {
     console.error('Dashboard error:', error);

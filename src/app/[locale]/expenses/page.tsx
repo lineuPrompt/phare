@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter, usePathname } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
+import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
 import ExpenseForm from '@/components/expenses/ExpenseForm';
 import ExpenseList from '@/components/expenses/ExpenseList';
 import SummaryTable from '@/components/expenses/SummaryTable';
@@ -97,6 +98,16 @@ export default function ExpensesPage() {
                   </button>
                 ))}
               </div>
+            )}
+
+            {!loading && data && (
+              <AwaitingDatesNotice
+                incomeCount={data.unanchoredIncomeCount}
+                expenseCount={data.unanchoredExpenseCount}
+                href={`/${locale}/recurring`}
+                className="block rounded-xl p-3 text-sm hover:opacity-80 transition-opacity"
+                style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E' }}
+              />
             )}
 
             {loading && <p className="text-center py-12" style={{ color: '#6B7280' }}>{t('loading')}</p>}

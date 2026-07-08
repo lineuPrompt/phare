@@ -43,6 +43,9 @@ export type MonthData = {
   net: number;
   cardGoal: number | null;
   categories: ExpenseCategory[];
+  // Recurring items on the viewed account with no known pay date yet.
+  unanchoredIncomeCount: number;
+  unanchoredExpenseCount: number;
 };
 
 export function formatCurrency(amount: number, locale: string) {

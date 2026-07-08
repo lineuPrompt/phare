@@ -6,6 +6,12 @@
     "signUp": "Get started",
     "loading": "Loading..."
   },
+  "awaitingDates": {
+    "income": "{count, plural, one {1 income source} other {# income sources}}",
+    "bills": "{count, plural, one {1 bill} other {# bills}}",
+    "and": "and",
+    "suffix": "awaiting pay dates — not yet in this month's ledger."
+  },
   "landing": {
     "badge": "AI financial coach for Canadian families",
     "hero": {
@@ -200,7 +206,7 @@
       },
       "unmatchedMembers": "{count, plural, one {1 income source's Member name didn't match anyone in your household — it was assigned to you. Check it on the Recurring page.} other {# income sources' Member names didn't match anyone in your household — they were assigned to you. Check them on the Recurring page.}}",
       "unmatchedMemberItem": "“{name}” didn't match anyone — assigned to you.",
-      "needsPayDate": "{count, plural, one {1 income source or bill needs a real date before it shows up day-by-day — add one on the Recurring page.} other {# income sources or bills need a real date before they show up day-by-day — add one on the Recurring page.}}",
+      "needsDateFlag": "set a payment date to see this month",
       "anchorStep": {
         "title": "When do these get paid?",
         "subtitle": "Add a real date for each of these so it shows up on the right days — a paycheque you receive, or a bill you pay. You can skip any of these and set them later on the Recurring page.",
@@ -295,7 +301,6 @@
     "savings": "Saved this month",
     "surplus": "Monthly surplus",
     "deficit": "Monthly deficit",
-    "unanchoredIncome": "{count, plural, one {1 income source awaiting a pay date — not yet in this month's ledger.} other {# income sources awaiting pay dates — not yet in this month's ledger.}}",
     "topPriority": "Your #1 priority",
     "sinkingFunds": "Sinking funds",
     "perMonth": "/month",
@@ -532,6 +537,8 @@
         "weekly": "Weekly"
       },
       "perPaycheque": "{amount}/paycheque",
+      "perPayment": "{amount}/payment",
+      "average": "≈ {amount}/mo average",
       "needsPayDate": "needs a pay date"
     }
   },

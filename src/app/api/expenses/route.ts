@@ -202,6 +202,33 @@ export async function GET(request: Request) {
     const incomeTxns = (allTxns ?? []).filter((t) => t.type === 'income');
     const totalIncome = Math.round(incomeTxns.reduce((s, t) => s + Number(t.amount), 0) * 100) / 100;
 
+    // Recurring items on THIS account with no known pay date yet — the same
+    // notice the dashboard shows, scoped to the account being viewed here.
+    let unanchoredIncomeCount = 0;
+    let unanchoredExpenseCount = 0;
+    if (selectedAccount) {
+      const [{ count: uInc }, { count: uExp }] = await Promise.all([
+        supabase
+          .from('recurring_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('household_id', householdId)
+          .eq('account_id', selectedAccount.id)
+          .eq('type', 'income')
+          .eq('active', true)
+          .is('anchor_date', null),
+        supabase
+          .from('recurring_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('household_id', householdId)
+          .eq('account_id', selectedAccount.id)
+          .eq('type', 'expense')
+          .eq('active', true)
+          .is('anchor_date', null),
+      ]);
+      unanchoredIncomeCount = uInc ?? 0;
+      unanchoredExpenseCount = uExp ?? 0;
+    }
+
     const { data: categories } = await supabase
       .from('categories')
       .select('id, name, type')
@@ -307,6 +334,8 @@ export async function GET(request: Request) {
       net: Math.round((totalIncome - totalSpent) * 100) / 100,
       cardGoal: goalRow?.card_goal ? Number(goalRow.card_goal) : null,
       categories: categories ?? [],
+      unanchoredIncomeCount,
+      unanchoredExpenseCount,
     });
   } catch (error) {
     console.error('Expenses GET error:', error);

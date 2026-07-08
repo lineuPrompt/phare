@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RecurringItem, RecurringAccount, RecurringCategory, formatCurrency } from './types';
+import { monthlyEquivalent } from '@/lib/incomeHelpers';
 
 // ── RecurringRow ───────────────────────────────────────────────────────────
 //
@@ -209,9 +210,16 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
           </p>
           <p className="text-xs" style={{ color: '#9CA3AF' }}>
             {t(`cadence.${item.cadence}`)}
-            {item.type === 'income' && item.cadence !== 'monthly'
-              ? ` (${t('perPaycheque', { amount: formatCurrency(Number(item.amount), locale) })})`
-              : ''}
+            {item.cadence !== 'monthly' && (
+              <>
+                {' ('}
+                {t(item.type === 'income' ? 'perPaycheque' : 'perPayment', { amount: formatCurrency(Number(item.amount), locale) })}
+                {') '}
+                {/* The monthly equivalent survives only as this labeled caption
+                    — never shown as if it were a real month's number. */}
+                {t('average', { amount: formatCurrency(monthlyEquivalent(Number(item.amount), item.cadence), locale) })}
+              </>
+            )}
             {item.categories?.name ? ` · ${item.categories.name}` : ''}
             {item.accounts?.name ? ` · ${item.accounts.type === 'chequing' ? '🏦' : '💳'} ${item.accounts.name}` : ''}
             {!item.anchor_date ? ` · ⚠ ${t('needsPayDate')}` : ''}

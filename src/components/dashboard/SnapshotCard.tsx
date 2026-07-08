@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import Link from 'next/link';
+import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
 import { DashboardSummary, formatCurrency } from './types';
 
 export default function SnapshotCard({
@@ -10,6 +10,7 @@ export default function SnapshotCard({
   onNextMonth,
   isCurrentMonth,
   unanchoredIncomeCount,
+  unanchoredExpenseCount,
 }: {
   summary: DashboardSummary;
   locale: string;
@@ -18,6 +19,7 @@ export default function SnapshotCard({
   onNextMonth: () => void;
   isCurrentMonth: boolean;
   unanchoredIncomeCount?: number;
+  unanchoredExpenseCount?: number;
 }) {
   const t = useTranslations('dashboard');
   const surplus = summary.netCashFlow >= 0;
@@ -61,15 +63,13 @@ export default function SnapshotCard({
         </div>
       </div>
 
-      {!!unanchoredIncomeCount && unanchoredIncomeCount > 0 && (
-        <Link
-          href={`/${locale}/recurring`}
-          className="block rounded-xl p-3 mb-3 text-sm hover:opacity-80 transition-opacity"
-          style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E' }}
-        >
-          {t('unanchoredIncome', { count: unanchoredIncomeCount })}
-        </Link>
-      )}
+      <AwaitingDatesNotice
+        incomeCount={unanchoredIncomeCount ?? 0}
+        expenseCount={unanchoredExpenseCount ?? 0}
+        href={`/${locale}/recurring`}
+        className="block rounded-xl p-3 mb-3 text-sm hover:opacity-80 transition-opacity"
+        style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E' }}
+      />
 
       {/* Three main buckets */}
       <div className="grid grid-cols-3 gap-3 mb-3">

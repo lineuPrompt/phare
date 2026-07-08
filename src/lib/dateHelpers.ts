@@ -148,17 +148,33 @@ export function formatLocalMonth(date: Date): string {
   return formatLocalDate(date).slice(0, 7);
 }
 
-export function materializeFutureRule(
+/**
+ * Expands a recurring rule into all occurrence dates from the START of the
+ * reference date's month through `monthCount` months forward.
+ *
+ * Months are real, not averaged: a payment that already happened earlier
+ * this month — before an anchor was set, or before an edit was made today —
+ * is still a real occurrence for this month and must not be dropped. This
+ * replaces the old "future-only" filter (date >= today), which silently
+ * discarded any legitimate occurrence between the 1st of the month and
+ * today whenever an anchor was set or edited after the month had begun
+ * (e.g. a bi-weekly mortgage anchored on the 9th was missing its 1st-of-
+ * month payment; a semi-monthly item anchored after the 15th was missing
+ * its 15th). occurrencesInMonth() already steps backward from the anchor
+ * by the cadence interval to find every occurrence in a target month —
+ * the bug was purely in the extra filter this function used to apply on
+ * top of that.
+ */
+export function materializeFromMonthStart(
   rule: {
     cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
     anchorDate: string;
     secondDay?: number | null;
   },
-  today: string,
+  referenceDate: string,   // YYYY-MM-DD — only its month is used
   monthCount: number
 ): string[] {
-  return materializeRule(rule, today.slice(0, 7), monthCount)
-    .filter((date) => date >= today);
+  return materializeRule(rule, referenceDate.slice(0, 7), monthCount);
 }
 
 /**
