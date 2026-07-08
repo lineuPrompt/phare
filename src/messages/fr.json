@@ -180,6 +180,7 @@
       "reviewError": "Nous n'avons pas pu générer votre revue pour le moment. Veuillez réessayer.",
       "saving": "Enregistrement du plan...",
       "saveError": "Impossible d'enregistrer votre plan.",
+      "saveErrorReason": "Impossible d'enregistrer votre plan : {reason}",
       "saveRetry": "Réessayer",
       "replaceConfirm": {
         "title": "Remplacer les données de votre import précédent?",

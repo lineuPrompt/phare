@@ -15,14 +15,24 @@
 -- WHAT THIS DELETES (all scoped to the one household_id below)
 --   transactions, recurring_items, monthly_goals, card_envelope_items,
 --   budgets, sinking_funds, goals, account_balance_anchors, budget_alerts,
---   file_imports, events, conversations, and ALL accounts (including
---   chequing — onboarding recreates it via /api/accounts, not the signup
---   trigger, so losing it here is recoverable).
+--   file_imports, events, conversations, and every NON-chequing account
+--   (credit cards, lines of credit, goal accounts).
 --
 -- WHAT THIS PRESERVES
 --   households, users, household_members, categories (the 10 seed
 --   categories, plus any custom ones — re-onboarding is idempotent on
---   categories and will not duplicate them).
+--   categories and will not duplicate them), and the chequing account
+--   itself (its transactions are deleted in step 1 like everything else —
+--   only the account row survives).
+--
+--   Chequing is kept directly by this script, not because something else
+--   is assumed to recreate it. It shouldn't be, either way: save-plan now
+--   self-heals a missing chequing account (see src/lib/accountHelpers.ts —
+--   ensureChequingAccount, called from /api/save-plan), so losing it here
+--   would in fact be recoverable today, but this script doesn't lean on
+--   that. A reset tool that deletes an account nothing else in the app can
+--   safely assume exists is a foot-gun regardless of what currently papers
+--   over it.
 --
 -- SAFETY CONTRACT
 --   • Scoped to ONE household via the _reset_target temp table below —
@@ -108,8 +118,10 @@ DELETE FROM events WHERE household_id = (SELECT household_id FROM _reset_target)
 -- STEP 12 — conversations (AI onboarding summaries, monthly reviews, chat)
 DELETE FROM conversations WHERE household_id = (SELECT household_id FROM _reset_target);
 
--- STEP 13 — accounts (all of them, including chequing — see header)
-DELETE FROM accounts WHERE household_id = (SELECT household_id FROM _reset_target);
+-- STEP 13 — accounts, EXCEPT chequing (preserved — see header)
+DELETE FROM accounts
+WHERE household_id = (SELECT household_id FROM _reset_target)
+  AND type != 'chequing';
 
 COMMIT;
 
@@ -128,14 +140,16 @@ UNION ALL SELECT 'budget_alerts',          count(*) FROM budget_alerts         W
 UNION ALL SELECT 'file_imports',           count(*) FROM file_imports          WHERE household_id = (SELECT household_id FROM _reset_target)
 UNION ALL SELECT 'events',                 count(*) FROM events                WHERE household_id = (SELECT household_id FROM _reset_target)
 UNION ALL SELECT 'conversations',          count(*) FROM conversations         WHERE household_id = (SELECT household_id FROM _reset_target)
-UNION ALL SELECT 'accounts',               count(*) FROM accounts              WHERE household_id = (SELECT household_id FROM _reset_target);
+UNION ALL SELECT 'accounts (non-chequing)', count(*) FROM accounts             WHERE household_id = (SELECT household_id FROM _reset_target) AND type != 'chequing';
 
 -- =============================================================================
--- VERIFICATION 2 — preserved rows; every row here must be non-zero.
+-- VERIFICATION 2 — preserved rows; every row here must be non-zero, and
+-- accounts (chequing) must be exactly 1.
 -- =============================================================================
 SELECT 'households (preserved)' AS check_name, count(*) AS row_count FROM households WHERE id = (SELECT household_id FROM _reset_target)
 UNION ALL SELECT 'users (preserved)',             count(*) FROM users             WHERE household_id = (SELECT household_id FROM _reset_target)
 UNION ALL SELECT 'household_members (preserved)', count(*) FROM household_members WHERE household_id = (SELECT household_id FROM _reset_target)
-UNION ALL SELECT 'categories (preserved)',        count(*) FROM categories        WHERE household_id = (SELECT household_id FROM _reset_target);
+UNION ALL SELECT 'categories (preserved)',        count(*) FROM categories        WHERE household_id = (SELECT household_id FROM _reset_target)
+UNION ALL SELECT 'accounts (chequing, preserved, expect exactly 1)', count(*) FROM accounts WHERE household_id = (SELECT household_id FROM _reset_target) AND type = 'chequing';
 
 DROP TABLE _reset_target;

@@ -14,6 +14,7 @@ import {
   type DesiredAccount,
 } from '@/lib/importProvenance';
 import { resolveMemberId, type IncomeFrequency } from '@/lib/incomeHelpers';
+import { ensureChequingAccount } from '@/lib/accountHelpers';
 
 type PlanCategory = {
   name: string;
@@ -72,13 +73,23 @@ export async function POST(request: Request) {
       .select('id, name')
       .eq('household_id', householdId);
 
-    // ----- Resolve chequing account (required) -----
+    // ----- Resolve chequing account, creating it if this household somehow
+    // has none (e.g. after scripts/reset-household.sql, which deletes it as
+    // routine hardening even though this path is now expected to cover it).
+    // Same defaults as the signup trigger — see accountHelpers.ts. -----
     const { data: accts } = await supabase
       .from('accounts')
       .select('id, type, name, file_import_id')
       .eq('household_id', householdId);
 
-    const chequingId = accts?.find((a) => a.type === 'chequing')?.id ?? null;
+    let chequingId = accts?.find((a) => a.type === 'chequing')?.id ?? null;
+    if (!chequingId) {
+      const chequing = await ensureChequingAccount(supabase, householdId);
+      chequingId = chequing.id;
+    }
+    // Final invariant guard — should be unreachable now that the block above
+    // always resolves or creates one. Kept because a save with no chequing
+    // account is not a state worth proceeding from under any circumstance.
     if (!chequingId) {
       return NextResponse.json({ error: 'A chequing account is required before saving a plan' }, { status: 400 });
     }
@@ -231,7 +242,7 @@ export async function POST(request: Request) {
       .single();
     if (importError || !importRow) {
       console.error('Save plan file_imports insert error:', importError);
-      return NextResponse.json({ error: 'Failed to record import' }, { status: 500 });
+      return NextResponse.json({ error: `Failed to record import: ${importError?.message ?? 'unknown error'}` }, { status: 500 });
     }
     const fileImportId: string = importRow.id;
     const transactionSource = resolveTransactionSource(fileMeta);
@@ -437,7 +448,7 @@ export async function POST(request: Request) {
 
       if (recurringError) {
         console.error('Save plan recurring insert error:', recurringError);
-        return NextResponse.json({ error: 'Failed to save recurring items' }, { status: 500 });
+        return NextResponse.json({ error: `Failed to save recurring items: ${recurringError.message}` }, { status: 500 });
       }
 
       const txnRows: Record<string, unknown>[] = [];
@@ -471,7 +482,7 @@ export async function POST(request: Request) {
 
         if (cleanupError) {
           console.error('Save plan materialize cleanup error:', cleanupError);
-          return NextResponse.json({ error: 'Failed to prepare recurring transactions' }, { status: 500 });
+          return NextResponse.json({ error: `Failed to prepare recurring transactions: ${cleanupError.message}` }, { status: 500 });
         }
 
         const dates = materializeRule(
@@ -509,7 +520,7 @@ export async function POST(request: Request) {
         const { error: txError } = await supabase.from('transactions').insert(txnRows);
         if (txError) {
           console.error('Save plan materialize insert error:', txError);
-          return NextResponse.json({ error: 'Failed to save recurring transactions' }, { status: 500 });
+          return NextResponse.json({ error: `Failed to save recurring transactions: ${txError.message}` }, { status: 500 });
         }
       }
     }
@@ -558,6 +569,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ saved: true, unmatchedMembers, needsPayDate, householdMembers: allMembers ?? [] });
   } catch (error) {
     console.error('Save plan error:', error);
-    return NextResponse.json({ error: 'Failed to save plan' }, { status: 500 });
+    // Surface the real reason to the client — the UI shows it verbatim
+    // ("Could not save your plan: [reason]"). A generic message here would
+    // turn every failure into an unactionable dead end.
+    const message = error instanceof Error ? error.message : 'Failed to save plan';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

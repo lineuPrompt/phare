@@ -71,6 +71,8 @@ export default function UploadPage() {
   } | null>(null);
   // Household members for the anchor step's attribution dropdown.
   const [householdMembers, setHouseholdMembers] = useState<{ id: string; name: string }[]>([]);
+  // The server's actual reason a save failed — shown verbatim, never a generic dead end.
+  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
 
   const localeOf = () => (typeof window !== 'undefined' && window.location.pathname.startsWith('/fr') ? 'fr' : 'en');
 
@@ -79,14 +81,17 @@ export default function UploadPage() {
     confirmReplace: boolean,
   ) => {
     setPlanSaveStatus('saving');
+    setSaveErrorMessage(null);
     try {
       const res = await fetch('/api/save-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, confirmReplace }),
       });
-      if (!res.ok) throw new Error('Save failed');
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || `Save failed (${res.status})`);
+      }
       if (data?.needsConfirmation) {
         setReplaceConfirmation(data.counts);
         setPlanSaveStatus('idle');
@@ -105,6 +110,7 @@ export default function UploadPage() {
       }
     } catch (err) {
       console.error('Plan save error:', err);
+      setSaveErrorMessage(err instanceof Error ? err.message : String(err));
       setPlanSaveStatus('error');
     }
   }, []);
@@ -460,6 +466,7 @@ export default function UploadPage() {
             onConfirmReplace={confirmReplaceAndSave}
             onCancelReplace={cancelReplace}
             saveNotices={saveNotices}
+            saveErrorMessage={saveErrorMessage}
           />
         )}
       </div>

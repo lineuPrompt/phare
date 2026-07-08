@@ -180,6 +180,7 @@
       "reviewError": "We couldn't generate your review just now. Please try again.",
       "saving": "Saving your plan...",
       "saveError": "Could not save your plan.",
+      "saveErrorReason": "Could not save your plan: {reason}",
       "saveRetry": "Retry",
       "replaceConfirm": {
         "title": "Replace data from your previous import?",

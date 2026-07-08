@@ -14,6 +14,7 @@ export default function PlanDisplay({
   onConfirmReplace,
   onCancelReplace,
   saveNotices,
+  saveErrorMessage,
 }: {
   plan: Plan;
   reviewText: string;
@@ -33,6 +34,7 @@ export default function PlanDisplay({
     unmatchedMembers: { label: string; attemptedMember: string }[];
     needsPayDate: { id: string; description: string }[];
   } | null;
+  saveErrorMessage: string | null;
 }) {
   const t = useTranslations('upload');
 
@@ -249,7 +251,9 @@ export default function PlanDisplay({
       )}
       {planSaveStatus === 'error' && (
         <div className="text-center">
-          <p className="text-sm mb-1" style={{ color: '#DC2626' }}>{t('plan.saveError')}</p>
+          <p className="text-sm mb-1" style={{ color: '#DC2626' }}>
+            {saveErrorMessage ? t('plan.saveErrorReason', { reason: saveErrorMessage }) : t('plan.saveError')}
+          </p>
           <button onClick={onRetrySave} className="text-sm font-medium underline cursor-pointer" style={{ color: '#DC2626' }}>
             {t('plan.saveRetry')}
           </button>
