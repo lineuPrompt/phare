@@ -61,3 +61,28 @@ export function buildSemimonthlyAnchor(
     secondDay: second,
   };
 }
+
+export type SkipConfirmation =
+  | { needed: false }
+  | { needed: true; unsetIncomeCount: number; unsetExpenseCount: number };
+
+/**
+ * Decides whether clicking "Continue" on the anchor step should be gated by
+ * a confirmation, and — if so — what to tell the user is at stake. Never
+ * fires for an empty list (nothing to skip) or once every item has a real
+ * date (nothing left to lose). The anchor step must not be silently
+ * skippable: leaving items undated is a real, consequential choice (they
+ * won't appear in any month view until dated), not a default to fall
+ * through unnoticed.
+ */
+export function evaluateSkipConfirmation(
+  items: { type: 'income' | 'expense'; isSet: boolean }[]
+): SkipConfirmation {
+  const unset = items.filter((i) => !i.isSet);
+  if (unset.length === 0) return { needed: false };
+  return {
+    needed: true,
+    unsetIncomeCount: unset.filter((i) => i.type === 'income').length,
+    unsetExpenseCount: unset.filter((i) => i.type === 'expense').length,
+  };
+}

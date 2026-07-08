@@ -230,6 +230,14 @@
         "savedConfirm": "Pay date set.",
         "continue": "Continue",
         "skipNote": "Anything left blank stays flagged as \"needs a pay date\" — you can add it later on the Recurring page.",
+        "confirmSkip": {
+          "bills": "{count, plural, one {1 bill} other {# bills}}",
+          "income": "{count, plural, one {1 income source} other {# income sources}}",
+          "and": "and",
+          "message": "{parts} won't appear in your month view until they have dates. Continue anyway?",
+          "setDates": "Set dates",
+          "continueAnyway": "Continue without dates"
+        },
         "error": {
           "past": "That date has already passed.",
           "tooFar": "That's more than {days} days away — the next payday should be sooner than that.",

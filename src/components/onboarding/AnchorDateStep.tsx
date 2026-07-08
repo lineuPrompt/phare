@@ -1,10 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatCAD } from './types';
-import { validateNextPayDate, validateSemimonthlyDays, buildSemimonthlyAnchor } from '@/lib/anchorDateHelpers';
+import { validateNextPayDate, validateSemimonthlyDays, buildSemimonthlyAnchor, evaluateSkipConfirmation, type SkipConfirmation } from '@/lib/anchorDateHelpers';
 import { formatLocalDate, formatLocalMonth } from '@/lib/dateHelpers';
+
+type Translator = (key: string, values?: Record<string, string | number>) => string;
+
+/** "3 bills and 2 income sources" — bills first, income second, "and" only when both are present. */
+function buildSkipConfirmParts(t: Translator, confirmation: Extract<SkipConfirmation, { needed: true }>): string {
+  const parts: string[] = [];
+  if (confirmation.unsetExpenseCount > 0) parts.push(t('confirmSkip.bills', { count: confirmation.unsetExpenseCount }));
+  if (confirmation.unsetIncomeCount > 0) parts.push(t('confirmSkip.income', { count: confirmation.unsetIncomeCount }));
+  return parts.length === 2 ? `${parts[0]} ${t('confirmSkip.and')} ${parts[1]}` : parts[0];
+}
 
 export type NeedsPayDateItem = {
   id: string;
@@ -53,9 +63,31 @@ export default function AnchorDateStep({
       },
     ]))
   );
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
+
+  // This step auto-advances straight out of review-streaming with no pause —
+  // a user mid-scroll on the plan review can land here without registering
+  // a screen change. Bring it into view on mount so the transition is
+  // impossible to miss, on top of its own distinct heading.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   const update = (id: string, patch: Partial<ItemState>) =>
     setState((s) => ({ ...s, [id]: { ...s[id], ...patch } }));
+
+  const skipConfirmation = evaluateSkipConfirmation(
+    items.map((i) => ({ type: i.type, isSet: state[i.id]?.status === 'saved' }))
+  );
+
+  const handleContinueClick = () => {
+    if (skipConfirmation.needed) {
+      setShowSkipConfirm(true);
+    } else {
+      onDone();
+    }
+  };
 
   const saveItem = async (item: NeedsPayDateItem) => {
     const s = state[item.id];
@@ -101,7 +133,7 @@ export default function AnchorDateStep({
   const inputStyle = { border: '1.5px solid #D1D5DB', color: '#0F2044' };
 
   return (
-    <div className="rounded-2xl bg-white p-8 space-y-6" style={{ border: '1px solid #E5E7EB' }}>
+    <div ref={rootRef} className="rounded-2xl bg-white p-8 space-y-6" style={{ border: '1px solid #E5E7EB' }}>
       <div>
         <p className="text-lg font-bold mb-1" style={{ color: '#0F2044' }}>{t('title')}</p>
         <p className="text-sm" style={{ color: '#6B7280' }}>{t('subtitle')}</p>
@@ -187,8 +219,32 @@ export default function AnchorDateStep({
         })}
       </div>
 
+      {showSkipConfirm && skipConfirmation.needed && (
+        <div className="rounded-xl p-4 space-y-3" style={{ background: '#FFFBEB', border: '1.5px solid #F5A623' }}>
+          <p className="text-sm" style={{ color: '#92400E' }}>
+            {t('confirmSkip.message', { parts: buildSkipConfirmParts(t, skipConfirmation) })}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              onClick={() => setShowSkipConfirm(false)}
+              className="flex-1 px-4 py-2 rounded-full text-sm font-semibold cursor-pointer hover:opacity-90 transition-all"
+              style={{ background: '#0F2044', color: 'white' }}
+            >
+              {t('confirmSkip.setDates')}
+            </button>
+            <button
+              onClick={onDone}
+              className="flex-1 px-4 py-2 rounded-full text-sm font-medium cursor-pointer"
+              style={{ border: '1.5px solid #92400E', color: '#92400E' }}
+            >
+              {t('confirmSkip.continueAnyway')}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="text-center pt-2">
-        <button onClick={onDone} className="px-6 py-2.5 rounded-full font-semibold cursor-pointer hover:opacity-90 transition-all"
+        <button onClick={handleContinueClick} className="px-6 py-2.5 rounded-full font-semibold cursor-pointer hover:opacity-90 transition-all"
           style={{ background: '#0F2044', color: 'white' }}>
           {t('continue')}
         </button>

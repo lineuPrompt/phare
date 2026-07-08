@@ -230,6 +230,14 @@
         "savedConfirm": "Date de paie définie.",
         "continue": "Continuer",
         "skipNote": "Tout champ laissé vide reste marqué « date de paie requise » — vous pourrez l'ajouter plus tard dans la page Récurrences.",
+        "confirmSkip": {
+          "bills": "{count, plural, one {1 facture} other {# factures}}",
+          "income": "{count, plural, one {1 source de revenu} other {# sources de revenu}}",
+          "and": "et",
+          "message": "{parts} n'apparaîtront pas dans votre vue du mois tant qu'elles n'auront pas de date. Continuer quand même?",
+          "setDates": "Définir les dates",
+          "continueAnyway": "Continuer sans dates"
+        },
         "error": {
           "past": "Cette date est déjà passée.",
           "tooFar": "C'est à plus de {days} jours — la prochaine paie devrait être plus proche.",

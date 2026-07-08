@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateNextPayDate, validateSemimonthlyDays, buildSemimonthlyAnchor } from '../anchorDateHelpers';
+import { validateNextPayDate, validateSemimonthlyDays, buildSemimonthlyAnchor, evaluateSkipConfirmation } from '../anchorDateHelpers';
 
 describe('validateNextPayDate', () => {
   it('accepts a biweekly payday exactly 14 days out', () => {
@@ -71,5 +71,45 @@ describe('buildSemimonthlyAnchor', () => {
     // Picking 30 & 31 in a 30-day month: anchor (30) needs clamping to 30 (no-op here),
     // but in February both would need clamping.
     expect(buildSemimonthlyAnchor('2026-02', 30, 31)).toEqual({ anchorDate: '2026-02-28', secondDay: 31 });
+  });
+});
+
+describe('evaluateSkipConfirmation', () => {
+  it('is not needed for an empty list', () => {
+    expect(evaluateSkipConfirmation([])).toEqual({ needed: false });
+  });
+
+  it('is not needed once every item has a real date', () => {
+    const items = [
+      { type: 'income' as const, isSet: true },
+      { type: 'expense' as const, isSet: true },
+    ];
+    expect(evaluateSkipConfirmation(items)).toEqual({ needed: false });
+  });
+
+  it('is needed when any item is unset, and counts unset income/expense independently', () => {
+    const items = [
+      { type: 'income' as const, isSet: false },
+      { type: 'income' as const, isSet: true },   // already set — not counted
+      { type: 'expense' as const, isSet: false },
+      { type: 'expense' as const, isSet: false },
+    ];
+    expect(evaluateSkipConfirmation(items)).toEqual({
+      needed: true,
+      unsetIncomeCount: 1,
+      unsetExpenseCount: 2,
+    });
+  });
+
+  it('counts zero for a type with no unset items, without needing it to be absent entirely', () => {
+    const items = [
+      { type: 'income' as const, isSet: true },
+      { type: 'expense' as const, isSet: false },
+    ];
+    expect(evaluateSkipConfirmation(items)).toEqual({
+      needed: true,
+      unsetIncomeCount: 0,
+      unsetExpenseCount: 1,
+    });
   });
 });
