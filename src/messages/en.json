@@ -547,6 +547,7 @@
       "perPaycheque": "{amount}/paycheque",
       "perPayment": "{amount}/payment",
       "average": "≈ {amount}/mo average",
+      "householdLabel": "Household",
       "needsPayDate": "needs a pay date"
     }
   },

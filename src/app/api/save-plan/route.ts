@@ -360,11 +360,11 @@ export async function POST(request: Request) {
     const unmatchedMembers: { label: string; attemptedMember: string }[] = [];
     const needsPayDate: { id: string; description: string; cadence: string; amount: number; type: 'income' | 'expense'; member: string | null; memberId: string | null; isHousehold: boolean; attemptedName: string | null }[] = [];
     const memberNameById = new Map((allMembers ?? []).map((m) => [m.id, m.name]));
-    // Per-income-line resolution detail, keyed by description — recurringRows
-    // only carries DB columns, so this is how the anchor step (built after
+    // Per-line resolution detail, keyed by description — recurringRows only
+    // carries DB columns, so this is how the anchor step (built after
     // insert, from insertedItems) learns whether a row was a household
     // attribution or an unmatched-name fallback worth visibly flagging.
-    const incomeMetaByDescription = new Map<string, { isHousehold: boolean; attemptedName: string | null }>();
+    const memberMetaByDescription = new Map<string, { isHousehold: boolean; attemptedName: string | null }>();
 
     for (const cat of (plan.monthlyBudget.categories as PlanCategory[])) {
       if (sinkingFundNames.has(cat.name.trim().toLowerCase())) continue;
@@ -383,7 +383,7 @@ export async function POST(request: Request) {
         if (usedFallback && unmatchedName) {
           unmatchedMembers.push({ label: cat.name, attemptedMember: unmatchedName });
         }
-        incomeMetaByDescription.set(cat.name, { isHousehold, attemptedName: usedFallback ? unmatchedName : null });
+        memberMetaByDescription.set(cat.name, { isHousehold, attemptedName: usedFallback ? unmatchedName : null });
 
         recurringRows.push({
           household_id: householdId,
@@ -411,14 +411,20 @@ export async function POST(request: Request) {
         // true per-payment amount when the parser gave us one (template v3
         // fixed-expense lines) — same conversion point as income (Phase C).
         // No member resolution here: the template has no per-expense member
-        // column, so expenses stay attributed to whoever is running onboarding.
+        // column at all, so there is nothing to match or fail to match.
+        // Household-level (member_id null) is the correct DEFAULT, not a
+        // fallback guess — it must never count toward unmatchedMembers or
+        // the banner. A person can still be assigned afterward via the
+        // anchor step's dropdown or the existing PATCH memberId path.
         const cadence = cat.frequency ?? 'monthly';
         const amount = cat.rawAmount ?? cat.budgeted;
         const isMonthly = cadence === 'monthly';
 
+        memberMetaByDescription.set(cat.name, { isHousehold: true, attemptedName: null });
+
         recurringRows.push({
           household_id: householdId,
-          member_id: memberId,
+          member_id: null,
           category_id: categoryId,
           description: cat.name,
           amount,
@@ -458,7 +464,7 @@ export async function POST(request: Request) {
           // Real cadence and amount are saved; there is just no known pay
           // date yet to place dated instances on. Nothing to materialize —
           // and nothing to fabricate.
-          const meta = incomeMetaByDescription.get(item.description);
+          const meta = memberMetaByDescription.get(item.description);
           needsPayDate.push({
             id: item.id,
             description: item.description,

@@ -206,7 +206,15 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
         <div className="flex-1 min-w-0">
           <p className="font-medium truncate" style={{ color: '#0F2044' }}>
             {item.description}
-            {item.household_members?.name ? ` — ${item.household_members.name}` : ''}
+            {item.household_members?.name
+              ? ` — ${item.household_members.name}`
+              // No member row to join means household-level. For income this
+              // is worth naming explicitly — it distinguishes "assigned to
+              // the household on purpose" from a named person. For expenses,
+              // household-level is the default absent any per-expense member
+              // concept at all, so a bare description with no suffix already
+              // reads as "ours" — adding a label there would be noise.
+              : item.type === 'income' ? ` — ${t('householdLabel')}` : ''}
           </p>
           <p className="text-xs" style={{ color: '#9CA3AF' }}>
             {t(`cadence.${item.cadence}`)}

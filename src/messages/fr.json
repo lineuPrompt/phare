@@ -547,6 +547,7 @@
       "perPaycheque": "{amount}/paie",
       "perPayment": "{amount}/paiement",
       "average": "≈ {amount}/mois en moyenne",
+      "householdLabel": "Ménage",
       "needsPayDate": "date de paie requise"
     }
   },

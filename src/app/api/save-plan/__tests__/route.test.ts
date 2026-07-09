@@ -175,3 +175,109 @@ describe('POST /api/save-plan — reset-then-onboard regression', () => {
     expect(txnRows.every((r) => r.account_id === 'chq-new')).toBe(true);
   });
 });
+
+describe('POST /api/save-plan — expense member attribution', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('an imported expense with no member column defaults to household-level (member_id null) and never counts as unmatched, while an unresolved income name still warns', async () => {
+    const currentMonth = formatLocalMonth(new Date());
+    const anchorDate = `${currentMonth}-01`;
+
+    const { client, calls } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      household_members: [
+        { data: { id: 'mem-1' }, error: null }, // onboarding user's own member row
+        { data: [{ id: 'mem-1', name: 'Lineu Prompt Graeff' }], error: null }, // allMembers — no "Marc"
+      ],
+      accounts: [
+        { data: [{ id: 'chq-1', type: 'chequing', name: 'Chequing', file_import_id: null }], error: null },
+      ],
+      recurring_items: [
+        { count: 0, error: null },
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'ri-inc', description: 'Salary', amount: 2500, type: 'income', cadence: 'biweekly',
+              anchor_date: null, second_day: null, category_id: null, account_id: 'chq-1', member_id: 'mem-1',
+            },
+            {
+              id: 'ri-exp', description: 'Mortgage', amount: 1500, type: 'expense', cadence: 'monthly',
+              anchor_date: anchorDate, second_day: null, category_id: 'cat-housing', account_id: 'chq-1', member_id: null,
+            },
+          ],
+          error: null,
+        },
+      ],
+      budgets: [
+        { count: 0, error: null },
+        { error: null },
+      ],
+      sinking_funds: [
+        { count: 0, error: null },
+        { error: null },
+      ],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      categories: [
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ id: `cat-${name.toLowerCase()}`, name })), error: null },
+      ],
+      transactions: [
+        { error: null }, // materialize cleanup for ri-exp (the only anchored item)
+        { error: null }, // materialize insert for ri-exp
+      ],
+      conversations: [{ error: null }],
+      events: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+
+    const body = {
+      plan: {
+        monthlyBudget: {
+          categories: [
+            { name: 'Salary', budgeted: 5416.67, type: 'income', rawAmount: 2500, frequency: 'biweekly', member: 'Marc' },
+            { name: 'Mortgage', budgeted: 1500, type: 'expense', isFixed: true, seedCategory: 'Housing' },
+          ],
+        },
+        sinkingFunds: [],
+        goals: [],
+        topRecommendation: 'Keep it up.',
+      },
+      reviewText: 'Looking good.',
+      locale: 'en',
+      cardNames: [],
+      fileMeta: null,
+    };
+
+    const res = await POST(new Request('http://localhost/api/save-plan', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+
+    // The actual INSERT payload sent to recurring_items — not the mocked
+    // return value — is what proves the real behaviour.
+    const recurringInserts = calls.filter((c) => c.table === 'recurring_items' && c.method === 'insert');
+    expect(recurringInserts).toHaveLength(1);
+    const insertedRows = recurringInserts[0].args[0] as { description: string; member_id: string | null }[];
+    const mortgageRow = insertedRows.find((r) => r.description === 'Mortgage')!;
+    const salaryRow = insertedRows.find((r) => r.description === 'Salary')!;
+
+    // The expense defaults to household-level — a default, not a failed match.
+    expect(mortgageRow.member_id).toBeNull();
+    // Income's unresolved name still falls back to the uploader...
+    expect(salaryRow.member_id).toBe('mem-1');
+
+    // ...and is the ONLY thing that shows up as unmatched. The expense,
+    // despite also having no member_id, must not appear here at all.
+    expect(json.unmatchedMembers).toEqual([{ label: 'Salary', attemptedMember: 'Marc' }]);
+  });
+});
