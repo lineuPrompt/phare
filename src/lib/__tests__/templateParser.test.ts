@@ -3,10 +3,9 @@ import * as XLSX from 'xlsx';
 import {
   isPhareTemplate,
   parseSection,
-  detectIncomeSheetVersion,
   parseFrequencyCell,
-  detectFixedExpenseVersion,
   parseExpenseFrequencyCell,
+  isValidV3Template,
   parseTemplate,
 } from '../templateParser';
 
@@ -121,155 +120,9 @@ describe('parseSection', () => {
 });
 
 // ---------------------------------------------------------------------------
-// detectIncomeSheetVersion
-// ---------------------------------------------------------------------------
-// The version is determined ONCE from header rows 0–4 only.
-// Data rows (index >= 5) NEVER influence the result.
-//
-// v2 signal: a cell in col 2 of rows 0–4 that is exactly "Frequency" or
-//            "Fréquence" (case-insensitive, trimmed).
-// v1:        everything else — no v2 signal found in the header area.
-//
-// This replaces the old per-row heuristic (detectFrequency(row[2])) which
-// could silently misparse a v1 template if any data cell in col 2 happened
-// to contain a frequency-like word such as "Monthly".
-// ---------------------------------------------------------------------------
-
-describe('detectIncomeSheetVersion', () => {
-  // Helper: build a row array where rows 0–4 are header area, rows 5+ are data.
-  function makeRows(
-    headerCol2Values: (string | null)[],
-    dataRows: unknown[][] = [],
-  ): unknown[][] {
-    // Pad to 5 header rows
-    const headers: unknown[][] = Array.from({ length: 5 }, (_, i) => [
-      null,
-      null,
-      headerCol2Values[i] ?? null,
-    ]);
-    return [...headers, ...dataRows];
-  }
-
-  it('returns v1 when no header row has a frequency column label', () => {
-    const rows = makeRows([null, null, null, null, 'Monthly Amount']);
-    expect(detectIncomeSheetVersion(rows)).toBe('v1');
-  });
-
-  it('returns v2 when a header row has "Frequency" in col 2 (exact, English)', () => {
-    const rows = makeRows([null, null, null, null, 'Frequency']);
-    expect(detectIncomeSheetVersion(rows)).toBe('v2');
-  });
-
-  it('returns v2 when a header row has "Fréquence" in col 2 (French accented)', () => {
-    const rows = makeRows([null, null, null, null, 'Fréquence']);
-    expect(detectIncomeSheetVersion(rows)).toBe('v2');
-  });
-
-  it('returns v2 when a header row has "frequence" in col 2 (French unaccented)', () => {
-    const rows = makeRows([null, null, null, null, 'frequence']);
-    expect(detectIncomeSheetVersion(rows)).toBe('v2');
-  });
-
-  it('is case-insensitive — "FREQUENCY" and "frequency" both trigger v2', () => {
-    expect(detectIncomeSheetVersion(makeRows([null, null, null, null, 'FREQUENCY']))).toBe('v2');
-    expect(detectIncomeSheetVersion(makeRows([null, null, null, null, 'frequency']))).toBe('v2');
-  });
-
-  it('ignores leading/trailing whitespace in header cells', () => {
-    const rows = makeRows([null, null, null, null, '  Frequency  ']);
-    expect(detectIncomeSheetVersion(rows)).toBe('v2');
-  });
-
-  it('returns v1 when "Monthly Amount" is in col 2 of a header row (not the v2 signal)', () => {
-    const rows = makeRows([null, null, null, null, 'Monthly Amount']);
-    expect(detectIncomeSheetVersion(rows)).toBe('v1');
-  });
-
-  it('returns v1 when rows array is empty', () => {
-    expect(detectIncomeSheetVersion([])).toBe('v1');
-  });
-
-  it('returns v1 when all header rows have null col 2', () => {
-    const rows = makeRows([null, null, null, null, null]);
-    expect(detectIncomeSheetVersion(rows)).toBe('v1');
-  });
-
-  it('detects v2 signal in any of the first 5 header rows (not just row 4)', () => {
-    // Signal in row 0
-    expect(detectIncomeSheetVersion(makeRows(['Frequency', null, null, null, null]))).toBe('v2');
-    // Signal in row 2
-    expect(detectIncomeSheetVersion(makeRows([null, null, 'Frequency', null, null]))).toBe('v2');
-  });
-
-  // --- Regression test ---
-  // The old per-row heuristic called detectFrequency(row[2]) on EVERY row including
-  // data rows starting at index 5.  If a v1 data row had the word "Monthly" in col 2,
-  // the heuristic would silently switch to v2 mode for that row and read col 1 as the
-  // paycheque amount — picking up the WRONG column, producing silent wrong income.
-  //
-  // The fix: version is detected from header rows 0–4 only.  A data row with "Monthly"
-  // in col 2 cannot trigger v2 mode.  It is simply not a number, so in v1 mode the row
-  // is skipped — transparent missing data, not a silent wrong value.
-
-  it('REGRESSION — v1 template: "Monthly" in a DATA row col 2 does NOT trigger v2 detection', () => {
-    // col 1 of these data rows has a number (e.g. an accidental amount in the wrong column)
-    // that the old per-row heuristic would have read as the v2 paycheque amount.
-    const dataRows: unknown[][] = [
-      ['Salary', 2397.85, 'Monthly'],       // "Monthly" in data col 2
-      ['Part-time work', 800, 'Monthly'],   // ditto
-    ];
-    const rows = makeRows(
-      [null, null, null, null, 'Monthly Amount'], // v1 header — col 2 says "Monthly Amount"
-      dataRows,
-    );
-    // Version must be v1 — data content must never influence version detection.
-    expect(detectIncomeSheetVersion(rows)).toBe('v1');
-    // Consequence: in v1 mode parseIncome reads col 2 as the monthly dollar amount.
-    // col 2 here is the string "Monthly", which is not a number → the row is skipped.
-    // The old code would have read col 1 (2397.85) as a monthly-frequency paycheque
-    // and produced $2,397.85/month instead of $0 — a silent undercount of income.
-  });
-
-  it('REGRESSION — "Frequency" appearing ONLY in a data row (>= index 5) does NOT trigger v2', () => {
-    // This verifies the old heuristic bug: if a data row contained the word "Frequency"
-    // in col 2, the old code would fire detectFrequency("Frequency") → null (not a match),
-    // so this specific word didn't trigger the old bug.  But "Monthly" / "Weekly" etc. did.
-    // This test documents that we only trust the header area.
-    const dataRows: unknown[][] = [
-      ['Frequency', 1000, 'Weekly'],  // col 0 happens to say "Frequency" — doesn't matter
-    ];
-    const rows = makeRows([null, null, null, null, 'Monthly Amount'], dataRows);
-    expect(detectIncomeSheetVersion(rows)).toBe('v1');
-  });
-
-  it('v2 template with "Frequency" header and data rows is detected as v2', () => {
-    const dataRows: unknown[][] = [
-      ['Salary', 2397.85, 'bi-weekly'],
-      ['Partner salary', 1500, 'monthly'],
-    ];
-    const rows = makeRows([null, null, null, null, 'Frequency'], dataRows);
-    expect(detectIncomeSheetVersion(rows)).toBe('v2');
-  });
-
-  // This is the specific case that caused the production bug:
-  // the shipped template uses the BILINGUAL combined header "Frequency / Fréquence",
-  // not just the bare word "Frequency".  The old === check missed it → v1 was returned
-  // → col 2 frequency strings were read as dollar amounts → all rows skipped → $0 income.
-  it('BUG REGRESSION — bilingual "Frequency / Fréquence" header is detected as v2', () => {
-    const rows = makeRows([null, null, null, null, 'Frequency / Fréquence']);
-    expect(detectIncomeSheetVersion(rows)).toBe('v2');
-  });
-
-  it('bilingual header is case-insensitive', () => {
-    const rows = makeRows([null, null, null, null, 'FREQUENCY / FRÉQUENCE']);
-    expect(detectIncomeSheetVersion(rows)).toBe('v2');
-  });
-});
-
-// ---------------------------------------------------------------------------
 // parseFrequencyCell
 // ---------------------------------------------------------------------------
-// The shipped v2 template uses hyphenated strings: "bi-weekly", "semi-monthly".
+// The shipped v3 template uses hyphenated strings: "bi-weekly", "semi-monthly".
 // The parser must also accept space variants ("bi weekly", "semi monthly") and
 // French equivalents.
 // ---------------------------------------------------------------------------
@@ -304,206 +157,6 @@ describe('parseFrequencyCell', () => {
   it('returns null for null', () => expect(parseFrequencyCell(null)).toBeNull());
 });
 
-// ---------------------------------------------------------------------------
-// parseTemplate — end-to-end v2 income parsing
-// ---------------------------------------------------------------------------
-// Build a minimal XLSX buffer that mimics the actual v2 template layout and
-// verify parseTemplate produces the correct income total.
-// ---------------------------------------------------------------------------
-
-function buildMinimalWorkbook(incomeRows: unknown[][], fixedExpenseRows?: unknown[][]): Buffer {
-  const wb = XLSX.utils.book_new();
-
-  const addSheet = (name: string, data: unknown[][] = []) => {
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data as XLSX.CellObject[][], {cellDates: false}), name);
-  };
-
-  addSheet('Household');
-  addSheet('Monthly Income', incomeRows);
-  // Fixed Expenses (legacy layout by default): parseFixedExpenses(rows, 'legacy', startRow=2, skipWords)
-  addSheet('Fixed Expenses', fixedExpenseRows ?? [[], [], ['Rent', null, 1200]]);
-  // Variable Expenses: parseSection(rows, 0, 1, startRow=3, skipWords)
-  addSheet('Variable Expenses', [[], [], [], ['Groceries', 800]]);
-  // Annual Expenses: startRow=5, label=col0, annual=col1, dueMonth=col3
-  addSheet('Annual Expenses', [[], [], [], [], [], ['Car Insurance', 1200, null, 'March']]);
-  addSheet('Goals');
-
-  return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as ArrayBuffer);
-}
-
-describe('parseTemplate — v2 income parsing (end-to-end)', () => {
-  // The actual v2 template layout:
-  //   Rows 0–3: other header content
-  //   Row 4:    [null, null, "Frequency / Fréquence"]  ← bilingual combined header
-  //   Row 5+:   data rows [label, paychequeAmount, frequencyString]
-  function makeV2IncomeRows(dataRows: unknown[][]): unknown[][] {
-    return [
-      [null, null, null],           // row 0
-      [null, null, null],           // row 1
-      [null, null, null],           // row 2
-      [null, null, null],           // row 3
-      [null, null, 'Frequency / Fréquence'], // row 4 — bilingual header (the production case)
-      ...dataRows,                   // rows 5+
-    ];
-  }
-
-  it('BUG REGRESSION — bilingual header + bi-weekly/monthly rows produce correct income total', () => {
-    // Salary: $2,397.85 bi-weekly → 2397.85 × 26 / 12 = $5,195.34/month
-    // Partner: $1,500 monthly → $1,500/month
-    // Total: $6,695.34/month
-    const incomeRows = makeV2IncomeRows([
-      ['Salary', 2397.85, 'bi-weekly'],
-      ['Partner salary', 1500, 'monthly'],
-    ]);
-    const buf = buildMinimalWorkbook(incomeRows);
-    const result = parseTemplate(buf);
-
-    expect(result.isTemplate).toBe(true);
-    expect(result.incomeLayout).toBe('v2');
-    expect(result.income.lines).toHaveLength(2);
-    expect(result.income.total).toBe(Math.round((2397.85 * 26 / 12 + 1500) * 100) / 100);
-    expect(result.incomeSkippedRows).toBe(0);
-  });
-
-  it('v2 template with all four frequency strings parses correctly', () => {
-    const incomeRows = makeV2IncomeRows([
-      ['Weekly pay',     1000, 'weekly'],        // 1000 × 52/12 = 4333.33
-      ['Bi-weekly pay',  2000, 'bi-weekly'],     // 2000 × 26/12 = 4333.33
-      ['Semi-monthly pay', 2000, 'semi-monthly'],// 2000 × 2     = 4000
-      ['Monthly pay',    5000, 'monthly'],       // 5000
-    ]);
-    const buf = buildMinimalWorkbook(incomeRows);
-    const result = parseTemplate(buf);
-
-    expect(result.incomeLayout).toBe('v2');
-    expect(result.income.lines).toHaveLength(4);
-    expect(result.incomeSkippedRows).toBe(0);
-    // All four rows contributed to total
-    expect(result.income.total).toBeGreaterThan(0);
-  });
-
-  it('v2 rows with an unrecognised frequency string are counted as skipped, not silently dropped', () => {
-    const incomeRows = makeV2IncomeRows([
-      ['Salary', 3000, 'bi-weekly'],       // valid → contributes
-      ['Bonus', 500, 'fortnightly'],        // invalid → skipped, counted
-      ['Rental', 800, 'monthly'],           // valid → contributes
-    ]);
-    const buf = buildMinimalWorkbook(incomeRows);
-    const result = parseTemplate(buf);
-
-    expect(result.incomeLayout).toBe('v2');
-    expect(result.income.lines).toHaveLength(2);  // 2 valid rows
-    expect(result.incomeSkippedRows).toBe(1);      // 1 row with bad frequency
-    expect(result.income.total).toBeGreaterThan(0); // did NOT silently collapse to $0
-  });
-
-  it('v2 with ALL invalid frequency strings: incomeSkippedRows equals row count, income is $0', () => {
-    const incomeRows = makeV2IncomeRows([
-      ['Salary', 3000, 'fortnightly'],
-      ['Bonus',  500,  'quaterly'],
-    ]);
-    const buf = buildMinimalWorkbook(incomeRows);
-    const result = parseTemplate(buf);
-
-    expect(result.income.total).toBe(0);
-    expect(result.incomeSkippedRows).toBe(2);  // caller can surface this — not a silent $0
-  });
-
-  // Regression fixture from the Build 3 Phase A/B onboarding-import bug:
-  // the shipped template's real Monthly Income sheet has FOUR income rows
-  // (two salary rows for the same person on different pay schedules, plus
-  // two monthly child-benefit rows) and a "Member / Membre" column (col 3)
-  // that must be captured, not dropped.
-  it('BUILD 3 — four-row shipped-template fixture: member captured, snapshot income is exactly $11,155.03 on two consecutive parses', () => {
-    const incomeRows = makeV2IncomeRows([
-      ['Salary / Salaire', 2397.85, 'bi-weekly', 'Lineu', 'One paycheque; paid every 2 weeks (26/yr)'],
-      ['Salary / Salaire', 2787.97, 'semi-monthly', 'Julia', 'One paycheque; paid 15th & 30th (24/yr)'],
-      ['Child benefit / Quebec', 203.50, 'monthly', null, 'CCB'],
-      ['Child benefit / Federal', 180.25, 'monthly', null, 'CCB'],
-    ]);
-    const buf = buildMinimalWorkbook(incomeRows);
-
-    // Parsing is pure and deterministic — "two consecutive imports of the
-    // same file" must produce the identical snapshot both times.
-    const first = parseTemplate(buf);
-    const second = parseTemplate(buf);
-
-    for (const result of [first, second]) {
-      expect(result.incomeLayout).toBe('v2');
-      expect(result.income.lines).toHaveLength(4);
-      expect(result.incomeSkippedRows).toBe(0);
-      expect(result.income.total).toBe(11155.03);
-      expect(result.summary.monthlyIncome).toBe(11155.03);
-    }
-
-    expect(first.income.lines[0]).toEqual({
-      label: 'Salary / Salaire', amount: 5195.34, rawAmount: 2397.85, frequency: 'biweekly', member: 'Lineu',
-    });
-    expect(first.income.lines[1]).toEqual({
-      label: 'Salary / Salaire', amount: 5575.94, rawAmount: 2787.97, frequency: 'semimonthly', member: 'Julia',
-    });
-    // Child-benefit rows have no Member cell — member is correctly absent, not fabricated.
-    expect(first.income.lines[2].member).toBeUndefined();
-    expect(first.income.lines[3].member).toBeUndefined();
-  });
-
-  it('v1 template (no frequency header): parses col 2 as monthly amount; incomeSkippedRows is 0', () => {
-    const incomeRows: unknown[][] = [
-      [null, null, null],
-      [null, null, null],
-      [null, null, null],
-      [null, null, null],
-      [null, null, 'Monthly Amount'],  // v1 header
-      ['Salary', null, 4800],
-      ['Rental', null, 1200],
-    ];
-    const buf = buildMinimalWorkbook(incomeRows);
-    const result = parseTemplate(buf);
-
-    expect(result.incomeLayout).toBe('v1');
-    expect(result.income.total).toBe(6000);
-    expect(result.incomeSkippedRows).toBe(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// detectFixedExpenseVersion / parseExpenseFrequencyCell
-// ---------------------------------------------------------------------------
-// Same structural-marker approach as income: version is decided from the
-// header area only (col 3 of rows 0..headerRowCount-1), never from data rows.
-// ---------------------------------------------------------------------------
-
-describe('detectFixedExpenseVersion', () => {
-  it('returns legacy when no header row has a frequency column label', () => {
-    const rows = [['Expense / Dépense', 'Category / Catégorie', 'Amount / Montant', 'Account / Compte', 'Notes']];
-    expect(detectFixedExpenseVersion(rows, 3)).toBe('legacy');
-  });
-
-  it('returns v3 when a header row has "Frequency" in col 3', () => {
-    const rows = [['Expense', 'Category', 'Amount per payment', 'Frequency', 'Account', 'Notes']];
-    expect(detectFixedExpenseVersion(rows, 3)).toBe('v3');
-  });
-
-  it('returns v3 for the bilingual combined header "Frequency / Fréquence", case-insensitive', () => {
-    const rows = [['Expense', 'Category', 'Amount', 'FREQUENCY / FRÉQUENCE', 'Account', 'Notes']];
-    expect(detectFixedExpenseVersion(rows, 3)).toBe('v3');
-  });
-
-  it('a data row (beyond headerRowCount) with "Frequency" in col 3 does not trigger v3', () => {
-    const rows = [
-      ['Expense / Dépense', 'Category / Catégorie', 'Amount / Montant', 'Account / Compte', 'Notes'], // header, row 0
-      [null, null, null, null, null], // row 1
-      [null, null, null, null, null], // row 2
-      ['Mortgage', 'Housing', 1500, 'Frequency', 'Chequing'], // row 3 — a data row, out of header window
-    ];
-    expect(detectFixedExpenseVersion(rows, 3)).toBe('legacy');
-  });
-
-  it('returns legacy for an empty rows array', () => {
-    expect(detectFixedExpenseVersion([], 3)).toBe('legacy');
-  });
-});
-
 describe('parseExpenseFrequencyCell', () => {
   it('treats a blank cell as monthly (unlike income, which requires an explicit value)', () => {
     expect(parseExpenseFrequencyCell(null)).toBe('monthly');
@@ -525,38 +178,289 @@ describe('parseExpenseFrequencyCell', () => {
 });
 
 // ---------------------------------------------------------------------------
-// parseTemplate — v3 fixed-expense frequency parsing (end-to-end)
+// Shared fixture builders — always v3-shaped (Frequency column on both
+// sheets) unless a test deliberately omits one to exercise refusal.
+// ---------------------------------------------------------------------------
+
+// Income: rows 0–3 header content, row 4 the bilingual column-label row
+// (the production case — the shipped template's real header), row 5+ data.
+function makeV3IncomeRows(dataRows: unknown[][]): unknown[][] {
+  return [
+    [null, null, null, null],
+    [null, null, null, null],
+    [null, null, null, null],
+    [null, null, null, null],
+    ['Source', 'Amount per paycheque / Montant par paie', 'Frequency / Fréquence', 'Member / Membre'],
+    ...dataRows,
+  ];
+}
+
+// Fixed Expenses: rows 0–1 header content, row 2 the column-label row, row 3+ data.
+function makeV3FixedExpenseRows(dataRows: unknown[][]): unknown[][] {
+  return [
+    ['FIXED MONTHLY EXPENSES / DÉPENSES FIXES MENSUELLES'],
+    [null],
+    ['Expense / Dépense', 'Category / Catégorie', 'Amount per payment / Montant par paiement', 'Frequency / Fréquence', 'Account / Compte', 'Notes'],
+    ...dataRows,
+  ];
+}
+
+function buildWorkbook(incomeRows: unknown[][], fixedExpenseRows: unknown[][]): Buffer {
+  const wb = XLSX.utils.book_new();
+  const addSheet = (name: string, data: unknown[][] = []) => {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data as XLSX.CellObject[][], { cellDates: false }), name);
+  };
+
+  addSheet('Household');
+  addSheet('Monthly Income', incomeRows);
+  addSheet('Fixed Expenses', fixedExpenseRows);
+  // Variable Expenses: parseSection(rows, 0, 1, startRow=3, skipWords)
+  addSheet('Variable Expenses', [[], [], [], ['Groceries', 800]]);
+  // Annual Expenses: startRow=5, label=col0, annual=col1, dueMonth=col3
+  addSheet('Annual Expenses', [[], [], [], [], [], ['Car Insurance', 1200, null, 'March']]);
+  addSheet('Goals');
+
+  return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as ArrayBuffer);
+}
+
+const DEFAULT_INCOME_ROWS = makeV3IncomeRows([]);
+const DEFAULT_EXPENSE_ROWS = makeV3FixedExpenseRows([]);
+
+// ---------------------------------------------------------------------------
+// isValidV3Template — exact-match-or-refuse contract
+// ---------------------------------------------------------------------------
+
+describe('isValidV3Template', () => {
+  it('accepts a workbook with the Frequency column present on both sheets', () => {
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS);
+    const workbook = XLSX.read(buf, { type: 'buffer' });
+    expect(isValidV3Template(workbook)).toBe(true);
+  });
+
+  it('rejects when the required sheets are missing entirely', () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['unrelated']]), 'Sheet1');
+    const buf = Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as ArrayBuffer);
+    const workbook = XLSX.read(buf, { type: 'buffer' });
+    expect(isValidV3Template(workbook)).toBe(false);
+  });
+
+  it('rejects a v2-shaped file: right sheets, but Fixed Expenses has no Frequency column', () => {
+    // The pre-v3 Fixed Expenses layout: Expense / Category / Amount / Account / Notes — no Frequency.
+    const v2ExpenseRows = [
+      ['FIXED MONTHLY EXPENSES'],
+      [null],
+      ['Expense / Dépense', 'Category / Catégorie', 'Amount / Montant', 'Account / Compte', 'Notes'],
+      ['Mortgage', 'Housing', 1500, 'Chequing', null],
+    ];
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, v2ExpenseRows);
+    const workbook = XLSX.read(buf, { type: 'buffer' });
+    expect(isValidV3Template(workbook)).toBe(false);
+  });
+
+  it('rejects when Monthly Income has no Frequency column (pre-v2 layout)', () => {
+    const v1IncomeRows = [
+      [null, null, null], [null, null, null], [null, null, null], [null, null, null],
+      [null, null, 'Monthly Amount'],
+      ['Salary', null, 4800],
+    ];
+    const buf = buildWorkbook(v1IncomeRows, DEFAULT_EXPENSE_ROWS);
+    const workbook = XLSX.read(buf, { type: 'buffer' });
+    expect(isValidV3Template(workbook)).toBe(false);
+  });
+
+  it('is case-insensitive and matches the bilingual combined header', () => {
+    const rows = makeV3FixedExpenseRows([]);
+    rows[2] = ['Expense', 'Category', 'Amount', 'FREQUENCY / FRÉQUENCE', 'Account', 'Notes'];
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, rows);
+    const workbook = XLSX.read(buf, { type: 'buffer' });
+    expect(isValidV3Template(workbook)).toBe(true);
+  });
+
+  it('does not trust a data row outside the header window — only the header area counts', () => {
+    const rows = [
+      ['Expense / Dépense', 'Category / Catégorie', 'Amount / Montant', 'Account / Compte', 'Notes'], // header, row 0 — no Frequency
+      [null, null, null, null, null], // row 1
+      [null, null, null, null, null], // row 2
+      ['Mortgage', 'Housing', 1500, 'Frequency', 'Chequing'], // row 3 — a data row, out of header window
+    ];
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, rows);
+    const workbook = XLSX.read(buf, { type: 'buffer' });
+    expect(isValidV3Template(workbook)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseTemplate — refuses, never partially parses, a non-v3 file
+// ---------------------------------------------------------------------------
+
+describe('parseTemplate — refusal contract', () => {
+  it('a workbook missing the required sheets: isTemplate false, isValidV3 false, nothing parsed', () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['unrelated']]), 'Sheet1');
+    const buf = Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as ArrayBuffer);
+    const result = parseTemplate(buf);
+    expect(result.isTemplate).toBe(false);
+    expect(result.isValidV3).toBe(false);
+    expect(result.income.lines).toEqual([]);
+  });
+
+  it("a v2-shaped file (no expense Frequency column) is refused — not parsed as monthly", () => {
+    const v2ExpenseRows = [
+      ['FIXED MONTHLY EXPENSES'],
+      [null],
+      ['Expense / Dépense', 'Category / Catégorie', 'Amount / Montant', 'Account / Compte', 'Notes'],
+      ['Mortgage', 'Housing', 1500, 'Chequing', null], // would silently become $1,500/mo under the old legacy path
+    ];
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, v2ExpenseRows);
+    const result = parseTemplate(buf);
+
+    // Right sheets exist, so isTemplate is true, but the outdated column
+    // layout must refuse — never parse Mortgage as a $1,500/month line.
+    expect(result.isTemplate).toBe(true);
+    expect(result.isValidV3).toBe(false);
+    expect(result.fixedExpenses.lines).toEqual([]);
+    expect(result.fixedExpenses.total).toBe(0);
+  });
+
+  it('a fully valid v3 file parses normally', () => {
+    const incomeRows = makeV3IncomeRows([
+      ['Salary / Salaire', 2397.85, 'bi-weekly', 'Lineu'],
+    ]);
+    const expenseRows = makeV3FixedExpenseRows([
+      ['Mortgage / Hypothèque', 'Housing', 1500, 'bi-weekly', 'Chequing', null],
+    ]);
+    const buf = buildWorkbook(incomeRows, expenseRows);
+    const result = parseTemplate(buf);
+
+    expect(result.isTemplate).toBe(true);
+    expect(result.isValidV3).toBe(true);
+    expect(result.income.lines).toEqual([
+      { label: 'Salary / Salaire', amount: 5195.34, rawAmount: 2397.85, frequency: 'biweekly', member: 'Lineu' },
+    ]);
+    expect(result.fixedExpenses.lines).toEqual([
+      { label: 'Mortgage / Hypothèque', amount: 3250, rawAmount: 1500, frequency: 'biweekly' },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseTemplate — income parsing (end-to-end)
+// ---------------------------------------------------------------------------
+
+describe('parseTemplate — income parsing (end-to-end)', () => {
+  it('BUG REGRESSION — bilingual header + bi-weekly/monthly rows produce correct income total', () => {
+    // Salary: $2,397.85 bi-weekly → 2397.85 × 26 / 12 = $5,195.34/month
+    // Partner: $1,500 monthly → $1,500/month
+    // Total: $6,695.34/month
+    const incomeRows = makeV3IncomeRows([
+      ['Salary', 2397.85, 'bi-weekly'],
+      ['Partner salary', 1500, 'monthly'],
+    ]);
+    const buf = buildWorkbook(incomeRows, DEFAULT_EXPENSE_ROWS);
+    const result = parseTemplate(buf);
+
+    expect(result.isTemplate).toBe(true);
+    expect(result.isValidV3).toBe(true);
+    expect(result.income.lines).toHaveLength(2);
+    expect(result.income.total).toBe(Math.round((2397.85 * 26 / 12 + 1500) * 100) / 100);
+    expect(result.incomeSkippedRows).toBe(0);
+  });
+
+  it('all four frequency strings parse correctly', () => {
+    const incomeRows = makeV3IncomeRows([
+      ['Weekly pay',     1000, 'weekly'],        // 1000 × 52/12 = 4333.33
+      ['Bi-weekly pay',  2000, 'bi-weekly'],     // 2000 × 26/12 = 4333.33
+      ['Semi-monthly pay', 2000, 'semi-monthly'],// 2000 × 2     = 4000
+      ['Monthly pay',    5000, 'monthly'],       // 5000
+    ]);
+    const buf = buildWorkbook(incomeRows, DEFAULT_EXPENSE_ROWS);
+    const result = parseTemplate(buf);
+
+    expect(result.income.lines).toHaveLength(4);
+    expect(result.incomeSkippedRows).toBe(0);
+    expect(result.income.total).toBeGreaterThan(0);
+  });
+
+  it('rows with an unrecognised frequency string are counted as skipped, not silently dropped', () => {
+    const incomeRows = makeV3IncomeRows([
+      ['Salary', 3000, 'bi-weekly'],       // valid → contributes
+      ['Bonus', 500, 'fortnightly'],        // invalid → skipped, counted
+      ['Rental', 800, 'monthly'],           // valid → contributes
+    ]);
+    const buf = buildWorkbook(incomeRows, DEFAULT_EXPENSE_ROWS);
+    const result = parseTemplate(buf);
+
+    expect(result.income.lines).toHaveLength(2);  // 2 valid rows
+    expect(result.incomeSkippedRows).toBe(1);      // 1 row with bad frequency
+    expect(result.income.total).toBeGreaterThan(0); // did NOT silently collapse to $0
+  });
+
+  it('with ALL invalid frequency strings: incomeSkippedRows equals row count, income is $0', () => {
+    const incomeRows = makeV3IncomeRows([
+      ['Salary', 3000, 'fortnightly'],
+      ['Bonus',  500,  'quaterly'],
+    ]);
+    const buf = buildWorkbook(incomeRows, DEFAULT_EXPENSE_ROWS);
+    const result = parseTemplate(buf);
+
+    expect(result.income.total).toBe(0);
+    expect(result.incomeSkippedRows).toBe(2);  // caller can surface this — not a silent $0
+  });
+
+  // Regression fixture from the Build 3 Phase A/B onboarding-import bug:
+  // the shipped template's real Monthly Income sheet has FOUR income rows
+  // (two salary rows for the same person on different pay schedules, plus
+  // two monthly child-benefit rows) and a "Member / Membre" column (col 3)
+  // that must be captured, not dropped.
+  it('BUILD 3 — four-row shipped-template fixture: member captured, snapshot income is exactly $11,155.03 on two consecutive parses', () => {
+    const incomeRows = makeV3IncomeRows([
+      ['Salary / Salaire', 2397.85, 'bi-weekly', 'Lineu', 'One paycheque; paid every 2 weeks (26/yr)'],
+      ['Salary / Salaire', 2787.97, 'semi-monthly', 'Julia', 'One paycheque; paid 15th & 30th (24/yr)'],
+      ['Child benefit / Quebec', 203.50, 'monthly', null, 'CCB'],
+      ['Child benefit / Federal', 180.25, 'monthly', null, 'CCB'],
+    ]);
+    const buf = buildWorkbook(incomeRows, DEFAULT_EXPENSE_ROWS);
+
+    // Parsing is pure and deterministic — "two consecutive imports of the
+    // same file" must produce the identical snapshot both times.
+    const first = parseTemplate(buf);
+    const second = parseTemplate(buf);
+
+    for (const result of [first, second]) {
+      expect(result.income.lines).toHaveLength(4);
+      expect(result.incomeSkippedRows).toBe(0);
+      expect(result.income.total).toBe(11155.03);
+      expect(result.summary.monthlyIncome).toBe(11155.03);
+    }
+
+    expect(first.income.lines[0]).toEqual({
+      label: 'Salary / Salaire', amount: 5195.34, rawAmount: 2397.85, frequency: 'biweekly', member: 'Lineu',
+    });
+    expect(first.income.lines[1]).toEqual({
+      label: 'Salary / Salaire', amount: 5575.94, rawAmount: 2787.97, frequency: 'semimonthly', member: 'Julia',
+    });
+    // Child-benefit rows have no Member cell — member is correctly absent, not fabricated.
+    expect(first.income.lines[2].member).toBeUndefined();
+    expect(first.income.lines[3].member).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseTemplate — fixed-expense frequency parsing (end-to-end)
 // Phase D: the income-frequency bug's expense-side twin. A bi-weekly
 // mortgage payment of $1,500 must convert to $3,250/month
 // (1500 × 26 / 12 = 3250), not collapse to $1,500/month.
 // ---------------------------------------------------------------------------
 
-describe('parseTemplate — v3 fixed-expense parsing (end-to-end)', () => {
-  // Minimal v1 income sheet — income is not the focus of these tests.
-  const flatIncomeRows: unknown[][] = [
-    [null, null, null], [null, null, null], [null, null, null], [null, null, null],
-    [null, null, 'Monthly Amount'],
-  ];
-
-  // The v3 layout: col0=Expense, col1=Category, col2=Amount per payment,
-  // col3=Frequency, col4=Account, col5=Notes.
-  function makeV3FixedExpenseRows(dataRows: unknown[][]): unknown[][] {
-    return [
-      ['FIXED MONTHLY EXPENSES / DÉPENSES FIXES MENSUELLES'],
-      [null],
-      ['Expense / Dépense', 'Category / Catégorie', 'Amount per payment / Montant par paiement', 'Frequency / Fréquence', 'Account / Compte', 'Notes'],
-      ...dataRows,
-    ];
-  }
-
+describe('parseTemplate — fixed-expense parsing (end-to-end)', () => {
   it('a bi-weekly $1,500 payment converts to $3,250/month, not $1,500/month', () => {
     const fixedRows = makeV3FixedExpenseRows([
       ['Mortgage / Hypothèque', 'Housing', 1500, 'bi-weekly', 'Chequing', null],
     ]);
-    const buf = buildMinimalWorkbook(flatIncomeRows, fixedRows);
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, fixedRows);
     const result = parseTemplate(buf);
 
-    expect(result.fixedExpenseLayout).toBe('v3');
     expect(result.fixedExpenses.lines).toEqual([
       { label: 'Mortgage / Hypothèque', amount: 3250, rawAmount: 1500, frequency: 'biweekly' },
     ]);
@@ -567,10 +471,9 @@ describe('parseTemplate — v3 fixed-expense parsing (end-to-end)', () => {
     const fixedRows = makeV3FixedExpenseRows([
       ['Internet', 'Utilities & Subscriptions', 80, null, 'Chequing', null],
     ]);
-    const buf = buildMinimalWorkbook(flatIncomeRows, fixedRows);
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, fixedRows);
     const result = parseTemplate(buf);
 
-    expect(result.fixedExpenseLayout).toBe('v3');
     expect(result.fixedExpenses.lines).toEqual([
       { label: 'Internet', amount: 80, rawAmount: 80, frequency: 'monthly' },
     ]);
@@ -582,27 +485,11 @@ describe('parseTemplate — v3 fixed-expense parsing (end-to-end)', () => {
       ['Mortgage', 'Housing', 1500, 'bi-weekly', 'Chequing', null],   // valid → contributes
       ['Gym', 'Health & Personal', 40, 'fortnightly', 'Chequing', null], // invalid → skipped, counted
     ]);
-    const buf = buildMinimalWorkbook(flatIncomeRows, fixedRows);
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, fixedRows);
     const result = parseTemplate(buf);
 
     expect(result.fixedExpenses.lines).toHaveLength(1);
     expect(result.fixedExpenseSkippedRows).toBe(1);
-  });
-
-  it('legacy template (no frequency header) still parses col 2 as a monthly amount, unchanged', () => {
-    const fixedRows = [
-      ['FIXED MONTHLY EXPENSES'],
-      [null],
-      ['Expense / Dépense', 'Category / Catégorie', 'Amount / Montant', 'Account / Compte', 'Notes'],
-      ['Mortgage', 'Housing', 1500, 'Chequing', null],
-      ['Car payment', 'Transportation', 420, 'Chequing', null],
-    ];
-    const buf = buildMinimalWorkbook(flatIncomeRows, fixedRows);
-    const result = parseTemplate(buf);
-
-    expect(result.fixedExpenseLayout).toBe('legacy');
-    expect(result.fixedExpenses.total).toBe(1920);
-    expect(result.fixedExpenseSkippedRows).toBe(0);
   });
 
   // The founder's fixture: three bi-weekly fixed expenses (mortgage + two car
@@ -615,10 +502,9 @@ describe('parseTemplate — v3 fixed-expense parsing (end-to-end)', () => {
       ['Car payment 2 / Paiement auto 2', 'Transportation', 275, 'bi-weekly', 'Chequing', null], // 275 × 26/12 = 595.83
       ['Home insurance / Assurance maison', 'Housing', 120, null, 'Chequing', null],   // blank → monthly, 120
     ]);
-    const buf = buildMinimalWorkbook(flatIncomeRows, fixedRows);
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, fixedRows);
     const result = parseTemplate(buf);
 
-    expect(result.fixedExpenseLayout).toBe('v3');
     expect(result.fixedExpenseSkippedRows).toBe(0);
     expect(result.fixedExpenses.lines).toHaveLength(4);
 

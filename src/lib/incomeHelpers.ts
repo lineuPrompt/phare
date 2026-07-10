@@ -100,3 +100,34 @@ export function resolveMemberId(
   }
   return { memberId: fallbackMemberId, usedFallback: true, unmatchedName: trimmed, isHousehold: false };
 }
+
+/**
+ * Which distinct Member-column names, across a set of income lines, don't
+ * resolve to an existing household member or a household keyword. Used to
+ * decide which names need the "is this part of your household?"
+ * confirmation before a plan is generated — so a plan is born with correct
+ * attribution instead of being patched after saving.
+ *
+ * Deduped case/accent/whitespace-insensitively — "Julia" and "julia" across
+ * two lines produce exactly one entry, in the casing of its first
+ * occurrence. Blank cells and household keywords are never included:
+ * there is nothing to confirm about them.
+ */
+export function collectUnresolvedMemberNames(
+  memberCells: (string | undefined)[],
+  existingMembers: { id: string; name: string }[]
+): string[] {
+  const seenKeys = new Set<string>();
+  const result: string[] = [];
+  for (const cell of memberCells) {
+    const trimmed = cell?.trim();
+    if (!trimmed) continue;
+    const key = normalizeName(trimmed);
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    if (resolveMemberName(trimmed, existingMembers).kind === 'unmatched') {
+      result.push(trimmed);
+    }
+  }
+  return result;
+}

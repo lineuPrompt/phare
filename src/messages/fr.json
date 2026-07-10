@@ -113,20 +113,34 @@
   },
   "upload": {
     "title": "Téléversez vos données financières",
-    "subtitle": "Déposez votre fichier Excel, CSV ou relevé bancaire. Phare le lira et construira votre portrait financier.",
-    "dropzone": "Glissez-déposez votre fichier ici, ou cliquez pour parcourir",
-    "formats": "Formats acceptés : .xlsx, .xls, .csv",
+    "subtitle": "Téléchargez le modèle Phare et remplissez vos chiffres, ou entrez-les manuellement.",
+    "dropzone": "Glissez-déposez votre modèle rempli ici, ou cliquez pour parcourir",
+    "formats": "Formats acceptés : .xlsx",
     "uploading": "Lecture de votre fichier...",
     "analyzing": "Analyse de vos finances...",
     "or": "ou",
     "tryAgain": "Réessayer",
-    "templateHint": "Problème avec votre fichier? Essayez notre modèle pré-formaté.",
-    "template": "Pas de tableur? Téléchargez notre modèle",
+    "mismatch": {
+      "wrongFile": "Ceci ne ressemble pas au modèle Phare. Téléchargez-le ci-dessous et remplissez vos chiffres.",
+      "outdatedTemplate": "Ce fichier ne correspond pas au modèle Phare actuel — téléchargez la dernière version et copiez-y vos chiffres."
+    },
     "noFile": {
-      "title": "Pas encore de tableur?",
-      "description": "Téléchargez notre modèle, remplissez vos chiffres et téléversez-le. Environ 10 minutes.",
+      "title": "Obtenez le modèle",
+      "description": "Téléchargez-le, remplissez vos chiffres et téléversez-le ci-dessous. Environ 10 minutes.",
       "cta": "Télécharger le modèle",
-      "manual": "Ou commencez sans fichier — entrez vos chiffres manuellement"
+      "manual": "Ou entrez vos chiffres manuellement"
+    },
+    "memberConfirm": {
+      "title": "Qui est qui?",
+      "subtitle": "Quelques noms dans votre fichier ne correspondent encore à personne dans votre foyer.",
+      "question": "Votre fichier mentionne {name} — fait partie de votre foyer?",
+      "confirmBtn": "Oui, ajouter",
+      "declineBtn": "Non",
+      "confirming": "Ajout en cours...",
+      "confirmedNote": "{name} a été ajouté à votre foyer.",
+      "declinedNote": "Ignoré — ce revenu vous sera attribué, et signalé pour que vous puissiez le corriger plus tard.",
+      "continue": "Continuer",
+      "error": "Une erreur est survenue. Veuillez réessayer."
     },
     "accounts": {
       "title": "Vos comptes",
@@ -246,12 +260,6 @@
           "generic": "Une erreur est survenue. Veuillez réessayer."
         }
       }
-    },
-    "mode": {
-      "own": "Mon propre fichier",
-      "ownDesc": "Téléversez votre tableur budgétaire existant",
-      "template": "Modèle Phare",
-      "templateDesc": "J'ai rempli le modèle Phare"
     },
     "form": {
       "title": "Nous n'avons pas pu lire ce fichier automatiquement",

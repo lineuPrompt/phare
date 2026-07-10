@@ -1,79 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
-import { parseTemplate, isPhareTemplate } from '@/lib/templateParser';
-import { calculateFinancials, extractLabelAmountPairs } from '@/lib/calculator';
+import { parseTemplate, isPhareTemplate, isValidV3Template } from '@/lib/templateParser';
 
+/**
+ * Onboarding accepts exactly two inputs: the Phare template and manual
+ * entry. This route is the template half — there is no generic/arbitrary-
+ * file path. The contract is exact-match-or-refuse: a file either is the
+ * current (v3) template, or it's refused with a specific reason, never
+ * partially parsed. A wrong-version upload "succeeding" with expenses
+ * silently collapsed to monthly is the exact failure this refuses to risk.
+ */
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const mode = (formData.get('mode') as string) || 'own'; // 'template' or 'own'
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
     const fileName = file.name.toLowerCase();
-    const buffer = Buffer.from(await file.arrayBuffer());
-
-    if (!fileName.endsWith('.csv') && !fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
+    if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
       return NextResponse.json(
-        { error: 'Unsupported file type. Please upload CSV or Excel.' },
+        { error: 'Unsupported file type. Please upload the Phare template (.xlsx).' },
         { status: 400 }
       );
     }
 
+    const buffer = Buffer.from(await file.arrayBuffer());
     const workbook = XLSX.read(buffer, { type: 'buffer' });
-    const sheetNames = workbook.SheetNames;
 
-    // MODE: Phare template
-    if (mode === 'template') {
-      if (!isPhareTemplate(sheetNames)) {
-        return NextResponse.json({
-          source: 'template_mismatch',
-          message: 'This does not look like the Phare template.',
-        });
-      }
-      const parsed = parseTemplate(buffer);
+    if (!isPhareTemplate(workbook.SheetNames)) {
       return NextResponse.json({
-        fileName: file.name,
-        source: 'template',
-        parsed,
+        source: 'template_mismatch',
+        reason: 'wrong_file',
+      });
+    }
+    if (!isValidV3Template(workbook)) {
+      return NextResponse.json({
+        source: 'template_mismatch',
+        reason: 'outdated_template',
       });
     }
 
-// MODE: Own file — try the calculator across all sheets
-    let bestResult = null;
-    let usedSheet: string | null = null;
-    const skippedSheets: string[] = [];
-
-    for (const name of sheetNames) {
-      const sheet = workbook.Sheets[name];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null }) as unknown[][];
-      const pairs = extractLabelAmountPairs(rows);
-      const result = calculateFinancials(pairs);
-      if (result.confidence === 'high' && !bestResult) {
-        bestResult = result;
-        usedSheet = name;
-      } else {
-        skippedSheets.push(name);
-      }
-    }
-
-    if (bestResult) {
-      return NextResponse.json({
-        fileName: file.name,
-        source: 'calculated',
-        calculated: bestResult,
-        usedSheet,
-        skippedSheets,
-      });
-    }
-
-    // Calculator could not parse confidently → tell frontend to show the form
+    const parsed = parseTemplate(buffer);
     return NextResponse.json({
       fileName: file.name,
-      source: 'needs_form',
+      source: 'template',
+      parsed,
     });
   } catch (error) {
     console.error('File upload error:', error);

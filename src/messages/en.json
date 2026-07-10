@@ -113,20 +113,34 @@
   },
   "upload": {
     "title": "Upload your financial data",
-    "subtitle": "Drop your Excel, CSV, or bank statement. Phare will read it and build your financial picture.",
-    "dropzone": "Drag and drop your file here, or click to browse",
-    "formats": "Supports .xlsx, .xls, .csv",
+    "subtitle": "Download the Phare template and fill in your numbers, or enter them manually.",
+    "dropzone": "Drag and drop your filled-in template here, or click to browse",
+    "formats": "Supports .xlsx",
     "uploading": "Reading your file...",
     "analyzing": "Analyzing your finances...",
     "or": "or",
     "tryAgain": "Try again",
-    "templateHint": "Having trouble with your file? Try our pre-formatted template instead.",
-    "template": "Don't have a spreadsheet? Download our template",
+    "mismatch": {
+      "wrongFile": "This doesn't look like the Phare template. Download it below and fill in your numbers.",
+      "outdatedTemplate": "This file doesn't match the current Phare template — download the latest version and copy your numbers in."
+    },
     "noFile": {
-      "title": "Don't have a spreadsheet yet?",
-      "description": "Download our template, fill in your numbers, and upload it. Takes about 10 minutes.",
+      "title": "Get the template",
+      "description": "Download it, fill in your numbers, and upload it below. Takes about 10 minutes.",
       "cta": "Download template",
-      "manual": "Or start without a file — enter your numbers manually"
+      "manual": "Or enter your numbers manually"
+    },
+    "memberConfirm": {
+      "title": "Who's who?",
+      "subtitle": "A few names in your file don't match anyone in your household yet.",
+      "question": "Your file mentions {name} — part of your household?",
+      "confirmBtn": "Yes, add them",
+      "declineBtn": "No",
+      "confirming": "Adding...",
+      "confirmedNote": "{name} added to your household.",
+      "declinedNote": "Skipped — this income will be assigned to you, and flagged so you can fix it later.",
+      "continue": "Continue",
+      "error": "Something went wrong. Please try again."
     },
     "accounts": {
       "title": "Your accounts",
@@ -246,12 +260,6 @@
           "generic": "Something went wrong. Please try again."
         }
       }
-    },
-    "mode": {
-      "own": "My own file",
-      "ownDesc": "Upload your existing budget spreadsheet",
-      "template": "Phare template",
-      "templateDesc": "I filled out the Phare template"
     },
     "form": {
       "title": "We couldn't read that file automatically",

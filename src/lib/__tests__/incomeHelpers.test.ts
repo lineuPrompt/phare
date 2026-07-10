@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { monthlyEquivalent, resolveMemberId, resolveMemberName } from '../incomeHelpers';
+import { monthlyEquivalent, resolveMemberId, resolveMemberName, collectUnresolvedMemberNames } from '../incomeHelpers';
 
 describe('monthlyEquivalent', () => {
   it('weekly: multiplies by 52/12', () => {
@@ -149,5 +149,81 @@ describe('resolveMemberId', () => {
     ];
     const result = resolveMemberId('Julia', dupes, 'fallback');
     expect(result).toEqual({ memberId: 'fallback', usedFallback: true, unmatchedName: 'Julia', isHousehold: false });
+  });
+});
+
+describe('collectUnresolvedMemberNames', () => {
+  const members = [
+    { id: 'm1', name: 'Lineu Prompt Graeff' },
+    { id: 'm2', name: 'Julia Alff' },
+  ];
+
+  it('returns an unmatched name that appears in the file', () => {
+    expect(collectUnresolvedMemberNames(['Marc'], members)).toEqual(['Marc']);
+  });
+
+  it('excludes a name that resolves to an existing member (short-name match)', () => {
+    expect(collectUnresolvedMemberNames(['Julia'], members)).toEqual([]);
+  });
+
+  it('excludes an exact full-name match', () => {
+    expect(collectUnresolvedMemberNames(['Lineu Prompt Graeff'], members)).toEqual([]);
+  });
+
+  it('excludes "Household" / "Ménage" — never prompts for the household keyword', () => {
+    expect(collectUnresolvedMemberNames(['Household', 'Ménage', 'Ménage familial'], members)).toEqual([]);
+  });
+
+  it('excludes blank/undefined cells — nothing to confirm about them', () => {
+    expect(collectUnresolvedMemberNames([undefined, '', '   '], members)).toEqual([]);
+  });
+
+  it('dedupes the same name across multiple lines, case/accent/whitespace-insensitively', () => {
+    expect(collectUnresolvedMemberNames(['Marc', 'marc', '  MARC  '], members)).toEqual(['Marc']);
+  });
+
+  it('keeps the casing of the first occurrence when deduping', () => {
+    expect(collectUnresolvedMemberNames(['marc', 'Marc'], members)).toEqual(['marc']);
+  });
+
+  it('a genuinely ambiguous duplicate first name is still reported as unresolved, never guessed', () => {
+    const dupes = [
+      { id: 'm2', name: 'Julia Alff' },
+      { id: 'm4', name: 'Julia Ng' },
+    ];
+    expect(collectUnresolvedMemberNames(['Julia'], dupes)).toEqual(['Julia']);
+  });
+
+  it('mixed file: resolved, unresolved, household, and blank all coexist correctly', () => {
+    const cells = ['Julia', 'Marc', 'Household', undefined, 'Sam', 'marc'];
+    expect(collectUnresolvedMemberNames(cells, members)).toEqual(['Marc', 'Sam']);
+  });
+});
+
+describe('member discovery — confirm/decline end to end', () => {
+  const baseMembers = [{ id: 'm1', name: 'Lineu Prompt Graeff' }];
+
+  it('confirm: once the discovered name exists as a real member, income resolves to them, not the fallback', () => {
+    // Before confirmation: "Julia" is unresolved.
+    expect(collectUnresolvedMemberNames(['Julia'], baseMembers)).toEqual(['Julia']);
+
+    // Confirming creates a name-only household_members row (simulated here —
+    // the real creation happens via POST /api/household/members/quick-add).
+    const afterConfirm = [...baseMembers, { id: 'mem-julia', name: 'Julia' }];
+
+    // The SAME income line now resolves to her, not the uploader fallback.
+    expect(collectUnresolvedMemberNames(['Julia'], afterConfirm)).toEqual([]);
+    expect(resolveMemberId('Julia', afterConfirm, 'fallback-id')).toEqual({
+      memberId: 'mem-julia', usedFallback: false, unmatchedName: null, isHousehold: false,
+    });
+  });
+
+  it('decline: no member is created, so the name still falls back to the uploader with the visible flag', () => {
+    expect(collectUnresolvedMemberNames(['Julia'], baseMembers)).toEqual(['Julia']);
+
+    // Declining is simply doing nothing — household membership is unchanged.
+    expect(resolveMemberId('Julia', baseMembers, 'fallback-id')).toEqual({
+      memberId: 'fallback-id', usedFallback: true, unmatchedName: 'Julia', isHousehold: false,
+    });
   });
 });

@@ -4,25 +4,25 @@ import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import Navbar from '@/components/brand/Navbar';
 import AnalyzingLoader from '@/components/onboarding/AnalyzingLoader';
-import ModeSelector from '@/components/onboarding/ModeSelector';
+import UploadEntry from '@/components/onboarding/UploadEntry';
 import AccountStep from '@/components/onboarding/AccountStep';
 import ManualForm from '@/components/onboarding/ManualForm';
 import PlanDisplay from '@/components/onboarding/PlanDisplay';
 import AnchorDateStep, { NeedsPayDateItem } from '@/components/onboarding/AnchorDateStep';
+import MemberConfirmStep from '@/components/onboarding/MemberConfirmStep';
 import { Plan, FormLine, IncomeFormLine } from '@/components/onboarding/types';
-import { monthlyEquivalent } from '@/lib/incomeHelpers';
+import { monthlyEquivalent, collectUnresolvedMemberNames } from '@/lib/incomeHelpers';
 import { runPlausibilityGuard, PlausibilityResult } from '@/lib/plausibilityGuard';
 import { TemplateParseResult } from '@/lib/templateParser';
 import { formatCAD } from '@/components/onboarding/types';
 
-type Status = 'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form' | 'accounts' | 'plausibility_check' | 'anchor_dates';
+type Status = 'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form' | 'accounts' | 'plausibility_check' | 'member_confirm' | 'anchor_dates';
 
 export default function UploadPage() {
   const t = useTranslations('upload');
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
-  const [mode, setMode] = useState<'template' | 'own'>('own');
   const [plan, setPlan] = useState<Plan | null>(null);
   const [reviewText, setReviewText] = useState('');
   const [reviewStreaming, setReviewStreaming] = useState(false);
@@ -38,6 +38,13 @@ export default function UploadPage() {
   const [skippedIncomeRows, setSkippedIncomeRows] = useState(0);
   // The calculated body built during submitForm (or the template planBody), held until plausibility is confirmed.
   const [pendingCalculated, setPendingCalculated] = useState<Record<string, unknown> | null>(null);
+
+  // Member discovery — income Member names that don't resolve to an existing
+  // household member or a household keyword. Resolved BEFORE plan
+  // generation, so the plan is born with correct attribution rather than
+  // patched after saving.
+  const [pendingUnresolvedNames, setPendingUnresolvedNames] = useState<string[]>([]);
+  const [pendingTemplateParsed, setPendingTemplateParsed] = useState<TemplateParseResult | null>(null);
 
   // Account step
   const [cardCount, setCardCount] = useState(1);
@@ -187,15 +194,50 @@ export default function UploadPage() {
     streamReview(planData.plan, planBody, resolvedCardNames);
   }, [streamReview]);
 
+  /**
+   * Resumes onboarding from a parsed template once member discovery (if any
+   * was needed) is settled — the plausibility check / accounts step is
+   * exactly what ran before this refactor, just reachable from two call
+   * sites now (no unresolved names, or after MemberConfirmStep finishes).
+   */
+  const proceedWithParsedTemplate = useCallback((parsed: TemplateParseResult) => {
+    const allExpenseLines = [
+      ...(parsed.fixedExpenses?.lines ?? []),
+      ...(parsed.variableExpenses?.lines ?? []),
+    ];
+    const guard = runPlausibilityGuard({
+      computedMonthlyIncome: parsed.income.total,
+      netCashFlow: parsed.summary.netCashFlow,
+      expenseLines: allExpenseLines,
+      statedCombinedAnnual: null,
+    });
+    const skipped = parsed.incomeSkippedRows ?? 0;
+    const planBody: Record<string, unknown> = { source: 'template', parsed };
+
+    if (!guard.ok || skipped > 0) {
+      setPendingCalculated(planBody);
+      setSkippedIncomeRows(skipped);
+      if (!guard.ok) setPlausibilityResult(guard);
+      setStatus('plausibility_check');
+      return;
+    }
+
+    setPendingPlanBody(planBody);
+    setStatus('accounts');
+  }, []);
+
+  const memberConfirmDone = useCallback(() => {
+    if (!pendingTemplateParsed) return;
+    proceedWithParsedTemplate(pendingTemplateParsed);
+  }, [pendingTemplateParsed, proceedWithParsedTemplate]);
+
   const handleFile = useCallback(async (file: File) => {
     setStatus('uploading');
     setError('');
-    const fileName = file.name.toLowerCase();
-    const detectedFileMeta: FileMeta = { fileName: file.name, fileType: fileName.endsWith('.csv') ? 'csv' : 'excel' };
+    const detectedFileMeta: FileMeta = { fileName: file.name, fileType: 'excel' };
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('mode', mode);
 
       const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
       if (!uploadRes.ok) {
@@ -205,56 +247,40 @@ export default function UploadPage() {
       const uploadData = await uploadRes.json();
 
       if (uploadData.source === 'template_mismatch') {
-        setError(uploadData.message || 'This does not look like the Phare template.');
+        // Exact-match-or-refuse: either reason names the fix (get/re-download
+        // the template) — never a partial parse of the wrong layout.
+        setError(uploadData.reason === 'outdated_template' ? t('mismatch.outdatedTemplate') : t('mismatch.wrongFile'));
         setStatus('error');
-        return;
-      }
-      if (uploadData.source === 'needs_form') {
-        // The file couldn't be parsed confidently — the numbers that end up
-        // saved will come from the manual form below, not from this file.
-        setFileMeta(null);
-        setStatus('form');
         return;
       }
 
       setFileMeta(detectedFileMeta);
 
-      if (uploadData.source === 'template') {
-        const parsed = uploadData.parsed as TemplateParseResult;
-        const allExpenseLines = [
-          ...(parsed.fixedExpenses?.lines ?? []),
-          ...(parsed.variableExpenses?.lines ?? []),
-        ];
-        const guard = runPlausibilityGuard({
-          computedMonthlyIncome: parsed.income.total,
-          netCashFlow: parsed.summary.netCashFlow,
-          expenseLines: allExpenseLines,
-          statedCombinedAnnual: null,
-        });
-        const skipped = parsed.incomeSkippedRows ?? 0;
-        const planBody: Record<string, unknown> = { source: 'template', parsed };
+      const parsed = uploadData.parsed as TemplateParseResult;
 
-        if (!guard.ok || skipped > 0) {
-          setPendingCalculated(planBody);
-          setSkippedIncomeRows(skipped);
-          if (!guard.ok) setPlausibilityResult(guard);
-          setStatus('plausibility_check');
-          return;
-        }
+      // Member discovery — before plan generation, so the plan is born with
+      // correct attribution instead of being patched after saving.
+      const membersRes = await fetch('/api/household/members');
+      const membersData = membersRes.ok ? await membersRes.json() : { members: [] };
+      const existingMembers = (membersData.members ?? []) as { id: string; name: string }[];
+      const unresolvedNames = collectUnresolvedMemberNames(
+        parsed.income.lines.map((l) => l.member),
+        existingMembers
+      );
 
-        setPendingPlanBody(planBody);
-        setStatus('accounts');
+      if (unresolvedNames.length > 0) {
+        setPendingTemplateParsed(parsed);
+        setPendingUnresolvedNames(unresolvedNames);
+        setStatus('member_confirm');
         return;
       }
 
-      const planBody = { source: 'calculated', calculated: uploadData.calculated };
-      setPendingPlanBody(planBody);
-      setStatus('accounts');
+      proceedWithParsedTemplate(parsed);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
       setStatus('error');
     }
-  }, [mode]);
+  }, [t, proceedWithParsedTemplate]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -375,6 +401,8 @@ export default function UploadPage() {
     setConfirmReplaceFlag(false);
     setReplaceConfirmation(null);
     setSaveNotices(null);
+    setPendingUnresolvedNames([]);
+    setPendingTemplateParsed(null);
   }, []);
 
   return (
@@ -387,8 +415,7 @@ export default function UploadPage() {
         <p className="text-lg text-center mb-12" style={{ color: '#6B7280' }}>{t('subtitle')}</p>
 
         {status === 'idle' && (
-          <ModeSelector
-            mode={mode} setMode={setMode}
+          <UploadEntry
             dragOver={dragOver} setDragOver={setDragOver}
             onDrop={onDrop} onFileSelect={onFileSelect}
             onManual={() => { setFileMeta(null); setStatus('form'); }}
@@ -421,6 +448,13 @@ export default function UploadPage() {
             submitting={formSubmitting}
             onSubmit={submitForm}
             onCancel={() => setStatus('idle')}
+          />
+        )}
+
+        {status === 'member_confirm' && (
+          <MemberConfirmStep
+            names={pendingUnresolvedNames}
+            onDone={memberConfirmDone}
           />
         )}
 
