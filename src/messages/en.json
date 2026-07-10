@@ -16,7 +16,7 @@
     "badge": "AI financial coach for Canadian families",
     "hero": {
       "title": "Your family finances, finally clear.",
-      "subtitle": "Upload your spreadsheet. Get a complete financial plan in 5 minutes. Know exactly what to do this month.",
+      "subtitle": "Fill in our simple template — or enter your numbers by hand. Get a complete financial plan in 5 minutes. Know exactly what to do this month.",
       "cta": "Get started free",
       "secondaryCta": "See how it works",
       "socialProof": "Built for Canadian families · RRSP, RESP, TFSA aware · English & Français"
@@ -49,12 +49,12 @@
         "upload": {
           "number": "1",
           "title": "Upload your budget",
-          "description": "Excel, CSV, or a screenshot of your bank statement. Phare reads it and builds your financial picture."
+          "description": "Fill in our simple template — or enter your numbers by hand. Phare builds your complete financial picture from it."
         },
         "plan": {
           "number": "2",
           "title": "Get your plan",
-          "description": "AI detects your categories, finds the gaps, and gives you a clear plan. No 20-question form."
+          "description": "Phare checks your numbers, asks only what's missing — real pay dates, who earns what — and gives you a clear plan you can trust."
         },
         "review": {
           "number": "3",
@@ -85,26 +85,44 @@
     "pricing": {
       "title": "A financial advisor charges $250/hour",
       "subtitle": "Phare costs less than a family dinner out.",
-      "price": "$15",
-      "period": "/month",
-      "annual": "$120/year — save $60",
-      "perHousehold": "One subscription covers both spouses.",
-      "cta": "Start your free trial",
-      "features": {
-        "upload": "File upload onboarding",
-        "budgets": "Family member budgets",
-        "sinking": "Sinking funds",
-        "goals": "Goal tracking",
-        "review": "Monthly AI review",
-        "alerts": "Budget alerts",
-        "bilingual": "English & French",
-        "canadian": "RRSP, RESP, TFSA aware"
+      "free": {
+        "name": "Phare Lighthouse",
+        "tier": "Free",
+        "price": "Free",
+        "cta": "Get early access",
+        "ctaNote": "Not open yet — check back soon.",
+        "features": {
+          "onboarding": "Onboarding plan",
+          "spending": "Spending tracking",
+          "family": "Family sharing",
+          "goals": "Goal tracking",
+          "sinking": "Sinking funds",
+          "bilingual": "English & French",
+          "reviewPreview": "Monthly review — locked preview"
+        }
+      },
+      "pro": {
+        "name": "Phare Lighthouse Pro",
+        "price": "$19",
+        "period": "/month",
+        "annual": "$150/year",
+        "founding": "Founding families: $15/month, locked forever — first 50 families.",
+        "perHousehold": "One subscription covers both spouses.",
+        "badge": "Coming soon",
+        "features": {
+          "review": "Full monthly AI review",
+          "alerts": "Budget alerts",
+          "coach": "AI coach",
+          "screenshot": "Screenshot import (coming soon)",
+          "canadian": "RRSP, RESP, TFSA-aware guidance"
+        }
       }
     },
     "finalCta": {
       "title": "Your family deserves a financial plan.",
       "subtitle": "Not another spreadsheet. Not another app that tracks what you already spent. A plan that tells you what to do next.",
-      "cta": "Get started free"
+      "cta": "Get early access",
+      "ctaNote": "Not open yet — check back soon."
     },
     "footer": {
       "builtFor": "Built for Canadian families",

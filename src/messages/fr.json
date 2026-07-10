@@ -16,7 +16,7 @@
     "badge": "Coach financier IA pour les familles canadiennes",
     "hero": {
       "title": "Les finances de votre famille, enfin claires.",
-      "subtitle": "Téléversez votre tableur. Obtenez un plan financier complet en 5 minutes. Sachez exactement quoi faire ce mois-ci.",
+      "subtitle": "Remplissez notre modèle simple — ou entrez vos chiffres à la main. Obtenez un plan financier complet en 5 minutes. Sachez exactement quoi faire ce mois-ci.",
       "cta": "Commencer gratuitement",
       "secondaryCta": "Voir comment ça marche",
       "socialProof": "Conçu pour les familles canadiennes · REER, REEE, CELI · English & Français"
@@ -49,12 +49,12 @@
         "upload": {
           "number": "1",
           "title": "Téléversez votre budget",
-          "description": "Excel, CSV ou une capture d'écran de votre relevé bancaire. Phare le lit et construit votre portrait financier."
+          "description": "Remplissez notre modèle simple — ou entrez vos chiffres à la main. Phare construit votre portrait financier complet à partir de vos données."
         },
         "plan": {
           "number": "2",
           "title": "Obtenez votre plan",
-          "description": "L'IA détecte vos catégories, trouve les lacunes et vous donne un plan clair. Pas de formulaire de 20 questions."
+          "description": "Phare vérifie vos chiffres, ne demande que ce qui manque — les vraies dates de paie, qui gagne quoi — et vous donne un plan clair et fiable."
         },
         "review": {
           "number": "3",
@@ -85,26 +85,44 @@
     "pricing": {
       "title": "Un conseiller financier coûte 250 $/heure",
       "subtitle": "Phare coûte moins qu'un souper en famille au restaurant.",
-      "price": "15 $",
-      "period": "/mois",
-      "annual": "120 $/an — économisez 60 $",
-      "perHousehold": "Un abonnement couvre les deux conjoints.",
-      "cta": "Commencer l'essai gratuit",
-      "features": {
-        "upload": "Intégration par téléversement",
-        "budgets": "Budgets par membre de la famille",
-        "sinking": "Fonds de prévoyance",
-        "goals": "Suivi des objectifs",
-        "review": "Revue mensuelle IA",
-        "alerts": "Alertes budgétaires",
-        "bilingual": "English & Français",
-        "canadian": "REER, REEE, CELI"
+      "free": {
+        "name": "Phare Lighthouse",
+        "tier": "Gratuit",
+        "price": "Gratuit",
+        "cta": "Obtenir un accès anticipé",
+        "ctaNote": "Pas encore ouvert — revenez bientôt.",
+        "features": {
+          "onboarding": "Plan de démarrage",
+          "spending": "Suivi des dépenses",
+          "family": "Partage familial",
+          "goals": "Suivi des objectifs",
+          "sinking": "Fonds de prévoyance",
+          "bilingual": "English & Français",
+          "reviewPreview": "Revue mensuelle — aperçu verrouillé"
+        }
+      },
+      "pro": {
+        "name": "Phare Lighthouse Pro",
+        "price": "19 $",
+        "period": "/mois",
+        "annual": "150 $/an",
+        "founding": "Familles fondatrices : 15 $/mois, prix figé pour toujours — 50 premières familles.",
+        "perHousehold": "Un seul abonnement couvre les deux conjoints.",
+        "badge": "Bientôt disponible",
+        "features": {
+          "review": "Revue mensuelle complète par IA",
+          "alerts": "Alertes budgétaires",
+          "coach": "Coach IA",
+          "screenshot": "Importation par capture d'écran (bientôt disponible)",
+          "canadian": "Conseils tenant compte du REER, REEE, CELI"
+        }
       }
     },
     "finalCta": {
       "title": "Votre famille mérite un plan financier.",
       "subtitle": "Pas un autre tableur. Pas une autre application qui suit ce que vous avez déjà dépensé. Un plan qui vous dit quoi faire ensuite.",
-      "cta": "Commencer gratuitement"
+      "cta": "Obtenir un accès anticipé",
+      "ctaNote": "Pas encore ouvert — revenez bientôt."
     },
     "footer": {
       "builtFor": "Conçu pour les familles canadiennes",
