@@ -17,7 +17,8 @@
     "hero": {
       "title": "Your family finances, finally clear.",
       "subtitle": "Fill in our simple template — or enter your numbers by hand. Get a complete financial plan in 5 minutes. Know exactly what to do this month.",
-      "cta": "Get started free",
+      "cta": "Get early access",
+      "ctaNote": "Not open yet — check back soon.",
       "secondaryCta": "See how it works",
       "socialProof": "Built for Canadian families · RRSP, RESP, TFSA aware · English & Français"
     },

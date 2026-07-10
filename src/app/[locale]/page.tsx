@@ -1,6 +1,5 @@
 import {useTranslations} from 'next-intl';
 import Navbar from '@/components/brand/Navbar';
-import Link from 'next/link';
 
 export default function Home() {
   const t = useTranslations('landing');
@@ -30,13 +29,12 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4">
-          <Link
-            href="/upload"
-            className="px-8 py-3 rounded-full text-white font-semibold text-lg transition-all hover:opacity-90 cursor-pointer inline-block"
-            style={{background: '#0F2044'}}
+          <div
+            className="px-8 py-3 rounded-full text-white font-semibold text-lg inline-block"
+            style={{background: '#9CA3AF'}}
           >
             {t('hero.cta')}
-          </Link>
+          </div>
           <a href="#how-it-works"
             className="px-8 py-3 rounded-full font-semibold text-lg transition-all hover:opacity-90 cursor-pointer inline-block"
             style={{ border: '2px solid #0F2044', color: '#0F2044' }}
@@ -44,8 +42,9 @@ export default function Home() {
             {t('hero.secondaryCta')}
           </a>
         </div>
+        <p className="mt-2 text-xs" style={{color: '#9CA3AF'}}>{t('hero.ctaNote')}</p>
 
-        <p className="mt-8 text-sm" style={{color: '#6B7280'}}>
+        <p className="mt-6 text-sm" style={{color: '#6B7280'}}>
           {t('hero.socialProof')}
         </p>
       </section>
@@ -133,9 +132,11 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Pricing */}
+      {/* Pricing — two tiers. Pro has no working checkout yet (that's a
+          later build with Stripe), so it carries a "Coming soon" badge and
+          no CTA. Free's CTA is inert too — signup isn't open yet. */}
       <section className="px-6 py-20" style={{background: '#FAFAF8'}}>
-        <div className="max-w-lg mx-auto text-center">
+        <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4" style={{color: '#0F2044'}}>
             {t('pricing.title')}
           </h2>
@@ -143,34 +144,61 @@ export default function Home() {
             {t('pricing.subtitle')}
           </p>
 
-          <div
-            className="bg-white rounded-2xl p-10"
-            style={{border: '2px solid #2ABFBF'}}
-          >
-            <div className="flex items-baseline justify-center gap-1 mb-2">
-              <span className="text-5xl font-bold" style={{color: '#0F2044'}}>{t('pricing.price')}</span>
-              <span className="text-xl" style={{color: '#6B7280'}}>{t('pricing.period')}</span>
+          <div className="grid md:grid-cols-2 gap-6 text-left">
+            {/* Free tier */}
+            <div className="bg-white rounded-2xl p-8" style={{border: '2px solid #E5E7EB'}}>
+              <p className="text-sm font-semibold mb-1" style={{color: '#6B7280'}}>
+                {t('pricing.free.name')} — {t('pricing.free.tier')}
+              </p>
+              <div className="mb-6">
+                <span className="text-4xl font-bold" style={{color: '#0F2044'}}>{t('pricing.free.price')}</span>
+              </div>
+
+              <div className="space-y-3 mb-8">
+                {(['onboarding', 'spending', 'family', 'goals', 'sinking', 'bilingual', 'reviewPreview'] as const).map((key) => (
+                  <div key={key} className="flex items-center gap-3">
+                    <span style={{color: '#2ABFBF'}}>✓</span>
+                    <span style={{color: '#374151'}}>{t(`pricing.free.features.${key}`)}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                className="block w-full py-3 rounded-full font-semibold text-lg text-center"
+                style={{background: '#F3F4F6', color: '#9CA3AF'}}
+              >
+                {t('pricing.free.cta')}
+              </div>
+              <p className="text-xs text-center mt-2" style={{color: '#9CA3AF'}}>{t('pricing.free.ctaNote')}</p>
             </div>
 
-            <p className="text-sm mb-1" style={{color: '#2ABFBF'}}>{t('pricing.annual')}</p>
-            <p className="text-sm mb-8" style={{color: '#6B7280'}}>{t('pricing.perHousehold')}</p>
+            {/* Pro tier */}
+            <div className="bg-white rounded-2xl p-8 relative" style={{border: '2px solid #2ABFBF'}}>
+              <span
+                className="absolute top-6 right-6 px-3 py-1 rounded-full text-xs font-medium"
+                style={{background: '#FEF3C7', color: '#92400E'}}
+              >
+                {t('pricing.pro.badge')}
+              </span>
 
-            <div className="text-left mb-8 space-y-3">
-              {(['upload', 'budgets', 'sinking', 'goals', 'review', 'alerts', 'bilingual', 'canadian'] as const).map((key) => (
-                <div key={key} className="flex items-center gap-3">
-                  <span style={{color: '#2ABFBF'}}>✓</span>
-                  <span style={{color: '#374151'}}>{t(`pricing.features.${key}`)}</span>
-                </div>
-              ))}
+              <p className="text-sm font-semibold mb-1" style={{color: '#2ABFBF'}}>{t('pricing.pro.name')}</p>
+              <div className="flex items-baseline gap-1 mb-1">
+                <span className="text-4xl font-bold" style={{color: '#0F2044'}}>{t('pricing.pro.price')}</span>
+                <span className="text-lg" style={{color: '#6B7280'}}>{t('pricing.pro.period')}</span>
+              </div>
+              <p className="text-sm mb-3" style={{color: '#6B7280'}}>{t('pricing.pro.annual')}</p>
+              <p className="text-sm font-medium mb-4" style={{color: '#B45309'}}>{t('pricing.pro.founding')}</p>
+              <p className="text-sm mb-6" style={{color: '#6B7280'}}>{t('pricing.pro.perHousehold')}</p>
+
+              <div className="space-y-3">
+                {(['review', 'alerts', 'coach', 'screenshot', 'canadian'] as const).map((key) => (
+                  <div key={key} className="flex items-center gap-3">
+                    <span style={{color: '#2ABFBF'}}>✓</span>
+                    <span style={{color: '#374151'}}>{t(`pricing.pro.features.${key}`)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-
-            <Link
-              href="/upload"
-              className="block w-full py-3 rounded-full text-white font-semibold text-lg transition-all hover:opacity-90 cursor-pointer text-center"
-              style={{background: '#0F2044'}}
-            >
-              {t('pricing.cta')}
-            </Link>
           </div>
         </div>
       </section>
@@ -184,13 +212,13 @@ export default function Home() {
           <p className="text-lg mb-10" style={{color: '#94A3B8'}}>
             {t('finalCta.subtitle')}
           </p>
-          <Link
-            href="/upload"
-            className="px-10 py-4 rounded-full font-semibold text-lg transition-all hover:opacity-90 cursor-pointer inline-block"
-            style={{background: '#2ABFBF', color: '#0F2044'}}
+          <div
+            className="px-10 py-4 rounded-full font-semibold text-lg inline-block"
+            style={{background: 'rgba(255,255,255,0.1)', color: '#94A3B8'}}
           >
             {t('finalCta.cta')}
-          </Link>
+          </div>
+          <p className="text-sm mt-3" style={{color: '#64748B'}}>{t('finalCta.ctaNote')}</p>
         </div>
       </section>
 
