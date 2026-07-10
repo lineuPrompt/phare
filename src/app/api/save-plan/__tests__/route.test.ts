@@ -176,6 +176,102 @@ describe('POST /api/save-plan — reset-then-onboard regression', () => {
   });
 });
 
+describe('POST /api/save-plan — manual entry produces the same shape as a template row', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('a manual bi-weekly expense (isFixed, rawAmount, frequency — what the "calculated" source now produces) gets a real cadence and lands in needsPayDate, same as a template row would', async () => {
+    const { client, calls } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      household_members: [
+        { data: { id: 'mem-1' }, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [
+        { data: [{ id: 'chq-1', type: 'chequing', name: 'Chequing', file_import_id: null }], error: null },
+      ],
+      recurring_items: [
+        { count: 0, error: null },
+        { data: [], error: null },
+        {
+          data: [{
+            id: 'ri-1', description: 'Mortgage', amount: 1500, type: 'expense', cadence: 'biweekly',
+            anchor_date: null, second_day: null, category_id: 'cat-housing',
+            account_id: 'chq-1', member_id: null,
+          }],
+          error: null,
+        },
+      ],
+      budgets: [
+        { count: 0, error: null },
+        { error: null },
+      ],
+      sinking_funds: [
+        { count: 0, error: null },
+        { error: null },
+      ],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      categories: [
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ id: `cat-${name.toLowerCase()}`, name })), error: null },
+      ],
+      conversations: [{ error: null }],
+      events: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+
+    // This is exactly what assembleCalculatedBudget + AI classification now
+    // produce for a manual form line marked bi-weekly — no "source" field
+    // reaches save-plan at all, so there is nothing here that could
+    // distinguish it from a template-parsed row.
+    const body = {
+      plan: {
+        monthlyBudget: {
+          categories: [
+            { name: 'Mortgage', budgeted: 3250, type: 'expense', isFixed: true, rawAmount: 1500, frequency: 'biweekly', seedCategory: 'Housing' },
+          ],
+        },
+        sinkingFunds: [],
+        goals: [],
+        topRecommendation: 'Keep it up.',
+      },
+      reviewText: 'Looking good.',
+      locale: 'en',
+      cardNames: [],
+      fileMeta: null,
+    };
+
+    const res = await POST(new Request('http://localhost/api/save-plan', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+
+    // The actual INSERT payload — real cadence and per-payment amount, not
+    // the monthly-equivalent, and no fabricated anchor date.
+    const recurringInserts = calls.filter((c) => c.table === 'recurring_items' && c.method === 'insert');
+    expect(recurringInserts).toHaveLength(1);
+    const row = (recurringInserts[0].args[0] as Record<string, unknown>[])[0];
+    expect(row.cadence).toBe('biweekly');
+    expect(row.amount).toBe(1500);
+    expect(row.anchor_date).toBeNull();
+
+    // No anchor yet → surfaced in needsPayDate, same mechanism a template
+    // upload's non-monthly expense already uses.
+    expect(json.needsPayDate).toHaveLength(1);
+    expect(json.needsPayDate[0]).toMatchObject({
+      description: 'Mortgage', cadence: 'biweekly', amount: 1500, type: 'expense',
+    });
+  });
+});
+
 describe('POST /api/save-plan — expense member attribution', () => {
   beforeEach(() => {
     vi.resetModules();

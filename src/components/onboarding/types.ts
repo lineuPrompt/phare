@@ -39,11 +39,20 @@ export type Plan = {
   topRecommendation: string;
 };
 
-// Expense form line — label + dollar amount (monthly).
-export type FormLine = { label: string; amount: string };
-
 // Income frequency options. Code converts these; users never pre-compute.
 export type IncomeFrequency = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
+
+// Expense form line — captures the per-payment amount and frequency
+// separately, same shape and semantics as IncomeFormLine below. Manual and
+// template entry must produce indistinguishable ledgers, so a manual
+// bi-weekly mortgage needs the same rawAmount+frequency data a template
+// row would carry — monthlyEquivalent() converts to monthly for display,
+// the anchor step captures a real pay date for non-monthly cadences.
+export type FormLine = {
+  label: string;
+  amount: string;        // raw per-payment amount (what you pay each time)
+  frequency: IncomeFrequency;
+};
 
 // Income form line — captures the paycheque amount and frequency separately.
 // monthlyEquivalent() in src/lib/incomeHelpers.ts converts to monthly.

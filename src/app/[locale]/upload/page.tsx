@@ -12,6 +12,7 @@ import AnchorDateStep, { NeedsPayDateItem } from '@/components/onboarding/Anchor
 import MemberConfirmStep from '@/components/onboarding/MemberConfirmStep';
 import { Plan, FormLine, IncomeFormLine } from '@/components/onboarding/types';
 import { monthlyEquivalent, collectUnresolvedMemberNames } from '@/lib/incomeHelpers';
+import { dropResolvedItems } from '@/lib/anchorDateHelpers';
 import { runPlausibilityGuard, PlausibilityResult } from '@/lib/plausibilityGuard';
 import { TemplateParseResult } from '@/lib/templateParser';
 import { formatCAD } from '@/components/onboarding/types';
@@ -29,7 +30,7 @@ export default function UploadPage() {
 
   // Manual form
   const [formIncome, setFormIncome] = useState<IncomeFormLine[]>([{ label: '', amount: '', frequency: 'monthly' }]);
-  const [formExpenses, setFormExpenses] = useState<FormLine[]>([{ label: '', amount: '' }]);
+  const [formExpenses, setFormExpenses] = useState<FormLine[]>([{ label: '', amount: '', frequency: 'monthly' }]);
   const [statedCombinedAnnual, setStatedCombinedAnnual] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
 
@@ -295,20 +296,38 @@ export default function UploadPage() {
   }, [handleFile]);
 
   /**
-   * Build the calculated body from the manual form — applying frequency conversion
-   * so the AI and the plan receive real monthly equivalents, never raw paycheque amounts.
+   * Build the calculated body from the manual form. Carries rawAmount +
+   * frequency through for both income and expenses, same as a template
+   * upload — amount is still the monthly equivalent (what the AI and the
+   * budget totals use), but save-plan reads rawAmount/frequency to give
+   * non-monthly lines a real cadence and the same anchor-step treatment a
+   * template row gets, instead of collapsing everyone to a monthly lump.
+   * Manual and template must produce indistinguishable ledgers.
    */
   const buildCalculated = useCallback(() => {
     const incomeLines = formIncome
       .filter((l) => l.label.trim() && l.amount)
-      .map((l) => ({
-        label: l.label.trim(),
-        amount: monthlyEquivalent(parseFloat(l.amount), l.frequency),
-      }));
+      .map((l) => {
+        const rawAmount = parseFloat(l.amount);
+        return {
+          label: l.label.trim(),
+          amount: monthlyEquivalent(rawAmount, l.frequency),
+          rawAmount,
+          frequency: l.frequency,
+        };
+      });
 
     const expenseLines = formExpenses
       .filter((l) => l.label.trim() && l.amount)
-      .map((l) => ({ label: l.label.trim(), amount: parseFloat(l.amount) }));
+      .map((l) => {
+        const rawAmount = parseFloat(l.amount);
+        return {
+          label: l.label.trim(),
+          amount: monthlyEquivalent(rawAmount, l.frequency),
+          rawAmount,
+          frequency: l.frequency,
+        };
+      });
 
     const incomeTotal = incomeLines.reduce((s, l) => s + l.amount, 0);
     const expenseTotal = expenseLines.reduce((s, l) => s + l.amount, 0);
@@ -484,7 +503,18 @@ export default function UploadPage() {
           <AnchorDateStep
             items={saveNotices.needsPayDate}
             members={householdMembers}
-            onDone={() => setStatus('plan')}
+            onDone={(resolvedIds) => {
+              // Drop the items that actually got a real date from the
+              // "awaiting dates" count — leaving the stale pre-anchor-step
+              // count in place is exactly what made the notice fire on the
+              // plan review even after every date was set. Anything skipped
+              // stays counted, honestly.
+              setSaveNotices((prev) => prev && {
+                ...prev,
+                needsPayDate: dropResolvedItems(prev.needsPayDate, resolvedIds),
+              });
+              setStatus('plan');
+            }}
           />
         )}
 

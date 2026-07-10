@@ -121,4 +121,52 @@ describe('assembleCalculatedBudget', () => {
     expect(budget.totalIncome).toBe(0);
     expect(budget.totalExpenses).toBe(500);
   });
+
+  // ---------------------------------------------------------------------------
+  // Manual and template must produce indistinguishable ledgers: rawAmount and
+  // frequency have to survive assembleCalculatedBudget for BOTH income and
+  // expense lines, same as a template row already carries them.
+  // ---------------------------------------------------------------------------
+
+  it('carries rawAmount + frequency through for a non-monthly expense line (manual bi-weekly mortgage)', () => {
+    const calc = {
+      income:   { total: 5000, lines: [{ label: 'Salary', amount: 5000 }] },
+      expenses: {
+        total: 3250,
+        lines: [{ label: 'Mortgage', amount: 3250, rawAmount: 1500, frequency: 'biweekly' as const }],
+      },
+    };
+    const budget = assembleCalculatedBudget(calc);
+    const mortgage = budget.categories.find((c) => c.name === 'Mortgage');
+    expect(mortgage).toEqual({
+      name: 'Mortgage', budgeted: 3250, type: 'expense', rawAmount: 1500, frequency: 'biweekly',
+    });
+  });
+
+  it('carries rawAmount + frequency through for a non-monthly income line', () => {
+    const calc = {
+      income: {
+        total: 5195.34,
+        lines: [{ label: 'Salary', amount: 5195.34, rawAmount: 2397.85, frequency: 'biweekly' as const }],
+      },
+      expenses: { total: 0, lines: [] },
+    };
+    const budget = assembleCalculatedBudget(calc);
+    const salary = budget.categories.find((c) => c.name === 'Salary');
+    expect(salary).toEqual({
+      name: 'Salary', budgeted: 5195.34, type: 'income', rawAmount: 2397.85, frequency: 'biweekly',
+    });
+  });
+
+  it('a plain monthly line (no rawAmount/frequency given) stays exactly as before', () => {
+    const calc = {
+      income:   { total: 5000, lines: [{ label: 'Salary', amount: 5000 }] },
+      expenses: { total: 2000, lines: [{ label: 'Rent', amount: 2000 }] },
+    };
+    const budget = assembleCalculatedBudget(calc);
+    expect(budget.categories).toEqual([
+      { name: 'Salary', budgeted: 5000, type: 'income' },
+      { name: 'Rent', budgeted: 2000, type: 'expense' },
+    ]);
+  });
 });

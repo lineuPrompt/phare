@@ -119,33 +119,61 @@ export default function ManualForm({
         </div>
       </div>
 
-      {/* Expenses section — unchanged structure */}
+      {/* Expenses section — same per-payment amount + frequency capture as
+          income, so a manual bi-weekly mortgage feeds the same anchor-step
+          mechanism a template row would. Default frequency is monthly. */}
       <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
-        <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>{t('form.expenses')}</h3>
+        <h3 className="text-xl font-bold mb-2" style={{ color: '#0F2044' }}>{t('form.expenses')}</h3>
+        <p className="text-sm mb-5" style={{ color: '#6B7280' }}>{t('form.expenseHint')}</p>
+
         <div className="space-y-3">
-          {expenses.map((line, i) => (
-            <div key={i} className="flex gap-3">
-              <input
-                type="text"
-                value={line.label}
-                onChange={(e) => setExpenses(expenses.map((l, j) => j === i ? { ...l, label: e.target.value } : l))}
-                placeholder={t('form.expensePlaceholder')}
-                className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none"
-                style={inputStyle}
-              />
-              <input
-                type="number"
-                value={line.amount}
-                onChange={(e) => setExpenses(expenses.map((l, j) => j === i ? { ...l, amount: e.target.value } : l))}
-                placeholder="0.00"
-                className="w-32 px-4 py-2.5 rounded-lg text-sm outline-none"
-                style={inputStyle}
-              />
-            </div>
-          ))}
+          {expenses.map((line, i) => {
+            const rawAmt = parseFloat(line.amount);
+            const monthly = (!isNaN(rawAmt) && rawAmt > 0)
+              ? monthlyEquivalent(rawAmt, line.frequency)
+              : null;
+
+            return (
+              <div key={i} className="space-y-1">
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    type="text"
+                    value={line.label}
+                    onChange={(e) => setExpenses(expenses.map((l, j) => j === i ? { ...l, label: e.target.value } : l))}
+                    placeholder={t('form.expensePlaceholder')}
+                    className="flex-1 min-w-[140px] px-4 py-2.5 rounded-lg text-sm outline-none"
+                    style={inputStyle}
+                  />
+                  <input
+                    type="number"
+                    value={line.amount}
+                    onChange={(e) => setExpenses(expenses.map((l, j) => j === i ? { ...l, amount: e.target.value } : l))}
+                    placeholder={t('form.expenseAmountPlaceholder')}
+                    className="w-32 px-4 py-2.5 rounded-lg text-sm outline-none"
+                    style={inputStyle}
+                  />
+                  <select
+                    value={line.frequency}
+                    onChange={(e) => setExpenses(expenses.map((l, j) => j === i ? { ...l, frequency: e.target.value as IncomeFrequency } : l))}
+                    className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white"
+                    style={inputStyle}
+                  >
+                    {FREQUENCIES.map((f) => (
+                      <option key={f} value={f}>{t(`form.freq_${f}`)}</option>
+                    ))}
+                  </select>
+                </div>
+                {monthly !== null && (
+                  <p className="text-xs pl-1" style={{ color: '#2ABFBF' }}>
+                    = {formatCAD(monthly)}{t('form.perMonth')}
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
         <button
-          onClick={() => setExpenses([...expenses, { label: '', amount: '' }])}
+          onClick={() => setExpenses([...expenses, { label: '', amount: '', frequency: 'monthly' }])}
           className="mt-3 text-sm font-medium cursor-pointer"
           style={{ color: '#2ABFBF' }}
         >

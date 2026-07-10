@@ -281,13 +281,15 @@
       }
     },
     "form": {
-      "title": "We couldn't read that file automatically",
-      "subtitle": "No problem — enter your numbers below and we'll build your plan.",
+      "title": "Enter your numbers",
+      "subtitle": "Add your income and expenses below — Phare builds your financial picture from it.",
       "income": "Income sources",
       "incomeHint": "Enter what lands in your bank account each pay, then pick the frequency. We compute the monthly figure — no math needed.",
-      "expenses": "Monthly Expenses",
+      "expenses": "Expenses",
+      "expenseHint": "Enter what you pay each time, then pick how often. We compute the monthly figure — no math needed.",
       "sourcePlaceholder": "e.g. Salary — Partner 1",
       "amountPerPay": "Amount per pay",
+      "expenseAmountPlaceholder": "Amount per payment",
       "freq_weekly": "Weekly",
       "freq_biweekly": "Bi-weekly (every 2 weeks)",
       "freq_semimonthly": "Semi-monthly (twice a month)",

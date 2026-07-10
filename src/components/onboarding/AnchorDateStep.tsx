@@ -48,7 +48,10 @@ export default function AnchorDateStep({
 }: {
   items: NeedsPayDateItem[];
   members: { id: string; name: string }[];
-  onDone: () => void;
+  // Reports the ids of items that actually got a real date set (status
+  // 'saved'), so the caller can drop them from any "awaiting dates" count
+  // it's holding — items left unresolved (skipped/declined) stay counted.
+  onDone: (resolvedIds: string[]) => void;
 }) {
   const t = useTranslations('upload.plan.anchorStep');
   const today = formatLocalDate(new Date());
@@ -81,11 +84,13 @@ export default function AnchorDateStep({
     items.map((i) => ({ type: i.type, isSet: state[i.id]?.status === 'saved' }))
   );
 
+  const resolvedIds = () => items.filter((i) => state[i.id]?.status === 'saved').map((i) => i.id);
+
   const handleContinueClick = () => {
     if (skipConfirmation.needed) {
       setShowSkipConfirm(true);
     } else {
-      onDone();
+      onDone(resolvedIds());
     }
   };
 
@@ -233,7 +238,7 @@ export default function AnchorDateStep({
               {t('confirmSkip.setDates')}
             </button>
             <button
-              onClick={onDone}
+              onClick={() => onDone(resolvedIds())}
               className="flex-1 px-4 py-2 rounded-full text-sm font-medium cursor-pointer"
               style={{ border: '1.5px solid #92400E', color: '#92400E' }}
             >

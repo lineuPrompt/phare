@@ -281,13 +281,15 @@
       }
     },
     "form": {
-      "title": "Nous n'avons pas pu lire ce fichier automatiquement",
-      "subtitle": "Pas de souci — entrez vos chiffres ci-dessous et nous construirons votre plan.",
+      "title": "Entrez vos chiffres",
+      "subtitle": "Ajoutez vos revenus et dépenses ci-dessous — Phare construit votre portrait financier à partir de ça.",
       "income": "Sources de revenus",
       "incomeHint": "Entrez ce qui arrive dans votre compte à chaque paie, puis choisissez la fréquence. Nous calculons le montant mensuel — pas besoin de faire les maths.",
-      "expenses": "Dépenses mensuelles",
+      "expenses": "Dépenses",
+      "expenseHint": "Entrez ce que vous payez à chaque fois, puis choisissez la fréquence. Nous calculons le montant mensuel — pas besoin de faire les maths.",
       "sourcePlaceholder": "ex. Salaire — Partenaire 1",
       "amountPerPay": "Montant par paie",
+      "expenseAmountPlaceholder": "Montant par paiement",
       "freq_weekly": "Hebdomadaire",
       "freq_biweekly": "Aux 2 semaines",
       "freq_semimonthly": "Deux fois par mois",

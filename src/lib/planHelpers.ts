@@ -1,3 +1,5 @@
+import type { IncomeFrequency } from './incomeHelpers';
+
 type BudgetCategory = { name: string; type: string; budgeted?: number };
 type NamedFund = { name: string };
 
@@ -22,16 +24,21 @@ export function dedupeSinkingFunds<C extends BudgetCategory>(
 // Three-bucket budget assembly for the calculated onboarding path
 // ---------------------------------------------------------------------------
 
+// rawAmount/frequency are optional — present when the line has a real
+// per-payment cadence (both income and expense lines can, on the manual
+// form, exactly like the template); absent means "monthly, take amount as-is."
+type CalculatedLine = { label: string; amount: number; rawAmount?: number; frequency?: IncomeFrequency };
+
 export type CalculatedSource = {
-  income:   { total: number; lines: Array<{ label: string; amount: number }> };
-  expenses: { total: number; lines: Array<{ label: string; amount: number }> };
+  income:   { total: number; lines: CalculatedLine[] };
+  expenses: { total: number; lines: CalculatedLine[] };
 };
 
 export type MonthlyBudget = {
   totalIncome:   number;
   totalExpenses: number;
   totalSavings:  number;
-  categories:    Array<{ name: string; budgeted: number; type: string }>;
+  categories:    Array<{ name: string; budgeted: number; type: string; rawAmount?: number; frequency?: IncomeFrequency }>;
 };
 
 /**
@@ -56,8 +63,8 @@ export function assembleCalculatedBudget(c: CalculatedSource): MonthlyBudget {
     totalExpenses: c.expenses.total,
     totalSavings:  0,
     categories: [
-      ...c.income.lines.map((l) => ({ name: l.label, budgeted: l.amount, type: 'income'  })),
-      ...c.expenses.lines.map((l) => ({ name: l.label, budgeted: l.amount, type: 'expense' })),
+      ...c.income.lines.map((l) => ({ name: l.label, budgeted: l.amount, type: 'income' as const, rawAmount: l.rawAmount, frequency: l.frequency })),
+      ...c.expenses.lines.map((l) => ({ name: l.label, budgeted: l.amount, type: 'expense' as const, rawAmount: l.rawAmount, frequency: l.frequency })),
     ],
   };
 }

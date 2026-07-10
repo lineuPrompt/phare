@@ -86,3 +86,16 @@ export function evaluateSkipConfirmation(
     unsetExpenseCount: unset.filter((i) => i.type === 'expense').length,
   };
 }
+
+/**
+ * Drops items that got a real date from an "awaiting dates" list. Without
+ * this, finishing the anchor step (setting every date) left the caller's
+ * needsPayDate/awaiting-dates count exactly as it was before the step ran —
+ * a stale count, not a live one — so the plan review kept showing "N
+ * awaiting dates" even once N was actually 0. Anything left unresolved
+ * (skipped/declined) stays counted, honestly.
+ */
+export function dropResolvedItems<T extends { id: string }>(items: T[], resolvedIds: string[]): T[] {
+  const resolved = new Set(resolvedIds);
+  return items.filter((item) => !resolved.has(item.id));
+}

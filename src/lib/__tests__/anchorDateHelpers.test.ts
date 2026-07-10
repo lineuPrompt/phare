@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateNextPayDate, validateSemimonthlyDays, buildSemimonthlyAnchor, evaluateSkipConfirmation } from '../anchorDateHelpers';
+import { validateNextPayDate, validateSemimonthlyDays, buildSemimonthlyAnchor, evaluateSkipConfirmation, dropResolvedItems } from '../anchorDateHelpers';
 
 describe('validateNextPayDate', () => {
   it('accepts a biweekly payday exactly 14 days out', () => {
@@ -111,5 +111,31 @@ describe('evaluateSkipConfirmation', () => {
       unsetIncomeCount: 0,
       unsetExpenseCount: 1,
     });
+  });
+});
+
+describe('dropResolvedItems', () => {
+  it('removes every item once all of them are resolved — the all-anchored case', () => {
+    const items = [{ id: 'a' }, { id: 'b' }];
+    expect(dropResolvedItems(items, ['a', 'b'])).toEqual([]);
+  });
+
+  it('keeps items not in the resolved list — a skipped/declined one stays counted', () => {
+    const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    expect(dropResolvedItems(items, ['a', 'c'])).toEqual([{ id: 'b' }]);
+  });
+
+  it('is a no-op when nothing was resolved', () => {
+    const items = [{ id: 'a' }, { id: 'b' }];
+    expect(dropResolvedItems(items, [])).toEqual(items);
+  });
+
+  it('is a no-op on an empty list', () => {
+    expect(dropResolvedItems([], ['a'])).toEqual([]);
+  });
+
+  it('ignores resolved ids that are not present in the list', () => {
+    const items = [{ id: 'a' }];
+    expect(dropResolvedItems(items, ['does-not-exist'])).toEqual(items);
   });
 });
