@@ -32,7 +32,7 @@ type PlanCategory = {
 export async function POST(request: Request) {
   try {
     const { plan, reviewText, locale, cardNames, fileMeta, confirmReplace } = await request.json() as {
-      plan: { monthlyBudget: { categories: PlanCategory[] }; seedCategories?: string[]; sinkingFunds?: { name: string; annualAmount: number; dueMonth: string }[]; goals?: { name: string; targetAmount: number }[]; topRecommendation: string };
+      plan: { monthlyBudget: { categories: PlanCategory[] }; seedCategories?: string[]; sinkingFunds?: { name: string; annualAmount: number; dueMonth: string }[]; goals?: { name: string; targetAmount: number; targetDate?: string | null; savedSoFar?: number }[]; topRecommendation: string };
       reviewText: string;
       locale: string;
       cardNames: string[];
@@ -261,19 +261,63 @@ export async function POST(request: Request) {
     }
 
     if (accountPlan.toCreate.length > 0) {
-      const goalsByName = new Map((plan.goals ?? []).map((g: { name: string; targetAmount: number }) => [g.name.trim().toLowerCase(), g]));
-      await supabase.from('accounts').insert(
-        accountPlan.toCreate.map((a) => {
-          const goal = a.type === 'savings' ? goalsByName.get(a.name.trim().toLowerCase()) : undefined;
-          return {
-            household_id: householdId,
-            name: a.name,
-            type: a.type,
-            file_import_id: fileImportId,
-            ...(a.type === 'savings' ? { goal_target: goal && goal.targetAmount > 0 ? goal.targetAmount : null } : {}),
-          };
-        })
+      const goalsByName = new Map(
+        (plan.goals ?? []).map((g: { name: string; targetAmount: number; targetDate?: string | null; savedSoFar?: number }) => [g.name.trim().toLowerCase(), g])
       );
+      const { data: createdAccounts, error: createAccountsError } = await supabase
+        .from('accounts')
+        .insert(
+          accountPlan.toCreate.map((a) => {
+            const goal = a.type === 'savings' ? goalsByName.get(a.name.trim().toLowerCase()) : undefined;
+            return {
+              household_id: householdId,
+              name: a.name,
+              type: a.type,
+              file_import_id: fileImportId,
+              ...(a.type === 'savings' ? {
+                goal_target: goal && goal.targetAmount > 0 ? goal.targetAmount : null,
+                goal_target_date: goal?.targetDate ?? null,
+              } : {}),
+            };
+          })
+        )
+        .select('id, name, type');
+
+      if (createAccountsError) {
+        console.error('Save plan account creation error:', createAccountsError);
+        return NextResponse.json({ error: `Failed to create accounts: ${createAccountsError.message}` }, { status: 500 });
+      }
+
+      // "Saved so far" seeds a real opening ledger row on the new goal
+      // account, dated at onboarding — not a balance field mutation. This
+      // keeps computeGoalBalance() (Σ transfer transactions) the single
+      // source of truth for the balance instead of a second, driftable
+      // number. No chequing-side peer: this reflects money the household
+      // already had before Phare, not a transfer happening today.
+      const startingBalanceRows = (createdAccounts ?? [])
+        .filter((a) => a.type === 'savings')
+        .map((a) => ({ account: a, goal: goalsByName.get(a.name.trim().toLowerCase()) }))
+        .filter(({ goal }) => goal && (goal.savedSoFar ?? 0) > 0)
+        .map(({ account, goal }) => ({
+          household_id: householdId,
+          member_id: null,
+          category_id: null,
+          description: 'Starting balance / Solde initial',
+          amount: goal!.savedSoFar,
+          date: monthDate,
+          type: 'transfer' as const,
+          source: transactionSource,
+          account_id: account.id,
+          file_import_id: fileImportId,
+        }));
+
+      if (startingBalanceRows.length > 0) {
+        const { error: startingBalanceError } = await supabase.from('transactions').insert(startingBalanceRows);
+        if (startingBalanceError) {
+          console.error('Save plan starting-balance insert error:', startingBalanceError);
+          return NextResponse.json({ error: `Failed to seed goal starting balances: ${startingBalanceError.message}` }, { status: 500 });
+        }
+      }
     }
 
     // ----- Replace prior onboarding-plan-generated recurring items -----

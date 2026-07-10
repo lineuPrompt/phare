@@ -34,7 +34,18 @@ export type Plan = {
     targetAmount: number;
     monthlyContribution: number;
     onTrack: boolean;
-    estimatedDate: string;
+    // estimatedDate is YYYY-MM (code-computed goals) for template source, or
+    // free text for AI-suggested goals (calculated source) — PlanDisplay
+    // renders it as given either way.
+    estimatedDate: string | null;
+    // Present only for code-computed (template-source) goals — absent for
+    // AI-suggested (calculated-source) ones, which fall back to the plain
+    // on-track/behind rendering with no honest-alternative sentence.
+    hasTargetDate?: boolean;
+    targetDate?: string | null;
+    fundedAlready?: boolean;
+    pastDue?: boolean;
+    savedSoFar?: number;
   }[];
   topRecommendation: string;
 };

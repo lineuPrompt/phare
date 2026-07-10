@@ -205,7 +205,7 @@ function makeV3FixedExpenseRows(dataRows: unknown[][]): unknown[][] {
   ];
 }
 
-function buildWorkbook(incomeRows: unknown[][], fixedExpenseRows: unknown[][]): Buffer {
+function buildWorkbook(incomeRows: unknown[][], fixedExpenseRows: unknown[][], goalRows: unknown[][] = []): Buffer {
   const wb = XLSX.utils.book_new();
   const addSheet = (name: string, data: unknown[][] = []) => {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data as XLSX.CellObject[][], { cellDates: false }), name);
@@ -218,7 +218,12 @@ function buildWorkbook(incomeRows: unknown[][], fixedExpenseRows: unknown[][]): 
   addSheet('Variable Expenses', [[], [], [], ['Groceries', 800]]);
   // Annual Expenses: startRow=5, label=col0, annual=col1, dueMonth=col3
   addSheet('Annual Expenses', [[], [], [], [], [], ['Car Insurance', 1200, null, 'March']]);
-  addSheet('Goals');
+  // Goals: header rows 0-1, data from row index 2 (name col0, target col1, date col2, saved col3)
+  addSheet('Goals', [
+    ['GOALS / OBJECTIFS'],
+    ['Goal / Objectif', 'Target amount / Montant cible', 'Target date / Date cible', 'Saved so far / Épargné'],
+    ...goalRows,
+  ]);
 
   return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as ArrayBuffer);
 }
@@ -517,5 +522,61 @@ describe('parseTemplate — fixed-expense parsing (end-to-end)', () => {
 
     // 3250 + 758.33 + 595.83 + 120 = 4724.16
     expect(result.fixedExpenses.total).toBe(4724.16);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Goals sheet — target-date parsing (Bug 2: Excel serials were silently
+// dropped, leaving the AI to invent a date from nothing)
+// ---------------------------------------------------------------------------
+
+describe('Goals sheet parsing', () => {
+  it('parses an Excel date serial into a real date (the Disney/Brazil fixture bug)', () => {
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS, [
+      ['Theme Park trip', 6000, 46753, 0],
+    ]);
+    const result = parseTemplate(buf);
+    expect(result.goals).toHaveLength(1);
+    expect(result.goals[0]).toMatchObject({ targetDate: '2028-01-01', targetDateFlagged: false });
+    expect(result.goalDateFlaggedRows).toBe(0);
+  });
+
+  it('parses "September 2026"-style text into a real date', () => {
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS, [
+      ['Pay off credit line', 3000, 'September 2026', 500],
+    ]);
+    const result = parseTemplate(buf);
+    expect(result.goals[0]).toMatchObject({ targetDate: '2026-09-01', targetDateFlagged: false });
+  });
+
+  it('flags an unparseable, non-empty date rather than silently dropping it to blank', () => {
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS, [
+      ['Ambiguous goal', 1000, 'Jan-28', 0],
+    ]);
+    const result = parseTemplate(buf);
+    expect(result.goals[0].targetDate).toBeNull();
+    expect(result.goals[0].targetDateFlagged).toBe(true);
+    expect(result.goalDateFlaggedRows).toBe(1);
+  });
+
+  it('treats a genuinely blank date cell as dateless, not flagged', () => {
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS, [
+      ['No date yet', 1000, null, 0],
+    ]);
+    const result = parseTemplate(buf);
+    expect(result.goals[0]).toMatchObject({ targetDate: null, targetDateFlagged: false });
+    expect(result.goalDateFlaggedRows).toBe(0);
+  });
+
+  it('is unaffected by the presence of an extra "Monthly contribution" column (col 4)', () => {
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS, [
+      ['Disney', 6000, 46753, 0, 250],
+      ['Brazil', 3000, 47115, 0, null],
+    ]);
+    const result = parseTemplate(buf);
+    expect(result.isValidV3).toBe(true);
+    expect(result.goals).toHaveLength(2);
+    expect(result.goals[0].targetDate).toBe('2028-01-01');
+    expect(result.goals[1].targetDate).toBe('2028-12-28');
   });
 });

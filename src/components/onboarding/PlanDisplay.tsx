@@ -142,25 +142,55 @@ export default function PlanDisplay({
         <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
           <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>{t('plan.goals')}</h3>
           <div className="space-y-4">
-            {plan.goals.map((goal, i) => (
-              <div key={i} className="rounded-xl p-4" style={{ background: '#F0FDFD', border: '1px solid #D1FAE5' }}>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold" style={{ color: '#0F2044' }}>{goal.name}</p>
-                  <span className="px-3 py-1 rounded-full text-xs font-medium"
-                    style={{
-                      background: goal.onTrack ? '#DCFCE7' : '#FEF2F2',
-                      color: goal.onTrack ? '#16A34A' : '#DC2626',
-                    }}>
-                    {goal.onTrack ? t('plan.onTrack') : t('plan.behind')}
-                  </span>
+            {plan.goals.map((goal, i) => {
+              // hasTargetDate is only ever set for code-computed (template-
+              // source) goals — see goalHelpers.ts. AI-suggested (calculated-
+              // source) goals have no such flag and keep the plain rendering
+              // below, unchanged from before this fix.
+              const isCodeComputed = goal.hasTargetDate !== undefined;
+              const noDateGiven = isCodeComputed && !goal.hasTargetDate;
+              // Never show "On track" for a goal whose stated date the plan
+              // doesn't actually reach — that was the exact fabrication bug.
+              const showHonestAlternative = isCodeComputed && !noDateGiven && !goal.onTrack && !goal.fundedAlready;
+
+              return (
+                <div key={i} className="rounded-xl p-4" style={{ background: '#F0FDFD', border: '1px solid #D1FAE5' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-semibold" style={{ color: '#0F2044' }}>{goal.name}</p>
+                    {!noDateGiven && (
+                      <span className="px-3 py-1 rounded-full text-xs font-medium"
+                        style={{
+                          background: goal.fundedAlready ? '#DCFCE7' : goal.onTrack ? '#DCFCE7' : '#FEF2F2',
+                          color: goal.fundedAlready ? '#16A34A' : goal.onTrack ? '#16A34A' : '#DC2626',
+                        }}>
+                        {goal.fundedAlready ? t('plan.goalFunded') : goal.onTrack ? t('plan.onTrack') : t('plan.behind')}
+                      </span>
+                    )}
+                  </div>
+
+                  {noDateGiven ? (
+                    <div className="flex gap-6 text-sm">
+                      <span style={{ color: '#6B7280' }}>{formatCAD(goal.targetAmount)}</span>
+                      <span style={{ color: '#9CA3AF' }}>{t('plan.noTargetDate')}</span>
+                    </div>
+                  ) : showHonestAlternative ? (
+                    <p className="text-sm" style={{ color: '#DC2626' }}>
+                      {t('plan.notAchievable', {
+                        statedDate: goal.targetDate ? goal.targetDate.slice(0, 7) : '',
+                        amount: formatCAD(goal.monthlyContribution),
+                        estimatedDate: goal.estimatedDate ?? '',
+                      })}
+                    </p>
+                  ) : (
+                    <div className="flex gap-6 text-sm">
+                      <span style={{ color: '#6B7280' }}>{formatCAD(goal.targetAmount)}</span>
+                      <span style={{ color: '#2ABFBF' }}>{formatCAD(goal.monthlyContribution)}{t('plan.perMonth')}</span>
+                      <span style={{ color: '#6B7280' }}>{t('plan.estimatedDate')} {goal.estimatedDate}</span>
+                    </div>
+                  )}
                 </div>
-                <div className="flex gap-6 text-sm">
-                  <span style={{ color: '#6B7280' }}>{formatCAD(goal.targetAmount)}</span>
-                  <span style={{ color: '#2ABFBF' }}>{formatCAD(goal.monthlyContribution)}{t('plan.perMonth')}</span>
-                  <span style={{ color: '#6B7280' }}>{t('plan.estimatedDate')} {goal.estimatedDate}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

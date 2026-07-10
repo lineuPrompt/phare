@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { anthropic } from '@/lib/anthropic';
 import { dedupeSinkingFunds, assembleCalculatedBudget } from '@/lib/planHelpers';
+import { evaluateGoals, GoalResult } from '@/lib/goalHelpers';
+import { formatLocalDate } from '@/lib/dateHelpers';
 
 const SEED_CATEGORIES = [
   'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
@@ -35,9 +37,22 @@ export async function POST(request: NextRequest) {
     };
     let sinkingFundsFromData: { name: string; annualAmount: number; monthlyProvision: number; dueMonth: string }[] | null = null;
     let aiContext: string;
+    // Goals are code-computed for template source (real user-stated targets —
+    // "Code owns math" applies) and stay AI-suggested for calculated source
+    // (no real target data exists yet to violate; the AI is brainstorming
+    // ideas, not asserting facts about something the user actually asked for).
+    let computedGoals: GoalResult[] | null = null;
 
     if (body.source === 'template') {
       const p = body.parsed;
+      const today = formatLocalDate(new Date());
+      computedGoals = evaluateGoals(
+        (p.goals ?? []).map((g: { name: string; targetAmount: number; savedSoFar: number; targetDate: string | null }) => ({
+          name: g.name, targetAmount: g.targetAmount, savedSoFar: g.savedSoFar, targetDate: g.targetDate,
+        })),
+        p.summary.netCashFlow,
+        today
+      );
 
       // ----- TypeScript assembles the budget. Exact, instant. -----
       monthlyBudget = {
@@ -72,7 +87,7 @@ export async function POST(request: NextRequest) {
       aiContext = `Household info: ${JSON.stringify(p.household)}
 Net cash flow: $${p.summary.netCashFlow}/month (income $${p.summary.monthlyIncome}, expenses $${p.summary.monthlyExpenses}, savings $0 at plan creation)
 Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts; none exist yet)
-Their stated goals: ${JSON.stringify(p.goals)}
+Their goals — ALREADY evaluated in code, do not recompute or contradict these numbers, just narrate them naturally where relevant: ${JSON.stringify(computedGoals)}
 Their sinking funds (already set up): ${JSON.stringify(p.sinkingFunds.lines)}
 Expense lines: ${JSON.stringify([...p.fixedExpenses.lines, ...p.variableExpenses.lines].map((l: { label: string }) => l.label))}`;
     } else if (body.source === 'calculated') {
@@ -94,6 +109,13 @@ No goals or sinking funds were provided — suggest sinking funds based on the e
 
     // ----- Claude does ONLY the interpretive part, in the user's language -----
     const needsSinkingFunds = sinkingFundsFromData === null;
+    // Template-sourced goals are real user-stated targets — the contribution,
+    // on-track verdict, and dates are already computed above by evaluateGoals()
+    // (see goalHelpers.ts). The AI never sees a "goals" field to fill in for
+    // this source; it may only narrate the code-computed facts in aiContext.
+    // Calculated-source goals are AI-suggested ideas with no real target data
+    // behind them, so that path is unchanged.
+    const needsAIGoals = body.source !== 'template';
     const categoryList = SEED_CATEGORIES.join(', ');
 
     const prompt = `You are Phare, an AI financial coach for Canadian families. The numbers below are VERIFIED — computed in code from the family's data. Do not change or recalculate them.
@@ -103,7 +125,7 @@ ${aiContext}
 Write ALL text in ${lang}.
 
 Return ONLY valid JSON:
-{${needsSinkingFunds ? '"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],' : ''}"lineClassifications":[{"label":"","category":"","isFixed":true}],"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"topRecommendation":""}
+{${needsSinkingFunds ? '"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],' : ''}"lineClassifications":[{"label":"","category":"","isFixed":true}]${needsAIGoals ? ',"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}]' : ''},"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"topRecommendation":""}
 
 Rules:
 - All goal names, descriptions, and topRecommendation text in ${lang}.
@@ -113,7 +135,7 @@ Rules:
   - "isFixed": true if it is a fixed recurring bill paid every month (mortgage, rent, loan payment, insurance, daycare, utilities, phone, subscriptions); false if it is variable day-to-day spending (groceries, restaurants, gas, shopping).
 - Classify income lines too: category "Income", isFixed true.
 ${needsSinkingFunds ? '- Suggest 3-6 sinking funds for likely Canadian annual expenses inferred from the expense labels (property tax March & June in Quebec, car registration, back to school, income tax balance, Christmas).' : ''}
-- goals: ${body.source === 'template' ? 'assess THEIR stated goals — compute monthlyContribution as (target - saved) / months to target date, mark onTrack based on whether net cash flow covers it' : 'suggest 2-3 sensible goals based on their situation (emergency fund of 3 months expenses, RESP if children evident, debt payoff if debt evident)'}.
+${needsAIGoals ? '- goals: suggest 2-3 sensible goals based on their situation (emergency fund of 3 months expenses, RESP if children evident, debt payoff if debt evident).' : '- Their goals are already evaluated (contribution, on-track verdict, and dates are all real, code-computed numbers) — do not invent or restate goal figures anywhere; if you reference a goal in topRecommendation, use the exact numbers given.'}
 - Canadian context: RRSP reduces taxable income (flag Quebec resident + Ontario employer tax gap if household info shows it). RESP gives $500/yr CESG per child on $2,500 contributed. TFSA is ideal for sinking funds.
 - If net cash flow is negative, topRecommendation must address that first.
 - If no debt is evident, set debtPayoff to null.
@@ -159,7 +181,9 @@ ${needsSinkingFunds ? '- Suggest 3-6 sinking funds for likely Canadian annual ex
       seedCategories: SEED_CATEGORIES,
       sinkingFunds: finalSinkingFunds,
       debtPayoff: aiPart.debtPayoff ?? null,
-      goals: aiPart.goals ?? [],
+      // Template source: code-computed, never the AI's. Calculated source:
+      // AI-suggested ideas, unchanged.
+      goals: computedGoals ?? aiPart.goals ?? [],
       topRecommendation: aiPart.topRecommendation ?? '',
     };
 

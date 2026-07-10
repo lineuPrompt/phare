@@ -34,6 +34,7 @@
 
 import * as XLSX from 'xlsx';
 import { monthlyEquivalent, IncomeFrequency } from './incomeHelpers';
+import { parseGoalTargetDate } from './goalHelpers';
 
 export interface ParsedLine {
   label: string;
@@ -53,7 +54,8 @@ export interface SinkingFundLine {
 export interface GoalLine {
   name: string;
   targetAmount: number;
-  targetDate: string;
+  targetDate: string | null;    // normalized YYYY-MM-DD — null when blank or unparseable
+  targetDateFlagged: boolean;   // true only when a non-empty cell couldn't be parsed
   savedSoFar: number;
 }
 
@@ -62,6 +64,7 @@ export interface TemplateParseResult {
   isValidV3: boolean;     // both Frequency columns are present — false means refuse, never partially parse
   incomeSkippedRows: number;         // rows with an unrecognised frequency string
   fixedExpenseSkippedRows: number;   // rows with an unrecognised, non-blank frequency string
+  goalDateFlaggedRows: number;       // goal rows with a target-date cell that couldn't be parsed
   household: Record<string, string>;
   income: { lines: ParsedLine[]; total: number };
   fixedExpenses: { lines: ParsedLine[]; total: number };
@@ -371,18 +374,25 @@ export function parseTemplate(buffer: Buffer): TemplateParseResult {
   }
 
   // --- Goals: target col 1, date col 2, saved col 3, from row index 2 ---
+  // Col 4 ("Monthly contribution") is not read here — it's a legacy column
+  // left over for founder cleanup and has no bearing on v3 detection, which
+  // only ever inspects the Income/Fixed-Expenses Frequency columns.
   const goalRows = sheetRows(workbook.Sheets['Goals']);
   const goals: GoalLine[] = [];
+  let goalDateFlaggedRows = 0;
   for (let i = 2; i < goalRows.length; i++) {
     const row = goalRows[i];
     if (!row) continue;
     const name = row[0];
     const target = row[1];
     if (typeof name === 'string' && name.trim() && typeof target === 'number' && target !== 0) {
+      const { date: targetDate, flagged } = parseGoalTargetDate(row[2]);
+      if (flagged) goalDateFlaggedRows++;
       goals.push({
         name: name.trim(),
         targetAmount: target,
-        targetDate: typeof row[2] === 'string' ? (row[2] as string).trim() : '',
+        targetDate,
+        targetDateFlagged: flagged,
         savedSoFar: typeof row[3] === 'number' ? (row[3] as number) : 0,
       });
     }
@@ -400,6 +410,7 @@ export function parseTemplate(buffer: Buffer): TemplateParseResult {
     isValidV3: true,
     incomeSkippedRows,
     fixedExpenseSkippedRows,
+    goalDateFlaggedRows,
     household,
     income: { lines: income, total: incomeTotal },
     fixedExpenses: { lines: fixed, total: fixedTotal },
@@ -420,6 +431,7 @@ function emptyResult(isTemplate: boolean, isValidV3: boolean): TemplateParseResu
     isValidV3,
     incomeSkippedRows: 0,
     fixedExpenseSkippedRows: 0,
+    goalDateFlaggedRows: 0,
     household: {},
     income: { lines: [], total: 0 },
     fixedExpenses: { lines: [], total: 0 },

@@ -377,3 +377,159 @@ describe('POST /api/save-plan — expense member attribution', () => {
     expect(json.unmatchedMembers).toEqual([{ label: 'Salary', attemptedMember: 'Marc' }]);
   });
 });
+
+describe('POST /api/save-plan — goal accounts (Bug 2: target date persistence + starting-balance seeding)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('persists goal_target_date and seeds exactly one "Starting balance" transfer transaction for savedSoFar', async () => {
+    const currentMonth = formatLocalMonth(new Date());
+    const monthDate = `${currentMonth}-01`;
+
+    const { client, calls } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      household_members: [
+        { data: { id: 'mem-1' }, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [
+        { data: [{ id: 'chq-1', type: 'chequing', name: 'Chequing', file_import_id: null }], error: null },
+        { data: [{ id: 'goal-1', name: 'Emergency Fund', type: 'savings' }], error: null }, // insert().select() for the new goal account
+      ],
+      recurring_items: [
+        { count: 0, error: null },
+        { data: [], error: null },
+      ],
+      budgets: [
+        { count: 0, error: null },
+        { error: null },
+      ],
+      sinking_funds: [
+        { count: 0, error: null },
+        { error: null },
+      ],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      categories: [
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ id: `cat-${name.toLowerCase()}`, name })), error: null },
+      ],
+      transactions: [
+        { error: null }, // the starting-balance insert
+      ],
+      conversations: [{ error: null }],
+      events: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+
+    // No income/expense categories at all — this test is scoped to goal
+    // account creation and starting-balance seeding, not the ledger routing
+    // already covered by the other describe blocks in this file.
+    const body = {
+      plan: {
+        monthlyBudget: { categories: [] },
+        sinkingFunds: [],
+        goals: [{ name: 'Emergency Fund', targetAmount: 5000, targetDate: '2027-01-01', savedSoFar: 2000 }],
+        topRecommendation: 'Keep it up.',
+      },
+      reviewText: 'Looking good.',
+      locale: 'en',
+      cardNames: [],
+      fileMeta: null,
+    };
+
+    const res = await POST(new Request('http://localhost/api/save-plan', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.saved).toBe(true);
+
+    const accountInserts = calls.filter((c) => c.table === 'accounts' && c.method === 'insert');
+    expect(accountInserts).toHaveLength(1);
+    const accountRow = (accountInserts[0].args[0] as Record<string, unknown>[])[0];
+    expect(accountRow).toMatchObject({
+      name: 'Emergency Fund', type: 'savings', goal_target: 5000, goal_target_date: '2027-01-01',
+    });
+
+    // A real ledger row, not a balance mutation — one transaction, on the
+    // new goal account, dated at onboarding.
+    const transactionInserts = calls.filter((c) => c.table === 'transactions' && c.method === 'insert');
+    expect(transactionInserts).toHaveLength(1);
+    const seededRows = transactionInserts[0].args[0] as Record<string, unknown>[];
+    expect(seededRows).toHaveLength(1);
+    expect(seededRows[0]).toMatchObject({
+      account_id: 'goal-1',
+      amount: 2000,
+      type: 'transfer',
+      description: 'Starting balance / Solde initial',
+      date: monthDate,
+    });
+  });
+
+  it('does not seed a starting-balance transaction when savedSoFar is zero or absent', async () => {
+    const { client, calls } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      household_members: [
+        { data: { id: 'mem-1' }, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [
+        { data: [{ id: 'chq-1', type: 'chequing', name: 'Chequing', file_import_id: null }], error: null },
+        { data: [{ id: 'goal-1', name: 'New Car', type: 'savings' }], error: null },
+      ],
+      recurring_items: [
+        { count: 0, error: null },
+        { data: [], error: null },
+      ],
+      budgets: [
+        { count: 0, error: null },
+        { error: null },
+      ],
+      sinking_funds: [
+        { count: 0, error: null },
+        { error: null },
+      ],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      categories: [
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ id: `cat-${name.toLowerCase()}`, name })), error: null },
+      ],
+      conversations: [{ error: null }],
+      events: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+
+    const body = {
+      plan: {
+        monthlyBudget: { categories: [] },
+        sinkingFunds: [],
+        goals: [{ name: 'New Car', targetAmount: 8000, targetDate: null, savedSoFar: 0 }],
+        topRecommendation: 'Keep it up.',
+      },
+      reviewText: 'Looking good.',
+      locale: 'en',
+      cardNames: [],
+      fileMeta: null,
+    };
+
+    const res = await POST(new Request('http://localhost/api/save-plan', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }));
+
+    expect(res.status).toBe(200);
+    const transactionInserts = calls.filter((c) => c.table === 'transactions' && c.method === 'insert');
+    expect(transactionInserts).toHaveLength(0);
+  });
+});

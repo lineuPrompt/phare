@@ -37,6 +37,7 @@ export default function UploadPage() {
   // Plausibility check
   const [plausibilityResult, setPlausibilityResult] = useState<Extract<PlausibilityResult, { ok: false }> | null>(null);
   const [skippedIncomeRows, setSkippedIncomeRows] = useState(0);
+  const [skippedGoalDateRows, setSkippedGoalDateRows] = useState(0);
   // The calculated body built during submitForm (or the template planBody), held until plausibility is confirmed.
   const [pendingCalculated, setPendingCalculated] = useState<Record<string, unknown> | null>(null);
 
@@ -213,11 +214,13 @@ export default function UploadPage() {
       statedCombinedAnnual: null,
     });
     const skipped = parsed.incomeSkippedRows ?? 0;
+    const skippedGoalDates = parsed.goalDateFlaggedRows ?? 0;
     const planBody: Record<string, unknown> = { source: 'template', parsed };
 
-    if (!guard.ok || skipped > 0) {
+    if (!guard.ok || skipped > 0 || skippedGoalDates > 0) {
       setPendingCalculated(planBody);
       setSkippedIncomeRows(skipped);
+      setSkippedGoalDateRows(skippedGoalDates);
       if (!guard.ok) setPlausibilityResult(guard);
       setStatus('plausibility_check');
       return;
@@ -381,6 +384,7 @@ export default function UploadPage() {
     setPlausibilityResult(null);
     setPendingCalculated(null);
     setSkippedIncomeRows(0);
+    setSkippedGoalDateRows(0);
     setStatus('accounts');
   }, [pendingCalculated]);
 
@@ -389,6 +393,7 @@ export default function UploadPage() {
     setPlausibilityResult(null);
     setPendingCalculated(null);
     setSkippedIncomeRows(0);
+    setSkippedGoalDateRows(0);
     // Template uploads go back to idle (re-upload); manual form goes back to form.
     setStatus(pendingCalculated && 'parsed' in (pendingCalculated as Record<string, unknown>) ? 'idle' : 'form');
   }, [pendingCalculated]);
@@ -478,10 +483,11 @@ export default function UploadPage() {
         )}
 
         {/* Plausibility check / skipped-row warning step */}
-        {status === 'plausibility_check' && (plausibilityResult || skippedIncomeRows > 0) && (
+        {status === 'plausibility_check' && (plausibilityResult || skippedIncomeRows > 0 || skippedGoalDateRows > 0) && (
           <PlausibilityCheck
             result={plausibilityResult}
             skippedIncomeRows={skippedIncomeRows}
+            skippedGoalDateRows={skippedGoalDateRows}
             onConfirm={confirmPlausibility}
             onCorrect={rejectPlausibility}
             t={t}
@@ -544,12 +550,14 @@ export default function UploadPage() {
 function PlausibilityCheck({
   result,
   skippedIncomeRows,
+  skippedGoalDateRows,
   onConfirm,
   onCorrect,
   t,
 }: {
   result: Extract<PlausibilityResult, { ok: false }> | null;
   skippedIncomeRows: number;
+  skippedGoalDateRows: number;
   onConfirm: () => void;
   onCorrect: () => void;
   t: ReturnType<typeof useTranslations<'upload'>>;
@@ -565,6 +573,13 @@ function PlausibilityCheck({
             <div className="rounded-xl p-4" style={{ background: 'white', border: '1px solid #FDE68A' }}>
               <p style={{ color: '#374151' }}>
                 {t('plausibility.skippedIncomeRows', { count: skippedIncomeRows })}
+              </p>
+            </div>
+          )}
+          {skippedGoalDateRows > 0 && (
+            <div className="rounded-xl p-4" style={{ background: 'white', border: '1px solid #FDE68A' }}>
+              <p style={{ color: '#374151' }}>
+                {t('plausibility.skippedGoalDateRows', { count: skippedGoalDateRows })}
               </p>
             </div>
           )}
