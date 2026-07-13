@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { dedupeSinkingFunds, assembleCalculatedBudget } from '../planHelpers';
+import { dedupeSinkingFunds, assembleCalculatedBudget, hasNonMonthlyLines, buildCalculatedFromFormLines } from '../planHelpers';
+import { runPlausibilityGuard } from '../plausibilityGuard';
 
 describe('dedupeSinkingFunds', () => {
   it('removes an expense category that matches a sinking fund', () => {
@@ -168,5 +169,125 @@ describe('assembleCalculatedBudget', () => {
       { name: 'Salary', budgeted: 5000, type: 'income' },
       { name: 'Rent', budgeted: 2000, type: 'expense' },
     ]);
+  });
+});
+
+describe('hasNonMonthlyLines', () => {
+  it('is true when an income category has a non-monthly frequency', () => {
+    const categories = [
+      { type: 'income', frequency: 'biweekly' as const },
+      { type: 'expense', frequency: 'monthly' as const },
+    ];
+    expect(hasNonMonthlyLines(categories, 'income')).toBe(true);
+    expect(hasNonMonthlyLines(categories, 'expense')).toBe(false);
+  });
+
+  it('is false when every line of that type is monthly or has no frequency at all', () => {
+    const categories = [
+      { type: 'income', frequency: 'monthly' as const },
+      { type: 'income' }, // no frequency field — a plain, exact monthly line
+      { type: 'expense', frequency: 'monthly' as const },
+    ];
+    expect(hasNonMonthlyLines(categories, 'income')).toBe(false);
+    expect(hasNonMonthlyLines(categories, 'expense')).toBe(false);
+  });
+
+  it('is false for an empty category list', () => {
+    expect(hasNonMonthlyLines([], 'income')).toBe(false);
+  });
+
+  it('only counts non-monthly lines of the requested type — an expense-only deficit does not flag the income tile', () => {
+    const categories = [
+      { type: 'income', frequency: 'monthly' as const },
+      { type: 'expense', frequency: 'biweekly' as const },
+    ];
+    expect(hasNonMonthlyLines(categories, 'income')).toBe(false);
+    expect(hasNonMonthlyLines(categories, 'expense')).toBe(true);
+  });
+});
+
+describe('buildCalculatedFromFormLines', () => {
+  it('converts a bi-weekly mortgage to its monthly equivalent, carrying rawAmount + frequency', () => {
+    const result = buildCalculatedFromFormLines(
+      [{ label: 'Salary', amount: '5000', frequency: 'monthly' }],
+      [{ label: 'Mortgage', amount: '3000', frequency: 'biweekly' }],
+    );
+    expect(result.income).toEqual({
+      detected: true,
+      lines: [{ label: 'Salary', amount: 5000, rawAmount: 5000, frequency: 'monthly' }],
+      total: 5000,
+    });
+    expect(result.expenses.lines).toEqual([
+      { label: 'Mortgage', amount: 6500, rawAmount: 3000, frequency: 'biweekly' },
+    ]);
+    expect(result.expenses.total).toBe(6500);
+    expect(result.netCashFlow).toBe(-1500);
+  });
+
+  it('ignores blank lines (no label, no amount)', () => {
+    const result = buildCalculatedFromFormLines(
+      [{ label: '', amount: '', frequency: 'monthly' }],
+      [{ label: '', amount: '', frequency: 'monthly' }],
+    );
+    expect(result.income).toEqual({ detected: false, lines: [], total: 0 });
+    expect(result.expenses).toEqual({ detected: false, lines: [], total: 0 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Manual-path plausibility guard — the founder's live-tested deficit scenario
+// ($5,000 income, a $6,500/mo-equivalent bi-weekly mortgage) must trigger the
+// exact same deficit-must-be-financed check the template path already has,
+// wired through the identical buildCalculatedFromFormLines() → runPlausibilityGuard()
+// path submitForm() calls in upload/page.tsx.
+// ---------------------------------------------------------------------------
+
+describe('manual-path plausibility guard (buildCalculatedFromFormLines + runPlausibilityGuard)', () => {
+  it('a structural deficit with no debt-servicing line fires the guard', () => {
+    const calculated = buildCalculatedFromFormLines(
+      [{ label: 'Salary', amount: '5000', frequency: 'monthly' }],
+      [{ label: 'Mortgage', amount: '3000', frequency: 'biweekly' }], // $6,500/mo-equivalent
+    );
+    const guard = runPlausibilityGuard({
+      computedMonthlyIncome: calculated.income.total,
+      netCashFlow: calculated.netCashFlow,
+      expenseLines: calculated.expenses.lines,
+      statedCombinedAnnual: null,
+    });
+    expect(guard.ok).toBe(false);
+    if (!guard.ok) {
+      expect(guard.issues).toContainEqual({ prong: 'deficit_not_financed', monthlyDeficit: 1500 });
+    }
+  });
+
+  it('a balanced manual entry produces no friction', () => {
+    const calculated = buildCalculatedFromFormLines(
+      [{ label: 'Salary', amount: '5000', frequency: 'monthly' }],
+      [{ label: 'Rent', amount: '2000', frequency: 'monthly' }],
+    );
+    const guard = runPlausibilityGuard({
+      computedMonthlyIncome: calculated.income.total,
+      netCashFlow: calculated.netCashFlow,
+      expenseLines: calculated.expenses.lines,
+      statedCombinedAnnual: null,
+    });
+    expect(guard).toEqual({ ok: true });
+  });
+
+  it('a deficit serviced by a visible credit line is not flagged — the shortfall is explained', () => {
+    const calculated = buildCalculatedFromFormLines(
+      [{ label: 'Salary', amount: '5000', frequency: 'monthly' }],
+      [
+        { label: 'Mortgage', amount: '3000', frequency: 'biweekly' },
+        { label: 'Line of credit minimum payment', amount: '200', frequency: 'monthly' },
+      ],
+    );
+    const guard = runPlausibilityGuard({
+      computedMonthlyIncome: calculated.income.total,
+      netCashFlow: calculated.netCashFlow,
+      expenseLines: calculated.expenses.lines,
+      statedCombinedAnnual: null,
+    });
+    expect(guard).toEqual({ ok: true });
   });
 });

@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
 import { Plan, formatCAD } from './types';
+import { hasNonMonthlyLines } from '@/lib/planHelpers';
 
 export default function PlanDisplay({
   plan,
@@ -46,6 +47,13 @@ export default function PlanDisplay({
 }) {
   const t = useTranslations('upload');
 
+  // A tile's total is an approximation — not an exact sum of real monthly
+  // figures — the moment any contributing line has a non-monthly cadence
+  // (its share was converted via monthlyEquivalent()). That must say so;
+  // savings is always exact ($0 or real transfers only, never rawAmount).
+  const incomeIsEquivalent = hasNonMonthlyLines(plan.monthlyBudget.categories, 'income');
+  const expensesAreEquivalent = hasNonMonthlyLines(plan.monthlyBudget.categories, 'expense');
+
   return (
     <div className="space-y-8">
       {/* Top Recommendation */}
@@ -61,11 +69,15 @@ export default function PlanDisplay({
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="rounded-xl p-4" style={{ background: '#F0FDFD' }}>
             <p className="text-sm" style={{ color: '#6B7280' }}>{t('plan.income')}</p>
-            <p className="text-xl font-bold" style={{ color: '#16A34A' }}>{formatCAD(plan.monthlyBudget.totalIncome)}</p>
+            <p className="text-xl font-bold" style={{ color: '#16A34A' }}>
+              {incomeIsEquivalent ? t('plan.monthlyEquivalent', { amount: formatCAD(plan.monthlyBudget.totalIncome) }) : formatCAD(plan.monthlyBudget.totalIncome)}
+            </p>
           </div>
           <div className="rounded-xl p-4" style={{ background: '#FEF2F2' }}>
             <p className="text-sm" style={{ color: '#6B7280' }}>{t('plan.expenses')}</p>
-            <p className="text-xl font-bold" style={{ color: '#DC2626' }}>{formatCAD(plan.monthlyBudget.totalExpenses)}</p>
+            <p className="text-xl font-bold" style={{ color: '#DC2626' }}>
+              {expensesAreEquivalent ? t('plan.monthlyEquivalent', { amount: formatCAD(plan.monthlyBudget.totalExpenses) }) : formatCAD(plan.monthlyBudget.totalExpenses)}
+            </p>
           </div>
           <div className="rounded-xl p-4" style={{ background: '#F0FDF4' }}>
             <p className="text-sm" style={{ color: '#6B7280' }}>{t('plan.savings')}</p>

@@ -11,7 +11,8 @@ import PlanDisplay from '@/components/onboarding/PlanDisplay';
 import AnchorDateStep, { NeedsPayDateItem } from '@/components/onboarding/AnchorDateStep';
 import MemberConfirmStep from '@/components/onboarding/MemberConfirmStep';
 import { Plan, FormLine, IncomeFormLine } from '@/components/onboarding/types';
-import { monthlyEquivalent, collectUnresolvedMemberNames } from '@/lib/incomeHelpers';
+import { collectUnresolvedMemberNames } from '@/lib/incomeHelpers';
+import { buildCalculatedFromFormLines } from '@/lib/planHelpers';
 import { dropResolvedItems } from '@/lib/anchorDateHelpers';
 import { runPlausibilityGuard, PlausibilityResult } from '@/lib/plausibilityGuard';
 import { TemplateParseResult } from '@/lib/templateParser';
@@ -311,43 +312,16 @@ export default function UploadPage() {
    * non-monthly lines a real cadence and the same anchor-step treatment a
    * template row gets, instead of collapsing everyone to a monthly lump.
    * Manual and template must produce indistinguishable ledgers.
+   *
+   * The actual computation is buildCalculatedFromFormLines() in
+   * planHelpers.ts — extracted to a pure function so the plausibility-guard
+   * wiring below can be tested without a .tsx test (this codebase's
+   * convention: no component tests, UI decision logic lives in testable .ts).
    */
-  const buildCalculated = useCallback(() => {
-    const incomeLines = formIncome
-      .filter((l) => l.label.trim() && l.amount)
-      .map((l) => {
-        const rawAmount = parseFloat(l.amount);
-        return {
-          label: l.label.trim(),
-          amount: monthlyEquivalent(rawAmount, l.frequency),
-          rawAmount,
-          frequency: l.frequency,
-        };
-      });
-
-    const expenseLines = formExpenses
-      .filter((l) => l.label.trim() && l.amount)
-      .map((l) => {
-        const rawAmount = parseFloat(l.amount);
-        return {
-          label: l.label.trim(),
-          amount: monthlyEquivalent(rawAmount, l.frequency),
-          rawAmount,
-          frequency: l.frequency,
-        };
-      });
-
-    const incomeTotal = incomeLines.reduce((s, l) => s + l.amount, 0);
-    const expenseTotal = expenseLines.reduce((s, l) => s + l.amount, 0);
-
-    return {
-      income: { detected: incomeLines.length > 0, lines: incomeLines, total: Math.round(incomeTotal * 100) / 100 },
-      expenses: { detected: expenseLines.length > 0, lines: expenseLines, total: Math.round(expenseTotal * 100) / 100 },
-      netCashFlow: Math.round((incomeTotal - expenseTotal) * 100) / 100,
-      excludedLines: [],
-      confidence: 'high',
-    };
-  }, [formIncome, formExpenses]);
+  const buildCalculated = useCallback(
+    () => buildCalculatedFromFormLines(formIncome, formExpenses),
+    [formIncome, formExpenses]
+  );
 
   const submitForm = useCallback(async () => {
     setFormSubmitting(true);

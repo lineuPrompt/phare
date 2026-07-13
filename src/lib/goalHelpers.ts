@@ -110,6 +110,47 @@ export function requiredMonthlyContribution(
   };
 }
 
+// A Goals-sheet row whose name matches one of these (bilingual, substring) is
+// a debt-payoff line, not a savings goal — it gets its own debtPayoff card
+// instead of appearing twice (once as a goal, once as debt). This is the only
+// signal available in the template (there is no separate "type" column), so
+// it is a name match, same tier as the income-Member resolution elsewhere —
+// never assumed present, never silently guessed beyond this explicit list.
+const DEBT_GOAL_KEYWORDS = [
+  'pay off', 'payoff', 'credit line', 'credit card', 'loan', 'debt',
+  'rembourser', 'marge', 'dette', 'prêt', 'carte de crédit',
+];
+
+export function isDebtGoalName(name: string): boolean {
+  const low = name.toLowerCase();
+  return DEBT_GOAL_KEYWORDS.some((k) => low.includes(k));
+}
+
+export type DebtPayoffResult = { description: string; targetDate: string; monthlyPayment: number };
+
+/**
+ * The debtPayoff card, entirely code-computed from the debt goal's own
+ * parsed target date and amount — same requiredMonthlyContribution used for
+ * every other goal, no separate AI math. Returns null whenever there is
+ * nothing honest to show as a live payoff plan: no debt goal identified, no
+ * usable target date, already paid off, or the date has already passed —
+ * matching the previous "if no debt is evident, set debtPayoff to null"
+ * intent, now a code decision instead of an AI guess.
+ */
+export function computeDebtPayoff(
+  debtGoal: { name: string; targetAmount: number; savedSoFar: number; targetDate: string | null } | undefined,
+  today: string
+): DebtPayoffResult | null {
+  if (!debtGoal) return null;
+  const contribution = requiredMonthlyContribution(debtGoal.targetAmount, debtGoal.savedSoFar, debtGoal.targetDate, today);
+  if (contribution.status !== 'ok') return null;
+  return {
+    description: debtGoal.name,
+    targetDate: debtGoal.targetDate!.slice(0, 7),
+    monthlyPayment: contribution.monthlyRequired,
+  };
+}
+
 /**
  * The month a goal would actually be reached at a given monthly capacity —
  * the honest alternative to a stated date the plan can't support. null

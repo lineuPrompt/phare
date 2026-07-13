@@ -213,6 +213,7 @@
       "goals": "Vos objectifs",
       "onTrack": "En bonne voie",
       "behind": "En retard",
+      "monthlyEquivalent": "≈ {amount}/mois équivalent",
       "goalFunded": "Atteint",
       "goalsEmpty": "Vous n'avez pas encore défini d'objectifs — ajoutez-les sur la page Objectifs.",
       "sinkingFundsEmpty": "Vous n'avez pas encore de fonds de prévoyance — vous pouvez en ajouter à tout moment, au fil des dépenses annuelles.",

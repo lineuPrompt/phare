@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { anthropic } from '@/lib/anthropic';
 import { dedupeSinkingFunds, assembleCalculatedBudget } from '@/lib/planHelpers';
-import { evaluateGoals, GoalResult } from '@/lib/goalHelpers';
+import { evaluateGoals, GoalResult, isDebtGoalName, computeDebtPayoff, DebtPayoffResult } from '@/lib/goalHelpers';
 import { formatLocalDate } from '@/lib/dateHelpers';
 
 const SEED_CATEGORIES = [
@@ -42,17 +42,21 @@ export async function POST(request: NextRequest) {
     // (no real target data exists yet to violate; the AI is brainstorming
     // ideas, not asserting facts about something the user actually asked for).
     let computedGoals: GoalResult[] | null = null;
+    // debtPayoff joins the code-owned side too — computed from the debt
+    // goal's own parsed target date/amount via the same requiredMonthlyContribution
+    // every other goal uses. Never AI-emitted, for either source.
+    let computedDebtPayoff: DebtPayoffResult | null = null;
 
     if (body.source === 'template') {
       const p = body.parsed;
       const today = formatLocalDate(new Date());
-      computedGoals = evaluateGoals(
-        (p.goals ?? []).map((g: { name: string; targetAmount: number; savedSoFar: number; targetDate: string | null }) => ({
-          name: g.name, targetAmount: g.targetAmount, savedSoFar: g.savedSoFar, targetDate: g.targetDate,
-        })),
-        p.summary.netCashFlow,
-        today
-      );
+      const rawGoals: { name: string; targetAmount: number; savedSoFar: number; targetDate: string | null }[] = p.goals ?? [];
+      // The debt-payoff line (if any) gets its own card, not a duplicate goal
+      // card — pulled out before the rest go through evaluateGoals().
+      const debtGoalLine = rawGoals.find((g) => isDebtGoalName(g.name));
+      const nonDebtGoals = rawGoals.filter((g) => g !== debtGoalLine);
+      computedDebtPayoff = computeDebtPayoff(debtGoalLine, today);
+      computedGoals = evaluateGoals(nonDebtGoals, p.summary.netCashFlow, today);
 
       // ----- TypeScript assembles the budget. Exact, instant. -----
       monthlyBudget = {
@@ -88,6 +92,7 @@ export async function POST(request: NextRequest) {
 Net cash flow: $${p.summary.netCashFlow}/month (income $${p.summary.monthlyIncome}, expenses $${p.summary.monthlyExpenses}, savings $0 at plan creation)
 Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts; none exist yet)
 Their goals — ALREADY evaluated in code, do not recompute or contradict these numbers, just narrate them naturally where relevant: ${JSON.stringify(computedGoals)}
+Their debt payoff — ALREADY evaluated in code (null means no debt evident or nothing computable), do not recompute or contradict: ${JSON.stringify(computedDebtPayoff)}
 Their sinking funds (already set up): ${JSON.stringify(p.sinkingFunds.lines)}
 Expense lines: ${JSON.stringify([...p.fixedExpenses.lines, ...p.variableExpenses.lines].map((l: { label: string }) => l.label))}`;
     } else if (body.source === 'calculated') {
@@ -112,15 +117,14 @@ This family entered ONLY these income and expense lines. They have NOT set any s
     // goal cards, debt-payoff cards. Those come from user input or code only:
     //   - sinking funds: from the template's Annual Expenses sheet
     //     (sinkingFundsFromData) or none at all. The AI never emits them.
-    //   - goals: template → evaluateGoals() (code); calculated → none. The AI
-    //     never emits them either way.
-    //   - debtPayoff: template only (a card with a real target/payment the AI
-    //     derives from THEIR stated debt). Calculated source has no such
-    //     structured input, so no card — any debt advice goes in prose.
-    // For the calculated (manual-form) source the AI returns ONLY line
-    // classifications and prose; every structured section is user-derived or
-    // empty. Its suggestions live in topRecommendation / the monthly review,
-    // framed as suggestions, never as rows with computed amounts.
+    //   - goals: template → evaluateGoals() (code); calculated → none.
+    //   - debtPayoff: template → computeDebtPayoff() (code), from the debt
+    //     goal's own parsed target date/amount; calculated → always null (no
+    //     structured debt input exists on that path).
+    // The AI's JSON request has NO slot for any of these, for either source —
+    // it returns ONLY line classifications and prose. Suggestions live in
+    // topRecommendation / the monthly review, framed as suggestions, never as
+    // rows or cards with computed amounts.
     const isTemplate = body.source === 'template';
     const categoryList = SEED_CATEGORIES.join(', ');
 
@@ -131,7 +135,7 @@ ${aiContext}
 Write ALL text in ${lang}.
 
 Return ONLY valid JSON:
-{"lineClassifications":[{"label":"","category":"","isFixed":true}]${isTemplate ? ',"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0}' : ''},"topRecommendation":""}
+{"lineClassifications":[{"label":"","category":"","isFixed":true}],"topRecommendation":""}
 
 Rules:
 - All descriptions and topRecommendation text in ${lang}.
@@ -140,8 +144,8 @@ Rules:
   - "category": which ONE of these fits best: ${categoryList}. Use the English category name exactly as written here.
   - "isFixed": true if it is a fixed recurring bill paid every month (mortgage, rent, loan payment, insurance, daycare, utilities, phone, subscriptions); false if it is variable day-to-day spending (groceries, restaurants, gas, shopping).
 - Classify income lines too: category "Income", isFixed true.
-- Do NOT output any sinking funds or goals as structured data. If you want to suggest one, put it in topRecommendation as a suggestion phrased as a suggestion ("Consider…"), never as a fund/goal they already have and never with a monthly amount presented as theirs.
-${isTemplate ? '- Their goals are already evaluated (contribution, on-track verdict, and dates are all real, code-computed numbers) — do not invent or restate goal figures anywhere; if you reference a goal in topRecommendation, use the exact numbers given.\n- debtPayoff: derive from THEIR stated debt only. If no debt is evident, set debtPayoff to null.' : ''}
+- Do NOT output any sinking funds, goals, or debt payoff as structured data — there is no field for them in the JSON above. If you want to suggest one, put it in topRecommendation as a suggestion phrased as a suggestion ("Consider…"), never as a fund/goal/debt-plan they already have and never with a monthly amount presented as theirs.
+${isTemplate ? '- Their goals and debt payoff are already evaluated (contribution, on-track verdict, and dates are all real, code-computed numbers) — do not invent or restate any of those figures anywhere; if you reference one in topRecommendation, use the exact numbers given.' : ''}
 - Canadian context: RRSP reduces taxable income (flag Quebec resident + Ontario employer tax gap if household info shows it). RESP gives $500/yr CESG per child on $2,500 contributed. TFSA is ideal for sinking funds.
 - If net cash flow is negative, topRecommendation must address that first.
 - topRecommendation: one specific sentence with a dollar amount.`;
@@ -187,9 +191,9 @@ ${isTemplate ? '- Their goals are already evaluated (contribution, on-track verd
       monthlyBudget: { ...monthlyBudget, categories: classifiedCategories },
       seedCategories: SEED_CATEGORIES,
       sinkingFunds: finalSinkingFunds,
-      // debtPayoff card is template-only — a structured object the AI may only
-      // build from THEIR stated debt. Calculated source never gets one.
-      debtPayoff: isTemplate ? (aiPart.debtPayoff ?? null) : null,
+      // Code-computed by computeDebtPayoff() (template) or null (calculated) —
+      // aiPart is never consulted for this, mirroring goals/sinking funds.
+      debtPayoff: computedDebtPayoff,
       // Template source: code-computed by evaluateGoals(). Calculated source:
       // empty — goals are user-entered or absent, never AI-fabricated. (When
       // manual entry later captures target dates, they flow through

@@ -8,6 +8,8 @@ import {
   requiredMonthlyContribution,
   achievableMonth,
   evaluateGoals,
+  isDebtGoalName,
+  computeDebtPayoff,
 } from '../goalHelpers';
 
 describe('monthsBetween', () => {
@@ -189,5 +191,51 @@ describe('evaluateGoals', () => {
     expect(g.pastDue).toBe(true);
     expect(g.onTrack).toBe(false);
     expect(g.estimatedDate).toBe('2026-12'); // ceil(1000/200)=5 months from July 2026
+  });
+});
+
+describe('isDebtGoalName', () => {
+  it('matches the founder fixture\'s bilingual debt goal name', () => {
+    expect(isDebtGoalName('Pay off credit line / Rembourser marge')).toBe(true);
+  });
+  it('matches a plain French name via keyword alone', () => {
+    expect(isDebtGoalName('Rembourser ma dette')).toBe(true);
+  });
+  it('does not match an ordinary savings goal', () => {
+    expect(isDebtGoalName('Theme Park trip')).toBe(false);
+    expect(isDebtGoalName('Europe trip')).toBe(false);
+    expect(isDebtGoalName('Emergency fund')).toBe(false);
+  });
+});
+
+describe('computeDebtPayoff', () => {
+  const today = '2026-07-10';
+
+  it('computes the same monthly figure requiredMonthlyContribution would, for the debt goal alone', () => {
+    const debtGoal = { name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 0, targetDate: '2026-09-01' };
+    const result = computeDebtPayoff(debtGoal, today);
+    const direct = requiredMonthlyContribution(5000, 0, '2026-09-01', today);
+    expect(direct.status).toBe('ok');
+    expect(result).toEqual({
+      description: 'Pay off credit line',
+      targetDate: '2026-09',
+      monthlyPayment: direct.status === 'ok' ? direct.monthlyRequired : NaN,
+    });
+  });
+
+  it('is null when no debt goal was found', () => {
+    expect(computeDebtPayoff(undefined, today)).toBeNull();
+  });
+
+  it('is null once the debt is already paid off — no fabricated $0 card', () => {
+    expect(computeDebtPayoff({ name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 5000, targetDate: '2026-09-01' }, today)).toBeNull();
+  });
+
+  it('is null when the debt goal has no target date', () => {
+    expect(computeDebtPayoff({ name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 0, targetDate: null }, today)).toBeNull();
+  });
+
+  it('is null when the target date has already passed — never shows a stale card', () => {
+    expect(computeDebtPayoff({ name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 0, targetDate: '2026-01-01' }, today)).toBeNull();
   });
 });

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { NextRequest } from 'next/server';
+import { computeDebtPayoff } from '@/lib/goalHelpers';
+import { formatLocalDate } from '@/lib/dateHelpers';
 
 // The AI must never instantiate structured objects (sinking-fund rows, goal
 // cards, debt-payoff cards) for the manual-form (calculated) source. These
@@ -100,6 +102,71 @@ describe('POST /api/plan — the AI may never instantiate structured objects (ca
     expect(prompt).not.toContain('"goals"');
     expect(prompt).not.toContain('monthlyContribution');
     // Nor a debtPayoff card for this source.
+    expect(prompt).not.toContain('"debtPayoff"');
+  });
+});
+
+describe('POST /api/plan — debtPayoff is code-computed (template source)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createMock.mockReset();
+  });
+
+  // The founder's fixture: a "Pay off credit line" goal alongside an
+  // ordinary savings goal. AI is deliberately misbehaving again — it
+  // returns its own debtPayoff figures, which must be ignored entirely.
+  const TEMPLATE_BODY = {
+    source: 'template',
+    locale: 'en',
+    parsed: {
+      household: { Province: 'Quebec' },
+      income: { lines: [], total: 5000 },
+      fixedExpenses: { lines: [], total: 0 },
+      variableExpenses: { lines: [] },
+      sinkingFunds: { lines: [] },
+      goals: [
+        { name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 0, targetDate: '2026-09-01' },
+        { name: 'Emergency fund', targetAmount: 3000, savedSoFar: 0, targetDate: '2027-01-01' },
+      ],
+      summary: { monthlyIncome: 5000, monthlyExpenses: 3000, netCashFlow: 2000 },
+    },
+  };
+
+  const ROGUE_DEBT_AI = {
+    lineClassifications: [],
+    debtPayoff: { description: 'Made up by the model', targetDate: '2099-01', monthlyPayment: 999999 },
+    topRecommendation: 'Keep paying down that credit line.',
+  };
+
+  it('ignores an AI-fabricated debtPayoff card entirely and computes the real one from the parsed debt goal', async () => {
+    aiReturns(ROGUE_DEBT_AI);
+    const plan = await postPlan(TEMPLATE_BODY);
+
+    const today = formatLocalDate(new Date());
+    const expected = computeDebtPayoff(
+      { name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 0, targetDate: '2026-09-01' },
+      today
+    );
+
+    expect(plan.debtPayoff).toEqual(expected);
+    expect(plan.debtPayoff.monthlyPayment).not.toBe(999999);
+    expect(plan.debtPayoff.targetDate).not.toBe('2099-01');
+  });
+
+  it('removes the debt goal from the regular goals list — it only appears as the debtPayoff card', async () => {
+    aiReturns(ROGUE_DEBT_AI);
+    const plan = await postPlan(TEMPLATE_BODY);
+
+    const names = plan.goals.map((g: { name: string }) => g.name);
+    expect(names).not.toContain('Pay off credit line');
+    expect(names).toContain('Emergency fund');
+  });
+
+  it('does not request a debtPayoff field from the AI at all', async () => {
+    aiReturns(ROGUE_DEBT_AI);
+    await postPlan(TEMPLATE_BODY);
+
+    const prompt = createMock.mock.calls[0][0].messages[0].content as string;
     expect(prompt).not.toContain('"debtPayoff"');
   });
 });
