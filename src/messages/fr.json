@@ -214,6 +214,8 @@
       "onTrack": "En bonne voie",
       "behind": "En retard",
       "goalFunded": "Atteint",
+      "goalsEmpty": "Vous n'avez pas encore défini d'objectifs — ajoutez-les sur la page Objectifs.",
+      "sinkingFundsEmpty": "Vous n'avez pas encore de fonds de prévoyance — vous pouvez en ajouter à tout moment, au fil des dépenses annuelles.",
       "noTargetDate": "Aucune date cible définie",
       "notAchievable": "{statedDate} nécessite {amount}/mois — à votre capacité actuelle, {estimatedDate} est réaliste.",
       "monthlyReview": "Votre première revue mensuelle",

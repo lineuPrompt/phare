@@ -378,6 +378,101 @@ describe('POST /api/save-plan — expense member attribution', () => {
   });
 });
 
+describe('POST /api/save-plan — no-fabrication contract: a manual plan with empty structured sections persists zero', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('a two-line manual plan (goals: [], sinkingFunds: []) creates no goal accounts and inserts no sinking funds', async () => {
+    const currentMonth = formatLocalMonth(new Date());
+    const anchorDate = `${currentMonth}-01`;
+
+    const { client, calls } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      household_members: [
+        { data: { id: 'mem-1' }, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [
+        { data: [{ id: 'chq-1', type: 'chequing', name: 'Chequing', file_import_id: null }], error: null },
+      ],
+      recurring_items: [
+        { count: 0, error: null },              // prior-data guard count
+        { data: [], error: null },              // prior provenanced recurring_items
+        {
+          data: [{
+            id: 'ri-1', description: 'Mortgage', amount: 3000, type: 'expense', cadence: 'monthly',
+            anchor_date: anchorDate, second_day: null, category_id: 'cat-housing',
+            account_id: 'chq-1', member_id: null,
+          }],
+          error: null,
+        },
+      ],
+      budgets: [
+        { count: 0, error: null },
+        { error: null },
+      ],
+      sinking_funds: [
+        { count: 0, error: null },
+        { error: null }, // unconditional delete — but NO insert must follow
+      ],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      categories: [
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ id: `cat-${name.toLowerCase()}`, name })), error: null },
+      ],
+      transactions: [
+        { error: null }, // materialize cleanup delete
+        { error: null }, // materialize insert
+      ],
+      conversations: [{ error: null }],
+      events: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+
+    // Exactly what api/plan now returns for the manual two-line input: user's
+    // income + expense lines, and empty goals / sinking funds.
+    const body = {
+      plan: {
+        monthlyBudget: {
+          categories: [
+            { name: 'Salary', budgeted: 5000, type: 'income' },
+            { name: 'Mortgage', budgeted: 3000, type: 'expense', isFixed: true, seedCategory: 'Housing' },
+          ],
+        },
+        sinkingFunds: [],
+        goals: [],
+        topRecommendation: 'Consider a property-tax fund — Quebec bills land in March and June.',
+      },
+      reviewText: 'Looking good.',
+      locale: 'en',
+      cardNames: [],
+      fileMeta: null,
+    };
+
+    const res = await POST(new Request('http://localhost/api/save-plan', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.saved).toBe(true);
+
+    // No goal account created — the only account touched is the pre-existing chequing.
+    const accountInserts = calls.filter((c) => c.table === 'accounts' && c.method === 'insert');
+    expect(accountInserts).toHaveLength(0);
+
+    // No sinking funds persisted (the delete is fine; there must be no insert).
+    const sinkingInserts = calls.filter((c) => c.table === 'sinking_funds' && c.method === 'insert');
+    expect(sinkingInserts).toHaveLength(0);
+  });
+});
+
 describe('POST /api/save-plan — goal accounts (Bug 2: target date persistence + starting-balance seeding)', () => {
   beforeEach(() => {
     vi.resetModules();

@@ -6,6 +6,7 @@ import { Plan, formatCAD } from './types';
 
 export default function PlanDisplay({
   plan,
+  planSource,
   reviewText,
   reviewStreaming,
   planSaveStatus,
@@ -19,6 +20,10 @@ export default function PlanDisplay({
   locale,
 }: {
   plan: Plan;
+  // Manual entry (calculated) legitimately has no goals/sinking funds — show
+  // an honest empty-state rather than silently hiding the section. Template
+  // source keeps the section hidden when the sheet had none.
+  planSource: 'template' | 'calculated' | null;
   reviewText: string;
   reviewStreaming: boolean;
   planSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
@@ -96,7 +101,12 @@ export default function PlanDisplay({
       </div>
 
       {/* Sinking Funds */}
-      {plan.sinkingFunds.length > 0 && (
+      {plan.sinkingFunds.length === 0 && planSource === 'calculated' ? (
+        <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
+          <h3 className="text-xl font-bold mb-2" style={{ color: '#0F2044' }}>{t('plan.sinkingFunds')}</h3>
+          <p className="text-sm" style={{ color: '#9CA3AF' }}>{t('plan.sinkingFundsEmpty')}</p>
+        </div>
+      ) : plan.sinkingFunds.length > 0 && (
         <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
           <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>{t('plan.sinkingFunds')}</h3>
           <div className="space-y-4">
@@ -138,7 +148,12 @@ export default function PlanDisplay({
       )}
 
       {/* Goals */}
-      {plan.goals.length > 0 && (
+      {plan.goals.length === 0 && planSource === 'calculated' ? (
+        <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
+          <h3 className="text-xl font-bold mb-2" style={{ color: '#0F2044' }}>{t('plan.goals')}</h3>
+          <p className="text-sm" style={{ color: '#9CA3AF' }}>{t('plan.goalsEmpty')}</p>
+        </div>
+      ) : plan.goals.length > 0 && (
         <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
           <h3 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>{t('plan.goals')}</h3>
           <div className="space-y-4">

@@ -214,6 +214,8 @@
       "onTrack": "On track",
       "behind": "Behind",
       "goalFunded": "Funded",
+      "goalsEmpty": "You haven't set any goals yet — add them on the Goals page.",
+      "sinkingFundsEmpty": "You haven't set up any sinking funds yet — you can add them anytime as annual expenses come up.",
       "noTargetDate": "No target date set yet",
       "notAchievable": "{statedDate} needs {amount}/mo — at your current capacity, {estimatedDate} is realistic.",
       "monthlyReview": "Your First Monthly Review",

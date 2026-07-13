@@ -25,6 +25,10 @@ export default function UploadPage() {
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [plan, setPlan] = useState<Plan | null>(null);
+  // Which source produced the current plan — drives honest empty-states in
+  // PlanDisplay (manual entry legitimately has no goals/sinking funds; a
+  // template does or doesn't per the user's sheet).
+  const [planSource, setPlanSource] = useState<'template' | 'calculated' | null>(null);
   const [reviewText, setReviewText] = useState('');
   const [reviewStreaming, setReviewStreaming] = useState(false);
 
@@ -192,6 +196,7 @@ export default function UploadPage() {
     }
     const planData = await planRes.json();
     setPlan(planData.plan);
+    setPlanSource(planBody.source === 'template' ? 'template' : 'calculated');
     setStatus('plan');
     streamReview(planData.plan, planBody, resolvedCardNames);
   }, [streamReview]);
@@ -527,6 +532,7 @@ export default function UploadPage() {
         {status === 'plan' && plan && (
           <PlanDisplay
             plan={plan}
+            planSource={planSource}
             reviewText={reviewText}
             reviewStreaming={reviewStreaming}
             planSaveStatus={planSaveStatus}

@@ -102,20 +102,26 @@ Expense lines: ${JSON.stringify([...p.fixedExpenses.lines, ...p.variableExpenses
 Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts; none exist yet)
 Income lines: ${JSON.stringify(c.income.lines)}
 Expense lines: ${JSON.stringify(c.expenses.lines)}
-No goals or sinking funds were provided — suggest sinking funds based on the expense labels and typical Canadian annual costs.`;
+This family entered ONLY these income and expense lines. They have NOT set any savings goals or sinking funds. Do not invent any — you may suggest one or two in your topRecommendation prose, framed explicitly as a suggestion ("Consider a property-tax fund — Quebec bills land in March and June"), but never as a fund or goal they already have, and never with a specific monthly amount presented as theirs.`;
     } else {
       return NextResponse.json({ error: 'Unknown plan source' }, { status: 400 });
     }
 
     // ----- Claude does ONLY the interpretive part, in the user's language -----
-    const needsSinkingFunds = sinkingFundsFromData === null;
-    // Template-sourced goals are real user-stated targets — the contribution,
-    // on-track verdict, and dates are already computed above by evaluateGoals()
-    // (see goalHelpers.ts). The AI never sees a "goals" field to fill in for
-    // this source; it may only narrate the code-computed facts in aiContext.
-    // Calculated-source goals are AI-suggested ideas with no real target data
-    // behind them, so that path is unchanged.
-    const needsAIGoals = body.source !== 'template';
+    // The AI may NEVER instantiate structured objects — sinking-fund rows,
+    // goal cards, debt-payoff cards. Those come from user input or code only:
+    //   - sinking funds: from the template's Annual Expenses sheet
+    //     (sinkingFundsFromData) or none at all. The AI never emits them.
+    //   - goals: template → evaluateGoals() (code); calculated → none. The AI
+    //     never emits them either way.
+    //   - debtPayoff: template only (a card with a real target/payment the AI
+    //     derives from THEIR stated debt). Calculated source has no such
+    //     structured input, so no card — any debt advice goes in prose.
+    // For the calculated (manual-form) source the AI returns ONLY line
+    // classifications and prose; every structured section is user-derived or
+    // empty. Its suggestions live in topRecommendation / the monthly review,
+    // framed as suggestions, never as rows with computed amounts.
+    const isTemplate = body.source === 'template';
     const categoryList = SEED_CATEGORIES.join(', ');
 
     const prompt = `You are Phare, an AI financial coach for Canadian families. The numbers below are VERIFIED — computed in code from the family's data. Do not change or recalculate them.
@@ -125,20 +131,19 @@ ${aiContext}
 Write ALL text in ${lang}.
 
 Return ONLY valid JSON:
-{${needsSinkingFunds ? '"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],' : ''}"lineClassifications":[{"label":"","category":"","isFixed":true}]${needsAIGoals ? ',"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}]' : ''},"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"topRecommendation":""}
+{"lineClassifications":[{"label":"","category":"","isFixed":true}]${isTemplate ? ',"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0}' : ''},"topRecommendation":""}
 
 Rules:
-- All goal names, descriptions, and topRecommendation text in ${lang}.
+- All descriptions and topRecommendation text in ${lang}.
 - lineClassifications: for EACH expense line label provided, return an object with:
   - "label": the exact expense line label as given
   - "category": which ONE of these fits best: ${categoryList}. Use the English category name exactly as written here.
   - "isFixed": true if it is a fixed recurring bill paid every month (mortgage, rent, loan payment, insurance, daycare, utilities, phone, subscriptions); false if it is variable day-to-day spending (groceries, restaurants, gas, shopping).
 - Classify income lines too: category "Income", isFixed true.
-${needsSinkingFunds ? '- Suggest 3-6 sinking funds for likely Canadian annual expenses inferred from the expense labels (property tax March & June in Quebec, car registration, back to school, income tax balance, Christmas).' : ''}
-${needsAIGoals ? '- goals: suggest 2-3 sensible goals based on their situation (emergency fund of 3 months expenses, RESP if children evident, debt payoff if debt evident).' : '- Their goals are already evaluated (contribution, on-track verdict, and dates are all real, code-computed numbers) — do not invent or restate goal figures anywhere; if you reference a goal in topRecommendation, use the exact numbers given.'}
+- Do NOT output any sinking funds or goals as structured data. If you want to suggest one, put it in topRecommendation as a suggestion phrased as a suggestion ("Consider…"), never as a fund/goal they already have and never with a monthly amount presented as theirs.
+${isTemplate ? '- Their goals are already evaluated (contribution, on-track verdict, and dates are all real, code-computed numbers) — do not invent or restate goal figures anywhere; if you reference a goal in topRecommendation, use the exact numbers given.\n- debtPayoff: derive from THEIR stated debt only. If no debt is evident, set debtPayoff to null.' : ''}
 - Canadian context: RRSP reduces taxable income (flag Quebec resident + Ontario employer tax gap if household info shows it). RESP gives $500/yr CESG per child on $2,500 contributed. TFSA is ideal for sinking funds.
 - If net cash flow is negative, topRecommendation must address that first.
-- If no debt is evident, set debtPayoff to null.
 - topRecommendation: one specific sentence with a dollar amount.`;
 
     const message = await anthropic.messages.create({
@@ -151,7 +156,9 @@ ${needsAIGoals ? '- goals: suggest 2-3 sensible goals based on their situation (
     const aiPart = JSON.parse(responseText.replace(/```json|```/g, '').trim());
 
     // ----- Assemble final plan: verified numbers + AI interpretation -----
-    const finalSinkingFunds = sinkingFundsFromData ?? aiPart.sinkingFunds ?? [];
+    // Sinking funds are user-sheet-derived (template) or empty (calculated) —
+    // never AI-invented. aiPart is not consulted for them.
+    const finalSinkingFunds = sinkingFundsFromData ?? [];
 
     monthlyBudget.categories = dedupeSinkingFunds(monthlyBudget.categories, finalSinkingFunds);
 
@@ -180,10 +187,15 @@ ${needsAIGoals ? '- goals: suggest 2-3 sensible goals based on their situation (
       monthlyBudget: { ...monthlyBudget, categories: classifiedCategories },
       seedCategories: SEED_CATEGORIES,
       sinkingFunds: finalSinkingFunds,
-      debtPayoff: aiPart.debtPayoff ?? null,
-      // Template source: code-computed, never the AI's. Calculated source:
-      // AI-suggested ideas, unchanged.
-      goals: computedGoals ?? aiPart.goals ?? [],
+      // debtPayoff card is template-only — a structured object the AI may only
+      // build from THEIR stated debt. Calculated source never gets one.
+      debtPayoff: isTemplate ? (aiPart.debtPayoff ?? null) : null,
+      // Template source: code-computed by evaluateGoals(). Calculated source:
+      // empty — goals are user-entered or absent, never AI-fabricated. (When
+      // manual entry later captures target dates, they flow through
+      // evaluateGoals() identically — this closes the old "manual goals stay
+      // AI-suggested" exception.)
+      goals: computedGoals ?? [],
       topRecommendation: aiPart.topRecommendation ?? '',
     };
 
