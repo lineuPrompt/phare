@@ -36,10 +36,18 @@ export default function ExpenseForm({
   useEffect(() => { setLocalCategories(categories); }, [categories]);
   useEffect(() => { setSelectedAccountId(accountId ?? ''); }, [accountId]);
 
+  // A "Money in" entry on a credit card is a refund/credit against a
+  // spending category, not household income — it needs a category so it can
+  // net against that category's Spent. Chequing income has no category.
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
+  const isCardAccount = selectedAccount?.type === 'credit_card' || selectedAccount?.type === 'line_of_credit';
+  const showCategoryField = entryType === 'expense' || isCardAccount;
+
   const switchType = (t: 'expense' | 'income') => {
     setEntryType(t);
-    // Category is irrelevant for income — clear it to avoid stale state
-    if (t === 'income') setCategoryId('');
+    // Category is irrelevant for chequing income — clear it to avoid stale state.
+    // Card refunds keep the category selector, so leave it as-is there.
+    if (t === 'income' && !isCardAccount) setCategoryId('');
   };
 
   const submit = async () => {
@@ -53,7 +61,7 @@ export default function ExpenseForm({
           type: entryType,
           date,
           description: description.trim(),
-          categoryId: entryType === 'expense' ? categoryId : undefined,
+          categoryId: showCategoryField ? categoryId : undefined,
           amount: parseFloat(amount),
           repeat,
           installments: repeat === 'installments' ? parseInt(installments, 10) : undefined,
@@ -118,7 +126,7 @@ export default function ExpenseForm({
       </div>
 
       <div className={`grid grid-cols-1 sm:grid-cols-2 ${
-        entryType === 'expense'
+        showCategoryField
           ? accounts.length > 1 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
           : accounts.length > 1 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
       } gap-3 mb-3`}>
@@ -127,8 +135,8 @@ export default function ExpenseForm({
         <input type="text" value={description} onChange={(e) => setDescription(e.target.value)}
           placeholder={t('description')} className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
 
-        {/* Category — expenses only */}
-        {entryType === 'expense' && (
+        {/* Category — expenses, and refunds (income) on a card */}
+        {showCategoryField && (
           !newCategoryMode ? (
             <select value={categoryId}
               onChange={(e) => {

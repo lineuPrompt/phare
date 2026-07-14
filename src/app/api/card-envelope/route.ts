@@ -8,6 +8,7 @@ import {
   envelopeStatus,
   EnvTx,
 } from '@/lib/envelopeHelpers';
+import { categoryDisplayName } from '@/lib/categoryTranslations';
 
 async function resolveHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -25,6 +26,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const cardId = url.searchParams.get('cardId');
     const monthParam = url.searchParams.get('month');
+    const locale = url.searchParams.get('locale') === 'fr' ? 'fr' : 'en';
 
     if (!cardId || !monthParam || !/^\d{4}-\d{2}$/.test(monthParam)) {
       return NextResponse.json({ error: 'cardId and month (YYYY-MM) required' }, { status: 400 });
@@ -58,12 +60,14 @@ export async function GET(request: Request) {
 
     const totalGoal: number | null = goalRow ? Number(goalRow.card_goal) : null;
 
-    // Envelope items (persistent per-card sub-budgets, not month-scoped)
+    // Envelope items saved for exactly this month (month-scoped: editing one
+    // month never touches another — see 20260714000000 migration).
     const { data: items } = await supabase
       .from('card_envelope_items')
-      .select('category_id, monthly_amount, categories(name)')
+      .select('category_id, monthly_amount, categories(name, name_fr)')
       .eq('household_id', householdId)
-      .eq('account_id', cardId);
+      .eq('account_id', cardId)
+      .eq('month', monthStart);
 
     // Transactions for this card in this month
     const [y, m] = monthParam.split('-').map(Number);
@@ -82,13 +86,24 @@ export async function GET(request: Request) {
     const txns = (rawTxns ?? []) as EnvTx[];
     const byCategory = categoryActualsForCard(txns, cardId, monthParam);
 
+    // All household expense categories — needed both for the editor's
+    // add-category dropdown and to name any category that has net activity
+    // (e.g. a refund) but no saved envelope item.
+    const { data: categories } = await supabase
+      .from('categories')
+      .select('id, name, name_fr')
+      .eq('household_id', householdId)
+      .eq('type', 'expense')
+      .order('name');
+    const categoryById = new Map((categories ?? []).map((c) => [c.id, c]));
+
     const envelopeItems = (items ?? []).map((item) => {
-      const cats = item.categories as unknown as { name: string } | null;
+      const cats = item.categories as unknown as { name: string; name_fr: string | null } | null;
       const monthlyAmount = Number(item.monthly_amount);
       const actual = byCategory.get(item.category_id) ?? 0;
       return {
         categoryId: item.category_id,
-        categoryName: cats?.name ?? '?',
+        categoryName: cats ? categoryDisplayName(cats, locale) : '?',
         monthlyAmount,
         actual,
         remaining: envelopeRemaining(monthlyAmount, actual),
@@ -96,16 +111,29 @@ export async function GET(request: Request) {
       };
     });
 
+    // Categories with net activity (spend or a refund) but no saved envelope
+    // item — still visible and netted, never a totals-only ghost.
+    const coveredIds = new Set(envelopeItems.map((i) => i.categoryId));
+    for (const [categoryId, actual] of byCategory) {
+      if (coveredIds.has(categoryId)) continue;
+      const cat = categoryById.get(categoryId);
+      envelopeItems.push({
+        categoryId,
+        categoryName: cat ? categoryDisplayName(cat, locale) : '?',
+        monthlyAmount: 0,
+        actual,
+        remaining: envelopeRemaining(0, actual),
+        status: envelopeStatus(0, actual),
+      });
+    }
+
     const uncategorized = uncategorizedSpend(txns, cardId, monthParam);
     const totalSpent = totalSpendForCard(txns, cardId, monthParam);
 
-    // All household expense categories (for the editor's add-category dropdown)
-    const { data: categories } = await supabase
-      .from('categories')
-      .select('id, name')
-      .eq('household_id', householdId)
-      .eq('type', 'expense')
-      .order('name');
+    const categoriesForEditor = (categories ?? []).map((c) => ({
+      id: c.id,
+      name: categoryDisplayName(c, locale),
+    }));
 
     return NextResponse.json({
       card,
@@ -113,7 +141,7 @@ export async function GET(request: Request) {
       envelopeItems,
       uncategorized,
       totalSpent,
-      categories: categories ?? [],
+      categories: categoriesForEditor,
     });
   } catch (error) {
     console.error('GET /api/card-envelope error:', error);
@@ -172,12 +200,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to save goal' }, { status: 500 });
     }
 
-    // 2. Replace envelope items (delete all for this card, then insert new set)
+    // 2. Replace this month's envelope items only (month-scoped: never
+    // touches another month's saved rows).
     const { error: delErr } = await supabase
       .from('card_envelope_items')
       .delete()
       .eq('household_id', householdId)
-      .eq('account_id', cardId);
+      .eq('account_id', cardId)
+      .eq('month', monthStart);
     if (delErr) {
       console.error('Envelope items delete error:', delErr);
       return NextResponse.json({ error: 'Failed to update categories' }, { status: 500 });
@@ -189,6 +219,7 @@ export async function POST(request: Request) {
         account_id: cardId,
         category_id: item.categoryId,
         monthly_amount: item.monthlyAmount,
+        month: monthStart,
       }));
       const { error: insErr } = await supabase.from('card_envelope_items').insert(rows);
       if (insErr) {

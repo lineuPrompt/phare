@@ -41,6 +41,7 @@ export default function CardEnvelopeEditor({
   const [payDay, setPayDay]     = useState(initialPayDay?.toString()   ?? '');
   const [addCatId, setAddCatId] = useState('');
   const [saving, setSaving]     = useState(false);
+  const [copying, setCopying]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
 
   // Sync when parent data changes (e.g. card switch)
@@ -106,9 +107,51 @@ export default function CardEnvelopeEditor({
     }
   };
 
+  // Explicit, one-shot copy into the local (unsaved) form state — nothing is
+  // written until Save is pressed, and Save only ever writes the viewed
+  // month, so copying into August and editing never touches July's rows.
+  const copyFromPrevious = async () => {
+    const [y, m] = month.split('-').map(Number);
+    const d = new Date(y, m - 2, 1);
+    const prevMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+    setCopying(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/card-envelope?cardId=${cardId}&month=${prevMonth}`);
+      if (!res.ok) throw new Error();
+      const prev = await res.json();
+      const prevItems: Item[] = (prev.envelopeItems ?? [])
+        .filter((i: { monthlyAmount: number }) => i.monthlyAmount > 0)
+        .map((i: { categoryId: string; categoryName: string; monthlyAmount: number }) => ({
+          categoryId: i.categoryId, categoryName: i.categoryName, monthlyAmount: i.monthlyAmount,
+        }));
+      if (prev.totalGoal === null && prevItems.length === 0) {
+        setError(t('editor.copyNothingToCopy'));
+        return;
+      }
+      if (prev.totalGoal !== null) setGoalStr(String(prev.totalGoal));
+      setItems(prevItems);
+    } catch {
+      setError(t('editor.copyFailed'));
+    } finally {
+      setCopying(false);
+    }
+  };
+
   return (
     <div className="rounded-2xl bg-white p-6 space-y-6" style={{ border: '2px solid #2ABFBF' }}>
-      <h3 className="text-base font-bold" style={{ color: '#0F2044' }}>{t('editor.title')}</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-bold" style={{ color: '#0F2044' }}>{t('editor.title')}</h3>
+        <button
+          onClick={copyFromPrevious}
+          disabled={copying}
+          className="text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-80 disabled:opacity-50"
+          style={{ border: '1.5px solid #2ABFBF', color: '#2ABFBF' }}
+        >
+          {copying ? t('editor.copying') : t('editor.copyFromPrevious')}
+        </button>
+      </div>
 
       {/* Total goal */}
       <div className="space-y-1">

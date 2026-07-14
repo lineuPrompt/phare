@@ -6,6 +6,7 @@ import {
   envelopeRemaining,
   envelopeStatus,
   sumWarning,
+  carryForwardMap,
   buildGrid,
   EnvTx,
 } from '../envelopeHelpers';
@@ -40,8 +41,6 @@ const BASE_TXS: EnvTx[] = [
   tx(VISA, 30,  '2026-07-18', null),
   // Visa — July — bridge (must be excluded)
   tx(VISA, 999, '2026-07-01', CAT_GROCERY, 'expense', true),
-  // Visa — July — income (must be excluded)
-  tx(VISA, 200, '2026-07-01', CAT_GROCERY, 'income'),
   // Visa — August — different month
   tx(VISA, 60,  '2026-08-03', CAT_GROCERY),
   // MasterCard — July — must not bleed into Visa totals
@@ -67,11 +66,6 @@ describe('categoryActualsForCard', () => {
     expect(result.get(CAT_GROCERY)).toBe(150);
   });
 
-  it('excludes income transactions', () => {
-    const result = categoryActualsForCard(BASE_TXS, VISA, '2026-07');
-    expect(result.get(CAT_GROCERY)).toBe(150);
-  });
-
   it('excludes transactions outside the target month', () => {
     const result = categoryActualsForCard(BASE_TXS, VISA, '2026-07');
     // August Grocery on Visa is 60; should not appear in July result
@@ -83,6 +77,52 @@ describe('categoryActualsForCard', () => {
   it('returns empty map for a month with no transactions', () => {
     const result = categoryActualsForCard(BASE_TXS, VISA, '2026-09');
     expect(result.size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1b. Refunds (income transactions on a card) net against spend, not vanish
+// ---------------------------------------------------------------------------
+
+describe('refunds net against category and card actuals', () => {
+  const REFUND_TXS: EnvTx[] = [
+    tx(VISA, 150, '2026-07-05', CAT_GROCERY),               // spend
+    tx(VISA, 40,  '2026-07-10', CAT_GROCERY, 'income'),      // partial refund
+    tx(VISA, 999, '2026-07-01', CAT_GROCERY, 'expense', true), // bridge, still excluded
+  ];
+
+  it('a refund reduces category Spent', () => {
+    const result = categoryActualsForCard(REFUND_TXS, VISA, '2026-07');
+    expect(result.get(CAT_GROCERY)).toBe(110); // 150 - 40
+  });
+
+  it('a refund reduces card total Spent', () => {
+    expect(totalSpendForCard(REFUND_TXS, VISA, '2026-07')).toBe(110);
+  });
+
+  it('a refund exceeding spend goes negative honestly, not clamped to zero', () => {
+    const bigRefund: EnvTx[] = [
+      tx(VISA, 50,  '2026-07-05', CAT_GROCERY),
+      tx(VISA, 200, '2026-07-10', CAT_GROCERY, 'income'),
+    ];
+    const result = categoryActualsForCard(bigRefund, VISA, '2026-07');
+    expect(result.get(CAT_GROCERY)).toBe(-150);
+    expect(totalSpendForCard(bigRefund, VISA, '2026-07')).toBe(-150);
+  });
+
+  it('a refund in a category with no other spend this month is still visible and netted', () => {
+    const refundOnly: EnvTx[] = [tx(VISA, 25, '2026-07-10', CAT_SHOPPING, 'income')];
+    const result = categoryActualsForCard(refundOnly, VISA, '2026-07');
+    expect(result.has(CAT_SHOPPING)).toBe(true);
+    expect(result.get(CAT_SHOPPING)).toBe(-25);
+  });
+
+  it('an uncategorized refund nets against uncategorized spend', () => {
+    const uncatRefund: EnvTx[] = [
+      tx(VISA, 100, '2026-07-05', null),
+      tx(VISA, 30,  '2026-07-10', null, 'income'),
+    ];
+    expect(uncategorizedSpend(uncatRefund, VISA, '2026-07')).toBe(70);
   });
 });
 
@@ -109,25 +149,37 @@ describe('envelopeRemaining', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Over/under status flips at the boundary
+// 3. ok / watch / over tiers flip at the right boundaries
 // ---------------------------------------------------------------------------
 
 describe('envelopeStatus', () => {
-  it('ok when actual is below sub-budget', () => {
+  it('ok below 80% of sub-budget', () => {
+    expect(envelopeStatus(100, 79.9)).toBe('ok');
+  });
+
+  it('watch at exactly 80% of sub-budget', () => {
+    expect(envelopeStatus(100, 80.0)).toBe('watch');
+  });
+
+  it('watch at exactly 100% of sub-budget (never green at 100%)', () => {
+    expect(envelopeStatus(100, 100.0)).toBe('watch');
+  });
+
+  it('over just past 100% of sub-budget', () => {
+    expect(envelopeStatus(100, 100.1)).toBe('over');
+  });
+
+  it('ok when actual is comfortably below sub-budget', () => {
     expect(envelopeStatus(300, 150)).toBe('ok');
-  });
-
-  it('ok when actual equals sub-budget exactly', () => {
-    expect(envelopeStatus(300, 300)).toBe('ok');
-  });
-
-  it('over when actual exceeds sub-budget by even $0.01', () => {
-    expect(envelopeStatus(300, 300.01)).toBe('over');
   });
 
   it('unset when sub-budget is zero', () => {
     expect(envelopeStatus(0, 0)).toBe('unset');
     expect(envelopeStatus(0, 50)).toBe('unset');
+  });
+
+  it('ok (not over) when actual is negative from a refund', () => {
+    expect(envelopeStatus(100, -30)).toBe('ok');
   });
 });
 
@@ -164,47 +216,96 @@ describe('sumWarning', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 5. Grid cells equal the single-month computation for each month
+// 5. carryForwardMap — month-scoped snapshots project forward
 // ---------------------------------------------------------------------------
 
-describe('buildGrid', () => {
-  const months = ['2026-07', '2026-08'];
-  const cats = [
-    { id: CAT_GROCERY, name: 'Groceries' },
-    { id: CAT_REST,    name: 'Restaurants' },
-  ];
-  const goals = new Map<string, number | null>([
-    ['2026-07', 2000],
-    ['2026-08', null],
+describe('carryForwardMap', () => {
+  const snaps = new Map<string, string>([
+    ['2026-05', 'may-snapshot'],
+    ['2026-07', 'july-snapshot'],
   ]);
 
-  it('grid cell equals categoryActualsForCard for the same card+month', () => {
-    const grid = buildGrid(BASE_TXS, VISA, cats, months, goals);
-
-    const groceryRow = grid.rows.find((r) => r.categoryId === CAT_GROCERY)!;
-    expect(groceryRow.actuals[0]).toBe(
-      categoryActualsForCard(BASE_TXS, VISA, '2026-07').get(CAT_GROCERY) ?? 0
-    );
-    expect(groceryRow.actuals[1]).toBe(
-      categoryActualsForCard(BASE_TXS, VISA, '2026-08').get(CAT_GROCERY) ?? 0
-    );
+  it('returns the exact-month snapshot when one was saved', () => {
+    expect(carryForwardMap(snaps, '2026-07')).toBe('july-snapshot');
   });
 
-  it('totalActuals equal totalSpendForCard for each month', () => {
-    const grid = buildGrid(BASE_TXS, VISA, cats, months, goals);
-    expect(grid.totalActuals[0]).toBe(totalSpendForCard(BASE_TXS, VISA, '2026-07'));
-    expect(grid.totalActuals[1]).toBe(totalSpendForCard(BASE_TXS, VISA, '2026-08'));
+  it('carries forward from the nearest earlier saved month', () => {
+    expect(carryForwardMap(snaps, '2026-08')).toBe('july-snapshot');
+    expect(carryForwardMap(snaps, '2026-06')).toBe('may-snapshot');
   });
 
-  it('maps totalGoals per month', () => {
-    const grid = buildGrid(BASE_TXS, VISA, cats, months, goals);
-    expect(grid.totalGoals[0]).toBe(2000);
-    expect(grid.totalGoals[1]).toBe(null);
+  it('returns null when nothing was ever saved at or before the month', () => {
+    expect(carryForwardMap(snaps, '2026-01')).toBe(null);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 6. Uncategorized spend is surfaced, not dropped
+// 6. Forward-looking grid: current month real, future budget-only
+// ---------------------------------------------------------------------------
+
+describe('buildGrid', () => {
+  const months = ['2026-07', '2026-08'];
+  const currentMonth = '2026-07';
+  const categoryNames = new Map([
+    [CAT_GROCERY, 'Groceries'],
+    [CAT_REST, 'Restaurants'],
+    [CAT_SHOPPING, 'Shopping'],
+  ]);
+  const itemSnapshots = new Map([
+    ['2026-07', [{ categoryId: CAT_GROCERY, monthlyAmount: 200 }, { categoryId: CAT_REST, monthlyAmount: 100 }]],
+  ]);
+  const goalsByMonth = new Map([['2026-07', 2000]]);
+
+  it('current month shows real actuals matching categoryActualsForCard', () => {
+    const grid = buildGrid(BASE_TXS, VISA, itemSnapshots, categoryNames, months, goalsByMonth, currentMonth);
+    const groceryRow = grid.rows.find((r) => r.categoryId === CAT_GROCERY)!;
+    expect(groceryRow.actuals[0]).toBe(categoryActualsForCard(BASE_TXS, VISA, '2026-07').get(CAT_GROCERY));
+  });
+
+  it('future months are budget-only: actuals null even if transactions exist there', () => {
+    const grid = buildGrid(BASE_TXS, VISA, itemSnapshots, categoryNames, months, goalsByMonth, currentMonth);
+    const groceryRow = grid.rows.find((r) => r.categoryId === CAT_GROCERY)!;
+    // BASE_TXS has a real August Grocery transaction (60), but August is future relative to currentMonth
+    expect(groceryRow.actuals[1]).toBe(null);
+    expect(grid.totalActuals[1]).toBe(null);
+    expect(grid.uncategorizedActuals[1]).toBe(null);
+  });
+
+  it('budgets carry forward into months with no explicit save', () => {
+    const grid = buildGrid(BASE_TXS, VISA, itemSnapshots, categoryNames, months, goalsByMonth, currentMonth);
+    const groceryRow = grid.rows.find((r) => r.categoryId === CAT_GROCERY)!;
+    expect(groceryRow.budgets[0]).toBe(200);
+    expect(groceryRow.budgets[1]).toBe(200); // carried forward from July
+  });
+
+  it('totalGoals carry forward the same way', () => {
+    const grid = buildGrid(BASE_TXS, VISA, itemSnapshots, categoryNames, months, goalsByMonth, currentMonth);
+    expect(grid.totalGoals[0]).toBe(2000);
+    expect(grid.totalGoals[1]).toBe(2000);
+  });
+
+  it('uncategorized spend is its own row-equivalent series, not a totals-only ghost', () => {
+    const grid = buildGrid(BASE_TXS, VISA, itemSnapshots, categoryNames, months, goalsByMonth, currentMonth);
+    expect(grid.uncategorizedActuals[0]).toBe(uncategorizedSpend(BASE_TXS, VISA, '2026-07'));
+  });
+
+  it('a category with actual activity but no saved envelope item still appears as a row', () => {
+    const refundOnly: EnvTx[] = [tx(VISA, 25, '2026-07-10', CAT_SHOPPING, 'income')];
+    const grid = buildGrid(refundOnly, VISA, itemSnapshots, categoryNames, months, goalsByMonth, currentMonth);
+    const shoppingRow = grid.rows.find((r) => r.categoryId === CAT_SHOPPING);
+    expect(shoppingRow).toBeDefined();
+    expect(shoppingRow!.budgets[0]).toBe(0); // no envelope item, but visible and netted
+    expect(shoppingRow!.actuals[0]).toBe(-25);
+  });
+
+  it('totalActuals equal totalSpendForCard for the current month', () => {
+    const grid = buildGrid(BASE_TXS, VISA, itemSnapshots, categoryNames, months, goalsByMonth, currentMonth);
+    expect(grid.totalActuals[0]).toBe(totalSpendForCard(BASE_TXS, VISA, '2026-07'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Uncategorized spend is surfaced, not dropped
 // ---------------------------------------------------------------------------
 
 describe('uncategorizedSpend', () => {
@@ -229,7 +330,7 @@ describe('uncategorizedSpend', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. Two cards with different goals/categories don't bleed into each other
+// 8. Two cards with different goals/categories don't bleed into each other
 // ---------------------------------------------------------------------------
 
 describe('card isolation', () => {
@@ -253,20 +354,5 @@ describe('card isolation', () => {
     expect(visaTotal).toBe(260);  // 150+80+30
     expect(mcTotal).toBe(520);    // 400+120
     expect(visaTotal).not.toBe(mcTotal);
-  });
-
-  it('buildGrid with different envelopes per card produces independent rows', () => {
-    const visaCats = [{ id: CAT_GROCERY, name: 'G' }, { id: CAT_REST, name: 'R' }];
-    const mcCats   = [{ id: CAT_GROCERY, name: 'G' }, { id: CAT_SHOPPING, name: 'S' }];
-    const goals    = new Map<string, number | null>();
-
-    const visaGrid = buildGrid(BASE_TXS, VISA, visaCats, ['2026-07'], goals);
-    const mcGrid   = buildGrid(BASE_TXS, MC,   mcCats,   ['2026-07'], goals);
-
-    const visaGrocery = visaGrid.rows.find((r) => r.categoryId === CAT_GROCERY)!;
-    const mcGrocery   = mcGrid.rows.find((r)   => r.categoryId === CAT_GROCERY)!;
-
-    expect(visaGrocery.actuals[0]).toBe(150);
-    expect(mcGrocery.actuals[0]).toBe(400);
   });
 });

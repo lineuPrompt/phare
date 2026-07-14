@@ -4,6 +4,7 @@ import { recurrenceDates } from '@/lib/dateHelpers';
 import { logEvent, isFirstEvent } from '@/lib/eventLogger';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
+import { categoryActualsForCard, totalSpendForCard, EnvTx } from '@/lib/envelopeHelpers';
 
 // POST: create expense (single, monthly recurring, or installments)
 export async function POST(request: Request) {
@@ -145,8 +146,7 @@ export async function GET(request: Request) {
       .from('accounts')
       .select('id, name, type, payment_day')
       .eq('household_id', householdId)
-      .order('type', { ascending: true })
-      .order('name', { ascending: true });
+      .order('created_at', { ascending: true });
 
     // Goal accounts (savings/tfsa/rrsp) are not spending accounts — they never
     // appear as expense tabs and never accept logged expenses.
@@ -158,6 +158,11 @@ export async function GET(request: Request) {
       accountList.find((a) => a.type === 'chequing') ??
       accountList[0] ??
       null;
+
+    // Card refunds (type 'income' on a card) are credits against spend, not
+    // household income — they belong in the card's own transaction list and
+    // net against category/card totals, unlike chequing income.
+    const isCard = selectedAccount?.type === 'credit_card' || selectedAccount?.type === 'line_of_credit';
 
     const monthStart = `${monthParam}-01`;
     const [y, m] = monthParam.split('-').map(Number);
@@ -202,6 +207,11 @@ export async function GET(request: Request) {
     const incomeTxns = (allTxns ?? []).filter((t) => t.type === 'income');
     const totalIncome = Math.round(incomeTxns.reduce((s, t) => s + Number(t.amount), 0) * 100) / 100;
 
+    // The list shown on a card includes refunds (income) alongside expenses —
+    // a refund must be visible like any other entry, not vanish. Chequing
+    // keeps expenses and income in their separate existing sections.
+    const listTxns = isCard ? (allTxns ?? []).filter((t) => t.type === 'expense' || t.type === 'income') : txns;
+
     // Recurring items on THIS account with no known pay date yet — the same
     // notice the dashboard shows, scoped to the account being viewed here.
     let unanchoredIncomeCount = 0;
@@ -237,7 +247,6 @@ export async function GET(request: Request) {
       .order('name');
 
     // Budget source: card_envelope_items for card/LOC accounts; general budgets table for chequing.
-    const isCard = selectedAccount?.type === 'credit_card' || selectedAccount?.type === 'line_of_credit';
     type BudgetRow = { amount: number; category_id: string; categories: { name: string; type: string } | null };
     let budgetItems: BudgetRow[] = [];
 
@@ -282,11 +291,24 @@ export async function GET(request: Request) {
 
     type Txn = { amount: number; category_id: string | null; is_bridge?: boolean };
 
-    // Bridge lines don't belong to a spending category — exclude from category rollup
-    const spentByCategory = new Map<string, number>();
-    for (const t of (txns as Txn[] | null) ?? []) {
-      if (!t.category_id || t.is_bridge) continue;
-      spentByCategory.set(t.category_id, (spentByCategory.get(t.category_id) ?? 0) + Number(t.amount));
+    // Card actuals net expenses against refunds via the shared envelope
+    // helper — the same math the Cards decision view and grid use, so a
+    // refund reduces Spent here too instead of vanishing. Chequing has no
+    // refund concept; its category rollup stays plain expense sums.
+    let spentByCategory: Map<string, number>;
+    let totalSpent: number;
+    if (isCard && selectedAccount) {
+      spentByCategory = categoryActualsForCard(allTxns as unknown as EnvTx[], selectedAccount.id, monthParam);
+      totalSpent = totalSpendForCard(allTxns as unknown as EnvTx[], selectedAccount.id, monthParam);
+    } else {
+      spentByCategory = new Map<string, number>();
+      for (const t of (txns as Txn[] | null) ?? []) {
+        if (!t.category_id || t.is_bridge) continue;
+        spentByCategory.set(t.category_id, (spentByCategory.get(t.category_id) ?? 0) + Number(t.amount));
+      }
+      totalSpent = Math.round(
+        (txns as { amount: number }[]).reduce((s, t) => s + Number(t.amount), 0) * 100
+      ) / 100;
     }
 
     const summaryRows = budgetItems
@@ -316,17 +338,11 @@ export async function GET(request: Request) {
       }
     }
 
-    // totalSpent for chequing should include bridge lines (real money out);
-    // for cards it's category spending. Compute from the actual expense txns.
-    const totalSpent = Math.round(
-      (txns as { amount: number }[]).reduce((s, t) => s + Number(t.amount), 0) * 100
-    ) / 100;
-
     return NextResponse.json({
       month: monthParam,
       accounts: accountList,
       selectedAccount,
-      expenses: txns,
+      expenses: listTxns,
       income: incomeTxns,
       totalIncome,
       summary: summaryRows,

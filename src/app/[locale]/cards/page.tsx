@@ -8,6 +8,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import CardDecisionView, { EnvelopeItem } from '@/components/cards/CardDecisionView';
 import CardEnvelopeEditor from '@/components/cards/CardEnvelopeEditor';
 import CardGrid from '@/components/cards/CardGrid';
+import CrossCardView, { CardOverviewRow } from '@/components/cards/CrossCardView';
 import { GridData } from '@/lib/envelopeHelpers';
 import { Account } from '@/components/expenses/types';
 
@@ -46,6 +47,7 @@ export default function CardsPage() {
   const [selectedMonth, setSelectedMonth]   = useState(currentMonth);
   const [envelopeData, setEnvelopeData]     = useState<EnvelopeData | null>(null);
   const [gridData, setGridData]             = useState<GridData | null>(null);
+  const [overview, setOverview]             = useState<CardOverviewRow[]>([]);
   const [loadingEnv, setLoadingEnv]         = useState(false);
   const [loadingGrid, setLoadingGrid]       = useState(false);
   const [editingEnvelope, setEditingEnvelope] = useState(false);
@@ -69,7 +71,7 @@ export default function CardsPage() {
   const loadEnvelope = useCallback(() => {
     if (!selectedCardId) return;
     setLoadingEnv(true);
-    fetch(`/api/card-envelope?cardId=${selectedCardId}&month=${selectedMonth}`)
+    fetch(`/api/card-envelope?cardId=${selectedCardId}&month=${selectedMonth}&locale=${locale}`)
       .then(async (r) => {
         if (r.status === 401) { router.push(`/${locale}/signin`); return null; }
         return r.ok ? r.json() : null;
@@ -81,11 +83,18 @@ export default function CardsPage() {
   const loadGrid = useCallback(() => {
     if (!selectedCardId) return;
     setLoadingGrid(true);
-    fetch(`/api/card-envelope/grid?cardId=${selectedCardId}`)
+    fetch(`/api/card-envelope/grid?cardId=${selectedCardId}&locale=${locale}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d: GridData | null) => { if (d) setGridData(d); })
       .finally(() => setLoadingGrid(false));
-  }, [selectedCardId]);
+  }, [selectedCardId, locale]);
+
+  const loadOverview = useCallback(() => {
+    fetch(`/api/cards/overview?month=${selectedMonth}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { cards: CardOverviewRow[] } | null) => { if (d) setOverview(d.cards); })
+      .catch(() => {});
+  }, [selectedMonth]);
 
   useEffect(() => {
     if (!selectedCardId) return;
@@ -96,10 +105,16 @@ export default function CardsPage() {
     loadGrid();
   }, [selectedCardId, selectedMonth, loadEnvelope, loadGrid]);
 
+  useEffect(() => {
+    if (cards.length === 0) return;
+    loadOverview();
+  }, [cards, selectedMonth, loadOverview]);
+
   const onEnvelopeSaved = () => {
     setEditingEnvelope(false);
     loadEnvelope();
     loadGrid();
+    loadOverview();
   };
 
   return (
@@ -117,6 +132,14 @@ export default function CardsPage() {
                 <p className="text-sm mb-1" style={{ color: '#6B7280' }}>{t('noCards')}</p>
                 <p className="text-sm" style={{ color: '#9CA3AF' }}>{t('noCardsHint')}</p>
               </div>
+            )}
+
+            {cards.length > 1 && overview.length > 0 && (
+              <CrossCardView
+                cards={overview}
+                monthLabel={months.find((mo) => mo.value === selectedMonth)?.label ?? selectedMonth}
+                locale={locale}
+              />
             )}
 
             {cards.length > 0 && (

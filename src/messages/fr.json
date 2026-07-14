@@ -460,12 +460,14 @@
       "difference": "Reste",
       "status": "Statut",
       "over": "Dépassé",
+      "watch": "À surveiller",
       "ok": "OK",
       "total": "TOTAL",
       "withinGoal": "Dans l'objectif",
       "overGoal": "Objectif dépassé",
       "uncategorized": "Sans catégorie",
-      "noEnvelope": "Aucune enveloppe définie — ajoutez des catégories ci-dessous pour suivre vos dépenses par catégorie."
+      "noEnvelope": "Aucune enveloppe définie — ajoutez des catégories ci-dessous pour suivre vos dépenses par catégorie.",
+      "goalVsAllocated": "Objectif {goal} · sous-budgets {sum} · {over} en surallocation"
     },
     "editor": {
       "title": "Modifier l'enveloppe",
@@ -480,12 +482,29 @@
       "paymentDay": "Jour d'échéance du paiement",
       "save": "Enregistrer l'enveloppe",
       "saving": "Enregistrement...",
-      "cancel": "Annuler"
+      "cancel": "Annuler",
+      "copyFromPrevious": "Copier le mois précédent",
+      "copying": "Copie en cours...",
+      "copyNothingToCopy": "Aucune enveloppe enregistrée pour le mois précédent.",
+      "copyFailed": "Impossible de charger le mois précédent."
     },
     "grid": {
-      "title": "Historique 12 mois",
+      "title": "Plan sur 12 mois",
       "total": "Total dépensé",
-      "goal": "Objectif"
+      "goal": "Objectif",
+      "current": "en cours",
+      "uncategorized": "Sans catégorie",
+      "empty": "Configurez des catégories d'enveloppe pour voir votre plan sur 12 mois."
+    },
+    "overview": {
+      "title": "Marge de manœuvre sur vos cartes",
+      "goal": "Objectif",
+      "spent": "Dépensé",
+      "room": "Marge",
+      "over": "Dépassé",
+      "watch": "À surveiller",
+      "ok": "OK",
+      "noGoal": "Aucun objectif"
     }
   },
   "planner": {

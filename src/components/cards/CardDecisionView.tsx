@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/components/expenses/types';
-import { EnvelopeStatus } from '@/lib/envelopeHelpers';
+import { EnvelopeStatus, envelopeStatus, sumWarning } from '@/lib/envelopeHelpers';
 
 export type EnvelopeItem = {
   categoryId: string;
@@ -35,8 +35,19 @@ export default function CardDecisionView({
   const overGoal = remaining !== null && remaining < 0;
   const hasEnvelope = envelopeItems.length > 0;
 
+  // TOTAL row sums its own columns — Envelope and Spent are independent
+  // truths, not a comparison against the card goal (that comparison lives in
+  // its own labeled line below, tied to the same warn-not-block rule the
+  // editor already uses).
+  const envelopeSum = envelopeItems.reduce((s, i) => s + i.monthlyAmount, 0);
+  const spentSum = envelopeItems.reduce((s, i) => s + i.actual, 0) + uncategorized;
+  const leftSum = envelopeSum - spentSum;
+  const totalStatus: EnvelopeStatus = envelopeStatus(envelopeSum, spentSum);
+  const overAllocated = totalGoal !== null && sumWarning(envelopeItems.map((i) => ({ monthlyAmount: i.monthlyAmount })), totalGoal);
+
   const statusColor = (status: EnvelopeStatus, actual: number) => {
     if (status === 'over') return '#DC2626';
+    if (status === 'watch') return '#D97706';
     if (status === 'ok' && actual > 0) return '#16A34A';
     return '#9CA3AF';
   };
@@ -137,6 +148,10 @@ export default function CardDecisionView({
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#FEE2E2', color: '#DC2626' }}>
                           {t('decision.over')}
                         </span>
+                      ) : row.status === 'watch' ? (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#FEF3C7', color: '#D97706' }}>
+                          {t('decision.watch')}
+                        </span>
                       ) : row.status === 'ok' && row.actual > 0 ? (
                         <span className="text-xs font-semibold" style={{ color: '#16A34A' }}>✓ {t('decision.ok')}</span>
                       ) : (
@@ -164,26 +179,44 @@ export default function CardDecisionView({
                 )}
               </tbody>
               <tfoot>
+                {/* TOTAL sums its own columns — no goal comparison mixed in. */}
                 <tr style={{ borderTop: '2px solid #0F2044' }}>
                   <td className="py-3 font-bold" style={{ color: '#0F2044' }}>{t('decision.total')}</td>
                   <td className="py-3 text-right font-bold" style={{ color: '#0F2044' }}>
-                    {totalGoal !== null ? formatCurrency(totalGoal, locale) : '—'}
+                    {formatCurrency(envelopeSum, locale)}
                   </td>
-                  <td className="py-3 text-right font-bold" style={{ color: overGoal ? '#DC2626' : '#0F2044' }}>
-                    {formatCurrency(totalSpent, locale)}
+                  <td className="py-3 text-right font-bold" style={{ color: statusColor(totalStatus, spentSum) === '#9CA3AF' ? '#0F2044' : statusColor(totalStatus, spentSum) }}>
+                    {formatCurrency(spentSum, locale)}
                   </td>
-                  <td className="py-3 text-right font-bold" style={{ color: remaining === null ? '#9CA3AF' : overGoal ? '#DC2626' : '#16A34A' }}>
-                    {remaining !== null ? formatCurrency(remaining, locale) : '—'}
+                  <td className="py-3 text-right font-bold" style={{ color: leftSum < 0 ? '#DC2626' : '#0F2044' }}>
+                    {formatCurrency(leftSum, locale)}
                   </td>
                   <td className="py-3 text-right font-bold">
-                    {totalGoal === null ? '—'
-                      : overGoal
-                      ? <span style={{ color: '#DC2626' }}>{t('decision.overGoal')}</span>
-                      : <span style={{ color: '#16A34A' }}>✓ {t('decision.withinGoal')}</span>}
+                    {totalStatus === 'over' ? (
+                      <span style={{ color: '#DC2626' }}>{t('decision.over')}</span>
+                    ) : totalStatus === 'watch' ? (
+                      <span style={{ color: '#D97706' }}>{t('decision.watch')}</span>
+                    ) : totalStatus === 'ok' ? (
+                      <span style={{ color: '#16A34A' }}>✓ {t('decision.ok')}</span>
+                    ) : (
+                      <span style={{ color: '#9CA3AF' }}>—</span>
+                    )}
                   </td>
                 </tr>
               </tfoot>
             </table>
+
+            {/* Goal comparison lives on its own line — a separate truth from the
+                column sums above. Warn, never block, same rule the editor uses. */}
+            {overAllocated && (
+              <p className="text-xs font-medium mt-3 px-3 py-2 rounded-lg" style={{ background: '#FEF3C7', color: '#D97706' }}>
+                {t('decision.goalVsAllocated', {
+                  goal: formatCurrency(totalGoal as number, locale),
+                  sum: formatCurrency(envelopeSum, locale),
+                  over: formatCurrency(envelopeSum - (totalGoal as number), locale),
+                })}
+              </p>
+            )}
           </>
         )}
       </div>

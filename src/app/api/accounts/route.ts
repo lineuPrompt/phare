@@ -22,8 +22,7 @@ export async function GET() {
       .from('accounts')
       .select('id, name, type, statement_close_day, payment_day, goal_target, goal_target_date')
       .eq('household_id', householdId)
-      .order('type', { ascending: true })
-      .order('name', { ascending: true });
+      .order('created_at', { ascending: true });
 
     return NextResponse.json({ accounts: accounts ?? [] });
   } catch {

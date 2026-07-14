@@ -1,15 +1,20 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { buildGrid, EnvTx } from '@/lib/envelopeHelpers';
+import { buildGrid, EnvTx, EnvelopeSnapshotItem } from '@/lib/envelopeHelpers';
+import { categoryDisplayName } from '@/lib/categoryTranslations';
 
-// GET /api/card-envelope/grid?cardId=<uuid>
-// Returns the 12-month trailing grid for one card.
-// Rows = the card's envelope categories. Columns = last 12 months (oldest → current).
-// Read-only, derived entirely from transactions + envelope items via envelopeHelpers.
+// GET /api/card-envelope/grid?cardId=<uuid>&locale=en|fr
+// Forward-looking grid for one card: current month + next 11. The current
+// month shows real actuals (from this month's transactions); future months
+// are budget-only — the past doesn't help the decision, so this grid never
+// looks backward. Budgets are carried forward per-cell from the nearest
+// saved envelope snapshot at or before that month (read-only projection;
+// never writes anything).
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const cardId = url.searchParams.get('cardId');
+    const locale = url.searchParams.get('locale') === 'fr' ? 'fr' : 'en';
     if (!cardId) {
       return NextResponse.json({ error: 'cardId required' }, { status: 400 });
     }
@@ -28,63 +33,75 @@ export async function GET(request: Request) {
       .from('accounts').select('id').eq('id', cardId).eq('household_id', householdId).single();
     if (!card) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
 
-    // Build 12-month list ending with the current calendar month
+    // Current month + next 11
     const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const months: string[] = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
-    const rangeStart = `${months[0]}-01`;
-    const last = months[months.length - 1];
-    const [ly, lm] = last.split('-').map(Number);
-    const rangeEnd = lm === 12
-      ? `${ly + 1}-01-01`
-      : `${ly}-${String(lm + 1).padStart(2, '0')}-01`;
 
-    // Fetch all transactions for this card in the 12-month window
+    // Only the current month can have real actuals in a forward-looking grid.
+    const monthStart = `${currentMonth}-01`;
+    const [cy, cm] = currentMonth.split('-').map(Number);
+    const nextMonth = cm === 12 ? `${cy + 1}-01-01` : `${cy}-${String(cm + 1).padStart(2, '0')}-01`;
+
     const { data: rawTxns } = await supabase
       .from('transactions')
       .select('account_id, amount, category_id, type, date, is_bridge')
       .eq('household_id', householdId)
       .eq('account_id', cardId)
-      .gte('date', rangeStart)
-      .lt('date', rangeEnd);
+      .gte('date', monthStart)
+      .lt('date', nextMonth);
 
-    // Envelope categories (defines the rows)
-    const { data: items } = await supabase
+    // All envelope-item snapshots ever saved for this card, grouped by month
+    // — carried forward per-cell so future columns show the projected plan.
+    const { data: itemRows } = await supabase
       .from('card_envelope_items')
-      .select('category_id, categories(name)')
+      .select('month, category_id, monthly_amount')
       .eq('household_id', householdId)
       .eq('account_id', cardId);
 
-    const envelopeCategories = (items ?? []).map((i) => ({
-      id: i.category_id as string,
-      name: (i.categories as unknown as { name: string } | null)?.name ?? '?',
-    }));
+    const itemSnapshotsByMonth = new Map<string, EnvelopeSnapshotItem[]>();
+    for (const row of itemRows ?? []) {
+      const m = (row.month as string).slice(0, 7);
+      const list = itemSnapshotsByMonth.get(m) ?? [];
+      list.push({ categoryId: row.category_id as string, monthlyAmount: Number(row.monthly_amount) });
+      itemSnapshotsByMonth.set(m, list);
+    }
 
-    // Monthly goals for this card across the grid window
+    // All goals ever saved for this card, carried forward the same way.
     const { data: goalRows } = await supabase
       .from('monthly_goals')
       .select('month, card_goal')
       .eq('household_id', householdId)
-      .eq('account_id', cardId)
-      .gte('month', rangeStart)
-      .lt('month', rangeEnd);
+      .eq('account_id', cardId);
 
-    const totalGoals = new Map<string, number | null>(
-      (goalRows ?? []).map((g) => [
-        (g.month as string).slice(0, 7), // YYYY-MM
-        Number(g.card_goal),
-      ])
+    const goalsByMonth = new Map<string, number>(
+      (goalRows ?? []).map((g) => [(g.month as string).slice(0, 7), Number(g.card_goal)])
+    );
+
+    // Category names — needed because a category can appear via actual
+    // activity (e.g. a refund) without ever having a saved envelope item.
+    const { data: categories } = await supabase
+      .from('categories')
+      .select('id, name, name_fr')
+      .eq('household_id', householdId)
+      .eq('type', 'expense');
+
+    const categoryNames = new Map(
+      (categories ?? []).map((c) => [c.id as string, categoryDisplayName(c, locale)])
     );
 
     const grid = buildGrid(
       (rawTxns ?? []) as EnvTx[],
       cardId,
-      envelopeCategories,
+      itemSnapshotsByMonth,
+      categoryNames,
       months,
-      totalGoals
+      goalsByMonth,
+      currentMonth
     );
 
     return NextResponse.json(grid);

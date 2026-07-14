@@ -460,12 +460,14 @@
       "difference": "Left",
       "status": "Status",
       "over": "Over",
+      "watch": "Watch",
       "ok": "OK",
       "total": "TOTAL",
       "withinGoal": "Within goal",
       "overGoal": "Over goal",
       "uncategorized": "Uncategorized",
-      "noEnvelope": "No envelope set — add categories below to track spending by category."
+      "noEnvelope": "No envelope set — add categories below to track spending by category.",
+      "goalVsAllocated": "Goal {goal} · sub-budgets {sum} · {over} over-allocated"
     },
     "editor": {
       "title": "Edit envelope",
@@ -480,12 +482,29 @@
       "paymentDay": "Payment due day",
       "save": "Save envelope",
       "saving": "Saving...",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "copyFromPrevious": "Copy from previous month",
+      "copying": "Copying...",
+      "copyNothingToCopy": "No envelope was saved for the previous month.",
+      "copyFailed": "Couldn't load the previous month."
     },
     "grid": {
-      "title": "12-month history",
+      "title": "12-month plan",
       "total": "Total spent",
-      "goal": "Goal"
+      "goal": "Goal",
+      "current": "current",
+      "uncategorized": "Uncategorized",
+      "empty": "Set up envelope categories to see your 12-month plan."
+    },
+    "overview": {
+      "title": "Room across your cards",
+      "goal": "Goal",
+      "spent": "Spent",
+      "room": "Room",
+      "over": "Over",
+      "watch": "Watch",
+      "ok": "OK",
+      "noGoal": "No goal"
     }
   },
   "planner": {
