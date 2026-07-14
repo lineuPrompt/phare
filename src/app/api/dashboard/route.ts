@@ -32,16 +32,29 @@ export async function GET(request: Request) {
       }
     }).catch(() => {});
 
-    // Plan existence check: the latest budget row determines whether a plan has been saved.
-    const { data: latestBudget } = await supabase
-      .from('budgets')
-      .select('month')
+    // Plan existence check: file_imports is the one row EVERY completed
+    // save-plan run inserts unconditionally (buildFileImportRow in
+    // importProvenance.ts), regardless of source or which categories the
+    // plan contains — template and manual entry write it via the exact same
+    // call, no branching. budgets used to be the proxy here, but budgets is
+    // only populated when the plan has at least one VARIABLE-expense
+    // category; a genuinely minimal manual entry (e.g. salary + rent, no
+    // day-to-day spending categories) legitimately has zero, and this gate
+    // was reporting "no plan" for a fully saved, valid one. Template plans
+    // happened to always clear it only because the template ships with
+    // non-zero example values pre-filled into Variable Expenses — an
+    // accident of the template's defaults, not a real distinction between
+    // the two onboarding paths. file_imports has no such accident: it's a
+    // true one-row-per-save contract shared by both writers.
+    const { data: latestImport } = await supabase
+      .from('file_imports')
+      .select('id')
       .eq('household_id', householdId)
-      .order('month', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (!latestBudget) {
+    if (!latestImport) {
       return NextResponse.json({ hasPlan: false });
     }
 
@@ -64,10 +77,19 @@ export async function GET(request: Request) {
       ? `${ay + 1}-01-01`
       : `${ay}-${String(am + 1).padStart(2, '0')}-01`;
 
-    // Plan month: the month of the most recent saved budget.
-    // Used only for budget-vs-actual comparison. Budgets don't exist for months
-    // that haven't been planned, so we never fake a budget for the current month.
-    const planMonth = latestBudget.month as string;
+    // Plan month: the month of the most recent saved budget, when one
+    // exists — used only for budget-vs-actual comparison. A household with
+    // no variable-expense categories has no budget rows at all (honest:
+    // there is nothing to compare), so this falls back to the actuals
+    // month rather than gating plan existence on it.
+    const { data: latestBudget } = await supabase
+      .from('budgets')
+      .select('month')
+      .eq('household_id', householdId)
+      .order('month', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const planMonth = (latestBudget?.month as string | undefined) ?? actualsMonth;
 
     const [txResult, acctResult, budgetResult, sfResult, convResult, unanchoredIncomeResult, unanchoredExpenseResult] =
       await Promise.all([
