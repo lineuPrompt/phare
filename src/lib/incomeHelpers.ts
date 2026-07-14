@@ -31,7 +31,7 @@ export function monthlyEquivalent(amount: number, frequency: IncomeFrequency): n
 const HOUSEHOLD_NAMES = new Set(['household', 'menage', 'menage familial']);
 
 /** Case/accent/whitespace-insensitive normalization shared by every tier of matching. */
-function normalizeName(s: string): string {
+export function normalizeName(s: string): string {
   return s
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // strip combining diacritics (e.g. accented -> unaccented)
@@ -50,9 +50,11 @@ export type MemberNameMatch =
  * Never guesses: a match is only returned when it is unambiguous.
  *
  *  (a) exact full-name match, case/whitespace-insensitive
- *  (b) unique first-name match — "Julia" matches "Julia Alff" iff exactly
- *      one household member's first name is Julia; two Julias is never
- *      resolved to either one
+ *  (b) unique first-name match, checked on BOTH sides — "Julia" matches
+ *      "Julia Alff" (short input, full candidate) AND "Julia Alff" matches
+ *      a candidate named just "Julia" (full input, short candidate — e.g. a
+ *      name-only member created during onboarding, later invited by full
+ *      name). Two Julias is never resolved to either one.
  *  (c) accent-insensitive throughout (é/e, ç/c, ...), both sides normalized
  *
  * "Household" / "Ménage" / "Ménage familial" resolve to household-level
@@ -66,10 +68,35 @@ export function resolveMemberName(name: string, members: { id: string; name: str
   const exact = members.find((m) => normalizeName(m.name) === normalized);
   if (exact) return { kind: 'member', memberId: exact.id };
 
-  const firstNameMatches = members.filter((m) => normalizeName(m.name).split(' ')[0] === normalized);
+  const firstToken = normalized.split(' ')[0];
+  const firstNameMatches = members.filter((m) => normalizeName(m.name).split(' ')[0] === firstToken);
   if (firstNameMatches.length === 1) return { kind: 'member', memberId: firstNameMatches[0].id };
 
   return { kind: 'unmatched' };
+}
+
+/**
+ * Every existing member matching `name` under the same tiers as
+ * resolveMemberName (exact, then first-name in either direction) — WITHOUT
+ * collapsing multiple matches down to "unmatched". Used where the caller
+ * needs to tell "no match" apart from "ambiguous, ask a human" instead of
+ * treating both the same way resolveMemberName's silent-fallback callers do
+ * (e.g. the member-invite endpoint's match-before-create check: a unique
+ * result attaches automatically, an ambiguous one must ask the owner to
+ * pick, never guess).
+ */
+export function findMemberNameCandidates(
+  name: string,
+  members: { id: string; name: string }[]
+): { id: string; name: string }[] {
+  const normalized = normalizeName(name);
+  if (!normalized) return [];
+
+  const exact = members.filter((m) => normalizeName(m.name) === normalized);
+  if (exact.length > 0) return exact;
+
+  const firstToken = normalized.split(' ')[0];
+  return members.filter((m) => normalizeName(m.name).split(' ')[0] === firstToken);
 }
 
 /**

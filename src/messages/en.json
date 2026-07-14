@@ -266,9 +266,14 @@
         "day1Label": "First payday (day of month)",
         "day2Label": "Second payday (day of month)",
         "shortMonthNote": "30th or 31st? In shorter months (like February), it lands on the last day instead.",
-        "setPayDate": "Set pay date",
         "saving": "Saving...",
         "savedConfirm": "Pay date set.",
+        "saveAllDates": "Save all dates",
+        "savingAll": "Saving...",
+        "batchResult": {
+          "allSaved": "{saved, plural, one {1 date saved.} other {# dates saved.}}",
+          "partial": "{saved, plural, one {1 date saved} other {# dates saved}}, {failed, plural, one {1 needs attention above} other {# need attention above}}."
+        },
         "continue": "Continue",
         "skipNote": "Anything left blank stays flagged as \"needs a pay date\" — you can add it later on the Recurring page.",
         "confirmSkip": {
@@ -644,6 +649,13 @@
     "successBody": "A set-password email has been sent to {email}. They'll click the link to set their password and sign in.",
     "resentTitle": "Email resent",
     "resentBody": "A new set-password email has been sent to {email}. The previous link may have expired.",
+    "attachedTitle": "Matched to an existing member",
+    "attachedBody": "{name} was already part of your household — we attached this invite to that existing record instead of creating a duplicate. A set-password email has been sent to {email}.",
+    "disambiguation": {
+      "prompt": "\"{name}\" matches more than one existing household member. Is this one of them, or a new person?",
+      "attachTo": "This is {name} — attach the invite to them",
+      "createNew": "This is someone new — create a new person"
+    },
     "noMembers": "No other members yet.",
     "you": "you",
     "ownerBadge": "Owner",

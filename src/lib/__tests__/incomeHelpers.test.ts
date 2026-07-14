@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { monthlyEquivalent, resolveMemberId, resolveMemberName, collectUnresolvedMemberNames } from '../incomeHelpers';
+import { monthlyEquivalent, resolveMemberId, resolveMemberName, collectUnresolvedMemberNames, findMemberNameCandidates } from '../incomeHelpers';
 
 describe('monthlyEquivalent', () => {
   it('weekly: multiplies by 52/12', () => {
@@ -92,6 +92,50 @@ describe('resolveMemberName', () => {
 
   it('reports unmatched for an empty name', () => {
     expect(resolveMemberName('   ', members)).toEqual({ kind: 'unmatched' });
+  });
+
+  it('matches in the REVERSE direction too — a full name matches a name-only member (the invite/quick-add case)', () => {
+    // "Julia" was created name-only during onboarding discovery; later the
+    // owner invites "Julia Alff" by full name — this must match her, not
+    // create a second row.
+    const withNameOnlyMember = [{ id: 'm5', name: 'Julia' }];
+    expect(resolveMemberName('Julia Alff', withNameOnlyMember)).toEqual({ kind: 'member', memberId: 'm5' });
+  });
+
+  it('never guesses in the reverse direction either — two name-only Julias stay unmatched', () => {
+    const twoNameOnlyJulias = [
+      { id: 'm5', name: 'Julia' },
+      { id: 'm6', name: 'Julia' },
+    ];
+    expect(resolveMemberName('Julia Alff', twoNameOnlyJulias)).toEqual({ kind: 'unmatched' });
+  });
+});
+
+describe('findMemberNameCandidates', () => {
+  it('returns the single exact match', () => {
+    const members = [{ id: 'm1', name: 'Lineu Prompt Graeff' }, { id: 'm2', name: 'Julia Alff' }];
+    expect(findMemberNameCandidates('Julia Alff', members)).toEqual([{ id: 'm2', name: 'Julia Alff' }]);
+  });
+
+  it('returns the single first-name match in the reverse direction (full input, short candidate)', () => {
+    const members = [{ id: 'm5', name: 'Julia' }];
+    expect(findMemberNameCandidates('Julia Alff', members)).toEqual([{ id: 'm5', name: 'Julia' }]);
+  });
+
+  it('returns BOTH candidates when ambiguous — the caller decides what to do, never guesses', () => {
+    const members = [{ id: 'm5', name: 'Julia' }, { id: 'm6', name: 'Julia' }];
+    const result = findMemberNameCandidates('Julia Alff', members);
+    expect(result).toHaveLength(2);
+    expect(result.map((m) => m.id).sort()).toEqual(['m5', 'm6']);
+  });
+
+  it('returns an empty array for no match', () => {
+    const members = [{ id: 'm1', name: 'Lineu Prompt Graeff' }];
+    expect(findMemberNameCandidates('Marc', members)).toEqual([]);
+  });
+
+  it('returns an empty array for a blank name', () => {
+    expect(findMemberNameCandidates('   ', [{ id: 'm1', name: 'Julia' }])).toEqual([]);
   });
 });
 

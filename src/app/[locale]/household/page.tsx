@@ -30,6 +30,11 @@ export default function HouseholdPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [addedEmail, setAddedEmail] = useState('');
+  const [attachedTo, setAttachedTo] = useState<string | null>(null);
+  // Set when the invite's name matches more than one existing name-only
+  // member (e.g. two people named "Julia" added via onboarding discovery) —
+  // never guessed, the owner picks attach-to-X or create-as-new explicitly.
+  const [disambiguation, setDisambiguation] = useState<{ candidates: { id: string; name: string }[] } | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -45,18 +50,29 @@ export default function HouseholdPage() {
     }).finally(() => setLoading(false));
   }, [router, locale]);
 
-  const handleAdd = async () => {
+  // overrides carries the owner's explicit choice after a needsDisambiguation
+  // response (attachToMemberId or forceNew) — omitted on the first attempt,
+  // when match-before-create runs on the server and decides for itself
+  // whenever the result is unambiguous.
+  const handleAdd = async (overrides?: { attachToMemberId?: string; forceNew?: boolean }) => {
     setError('');
     setSaving(true);
     try {
       const res = await fetch('/api/household/members', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), fullName: fullName.trim(), role }),
+        body: JSON.stringify({ email: email.trim(), fullName: fullName.trim(), role, ...overrides }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Failed to add member'); return; }
 
+      if (data.needsDisambiguation) {
+        setDisambiguation({ candidates: data.candidates });
+        return;
+      }
+
+      setDisambiguation(null);
+      setAttachedTo(data.attached ? (data.attachedTo as string) : null);
       setAddedEmail(data.resent ? `resent:${email.trim()}` : email.trim());
       setEmail('');
       setFullName('');
@@ -163,16 +179,48 @@ export default function HouseholdPage() {
                   style={{ background: '#F0FDF4', border: '1px solid #BBF7D0' }}
                 >
                   <h2 className="font-semibold" style={{ color: '#15803D' }}>
-                    {isResent ? t('resentTitle') : t('successTitle')}
+                    {isResent ? t('resentTitle') : attachedTo ? t('attachedTitle') : t('successTitle')}
                   </h2>
                   <p className="text-sm" style={{ color: '#166534' }}>
                     {isResent
                       ? t('resentBody', { email: displayEmail })
-                      : t('successBody', { email: displayEmail })}
+                      : attachedTo
+                        ? t('attachedBody', { name: attachedTo, email: displayEmail })
+                        : t('successBody', { email: displayEmail })}
                   </p>
                 </section>
               );
             })()}
+
+            {/* Ambiguous name match — never guessed, the owner picks. */}
+            {disambiguation && (
+              <section className="rounded-2xl p-6 space-y-3" style={{ background: '#FFFBEB', border: '1.5px solid #F5A623' }}>
+                <p className="text-sm font-medium" style={{ color: '#92400E' }}>
+                  {t('disambiguation.prompt', { name: fullName.trim() })}
+                </p>
+                <div className="space-y-2">
+                  {disambiguation.candidates.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => handleAdd({ attachToMemberId: c.id })}
+                      disabled={saving}
+                      className="w-full text-left px-4 py-2.5 rounded-lg text-sm cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
+                      style={{ border: '1.5px solid #D1D5DB', color: '#0F2044', background: 'white' }}
+                    >
+                      {t('disambiguation.attachTo', { name: c.name })}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => handleAdd({ forceNew: true })}
+                    disabled={saving}
+                    className="w-full text-left px-4 py-2.5 rounded-lg text-sm cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
+                    style={{ border: '1.5px solid #D1D5DB', color: '#0F2044', background: 'white' }}
+                  >
+                    {t('disambiguation.createNew')}
+                  </button>
+                </div>
+              </section>
+            )}
 
             {/* Add member form */}
             <section className="rounded-2xl bg-white p-6 space-y-4" style={{ border: '1px solid #E5E7EB' }}>
@@ -185,7 +233,7 @@ export default function HouseholdPage() {
                 <input
                   type="text"
                   value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  onChange={(e) => { setFullName(e.target.value); setDisambiguation(null); }}
                   className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
                   style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
                 />
@@ -198,7 +246,7 @@ export default function HouseholdPage() {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => { setEmail(e.target.value); setDisambiguation(null); }}
                   className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
                   style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
                 />
@@ -234,14 +282,16 @@ export default function HouseholdPage() {
 
               {error && <p className="text-sm text-red-600">{error}</p>}
 
-              <button
-                onClick={handleAdd}
-                disabled={saving || !email.trim() || !fullName.trim()}
-                className="w-full py-3 rounded-full text-white font-semibold cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
-                style={{ background: '#0F2044' }}
-              >
-                {saving ? t('saving') : t('save')}
-              </button>
+              {!disambiguation && (
+                <button
+                  onClick={() => handleAdd()}
+                  disabled={saving || !email.trim() || !fullName.trim()}
+                  className="w-full py-3 rounded-full text-white font-semibold cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
+                  style={{ background: '#0F2044' }}
+                >
+                  {saving ? t('saving') : t('save')}
+                </button>
+              )}
             </section>
           </div>
         </div>

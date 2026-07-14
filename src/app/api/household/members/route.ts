@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { findMemberNameCandidates } from '@/lib/incomeHelpers';
 
 // ---------------------------------------------------------------------------
 // Auth guard — exported for unit testing
@@ -86,10 +87,14 @@ export async function POST(request: Request) {
     // 2. Validate input
     // -----------------------------------------------------------------------
     const body = await request.json();
-    const { email, fullName, role } = body as {
+    const { email, fullName, role, attachToMemberId, forceNew } = body as {
       email?: string;
       fullName?: string;
       role?: string;
+      // Set by the client after a needsDisambiguation response — the owner's
+      // explicit choice, never inferred.
+      attachToMemberId?: string;
+      forceNew?: boolean;
     };
 
     if (!email?.trim()) {
@@ -104,6 +109,59 @@ export async function POST(request: Request) {
     }
     if (role !== 'member' && role !== 'owner') {
       return NextResponse.json({ error: 'Role must be member or owner' }, { status: 400 });
+    }
+
+    // -----------------------------------------------------------------------
+    // 2b. Match-before-create — same rule accounts already follow. A
+    // name-only member created during onboarding discovery (user_id null,
+    // e.g. quick-add's "Julia") must be ATTACHED when later invited by name,
+    // never duplicated. Uses the same tiered matching as the template's
+    // Member column (resolveMemberName's rules, exposed here via
+    // findMemberNameCandidates so an ambiguous result is visible instead of
+    // collapsed to "no match").
+    //
+    //   - attachToMemberId given  → the owner already chose, from a prior
+    //     needsDisambiguation response. Skip matching, validate and attach.
+    //   - forceNew given          → the owner chose "create as a new
+    //     person" from that same prompt. Skip matching entirely.
+    //   - neither given           → run the match:
+    //       0 candidates → create as today (no attach).
+    //       1 candidate  → unambiguous, attach automatically.
+    //       2+ candidates → never guess; return them and stop before
+    //         creating anything, so the owner picks attach-vs-new.
+    // -----------------------------------------------------------------------
+    let attachTargetId: string | null = null;
+
+    if (attachToMemberId) {
+      const { data: target } = await supabase
+        .from('household_members')
+        .select('id, user_id, household_id')
+        .eq('id', attachToMemberId)
+        .single();
+      if (!target || target.household_id !== caller.householdId) {
+        return NextResponse.json({ error: 'That member was not found in your household' }, { status: 404 });
+      }
+      if (target.user_id) {
+        return NextResponse.json({ error: 'That member already has an account' }, { status: 409 });
+      }
+      attachTargetId = attachToMemberId;
+    } else if (!forceNew) {
+      const { data: nameOnlyMembers } = await supabase
+        .from('household_members')
+        .select('id, name')
+        .eq('household_id', caller.householdId)
+        .is('user_id', null);
+
+      const candidates = findMemberNameCandidates(fullName.trim(), nameOnlyMembers ?? []);
+      if (candidates.length > 1) {
+        return NextResponse.json({
+          needsDisambiguation: true,
+          candidates: candidates.map((c) => ({ id: c.id, name: c.name })),
+        });
+      }
+      if (candidates.length === 1) {
+        attachTargetId = candidates[0].id;
+      }
     }
 
     // -----------------------------------------------------------------------
@@ -161,6 +219,65 @@ export async function POST(request: Request) {
     }
 
     // -----------------------------------------------------------------------
+    // 3b. Attach-and-cleanup. handle_new_user() (the signup trigger) ALWAYS
+    // inserts a brand-new household_members row for the new auth user —
+    // that's unconditional, unrelated to matching. When we matched an
+    // existing name-only member above, re-point that identity onto the
+    // EXISTING row (which may carry real recurring_items/transactions/
+    // budgets attribution — see the household_members merge script for the
+    // list) and delete the trigger's just-created duplicate instead. This is
+    // simpler and safer than re-pointing every FK: nothing references a row
+    // that's milliseconds old, so deleting it is trivially safe, while the
+    // existing row's id — and everything already pointing at it — never
+    // changes.
+    // -----------------------------------------------------------------------
+    let attached = false;
+    let attachedTo: string | null = null;
+
+    if (attachTargetId && newUser.user) {
+      const { data: existingRow } = await supabase
+        .from('household_members')
+        .select('name')
+        .eq('id', attachTargetId)
+        .single();
+
+      if (existingRow) {
+        const mergedName = fullName.trim().length > existingRow.name.trim().length
+          ? fullName.trim()
+          : existingRow.name;
+
+        const { error: attachError } = await supabase
+          .from('household_members')
+          .update({ user_id: newUser.user.id, name: mergedName })
+          .eq('id', attachTargetId);
+
+        if (attachError) {
+          console.error('Member attach-on-invite update error (userId for ops):', newUser.user.id, attachError);
+        } else {
+          attached = true;
+          attachedTo = mergedName;
+
+          const { data: duplicateRow } = await supabase
+            .from('household_members')
+            .select('id')
+            .eq('user_id', newUser.user.id)
+            .neq('id', attachTargetId)
+            .maybeSingle();
+
+          if (duplicateRow) {
+            const { error: cleanupError } = await supabase
+              .from('household_members')
+              .delete()
+              .eq('id', duplicateRow.id);
+            if (cleanupError) {
+              console.error('Member attach-on-invite duplicate cleanup error (row left behind, needs manual removal via the merge script):', duplicateRow.id, cleanupError);
+            }
+          }
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
     // 4. Send the set-password email via resetPasswordForEmail.
     //    redirectTo must use the incoming request origin so it works in both
     //    dev and prod without an extra env var.
@@ -180,7 +297,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, attached, attachedTo });
   } catch (err) {
     console.error('Members POST threw:', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });

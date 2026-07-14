@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateNextPayDate, validateSemimonthlyDays, buildSemimonthlyAnchor, evaluateSkipConfirmation, dropResolvedItems } from '../anchorDateHelpers';
+import { validateNextPayDate, validateSemimonthlyDays, buildSemimonthlyAnchor, evaluateSkipConfirmation, dropResolvedItems, selectBatchSaveable, summarizeBatchResult } from '../anchorDateHelpers';
 
 describe('validateNextPayDate', () => {
   it('accepts a biweekly payday exactly 14 days out', () => {
@@ -137,5 +137,84 @@ describe('dropResolvedItems', () => {
   it('ignores resolved ids that are not present in the list', () => {
     const items = [{ id: 'a' }];
     expect(dropResolvedItems(items, ['does-not-exist'])).toEqual(items);
+  });
+});
+
+describe('selectBatchSaveable', () => {
+  const items = [
+    { id: 'a', cadence: 'biweekly' },
+    { id: 'b', cadence: 'semimonthly' },
+    { id: 'c', cadence: 'weekly' },
+  ];
+
+  it('includes a weekly/biweekly item once nextPayDate is filled in', () => {
+    const state = {
+      a: { status: 'idle', nextPayDate: '2026-07-15', day1: '', day2: '' },
+      b: { status: 'idle', nextPayDate: '', day1: '', day2: '' },
+      c: { status: 'idle', nextPayDate: '', day1: '', day2: '' },
+    };
+    expect(selectBatchSaveable(items, state).map((i) => i.id)).toEqual(['a']);
+  });
+
+  it('requires BOTH semimonthly days to be filled in, not just one', () => {
+    const state = {
+      a: { status: 'idle', nextPayDate: '', day1: '', day2: '' },
+      b: { status: 'idle', nextPayDate: '', day1: '15', day2: '' },
+      c: { status: 'idle', nextPayDate: '', day1: '', day2: '' },
+    };
+    expect(selectBatchSaveable(items, state)).toEqual([]);
+
+    const stateBothFilled = { ...state, b: { status: 'idle', nextPayDate: '', day1: '15', day2: '30' } };
+    expect(selectBatchSaveable(items, stateBothFilled).map((i) => i.id)).toEqual(['b']);
+  });
+
+  it('excludes an item already saved, even if its fields are filled in', () => {
+    const state = {
+      a: { status: 'saved', nextPayDate: '2026-07-15', day1: '', day2: '' },
+      b: { status: 'idle', nextPayDate: '', day1: '', day2: '' },
+      c: { status: 'idle', nextPayDate: '', day1: '', day2: '' },
+    };
+    expect(selectBatchSaveable(items, state)).toEqual([]);
+  });
+
+  it('excludes blank items — they still flow to the skip-confirmation, never silently submitted', () => {
+    const state = {
+      a: { status: 'idle', nextPayDate: '', day1: '', day2: '' },
+      b: { status: 'idle', nextPayDate: '', day1: '', day2: '' },
+      c: { status: 'idle', nextPayDate: '', day1: '', day2: '' },
+    };
+    expect(selectBatchSaveable(items, state)).toEqual([]);
+  });
+
+  it('a whitespace-only value counts as blank, not filled', () => {
+    const state = {
+      a: { status: 'idle', nextPayDate: '   ', day1: '', day2: '' },
+      b: { status: 'idle', nextPayDate: '', day1: '', day2: '' },
+      c: { status: 'idle', nextPayDate: '', day1: '', day2: '' },
+    };
+    expect(selectBatchSaveable(items, state)).toEqual([]);
+  });
+
+  it('selects multiple ready items at once, preserving their order', () => {
+    const state = {
+      a: { status: 'idle', nextPayDate: '2026-07-15', day1: '', day2: '' },
+      b: { status: 'idle', nextPayDate: '', day1: '15', day2: '30' },
+      c: { status: 'idle', nextPayDate: '2026-07-08', day1: '', day2: '' },
+    };
+    expect(selectBatchSaveable(items, state).map((i) => i.id)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('summarizeBatchResult', () => {
+  it('tallies saved and failed independently — one failure does not hide the others\' success', () => {
+    expect(summarizeBatchResult(['saved', 'error', 'saved', 'saved', 'error'])).toEqual({ saved: 3, failed: 2 });
+  });
+
+  it('is all-zero for an empty batch', () => {
+    expect(summarizeBatchResult([])).toEqual({ saved: 0, failed: 0 });
+  });
+
+  it('reports a clean all-saved batch', () => {
+    expect(summarizeBatchResult(['saved', 'saved'])).toEqual({ saved: 2, failed: 0 });
   });
 });

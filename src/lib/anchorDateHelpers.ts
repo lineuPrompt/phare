@@ -99,3 +99,36 @@ export function dropResolvedItems<T extends { id: string }>(items: T[], resolved
   const resolved = new Set(resolvedIds);
   return items.filter((item) => !resolved.has(item.id));
 }
+
+export type AnchorItemState = { status: string; nextPayDate: string; day1: string; day2: string };
+
+/**
+ * Which items are eligible for a single "Save all dates" submit: filled in
+ * (enough input to attempt a save) and not already saved. An item left
+ * blank is deliberately excluded here, never silently attempted with empty
+ * data — it still flows into evaluateSkipConfirmation exactly as before.
+ */
+export function selectBatchSaveable<T extends { id: string; cadence: string }>(
+  items: T[],
+  state: Record<string, AnchorItemState>
+): T[] {
+  return items.filter((item) => {
+    const s = state[item.id];
+    if (!s || s.status === 'saved') return false;
+    return item.cadence === 'semimonthly'
+      ? s.day1.trim() !== '' && s.day2.trim() !== ''
+      : s.nextPayDate.trim() !== '';
+  });
+}
+
+/**
+ * Honest per-item tally after a batch save — never just "done" when some
+ * items failed. One item's validation/network error never blocks or hides
+ * another's success; this is what lets the UI say so.
+ */
+export function summarizeBatchResult(outcomes: ('saved' | 'error')[]): { saved: number; failed: number } {
+  return {
+    saved: outcomes.filter((o) => o === 'saved').length,
+    failed: outcomes.filter((o) => o === 'error').length,
+  };
+}

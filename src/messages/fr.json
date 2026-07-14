@@ -266,9 +266,14 @@
         "day1Label": "Première paie (jour du mois)",
         "day2Label": "Deuxième paie (jour du mois)",
         "shortMonthNote": "30 ou 31? Dans les mois plus courts (comme février), cela tombe plutôt le dernier jour.",
-        "setPayDate": "Définir la date de paie",
         "saving": "Enregistrement...",
         "savedConfirm": "Date de paie définie.",
+        "saveAllDates": "Enregistrer toutes les dates",
+        "savingAll": "Enregistrement...",
+        "batchResult": {
+          "allSaved": "{saved, plural, one {1 date enregistrée.} other {# dates enregistrées.}}",
+          "partial": "{saved, plural, one {1 date enregistrée} other {# dates enregistrées}}, {failed, plural, one {1 nécessite votre attention ci-dessus} other {# nécessitent votre attention ci-dessus}}."
+        },
         "continue": "Continuer",
         "skipNote": "Tout champ laissé vide reste marqué « date de paie requise » — vous pourrez l'ajouter plus tard dans la page Récurrences.",
         "confirmSkip": {
@@ -644,6 +649,13 @@
     "successBody": "Un courriel de définition de mot de passe a été envoyé à {email}. Le membre cliquera sur le lien pour définir son mot de passe et se connecter.",
     "resentTitle": "Courriel renvoyé",
     "resentBody": "Un nouveau courriel de définition de mot de passe a été envoyé à {email}. Le lien précédent a peut-être expiré.",
+    "attachedTitle": "Rattaché à un membre existant",
+    "attachedBody": "{name} faisait déjà partie de votre foyer — nous avons rattaché cette invitation à ce membre existant plutôt que de créer un doublon. Un courriel de définition de mot de passe a été envoyé à {email}.",
+    "disambiguation": {
+      "prompt": "« {name} » correspond à plus d'un membre existant du foyer. S'agit-il de l'un d'eux, ou d'une nouvelle personne?",
+      "attachTo": "C'est {name} — rattacher l'invitation à cette personne",
+      "createNew": "C'est une nouvelle personne — créer une nouvelle fiche"
+    },
     "noMembers": "Aucun autre membre pour l'instant.",
     "you": "vous",
     "ownerBadge": "Propriétaire",

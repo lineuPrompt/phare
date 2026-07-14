@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatCAD } from './types';
-import { validateNextPayDate, validateSemimonthlyDays, buildSemimonthlyAnchor, evaluateSkipConfirmation, type SkipConfirmation } from '@/lib/anchorDateHelpers';
+import { validateNextPayDate, validateSemimonthlyDays, buildSemimonthlyAnchor, evaluateSkipConfirmation, selectBatchSaveable, summarizeBatchResult, type SkipConfirmation } from '@/lib/anchorDateHelpers';
 import { formatLocalDate, formatLocalMonth } from '@/lib/dateHelpers';
 
 type Translator = (key: string, values?: Record<string, string | number>) => string;
@@ -67,6 +67,8 @@ export default function AnchorDateStep({
     ]))
   );
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
+  const [batchSaving, setBatchSaving] = useState(false);
+  const [batchResult, setBatchResult] = useState<{ saved: number; failed: number } | null>(null);
 
   // This step auto-advances straight out of review-streaming with no pause —
   // a user mid-scroll on the plan review can land here without registering
@@ -94,7 +96,10 @@ export default function AnchorDateStep({
     }
   };
 
-  const saveItem = async (item: NeedsPayDateItem) => {
+  // Returns the outcome rather than throwing — every caller (the single
+  // "Save all dates" batch below) relies on one item's validation/network
+  // failure never blocking or hiding another's success.
+  const saveItem = async (item: NeedsPayDateItem): Promise<'saved' | 'error'> => {
     const s = state[item.id];
     let anchorDate: string;
     let secondDay: number | null = null;
@@ -105,7 +110,7 @@ export default function AnchorDateStep({
       const check = validateSemimonthlyDays(day1, day2);
       if (!check.ok) {
         update(item.id, { status: 'error', error: t(`error.${check.error}`) });
-        return;
+        return 'error';
       }
       const built = buildSemimonthlyAnchor(currentMonth, day1, day2);
       anchorDate = built.anchorDate;
@@ -115,7 +120,7 @@ export default function AnchorDateStep({
       const check = validateNextPayDate(s.nextPayDate, cadence, today);
       if (!check.ok) {
         update(item.id, { status: 'error', error: t(`error.${check.error}`, { days: cadence === 'weekly' ? 7 : 14 }) });
-        return;
+        return 'error';
       }
       anchorDate = s.nextPayDate;
     }
@@ -130,10 +135,32 @@ export default function AnchorDateStep({
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
       update(item.id, { status: 'saved', error: '' });
+      return 'saved';
     } catch (err) {
       update(item.id, { status: 'error', error: err instanceof Error ? err.message : t('error.generic') });
+      return 'error';
     }
   };
+
+  // Submits every filled-in, not-yet-saved item at once. Each item saves
+  // independently (saveItem never throws — it always resolves with an
+  // outcome), so one item's error never blocks or delays another's save.
+  // Blank items are excluded entirely — they still flow to the existing
+  // skip-confirmation when Continue is clicked, never silently attempted.
+  const saveAllDates = async () => {
+    const toSave = selectBatchSaveable(items, state);
+    if (toSave.length === 0) return;
+    setBatchSaving(true);
+    setBatchResult(null);
+    try {
+      const outcomes = await Promise.all(toSave.map((item) => saveItem(item)));
+      setBatchResult(summarizeBatchResult(outcomes));
+    } finally {
+      setBatchSaving(false);
+    }
+  };
+
+  const saveableCount = selectBatchSaveable(items, state).length;
 
   const inputStyle = { border: '1.5px solid #D1D5DB', color: '#0F2044' };
 
@@ -208,20 +235,28 @@ export default function AnchorDateStep({
               )}
 
               {s.status === 'error' && <p className="text-sm mt-2" style={{ color: '#DC2626' }}>{s.error}</p>}
-
-              {s.status !== 'saved' && (
-                <button
-                  onClick={() => saveItem(item)}
-                  disabled={s.status === 'saving'}
-                  className="mt-3 px-4 py-1.5 rounded-full text-sm font-medium text-white cursor-pointer disabled:opacity-50"
-                  style={{ background: '#0F2044' }}
-                >
-                  {s.status === 'saving' ? t('saving') : t('setPayDate')}
-                </button>
-              )}
+              {s.status === 'saving' && <p className="text-sm mt-2" style={{ color: '#6B7280' }}>{t('saving')}</p>}
             </div>
           );
         })}
+      </div>
+
+      <div className="text-center">
+        <button
+          onClick={saveAllDates}
+          disabled={batchSaving || saveableCount === 0}
+          className="px-6 py-2.5 rounded-full font-semibold text-white cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
+          style={{ background: '#0F2044' }}
+        >
+          {batchSaving ? t('savingAll') : t('saveAllDates')}
+        </button>
+        {batchResult && (
+          <p className="text-sm mt-2" style={{ color: batchResult.failed > 0 ? '#DC2626' : '#16A34A' }}>
+            {batchResult.failed > 0
+              ? t('batchResult.partial', { saved: batchResult.saved, failed: batchResult.failed })
+              : t('batchResult.allSaved', { saved: batchResult.saved })}
+          </p>
+        )}
       </div>
 
       {showSkipConfirm && skipConfirmation.needed && (
