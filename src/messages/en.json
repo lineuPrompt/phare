@@ -133,6 +133,7 @@
   "upload": {
     "title": "Upload your financial data",
     "subtitle": "Download the Phare template and fill in your numbers, or enter them manually.",
+    "planTitle": "Your plan",
     "dropzone": "Drag and drop your filled-in template here, or click to browse",
     "formats": "Supports .xlsx",
     "uploading": "Reading your file...",
@@ -223,6 +224,7 @@
       "startOver": "Upload a different file",
       "estimatedDate": "Est.",
       "reviewError": "We couldn't generate your review just now. Please try again.",
+      "reviewUnavailableForSave": "Your first review couldn't be generated, but your plan is saved. You can regenerate a review from your dashboard.",
       "saving": "Saving your plan...",
       "saveError": "Could not save your plan.",
       "saveErrorReason": "Could not save your plan: {reason}",

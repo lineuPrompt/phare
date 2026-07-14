@@ -129,6 +129,19 @@ export default function UploadPage() {
     }
   }, []);
 
+  /**
+   * Generating the narrative review and persisting the plan are independent
+   * concerns — a hiccup in the former (network blip, AI error, an
+   * interrupted stream) must never silently skip the latter. This used to
+   * call doSave() from inside the try block, right after the streaming
+   * loop — so any error thrown by the fetch or the loop above it skipped
+   * straight to the catch and doSave() was never reached at all, with no
+   * distinct save error ever surfacing (only reviewText's soft fallback
+   * copy). doSave is now called unconditionally after the try/catch/finally,
+   * with a placeholder body when generation failed, so the plan always gets
+   * a real save attempt — and a real saved/error outcome — regardless of
+   * whether the prose came through.
+   */
   const streamReview = useCallback(async (
     planData: Plan,
     planBody: Record<string, unknown>,
@@ -136,7 +149,6 @@ export default function UploadPage() {
   ) => {
     setReviewStreaming(true);
     setReviewText('');
-    setPlanSaveStatus('idle');
     const locale = localeOf();
     let fullText = '';
     try {
@@ -156,17 +168,22 @@ export default function UploadPage() {
         fullText += chunk;
         setReviewText((prev) => prev + chunk);
       }
-
-      const savePayload = { plan: planData, reviewText: fullText, locale, cardNames: resolvedCardNames, fileMeta };
-      setPendingSavePayload(savePayload);
-      setConfirmReplaceFlag(false);
-      await doSave(savePayload, false);
     } catch (err) {
       console.error('Review streaming error:', err);
+      fullText = '';
       setReviewText(t('plan.reviewError'));
     } finally {
       setReviewStreaming(false);
     }
+
+    const savePayload = {
+      plan: planData,
+      reviewText: fullText || t('plan.reviewUnavailableForSave'),
+      locale, cardNames: resolvedCardNames, fileMeta,
+    };
+    setPendingSavePayload(savePayload);
+    setConfirmReplaceFlag(false);
+    await doSave(savePayload, false);
   }, [t, doSave, fileMeta]);
 
   const retrySave = useCallback(async () => {
@@ -198,6 +215,13 @@ export default function UploadPage() {
     const planData = await planRes.json();
     setPlan(planData.plan);
     setPlanSource(planBody.source === 'template' ? 'template' : 'calculated');
+    // Visible the instant the plan screen appears — there must never be a
+    // silent window where the plan looks fully done but nothing has
+    // persisted yet. Previously this stayed 'idle' (which renders no banner
+    // at all) for the entire multi-second review-streaming duration, only
+    // flipping once doSave() ran at the end of streamReview — invisible if
+    // that never happened.
+    setPlanSaveStatus('saving');
     setStatus('plan');
     streamReview(planData.plan, planBody, resolvedCardNames);
   }, [streamReview]);
@@ -408,14 +432,22 @@ export default function UploadPage() {
     setPendingTemplateParsed(null);
   }, []);
 
+  // The plan-review screen (and everything reached only from it, like the
+  // post-anchor-step return) is the product's proudest screen — it must not
+  // keep wearing the generic "upload your data" entry header once the plan
+  // actually exists.
+  const isPlanState = status === 'plan' || status === 'anchor_dates';
+
   return (
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
       <Navbar />
       <div className="max-w-3xl mx-auto px-6 py-16">
-        <h1 className="text-3xl md:text-4xl font-bold mb-4 text-center" style={{ color: '#0F2044' }}>
-          {t('title')}
+        <h1 className={`text-3xl md:text-4xl font-bold text-center ${isPlanState ? 'mb-10' : 'mb-4'}`} style={{ color: '#0F2044' }}>
+          {isPlanState ? t('planTitle') : t('title')}
         </h1>
-        <p className="text-lg text-center mb-12" style={{ color: '#6B7280' }}>{t('subtitle')}</p>
+        {!isPlanState && (
+          <p className="text-lg text-center mb-12" style={{ color: '#6B7280' }}>{t('subtitle')}</p>
+        )}
 
         {status === 'idle' && (
           <UploadEntry

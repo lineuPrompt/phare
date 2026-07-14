@@ -39,7 +39,9 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { anthropic } from '@/lib/anthropic';
 import { assembleCalculatedBudget, dedupeSinkingFunds } from '@/lib/planHelpers';
-import { computeMonthTotals } from '@/lib/dashboardHelpers';
+import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
+import { evaluateGoals, isDebtGoalName, computeDebtPayoff, GoalResult, DebtPayoffResult } from '@/lib/goalHelpers';
+import { formatLocalDate } from '@/lib/dateHelpers';
 
 const SEED_CATEGORIES = [
   'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
@@ -98,7 +100,7 @@ export async function POST(request: Request) {
 
       supabase
         .from('accounts')
-        .select('id, type')
+        .select('id, name, type, goal_target, goal_target_date')
         .eq('household_id', householdId),
 
       supabase
@@ -125,6 +127,38 @@ export async function POST(request: Request) {
     const chequingIds = new Set(
       accounts.filter((a) => a.type === 'chequing').map((a) => a.id),
     );
+
+    // ── Goals & debt payoff: code-computed from REAL goal accounts, never
+    // AI-invented. Every account with a goal_target is a real, user-set goal
+    // (created via onboarding or the Goals page) — mirrors api/plan/route.ts's
+    // template-source handling exactly, just reading accounts instead of a
+    // parsed sheet. Requires full (all-time) transaction history per goal
+    // account, not just this month's window, so computeGoalBalance sees the
+    // real running balance (same fetch dashboard/route.ts uses). ──────────
+    const goalAccountList = accounts.filter(
+      (a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type) && a.goal_target != null
+    );
+    const goalIds = goalAccountList.map((a) => a.id);
+    let goalTxData: { amount: number | string; type: string; account_id: string | null }[] = [];
+    if (goalIds.length > 0) {
+      const { data } = await supabase
+        .from('transactions')
+        .select('amount, type, account_id')
+        .eq('household_id', householdId)
+        .in('account_id', goalIds);
+      goalTxData = data ?? [];
+    }
+    const rawGoals = goalAccountList.map((a) => ({
+      name: a.name,
+      targetAmount: Number(a.goal_target),
+      savedSoFar: computeGoalBalance(goalTxData, a.id),
+      targetDate: a.goal_target_date ?? null,
+    }));
+    const debtGoalLine = rawGoals.find((g) => isDebtGoalName(g.name));
+    const nonDebtGoals = rawGoals.filter((g) => g !== debtGoalLine);
+    const today = formatLocalDate(new Date());
+    const computedDebtPayoff: DebtPayoffResult | null = computeDebtPayoff(debtGoalLine, today);
+    const computedGoals: GoalResult[] = evaluateGoals(nonDebtGoals, netCashFlow, today);
 
     // ── Income lines: aggregate by source for AI context ─────────────────────
     // (e.g. Lineu bi-weekly appears 3× in July → one aggregated line: $8,247)
@@ -176,9 +210,18 @@ export async function POST(request: Request) {
       `NOT from planned budgets or per-period recurring amounts.\n` +
       `Income lines: ${JSON.stringify(incomeLines)}\n` +
       `Expense lines (chequing, avoids card double-count): ${JSON.stringify(expenseLines)}\n` +
-      `No goals provided — suggest based on expense labels and typical Canadian annual costs.`;
+      `Their sinking funds (already set up, or none): ${JSON.stringify(sinkingFunds)}\n` +
+      `Their goals — ALREADY evaluated in code, do not recompute or contradict these numbers, just narrate them naturally where relevant: ${JSON.stringify(computedGoals)}\n` +
+      `Their debt payoff — ALREADY evaluated in code (null means no debt evident or nothing computable), do not recompute or contradict: ${JSON.stringify(computedDebtPayoff)}`;
 
     // ── Generate plan (AI interprets verified numbers only) ──────────────────
+    // The AI may NEVER instantiate structured objects here either — same hard
+    // gate as api/plan/route.ts. Sinking funds come from the real sinking_funds
+    // table (or none); goals/debtPayoff come from real goal accounts via
+    // evaluateGoals()/computeDebtPayoff() (or none). This feeds the ongoing
+    // monthly review — the single most important retention surface — so it
+    // must be constitutionally incapable of inventing a fund, goal, or debt
+    // plan the family never set up.
     const categoryList = SEED_CATEGORIES.join(', ');
     const planPrompt =
       `You are Phare, an AI financial coach for Canadian families. The numbers below are VERIFIED — ` +
@@ -186,19 +229,18 @@ export async function POST(request: Request) {
       `${aiContext}\n\n` +
       `Write ALL text in ${lang}.\n\n` +
       `Return ONLY valid JSON:\n` +
-      `{"sinkingFunds":[{"name":"","annualAmount":0,"monthlyProvision":0,"dueMonth":""}],"lineClassifications":[{"label":"","category":"","isFixed":true}],"goals":[{"name":"","targetAmount":0,"monthlyContribution":0,"onTrack":true,"estimatedDate":""}],"debtPayoff":{"description":"","targetDate":"","monthlyPayment":0},"topRecommendation":""}\n\n` +
+      `{"lineClassifications":[{"label":"","category":"","isFixed":true}],"topRecommendation":""}\n\n` +
       `Rules:\n` +
-      `- All goal names, descriptions, and topRecommendation text in ${lang}.\n` +
+      `- All descriptions and topRecommendation text in ${lang}.\n` +
       `- lineClassifications: for EACH expense line label provided, return an object with:\n` +
       `  - "label": the exact expense line label as given\n` +
       `  - "category": which ONE of these fits best: ${categoryList}. Use the English category name exactly as written here.\n` +
       `  - "isFixed": true if it is a fixed recurring bill paid every month; false if variable day-to-day spending.\n` +
       `- Classify income lines too: category "Income", isFixed true.\n` +
-      `- Suggest 3-6 sinking funds for likely Canadian annual expenses inferred from the expense labels.\n` +
-      `- goals: suggest 2-3 sensible goals based on their situation (emergency fund of 3 months expenses, RESP if children evident, debt payoff if debt evident).\n` +
+      `- Do NOT output any sinking funds, goals, or debt payoff as structured data — there is no field for them in the JSON above. If you want to suggest one, put it in topRecommendation as a suggestion phrased as a suggestion ("Consider…"), never as a fund/goal/debt-plan they already have and never with a monthly amount presented as theirs.\n` +
+      `- Their goals and debt payoff (if any) are already evaluated (contribution, on-track verdict, and dates are all real, code-computed numbers) — do not invent or restate any of those figures anywhere; if you reference one in topRecommendation, use the exact numbers given.\n` +
       `- Canadian context: RRSP, RESP, TFSA, CESG.\n` +
       `- If net cash flow is negative, topRecommendation must address that first.\n` +
-      `- If no debt is evident, set debtPayoff to null.\n` +
       `- topRecommendation: one specific sentence with a dollar amount.`;
 
     const planMessage = await anthropic.messages.create({
@@ -210,6 +252,8 @@ export async function POST(request: Request) {
     const planText = planMessage.content[0].type === 'text' ? planMessage.content[0].text : '';
     const aiPart = JSON.parse(planText.replace(/```json|```/g, '').trim());
 
+    // Sinking funds are DB-derived (real rows) or empty — never AI-invented.
+    // aiPart is not consulted for them.
     const finalSinkingFunds = sinkingFunds.length > 0
       ? sinkingFunds.map((sf) => ({
           name: sf.name,
@@ -217,7 +261,7 @@ export async function POST(request: Request) {
           monthlyProvision: Number(sf.monthly_provision),
           dueMonth: sf.due_month ?? '',
         }))
-      : (aiPart.sinkingFunds ?? []);
+      : [];
 
     const classMap = new Map<string, { category: string; isFixed: boolean }>();
     for (const lc of (aiPart.lineClassifications ?? [])) {
@@ -243,8 +287,9 @@ export async function POST(request: Request) {
       monthlyBudget: { ...monthlyBudget, categories: classifiedCategories },
       seedCategories: SEED_CATEGORIES,
       sinkingFunds: finalSinkingFunds,
-      debtPayoff: aiPart.debtPayoff ?? null,
-      goals: aiPart.goals ?? [],
+      // Code-computed from real goal accounts — never AI-emitted.
+      debtPayoff: computedDebtPayoff,
+      goals: computedGoals,
       topRecommendation: aiPart.topRecommendation ?? '',
     };
 

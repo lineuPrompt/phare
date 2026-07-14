@@ -133,6 +133,7 @@
   "upload": {
     "title": "Téléversez vos données financières",
     "subtitle": "Téléchargez le modèle Phare et remplissez vos chiffres, ou entrez-les manuellement.",
+    "planTitle": "Votre plan",
     "dropzone": "Glissez-déposez votre modèle rempli ici, ou cliquez pour parcourir",
     "formats": "Formats acceptés : .xlsx",
     "uploading": "Lecture de votre fichier...",
@@ -223,6 +224,7 @@
       "startOver": "Téléverser un autre fichier",
       "estimatedDate": "Est.",
       "reviewError": "Nous n'avons pas pu générer votre revue pour le moment. Veuillez réessayer.",
+      "reviewUnavailableForSave": "Votre première revue n'a pas pu être générée, mais votre plan est enregistré. Vous pouvez régénérer une revue depuis votre tableau de bord.",
       "saving": "Enregistrement du plan...",
       "saveError": "Impossible d'enregistrer votre plan.",
       "saveErrorReason": "Impossible d'enregistrer votre plan : {reason}",

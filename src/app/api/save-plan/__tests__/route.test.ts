@@ -473,6 +473,132 @@ describe('POST /api/save-plan — no-fabrication contract: a manual plan with em
   });
 });
 
+describe('POST /api/save-plan — calculated-source end-to-end persistence (manual-entry blocker)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  // The founder's live-tested manual-entry shape: a salary, a monthly rent
+  // (fixed), and a groceries budget (variable) — nothing template-specific
+  // anywhere in this payload. Proves recurring items, their materialized
+  // transactions, the variable-expense budget row, and the conversation
+  // (plan artifact) all persist for the "calculated" source exactly as they
+  // do for "template" — the same save path, indistinguishable ledgers.
+  it('a realistic calculated-source plan persists recurring items, materialized transactions, budgets, and the review conversation', async () => {
+    const currentMonth = formatLocalMonth(new Date());
+    const anchorDate = `${currentMonth}-01`;
+
+    const { client, calls } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      household_members: [
+        { data: { id: 'mem-1' }, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [
+        { data: [{ id: 'chq-1', type: 'chequing', name: 'Chequing', file_import_id: null }], error: null },
+      ],
+      recurring_items: [
+        { count: 0, error: null },
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'ri-salary', description: 'Salary', amount: 5000, type: 'income', cadence: 'monthly',
+              anchor_date: anchorDate, second_day: null, category_id: null, account_id: 'chq-1', member_id: 'mem-1',
+            },
+            {
+              id: 'ri-rent', description: 'Rent', amount: 2000, type: 'expense', cadence: 'monthly',
+              anchor_date: anchorDate, second_day: null, category_id: 'cat-housing', account_id: 'chq-1', member_id: null,
+            },
+          ],
+          error: null,
+        },
+      ],
+      budgets: [
+        { count: 0, error: null },
+        { error: null }, // unconditional delete
+        { error: null }, // the Groceries budget insert
+      ],
+      sinking_funds: [
+        { count: 0, error: null },
+        { error: null },
+      ],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      categories: [
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ id: `cat-${name.toLowerCase().replace(/ & /g, '-').replace(/ /g, '-')}`, name })), error: null },
+      ],
+      transactions: [
+        { error: null }, // materialize cleanup for ri-salary
+        { error: null }, // materialize cleanup for ri-rent
+        { error: null }, // materialize insert (both items' occurrences)
+      ],
+      conversations: [{ error: null }],
+      events: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+
+    // Exactly the shape assembleCalculatedBudget + AI classification produce
+    // for manual entry — no "source" field reaches save-plan at all.
+    const body = {
+      plan: {
+        monthlyBudget: {
+          categories: [
+            { name: 'Salary', budgeted: 5000, type: 'income' },
+            { name: 'Rent', budgeted: 2000, type: 'expense', isFixed: true, seedCategory: 'Housing' },
+            { name: 'Groceries', budgeted: 400, type: 'expense', isFixed: false, seedCategory: 'Groceries & Pharmacy' },
+          ],
+        },
+        sinkingFunds: [],
+        goals: [],
+        topRecommendation: 'Keep it up.',
+      },
+      reviewText: 'Looking good this month.',
+      locale: 'en',
+      cardNames: [],
+      fileMeta: null,
+    };
+
+    const res = await POST(new Request('http://localhost/api/save-plan', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.saved).toBe(true);
+
+    // Recurring items: both the income and the fixed expense.
+    const recurringInserts = calls.filter((c) => c.table === 'recurring_items' && c.method === 'insert');
+    expect(recurringInserts).toHaveLength(1);
+    const recurringRows = recurringInserts[0].args[0] as { description: string; type: string }[];
+    expect(recurringRows.map((r) => r.description).sort()).toEqual(['Rent', 'Salary']);
+
+    // Materialized transactions for both (both are monthly, anchored immediately).
+    const transactionInserts = calls.filter((c) => c.table === 'transactions' && c.method === 'insert');
+    expect(transactionInserts).toHaveLength(1);
+    expect((transactionInserts[0].args[0] as unknown[]).length).toBeGreaterThan(0);
+
+    // The variable expense lands as a budget row, not a recurring item.
+    const budgetInserts = calls.filter((c) => c.table === 'budgets' && c.method === 'insert');
+    expect(budgetInserts).toHaveLength(1);
+    expect(budgetInserts[0].args[0]).toEqual([
+      expect.objectContaining({ amount: 400 }),
+    ]);
+
+    // The plan artifact (top recommendation + review) is recorded.
+    const conversationInserts = calls.filter((c) => c.table === 'conversations' && c.method === 'insert');
+    expect(conversationInserts).toHaveLength(1);
+
+    // No anchor step needed — everything was monthly and anchored immediately.
+    expect(json.needsPayDate).toEqual([]);
+  });
+});
+
 describe('POST /api/save-plan — goal accounts (Bug 2: target date persistence + starting-balance seeding)', () => {
   beforeEach(() => {
     vi.resetModules();
