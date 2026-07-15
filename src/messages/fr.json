@@ -369,6 +369,7 @@
     "regenerating": "Régénération…",
     "nav": {
       "overview": "Aperçu",
+      "timeline": "Chronologie",
       "upload": "Nouveau plan",
       "expenses": "Dépenses",
       "reviews": "Revues",
@@ -506,6 +507,48 @@
       "watch": "À surveiller",
       "ok": "OK",
       "noGoal": "Aucun objectif"
+    }
+  },
+  "timeline": {
+    "title": "Chronologie de trésorerie",
+    "loading": "Chargement de votre chronologie...",
+    "header": {
+      "balanceToday": "Solde aujourd'hui",
+      "lowestPoint": "Point le plus bas",
+      "dipsBelowZero": "Vous passez sous zéro",
+      "on": "le",
+      "noDip": "Aucun revenu prévu à venir dans cette vue — solde affiché jusqu'au {date}."
+    },
+    "list": {
+      "opensAt": "Ouvre à",
+      "closesAt": "Ferme à",
+      "today": "Aujourd'hui",
+      "empty": "Rien de prévu ce mois-ci.",
+      "balancesBegin": "Les soldes commencent le {date} — la date de votre premier ancrage.",
+      "noBalanceYet": "solde pas encore connu",
+      "untitled": "Entrée"
+    },
+    "nav": {
+      "prev": "Précédent",
+      "next": "Suivant",
+      "today": "Aller à aujourd'hui",
+      "outOfRange": "En dehors de la période suivie par Phare pour ce compte"
+    },
+    "noAnchor": {
+      "title": "Pour afficher votre chronologie, Phare a besoin d'un vrai chiffre : le solde de votre compte chèques à une date que vous connaissez.",
+      "body": "Tout le reste en découle."
+    },
+    "reAnchor": {
+      "cta": "Mettre à jour le solde"
+    },
+    "anchorForm": {
+      "date": "Date",
+      "balance": "Solde",
+      "balancePlaceholder": "ex. 1250,00",
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "cancel": "Annuler",
+      "genericError": "Une erreur est survenue. Réessayez."
     }
   },
   "planner": {

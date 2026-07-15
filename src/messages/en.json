@@ -369,6 +369,7 @@
     "regenerating": "Regenerating…",
     "nav": {
       "overview": "Overview",
+      "timeline": "Timeline",
       "upload": "New plan",
       "expenses": "Expenses",
       "reviews": "Reviews",
@@ -506,6 +507,48 @@
       "watch": "Watch",
       "ok": "OK",
       "noGoal": "No goal"
+    }
+  },
+  "timeline": {
+    "title": "Cash Timeline",
+    "loading": "Loading your timeline...",
+    "header": {
+      "balanceToday": "Balance today",
+      "lowestPoint": "Lowest point",
+      "dipsBelowZero": "You dip below zero",
+      "on": "on",
+      "noDip": "No income scheduled ahead in this view — balance shown through {date}."
+    },
+    "list": {
+      "opensAt": "Opens at",
+      "closesAt": "Closes at",
+      "today": "Today",
+      "empty": "Nothing on the books this month.",
+      "balancesBegin": "Balances begin {date} — the date of your first anchor.",
+      "noBalanceYet": "no balance yet",
+      "untitled": "Entry"
+    },
+    "nav": {
+      "prev": "Previous",
+      "next": "Next",
+      "today": "Jump to today",
+      "outOfRange": "Outside the range Phare tracks for this account"
+    },
+    "noAnchor": {
+      "title": "To show your timeline, Phare needs one real number: your chequing balance on a date you know.",
+      "body": "Everything else follows from it."
+    },
+    "reAnchor": {
+      "cta": "Update balance"
+    },
+    "anchorForm": {
+      "date": "Date",
+      "balance": "Balance",
+      "balancePlaceholder": "e.g. 1250.00",
+      "save": "Save",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "genericError": "Something went wrong. Try again."
     }
   },
   "planner": {
