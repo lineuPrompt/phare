@@ -657,43 +657,6 @@
       "needsPayDate": "needs a pay date"
     }
   },
-  "timeline": {
-    "loading": "Loading your cash timeline...",
-    "noAnchor": {
-      "title": "No balance on record",
-      "body": "Enter your chequing balance for today to start your cash timeline.",
-      "cta": "Set opening balance"
-    },
-    "anchor": {
-      "setTitle": "Set balance checkpoint",
-      "editTitle": "Edit balance checkpoint",
-      "date": "Date",
-      "balance": "Balance (CAD)",
-      "balancePlaceholder": "e.g. 2450.00",
-      "balanceHint": "Your actual chequing balance on this date.",
-      "futureDateError": "Date must not be in the future.",
-      "saving": "Saving...",
-      "save": "Save checkpoint",
-      "delete": "Delete",
-      "confirmDeleteTitle": "Delete this checkpoint?",
-      "confirmDeleteBody": "Balances before the next checkpoint will be recalculated.",
-      "confirmDelete": "Delete",
-      "cancel": "Cancel"
-    },
-    "dipCallout": {
-      "label": "Lowest balance before next paycheque",
-      "on": "on"
-    },
-    "day": {
-      "today": "Today",
-      "openingBalance": "Opening balance",
-      "closingBalance": "Closing balance"
-    },
-    "entry": {
-      "bridge": "Card payment",
-      "installment": "Instalment {label}"
-    }
-  },
   "household": {
     "title": "Household Members",
     "subtitle": "Manage who has access to your household's financial data.",
