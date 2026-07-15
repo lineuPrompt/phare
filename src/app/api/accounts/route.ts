@@ -18,11 +18,16 @@ export async function GET() {
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
+    // sort_order first (explicit, template/entry order — see
+    // 20260716000000 migration), then created_at and id as tiebreakers for
+    // legacy rows that predate sort_order (all default to 0 and tie there).
     const { data: accounts } = await supabase
       .from('accounts')
       .select('id, name, type, statement_close_day, payment_day, goal_target, goal_target_date')
       .eq('household_id', householdId)
-      .order('created_at', { ascending: true });
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
 
     return NextResponse.json({ accounts: accounts ?? [] });
   } catch {
@@ -50,12 +55,22 @@ export async function POST(request: Request) {
       : null;
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
+    // New accounts append after everything the household already has —
+    // never sort_order 0, which would jump a manually-added card ahead of
+    // every template-imported one.
+    const { data: existingAccounts } = await supabase
+      .from('accounts')
+      .select('sort_order')
+      .eq('household_id', householdId);
+    const nextSortOrder = (existingAccounts ?? []).reduce((m, a) => Math.max(m, a.sort_order ?? 0), 0) + 1;
+
     const { data: account, error } = await supabase
       .from('accounts')
       .insert({
         household_id: householdId,
         name: name.trim(),
         type,
+        sort_order: nextSortOrder,
         statement_close_day: statementCloseDay ?? null,
         payment_day: paymentDay ?? null,
         goal_target: goalTarget ?? null,

@@ -9,6 +9,7 @@ import {
   needsReplaceConfirmation,
   missingSeedCategories,
   planAccountActions,
+  assignSequentialSortOrder,
   type FileMeta,
   type AccountProvenanceInfo,
   type DesiredAccount,
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
     // Same defaults as the signup trigger — see accountHelpers.ts. -----
     const { data: accts } = await supabase
       .from('accounts')
-      .select('id, type, name, file_import_id')
+      .select('id, type, name, file_import_id, sort_order')
       .eq('household_id', householdId);
 
     let chequingId = accts?.find((a) => a.type === 'chequing')?.id ?? null;
@@ -264,16 +265,24 @@ export async function POST(request: Request) {
       const goalsByName = new Map(
         (plan.goals ?? []).map((g: { name: string; targetAmount: number; targetDate?: string | null; savedSoFar?: number }) => [g.name.trim().toLowerCase(), g])
       );
+      // toCreate is still in the caller's original order (planAccountActions
+      // preserves it) — assign explicit sort_order here so that order
+      // survives the bulk insert below, since every row in one INSERT
+      // statement gets an identical created_at (Postgres now() is constant
+      // per statement) and can't be relied on to order the batch itself.
+      const maxSortOrder = (accts ?? []).reduce((m, a) => Math.max(m, a.sort_order ?? 0), 0);
+      const toCreateOrdered = assignSequentialSortOrder(accountPlan.toCreate, maxSortOrder);
       const { data: createdAccounts, error: createAccountsError } = await supabase
         .from('accounts')
         .insert(
-          accountPlan.toCreate.map((a) => {
+          toCreateOrdered.map((a) => {
             const goal = a.type === 'savings' ? goalsByName.get(a.name.trim().toLowerCase()) : undefined;
             return {
               household_id: householdId,
               name: a.name,
               type: a.type,
               file_import_id: fileImportId,
+              sort_order: a.sort_order,
               ...(a.type === 'savings' ? {
                 goal_target: goal && goal.targetAmount > 0 ? goal.targetAmount : null,
                 goal_target_date: goal?.targetDate ?? null,

@@ -146,7 +146,9 @@ export async function GET(request: Request) {
       .from('accounts')
       .select('id, name, type, payment_day')
       .eq('household_id', householdId)
-      .order('created_at', { ascending: true });
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
 
     // Goal accounts (savings/tfsa/rrsp) are not spending accounts — they never
     // appear as expense tabs and never accept logged expenses.

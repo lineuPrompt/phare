@@ -23,8 +23,8 @@ export default function Sidebar({ locale, role: roleProp }: { locale: string; ro
 
   const items = [
     { href: `/${locale}/dashboard`, label: t('overview'),  icon: '🏠' },
-    { href: `/${locale}/expenses`,  label: t('expenses'),  icon: '💳' },
-    { href: `/${locale}/cards`,     label: t('cards'),     icon: '🗂️' },
+    { href: `/${locale}/expenses`,  label: t('expenses'),  icon: '🧾' },
+    { href: `/${locale}/cards`,     label: t('cards'),     icon: '💳' },
     { href: `/${locale}/goals`,     label: t('goals'),     icon: '🎯' },
     { href: `/${locale}/planner`,   label: t('planner'),   icon: '📊' },
     { href: `/${locale}/upload`,    label: t('upload'),    icon: '📄' },

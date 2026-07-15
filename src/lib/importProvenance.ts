@@ -160,3 +160,18 @@ export function planAccountActions(
 
   return { toDelete, toPreserve, toReuse, toCreate };
 }
+
+// Assigns explicit, strictly-increasing sort_order values to a list of
+// to-be-created accounts, starting just after the household's current
+// maximum — new accounts append after existing ones, and the array's own
+// order (planAccountActions above preserves the caller's input order, e.g.
+// the onboarding template's card sequence) becomes the real ordering. A
+// single bulk INSERT can't rely on created_at for this: Postgres's now() is
+// constant for the whole statement, so every row in the batch gets an
+// identical timestamp and ties break in an unspecified, unstable order.
+export function assignSequentialSortOrder<T>(
+  items: T[],
+  startAfter: number
+): (T & { sort_order: number })[] {
+  return items.map((item, i) => ({ ...item, sort_order: startAfter + 1 + i }));
+}

@@ -29,7 +29,9 @@ export async function GET(request: Request) {
       .select('id, name, type')
       .eq('household_id', householdId)
       .eq('type', 'credit_card')
-      .order('created_at', { ascending: true });
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
 
     const cardList = cards ?? [];
     if (cardList.length === 0) return NextResponse.json({ cards: [] });

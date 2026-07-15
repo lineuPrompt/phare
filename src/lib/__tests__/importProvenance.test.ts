@@ -6,6 +6,7 @@ import {
   partitionByProvenance,
   missingSeedCategories,
   planAccountActions,
+  assignSequentialSortOrder,
   type AccountProvenanceInfo,
 } from '../importProvenance';
 
@@ -100,6 +101,55 @@ describe('missingSeedCategories', () => {
   it('does not exclude anything based on a user-added custom category', () => {
     const result = missingSeedCategories(['Housing', 'Transportation', 'Unexpected', 'Pet Care'], seed);
     expect(result).toEqual([]);
+  });
+});
+
+// Regression coverage for the 2026-07-16 bug: cards created together in one
+// save-plan batch get an identical created_at (Postgres now() is constant
+// per statement), so ORDER BY created_at alone ties and Postgres does not
+// guarantee any particular tie order — card order changed between runs with
+// no ordering code touched. planAccountActions already preserves the
+// caller's array order (e.g. the template's Costco Julia, Costco Lineu,
+// Visa Avion sequence) into toCreate; this is the piece that turns that
+// preserved order into an explicit, persisted value.
+describe('assignSequentialSortOrder', () => {
+  it('preserves the input array order as strictly increasing values', () => {
+    const items = [{ name: 'Costco Julia' }, { name: 'Costco Lineu' }, { name: 'Visa Avion' }];
+    const result = assignSequentialSortOrder(items, 0);
+    expect(result.map((r) => r.name)).toEqual(['Costco Julia', 'Costco Lineu', 'Visa Avion']);
+    expect(result.map((r) => r.sort_order)).toEqual([1, 2, 3]);
+  });
+
+  it('starts after the household\'s current maximum, never colliding with existing accounts', () => {
+    const items = [{ name: 'New Card A' }, { name: 'New Card B' }];
+    const result = assignSequentialSortOrder(items, 5);
+    expect(result.map((r) => r.sort_order)).toEqual([6, 7]);
+  });
+
+  it('an empty list produces an empty result', () => {
+    expect(assignSequentialSortOrder([], 3)).toEqual([]);
+  });
+
+  it('does not mutate the original items', () => {
+    const items = [{ name: 'Visa' }];
+    const result = assignSequentialSortOrder(items, 0);
+    expect(items[0]).not.toHaveProperty('sort_order');
+    expect(result[0]).toEqual({ name: 'Visa', sort_order: 1 });
+  });
+
+  it('end to end: the template card sequence survives planAccountActions into a persisted sort_order', () => {
+    const desired = [
+      { name: 'Costco Julia', type: 'credit_card' as const },
+      { name: 'Costco Lineu', type: 'credit_card' as const },
+      { name: 'Visa Avion', type: 'credit_card' as const },
+    ];
+    const { toCreate } = planAccountActions(desired, []);
+    const ordered = assignSequentialSortOrder(toCreate, 0);
+    expect(ordered.map((a) => `${a.name}:${a.sort_order}`)).toEqual([
+      'Costco Julia:1',
+      'Costco Lineu:2',
+      'Visa Avion:3',
+    ]);
   });
 });
 
