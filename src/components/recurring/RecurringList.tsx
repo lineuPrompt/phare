@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RecurringItem, RecurringAccount, RecurringCategory, formatCurrency } from './types';
+import { formatSignedAmount } from '@/components/expenses/types';
 import { monthlyEquivalent } from '@/lib/incomeHelpers';
 
 // ── RecurringRow ───────────────────────────────────────────────────────────
@@ -235,9 +236,9 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
         </div>
         <span
           className="font-bold shrink-0 w-24 text-right"
-          style={{ color: item.type === 'income' ? '#16A34A' : '#0F2044' }}
+          style={{ color: formatSignedAmount(Number(item.amount), item.type, locale).color }}
         >
-          {item.type === 'income' ? '+' : ''}{formatCurrency(Number(item.amount), locale)}
+          {formatSignedAmount(Number(item.amount), item.type, locale).text}
         </span>
         <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <button

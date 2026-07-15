@@ -1,5 +1,6 @@
 import { useTranslations } from 'next-intl';
 import { SummaryRow, formatCurrency } from './types';
+import { UNCATEGORIZED_ROW_ID } from '@/lib/envelopeHelpers';
 
 export default function SummaryTable({
   summary,
@@ -31,19 +32,28 @@ export default function SummaryTable({
         </thead>
         <tbody>
           {summary.map((row) => {
+            const isUncategorized = row.categoryId === UNCATEGORIZED_ROW_ID;
             const noBudget = row.budget === 0;
             const over = !noBudget && row.difference < 0;
             const untouched = row.spent === 0;
             return (
               <tr key={row.categoryId} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                <td className="py-2.5" style={{ color: '#0F2044' }}>{row.name}</td>
-                <td className="py-2.5 text-right" style={{ color: '#6B7280' }}>{formatCurrency(row.budget, locale)}</td>
-                <td className="py-2.5 text-right font-medium" style={{ color: '#0F2044' }}>{formatCurrency(row.spent, locale)}</td>
+                <td className="py-2.5" style={{ color: isUncategorized ? '#9CA3AF' : '#0F2044', fontStyle: isUncategorized ? 'italic' : 'normal' }}>
+                  {isUncategorized ? t('uncategorized') : row.name}
+                </td>
+                <td className="py-2.5 text-right" style={{ color: '#6B7280' }}>
+                  {noBudget ? '—' : formatCurrency(row.budget, locale)}
+                </td>
+                <td className="py-2.5 text-right font-medium" style={{ color: isUncategorized ? '#DC2626' : '#0F2044' }}>
+                  {formatCurrency(row.spent, locale)}
+                </td>
                 <td className="py-2.5 text-right font-medium" style={{ color: noBudget ? '#9CA3AF' : over ? '#DC2626' : '#16A34A' }}>
                   {noBudget ? '—' : formatCurrency(row.difference, locale)}
                 </td>
                 <td className="py-2.5 text-right">
-                  {untouched || noBudget ? <span style={{ color: '#9CA3AF' }}>—</span>
+                  {isUncategorized ? (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#FEF3C7', color: '#D97706' }}>!</span>
+                  ) : untouched || noBudget ? <span style={{ color: '#9CA3AF' }}>—</span>
                     : over ? <span style={{ color: '#DC2626' }}>{t('over')}</span>
                     : <span style={{ color: '#16A34A' }}>✓ {t('ok')}</span>}
                 </td>

@@ -8,6 +8,8 @@ import {
   sumWarning,
   carryForwardMap,
   buildGrid,
+  buildCardSummary,
+  UNCATEGORIZED_ROW_ID,
   EnvTx,
 } from '../envelopeHelpers';
 
@@ -354,5 +356,65 @@ describe('card isolation', () => {
     expect(visaTotal).toBe(260);  // 150+80+30
     expect(mcTotal).toBe(520);    // 400+120
     expect(visaTotal).not.toBe(mcTotal);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. buildCardSummary — rows and TOTAL come from one derivation; a category
+//    can never appear twice even if the caller's items query does (the
+//    2026-07-15 bug: a missing month filter fetched both July's and
+//    August's card_envelope_items rows and fanned every category out into
+//    two identical summary rows).
+// ---------------------------------------------------------------------------
+
+describe('buildCardSummary', () => {
+  const categoryNames = new Map([[CAT_SHOPPING, 'Shopping']]);
+
+  it('TOTAL is always the sum of the visible rows, by construction', () => {
+    const items = [
+      { categoryId: CAT_GROCERY, categoryName: 'Groceries', monthlyAmount: 200 },
+      { categoryId: CAT_REST, categoryName: 'Restaurants', monthlyAmount: 100 },
+    ];
+    const { summary, totalSpent } = buildCardSummary(items, categoryNames, BASE_TXS, VISA, '2026-07');
+    const summedFromRows = summary.reduce((s, r) => s + r.spent, 0);
+    expect(totalSpent).toBe(Math.round(summedFromRows * 100) / 100);
+  });
+
+  it('a category is never doubled even when the items list itself contains a duplicate row for it', () => {
+    // Simulates the exact bug: an unscoped query returning July's AND
+    // August's row for the same category (same categoryId, would-be two
+    // rows without the dedupe guard).
+    const itemsWithDuplicate = [
+      { categoryId: CAT_GROCERY, categoryName: 'Groceries', monthlyAmount: 200 }, // July's row
+      { categoryId: CAT_GROCERY, categoryName: 'Groceries', monthlyAmount: 200 }, // August's row, same category
+      { categoryId: CAT_REST, categoryName: 'Restaurants', monthlyAmount: 100 },
+    ];
+    const { summary } = buildCardSummary(itemsWithDuplicate, categoryNames, BASE_TXS, VISA, '2026-07');
+    const groceryRows = summary.filter((r) => r.categoryId === CAT_GROCERY);
+    expect(groceryRows.length).toBe(1);
+    expect(groceryRows[0].spent).toBe(150); // not doubled to 300
+  });
+
+  it('a category with activity but no saved envelope item is included, named from categoryNames', () => {
+    const refundOnly: EnvTx[] = [tx(VISA, 25, '2026-07-10', CAT_SHOPPING, 'income')];
+    const { summary } = buildCardSummary([], categoryNames, refundOnly, VISA, '2026-07');
+    const row = summary.find((r) => r.categoryId === CAT_SHOPPING);
+    expect(row).toBeDefined();
+    expect(row!.name).toBe('Shopping');
+    expect(row!.spent).toBe(-25);
+  });
+
+  it('uncategorized spend is its own row, included in TOTAL', () => {
+    const { summary, totalSpent } = buildCardSummary([], categoryNames, BASE_TXS, VISA, '2026-07');
+    const uncatRow = summary.find((r) => r.categoryId === UNCATEGORIZED_ROW_ID);
+    expect(uncatRow).toBeDefined();
+    expect(uncatRow!.spent).toBe(30);
+    expect(totalSpent).toBe(totalSpendForCard(BASE_TXS, VISA, '2026-07'));
+  });
+
+  it('no uncategorized row when there is no uncategorized spend', () => {
+    const clean = BASE_TXS.filter((t) => t.category_id !== null);
+    const { summary } = buildCardSummary([], categoryNames, clean, VISA, '2026-07');
+    expect(summary.some((r) => r.categoryId === UNCATEGORIZED_ROW_ID)).toBe(false);
   });
 });

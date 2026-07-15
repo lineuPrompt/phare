@@ -412,7 +412,8 @@
       "total": "TOTAL",
       "within": "Dans l'objectif",
       "overGoal": "Objectif dépassé",
-      "setGoal": "Définir l'objectif mensuel"
+      "setGoal": "Définir l'objectif mensuel",
+      "uncategorized": "Sans catégorie"
     },
     "goal": {
       "label": "Objectif mensuel de carte",

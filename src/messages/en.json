@@ -412,7 +412,8 @@
       "total": "TOTAL",
       "within": "Within goal",
       "overGoal": "Over goal",
-      "setGoal": "Set monthly goal"
+      "setGoal": "Set monthly goal",
+      "uncategorized": "Uncategorized"
     },
     "goal": {
       "label": "Monthly card goal",

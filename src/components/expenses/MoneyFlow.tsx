@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Expense, Account, formatCurrency } from './types';
+import { Expense, Account, formatCurrency, formatSignedAmount } from './types';
 
 export default function MoneyFlow({
   income,
@@ -154,8 +154,8 @@ export default function MoneyFlow({
               <div key={i.id} className="flex items-center gap-3 py-1.5 px-2 group" style={{ borderBottom: '1px solid #F9FAFB' }}>
                 <span className="text-sm w-14 shrink-0" style={{ color: '#6B7280' }}>{fmtDate(i.date)}</span>
                 <span className="flex-1 min-w-0 truncate text-sm" style={{ color: '#0F2044' }}>{i.description}</span>
-                <span className="text-sm font-medium shrink-0" style={{ color: '#16A34A' }}>
-                  +{formatCurrency(Number(i.amount), locale)}
+                <span className="text-sm font-medium shrink-0" style={{ color: formatSignedAmount(Number(i.amount), i.type, locale).color }}>
+                  {formatSignedAmount(Number(i.amount), i.type, locale).text}
                 </span>
                 <div className="flex gap-1 shrink-0">
                   <button

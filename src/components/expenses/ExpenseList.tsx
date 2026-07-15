@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Expense, ExpenseCategory, Account, formatCurrency } from './types';
+import { Expense, ExpenseCategory, Account, formatSignedAmount } from './types';
 
 export default function ExpenseList({
   expenses,
@@ -127,8 +127,8 @@ export default function ExpenseList({
                 )}
               </span>
               <span className="text-xs shrink-0" style={{ color: '#9CA3AF' }}>{e.categories?.name ?? ''}</span>
-              <span className="text-sm font-medium w-24 text-right shrink-0" style={{ color: '#0F2044' }}>
-                {formatCurrency(Number(e.amount), locale)}
+              <span className="text-sm font-medium w-24 text-right shrink-0" style={{ color: formatSignedAmount(Number(e.amount), e.type, locale).color }}>
+                {formatSignedAmount(Number(e.amount), e.type, locale).text}
               </span>
               <div className="flex gap-1 shrink-0">
                 <button onClick={() => startEdit(e)} className="px-2 py-1 rounded text-xs cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#2ABFBF' }}>{t('edit')}</button>

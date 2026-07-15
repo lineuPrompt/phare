@@ -205,3 +205,85 @@ export function buildGrid(
 
   return { months, currentMonth, rows, uncategorizedActuals, totalActuals, totalGoals };
 }
+
+// ---------------------------------------------------------------------------
+// Single-month card summary (the Expenses page's per-category table for a
+// card account). TOTAL is the sum of the rows in this same result — not a
+// separately computed number — so the two can never drift apart, and a
+// category can never fan out into more than one row here even if the
+// caller's query ever returns overlapping rows for a month.
+// ---------------------------------------------------------------------------
+
+export const UNCATEGORIZED_ROW_ID = 'uncategorized';
+
+export type CardSummaryRow = {
+  categoryId: string; // UNCATEGORIZED_ROW_ID for the uncategorized row
+  name: string;
+  budget: number;
+  spent: number;
+  difference: number;
+};
+
+// items: this card's envelope items for exactly the viewed month (caller's
+// responsibility to scope the query — this function structurally cannot
+// double a category even if the caller's items list itself contains
+// duplicate rows for the same category, e.g. from a missing month filter).
+// categoryNames: household category id -> display name, for any category
+// with activity but no saved envelope item.
+export function buildCardSummary(
+  items: { categoryId: string; categoryName: string; monthlyAmount: number }[],
+  categoryNames: Map<string, string>,
+  transactions: EnvTx[],
+  cardId: string,
+  month: string
+): { summary: CardSummaryRow[]; totalSpent: number } {
+  const byCategory = categoryActualsForCard(transactions, cardId, month);
+  const uncategorized = uncategorizedSpend(transactions, cardId, month);
+
+  // Dedupe by categoryId — last one wins. A structural guard: this can't
+  // fan out into duplicate summary rows no matter what the caller's items
+  // query returns.
+  const dedupedItems = new Map<string, { categoryName: string; monthlyAmount: number }>();
+  for (const item of items) {
+    dedupedItems.set(item.categoryId, { categoryName: item.categoryName, monthlyAmount: item.monthlyAmount });
+  }
+
+  const summary: CardSummaryRow[] = [];
+  const covered = new Set<string>();
+  for (const [categoryId, { categoryName, monthlyAmount }] of dedupedItems) {
+    const spent = byCategory.get(categoryId) ?? 0;
+    summary.push({
+      categoryId,
+      name: categoryName,
+      budget: monthlyAmount,
+      spent: r2(spent),
+      difference: r2(monthlyAmount - spent),
+    });
+    covered.add(categoryId);
+  }
+
+  for (const [categoryId, spent] of byCategory) {
+    if (covered.has(categoryId)) continue;
+    summary.push({
+      categoryId,
+      name: categoryNames.get(categoryId) ?? '?',
+      budget: 0,
+      spent: r2(spent),
+      difference: r2(-spent),
+    });
+  }
+
+  if (uncategorized !== 0) {
+    summary.push({
+      categoryId: UNCATEGORIZED_ROW_ID,
+      name: UNCATEGORIZED_ROW_ID,
+      budget: 0,
+      spent: r2(uncategorized),
+      difference: r2(-uncategorized),
+    });
+  }
+
+  const totalSpent = r2(summary.reduce((s, r) => s + r.spent, 0));
+
+  return { summary, totalSpent };
+}

@@ -4,7 +4,7 @@ import { recurrenceDates } from '@/lib/dateHelpers';
 import { logEvent, isFirstEvent } from '@/lib/eventLogger';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
-import { categoryActualsForCard, totalSpendForCard, EnvTx } from '@/lib/envelopeHelpers';
+import { buildCardSummary, EnvTx } from '@/lib/envelopeHelpers';
 
 // POST: create expense (single, monthly recurring, or installments)
 export async function POST(request: Request) {
@@ -247,6 +247,11 @@ export async function GET(request: Request) {
       .order('name');
 
     // Budget source: card_envelope_items for card/LOC accounts; general budgets table for chequing.
+    // card_envelope_items is month-scoped (20260714000000 migration) — a
+    // query here without .eq('month', ...) would fetch every month's rows
+    // for the card (e.g. both July's and August's after a copy-forward) and
+    // fan out into duplicate category rows in the summary below, even
+    // though the underlying table has no duplicate rows itself.
     type BudgetRow = { amount: number; category_id: string; categories: { name: string; type: string } | null };
     let budgetItems: BudgetRow[] = [];
 
@@ -255,7 +260,8 @@ export async function GET(request: Request) {
         .from('card_envelope_items')
         .select('monthly_amount, category_id, categories(name, type)')
         .eq('household_id', householdId)
-        .eq('account_id', selectedAccount.id);
+        .eq('account_id', selectedAccount.id)
+        .eq('month', monthStart);
       budgetItems = (envItems ?? []).map((d) => ({
         amount: Number(d.monthly_amount),
         category_id: d.category_id as string,
@@ -291,17 +297,24 @@ export async function GET(request: Request) {
 
     type Txn = { amount: number; category_id: string | null; is_bridge?: boolean };
 
-    // Card actuals net expenses against refunds via the shared envelope
-    // helper — the same math the Cards decision view and grid use, so a
-    // refund reduces Spent here too instead of vanishing. Chequing has no
-    // refund concept; its category rollup stays plain expense sums.
-    let spentByCategory: Map<string, number>;
+    // Card summary: rows and TOTAL come from one call, one derivation — the
+    // shared buildCardSummary helper sums its own rows for the total, so
+    // they can never drift apart, and it structurally can't double a
+    // category even if a query upstream ever returns overlapping rows for
+    // a month again. Chequing has no refund/envelope concept, so it keeps
+    // its own plain expense-sum construction.
+    let summaryRows: { categoryId: string; name: string; budget: number; spent: number; difference: number }[];
     let totalSpent: number;
     if (isCard && selectedAccount) {
-      spentByCategory = categoryActualsForCard(allTxns as unknown as EnvTx[], selectedAccount.id, monthParam);
-      totalSpent = totalSpendForCard(allTxns as unknown as EnvTx[], selectedAccount.id, monthParam);
+      const categoryNames = new Map((categories ?? []).map((c) => [c.id, c.name]));
+      const items = budgetItems
+        .filter((b) => b.categories?.type === 'expense')
+        .map((b) => ({ categoryId: b.category_id, categoryName: b.categories?.name ?? '', monthlyAmount: Number(b.amount) }));
+      const built = buildCardSummary(items, categoryNames, allTxns as unknown as EnvTx[], selectedAccount.id, monthParam);
+      summaryRows = built.summary;
+      totalSpent = built.totalSpent;
     } else {
-      spentByCategory = new Map<string, number>();
+      const spentByCategory = new Map<string, number>();
       for (const t of (txns as Txn[] | null) ?? []) {
         if (!t.category_id || t.is_bridge) continue;
         spentByCategory.set(t.category_id, (spentByCategory.get(t.category_id) ?? 0) + Number(t.amount));
@@ -309,32 +322,32 @@ export async function GET(request: Request) {
       totalSpent = Math.round(
         (txns as { amount: number }[]).reduce((s, t) => s + Number(t.amount), 0) * 100
       ) / 100;
-    }
 
-    const summaryRows = budgetItems
-      .filter((b) => b.categories?.type === 'expense')
-      .map((b) => {
-        const spent = spentByCategory.get(b.category_id) ?? 0;
-        return {
-          categoryId: b.category_id,
-          name: b.categories?.name ?? '',
-          budget: Number(b.amount),
-          spent: Math.round(spent * 100) / 100,
-          difference: Math.round((Number(b.amount) - spent) * 100) / 100,
-        };
-      });
-
-    const budgetedIds = new Set(summaryRows.map((r) => r.categoryId));
-    for (const [catId, spent] of spentByCategory) {
-      if (!budgetedIds.has(catId)) {
-        const cat = (categories ?? []).find((c) => c.id === catId);
-        summaryRows.push({
-          categoryId: catId,
-          name: cat?.name ?? '?',
-          budget: 0,
-          spent: Math.round(spent * 100) / 100,
-          difference: Math.round(-spent * 100) / 100,
+      summaryRows = budgetItems
+        .filter((b) => b.categories?.type === 'expense')
+        .map((b) => {
+          const spent = spentByCategory.get(b.category_id) ?? 0;
+          return {
+            categoryId: b.category_id,
+            name: b.categories?.name ?? '',
+            budget: Number(b.amount),
+            spent: Math.round(spent * 100) / 100,
+            difference: Math.round((Number(b.amount) - spent) * 100) / 100,
+          };
         });
+
+      const budgetedIds = new Set(summaryRows.map((r) => r.categoryId));
+      for (const [catId, spent] of spentByCategory) {
+        if (!budgetedIds.has(catId)) {
+          const cat = (categories ?? []).find((c) => c.id === catId);
+          summaryRows.push({
+            categoryId: catId,
+            name: cat?.name ?? '?',
+            budget: 0,
+            spent: Math.round(spent * 100) / 100,
+            difference: Math.round(-spent * 100) / 100,
+          });
+        }
       }
     }
 

@@ -54,3 +54,21 @@ export function formatCurrency(amount: number, locale: string) {
     currency: 'CAD',
   }).format(amount);
 }
+
+// One shared rule for any list mixing money-in and money-out entries
+// (a card's transaction list now includes refunds alongside expenses,
+// exactly the case this exists for): income is +$X.XX in green, everything
+// else is plain currency in the default text color. Locale-safe — the sign
+// is a literal "+", not baked into Intl formatting, so it reads correctly
+// in both en and fr.
+export function formatSignedAmount(
+  amount: number,
+  type: string,
+  locale: string
+): { text: string; color: string } {
+  const isIncome = type === 'income';
+  return {
+    text: `${isIncome ? '+' : ''}${formatCurrency(Math.abs(amount), locale)}`,
+    color: isIncome ? '#16A34A' : '#0F2044',
+  };
+}
