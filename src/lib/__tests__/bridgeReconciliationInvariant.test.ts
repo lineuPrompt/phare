@@ -206,6 +206,28 @@ describe('Phase 1.2 invariant — reconciliation stays balanced through card-ent
     expect(result.netDifference).toBe(0);
   });
 
+  it('real-world shape (item B, 2026-07-16): a card refund alongside card spend stays reconciled through ensure', async () => {
+    // The persisting reconciliation mismatch after the statement-cycle fix
+    // was NOT a bridge bug at all — computeMonthTotals (dashboardHelpers.ts)
+    // counted a card refund (type='income' on the credit_card account) as
+    // household income unconditionally, while chequingLedgerNet correctly
+    // excluded it (not a chequing row). This test encodes exactly that
+    // real-world shape end-to-end: card spend + a card refund + the bridge
+    // sync, then reconciliation must hold.
+    const supabase = makeFakeSupabase([
+      { id: 'card-1', household_id: HOUSEHOLD, account_id: CARD, amount: 100, type: 'expense', date: '2026-07-01', description: 'Groceries', is_bridge: false },
+      { id: 'card-2', household_id: HOUSEHOLD, account_id: CARD, amount: 20, type: 'income', date: '2026-07-05', description: 'Refund', is_bridge: false },
+    ]);
+
+    await ensure(supabase);
+
+    const result = reconcileAll(supabase);
+    expect(result.reconciled).toBe(true);
+    expect(result.netDifference).toBe(0);
+    // The refund is not household income — it never entered chequing.
+    expect(result.totalIncome).toBe(0);
+  });
+
   it('a full add/edit/delete/re-add sequence stays reconciled at every single step', async () => {
     const supabase = makeFakeSupabase([]);
 

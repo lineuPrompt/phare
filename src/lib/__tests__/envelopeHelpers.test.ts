@@ -8,8 +8,11 @@ import {
   sumWarning,
   carryForwardMap,
   buildGrid,
+  groupEntriesByCategory,
   EnvTx,
+  CardTxRow,
 } from '../envelopeHelpers';
+import { statementCycleWindow, bridgePaymentDate } from '../dateHelpers';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -355,5 +358,82 @@ describe('card isolation', () => {
     expect(mcTotal).toBe(520);    // 400+120
     expect(visaTotal).not.toBe(mcTotal);
   });
+});
+
+// ---------------------------------------------------------------------------
+// 10. Phase 1 fix (post-founder-verification round 2): the Cards page
+// display contract is CALENDAR month, always — never the statement cycle.
+// The statement cycle governs only which bridge payment date a card's
+// spend rolls into (bridgeHelpers.ts / statementCycleWindow). These two
+// concerns must never collide: an entry always shows under the calendar
+// month of its date, full stop.
+// ---------------------------------------------------------------------------
+
+function cardTx(
+  id: string,
+  amount: number,
+  date: string,
+  category_id: string | null = CAT_GROCERY,
+  type: 'expense' | 'income' = 'expense'
+): CardTxRow {
+  return { id, account_id: VISA, amount, date, category_id, type, is_bridge: false, description: `entry-${id}`, installment_label: null };
+}
+
+describe('groupEntriesByCategory — calendar-month display contract', () => {
+  it('groups entries by category, scoped to the calendar month only (no statement-cycle awareness)', () => {
+    const { byCategory, uncategorized } = groupEntriesByCategory(
+      [
+        cardTx('e1', 100, '2026-07-05', CAT_GROCERY),
+        cardTx('e2', 50, '2026-07-20', CAT_REST),
+        cardTx('e3', 30, '2026-07-18', null),
+        cardTx('e4', 999, '2026-08-03', CAT_GROCERY), // different calendar month — excluded
+      ],
+      VISA,
+      '2026-07'
+    );
+    expect(byCategory[CAT_GROCERY]?.map((e) => e.id)).toEqual(['e1']);
+    expect(byCategory[CAT_REST]?.map((e) => e.id)).toEqual(['e2']);
+    expect(uncategorized.map((e) => e.id)).toEqual(['e3']);
+    expect(byCategory[CAT_GROCERY]?.some((e) => e.id === 'e4')).toBeFalsy();
+  });
+
+  it('excludes bridge rows even when dated within the viewed calendar month', () => {
+    const bridgeRow: CardTxRow = { id: 'b1', account_id: VISA, amount: 500, date: '2026-07-05', category_id: null, type: 'expense', is_bridge: true, description: 'Visa payment', installment_label: null };
+    const { byCategory, uncategorized } = groupEntriesByCategory([bridgeRow], VISA, '2026-07');
+    expect(Object.keys(byCategory)).toHaveLength(0);
+    expect(uncategorized).toHaveLength(0);
+  });
+
+  it(
+    'an entry dated on the statement close day and one the day after are BOTH visible under ' +
+    'the same calendar month tab, even though they land in different bridge payment cycles',
+    () => {
+      // Card closes on the 15th. Both entries are July dates, same calendar month.
+      const closeDayEntry = cardTx('close-day', 40, '2026-07-15', CAT_GROCERY);
+      const dayAfterEntry = cardTx('day-after', 60, '2026-07-16', CAT_GROCERY);
+
+      // Display: both show up under the July calendar-month tab.
+      const { byCategory } = groupEntriesByCategory([closeDayEntry, dayAfterEntry], VISA, '2026-07');
+      const ids = byCategory[CAT_GROCERY]?.map((e) => e.id) ?? [];
+      expect(ids).toEqual(expect.arrayContaining(['close-day', 'day-after']));
+      expect(ids).toHaveLength(2);
+
+      // Bridge computation: the two entries fall in DIFFERENT statement
+      // cycles and so land on different chequing payment dates.
+      const closeDay = 15;
+      const paymentDay = 5;
+      const julyWindow = statementCycleWindow('2026-07', closeDay); // ends 2026-07-15
+      const augustWindow = statementCycleWindow('2026-08', closeDay); // 2026-07-16..2026-08-15
+
+      expect(closeDayEntry.date >= julyWindow.start && closeDayEntry.date <= julyWindow.end).toBe(true);
+      expect(dayAfterEntry.date >= augustWindow.start && dayAfterEntry.date <= augustWindow.end).toBe(true);
+
+      const closeDayPaymentDate = bridgePaymentDate('2026-07', paymentDay);
+      const dayAfterPaymentDate = bridgePaymentDate('2026-08', paymentDay);
+      expect(closeDayPaymentDate).not.toBe(dayAfterPaymentDate);
+      expect(closeDayPaymentDate).toBe('2026-08-05');
+      expect(dayAfterPaymentDate).toBe('2026-09-05');
+    }
+  );
 });
 

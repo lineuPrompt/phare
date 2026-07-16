@@ -84,40 +84,58 @@ describe('reconcileMonth — normal month', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. Mismatch path — inconsistent dataset exposes the break
+// 2. Card refunds — Phase 1 fix (2026-07-16)
+//
+// This describe block used to assert the OPPOSITE of what it now asserts:
+// it treated "income posted to a card account creates a non-zero
+// netDifference" as a *feature* proving the dual-path audit catches breaks,
+// explicitly commented "not a realistic scenario". It was realistic — Build
+// 2 introduced card refunds ("money in" entries on a credit_card account,
+// type='income', netting against that card's spend) — and this exact shape
+// was the real, persistent reconciliation mismatch the founder saw live,
+// unrelated to bridge timing. computeMonthTotals now scopes income to
+// chequing (dashboardHelpers.ts), matching chequingLedgerNet, so a card
+// refund is excluded from BOTH paths and reconciliation holds.
 // ---------------------------------------------------------------------------
 
-describe('reconcileMonth — mismatch detection', () => {
-  it('reports non-zero difference when income lands on a non-chequing account', () => {
-    // Income posted to a card account — computeMonthTotals counts it (type='income'),
-    // but chequingLedgerNet ignores it (not on chequing).
-    // This is not a realistic scenario, but it proves the audit actually catches breaks.
+describe('reconcileMonth — card refunds do not break reconciliation', () => {
+  it('a card refund (income on a credit_card account) is excluded from both paths — reconciled', () => {
     const transactions: ReconcileTxRow[] = [
-      tx({ type: 'income',  account_id: CARD, amount: 500 }), // off-chequing income
+      tx({ type: 'income',  account_id: CARD, amount: 500 }), // card refund — not household income
       tx({ type: 'expense', account_id: CHQ,  amount: 300 }),
     ];
 
     const result = reconcileMonth(transactions, accounts);
 
-    // Path 1 sees $500 income; path 2 sees $0 chequing inflows
-    expect(result.totalIncome).toBe(500);          // bucket path includes it
-    expect(result.netFromBuckets).toBe(200);       // 500 − 300 − 0
+    expect(result.totalIncome).toBe(0);           // card refund excluded, not counted as income
+    expect(result.netFromBuckets).toBe(-300);     // 0 − 300 − 0
     expect(result.netFromChequing).toBe(-300);     // chequing: 0 in − 300 out
-    expect(result.netDifference).not.toBe(0);
-    expect(result.reconciled).toBe(false);
-    // Delta should equal the off-chequing income amount
-    expect(result.netDifference).toBe(-500);       // chequing − buckets = −300 − 200
+    expect(result.netDifference).toBe(0);
+    expect(result.reconciled).toBe(true);
   });
 
-  it('mismatch delta is visible and the amount is correct', () => {
+  it('a real household income row plus a card refund in the same month both classify correctly', () => {
     const transactions: ReconcileTxRow[] = [
-      tx({ type: 'income',  account_id: CARD, amount: 1000 }),
-      tx({ type: 'income',  account_id: CHQ,  amount: 3000 }),
+      tx({ type: 'income',  account_id: CARD, amount: 1000 }), // card refund — excluded
+      tx({ type: 'income',  account_id: CHQ,  amount: 3000 }), // real paycheque
       tx({ type: 'expense', account_id: CHQ,  amount: 2000 }),
     ];
     const result = reconcileMonth(transactions, accounts);
-    expect(result.reconciled).toBe(false);
-    expect(result.netDifference).toBe(-1000); // path2 misses the CARD income
+    expect(result.totalIncome).toBe(3000); // card refund never enters household income
+    expect(result.reconciled).toBe(true);
+    expect(result.netDifference).toBe(0);
+  });
+
+  it('a refund that fully offsets that month\'s card spend still reconciles', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ type: 'income',   account_id: CHQ,  amount: 4000 }),
+      tx({ type: 'expense',  account_id: CARD, amount: 150  }), // card spend — excluded from chequing net
+      tx({ type: 'income',   account_id: CARD, amount: 150  }), // full refund on the same card
+      tx({ type: 'expense',  account_id: CHQ,  amount: 2500 }),
+    ];
+    const result = reconcileMonth(transactions, accounts);
+    expect(result.reconciled).toBe(true);
+    expect(result.netDifference).toBe(0);
   });
 });
 

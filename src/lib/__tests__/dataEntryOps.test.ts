@@ -69,12 +69,27 @@ describe('one-off income entry — bucket placement', () => {
     // regardless of the account it is on.
     const txns: TxRow[] = [
       { type: 'income', account_id: CHEQUING_ID, amount: 1000 },
-      { type: 'income', account_id: CARD_ID,     amount: 200  }, // unusual but should not break
     ];
     const result = computeMonthTotals(txns, accounts);
     expect(result.totalSavings).toBe(0);
     expect(result.totalExpenses).toBe(0);
-    expect(result.totalIncome).toBe(1200);
+    expect(result.totalIncome).toBe(1000);
+  });
+
+  it('Phase 1 fix — a card refund (type=income on a credit_card account) is NOT household income', () => {
+    // A "money in" entry on a card is a refund/credit against that card's
+    // spend (envelopeHelpers.ts), not new household cash. Before the fix,
+    // this counted toward totalIncome here while chequingLedgerNet (the
+    // reconcile screen's independent path) correctly excluded it — a real,
+    // persistent dual-path mismatch any time a card refund existed.
+    const txns: TxRow[] = [
+      { type: 'income', account_id: CHEQUING_ID, amount: 1000 }, // real household income
+      { type: 'income', account_id: CARD_ID,     amount: 200  }, // card refund — not income
+    ];
+    const result = computeMonthTotals(txns, accounts);
+    expect(result.totalIncome).toBe(1000); // card refund excluded
+    expect(result.totalSavings).toBe(0);
+    expect(result.totalExpenses).toBe(0);
   });
 
   it('planner/dashboard reconciliation holds after adding one-off income', () => {

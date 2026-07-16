@@ -9,6 +9,20 @@
  * would count card spending twice. We restrict money-out to transactions
  * whose account_id belongs to a chequing account.
  *
+ * INCOME SCOPE — Phase 1 fix (2026-07-16)
+ * ----------------------------------------
+ * Income is scoped to chequing for the exact same reason as the double-count
+ * rule above: a "money in" entry recorded ON A CARD is a refund/credit
+ * against that card's spend (see envelopeHelpers.ts), not new household
+ * cash — no money actually entered chequing. Previously `income` summed
+ * type='income' across ALL accounts unconditionally, so a card refund
+ * inflated totalIncome here while `chequingLedgerNet` (reconcileHelpers.ts'
+ * independent path 2) correctly excluded it as a non-chequing row — a real,
+ * persistent dual-path reconciliation mismatch (this file's income bucket
+ * disagreeing with the chequing ledger's own inflows) any time a card
+ * refund existed, not something a bridge-timing fix could touch. Fixed by
+ * scoping income to chequing, same as expenses/savings below.
+ *
  * TRANSFER RULE
  * -------------
  * A transfer (chequing → goal account) is neither income nor expense.
@@ -18,13 +32,14 @@
  *
  * BUCKET MATH
  * -----------
- *   income   = Σ amount WHERE type = 'income'
- *   expenses = Σ amount WHERE type = 'expense'  AND account_id ∈ chequing
+ *   income   = Σ amount WHERE type = 'income'  AND account_id ∈ chequing
+ *   expenses = Σ amount WHERE type = 'expense' AND account_id ∈ chequing
  *   savings  = Σ amount WHERE type = 'transfer' AND account_id ∈ chequing
  *   net      = income − expenses − savings
  *
  * The goal-side transfer rows (account_id ∈ goal accounts) fall through all
- * predicates and are intentionally counted in zero buckets.
+ * predicates and are intentionally counted in zero buckets. Same now for a
+ * card-side income (refund) row.
  */
 
 export const GOAL_ACCOUNT_TYPES = ['savings', 'tfsa', 'rrsp'] as const;
@@ -64,7 +79,7 @@ export function computeMonthTotals(
     const amt = Number(tx.amount);
     const onChequing = tx.account_id !== null && chequingIds.has(tx.account_id);
 
-    if (tx.type === 'income') {
+    if (tx.type === 'income' && onChequing) {
       income += amt;
     } else if (tx.type === 'expense' && onChequing) {
       expenses += amt;

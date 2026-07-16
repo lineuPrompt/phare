@@ -24,6 +24,12 @@ export type CategoryEntryLine = {
   installmentLabel: string | null;
 };
 
+export type CardTxRow = EnvTx & {
+  id: string;
+  description: string | null;
+  installment_label: string | null;
+};
+
 function r2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -60,6 +66,46 @@ export function categoryActualsForCard(
     map.set(t.category_id, r2((map.get(t.category_id) ?? 0) + signed));
   }
   return map;
+}
+
+// DISPLAY CONTRACT: entries are grouped by the CALENDAR month of their date
+// (t.date.startsWith(month)) — the exact same filter categoryActualsForCard
+// uses above, so the entry list a category's accordion shows can never drift
+// from the $ actual figure shown next to it. The statement cycle a card may
+// have configured (statementCycleWindow, dateHelpers.ts) governs ONLY which
+// bridge payment date a card's spend rolls into — it never affects whether
+// an entry is visible here. An entry always appears under the calendar
+// month of the date the founder entered, full stop.
+export function groupEntriesByCategory(
+  transactions: CardTxRow[],
+  cardId: string,
+  month: string
+): { byCategory: Record<string, CategoryEntryLine[]>; uncategorized: CategoryEntryLine[] } {
+  const byCategory: Record<string, CategoryEntryLine[]> = {};
+  const uncategorized: CategoryEntryLine[] = [];
+
+  for (const t of transactions) {
+    if (t.account_id !== cardId) continue;
+    if (t.is_bridge) continue;
+    if (!t.date.startsWith(month)) continue;
+
+    const line: CategoryEntryLine = {
+      id: t.id,
+      date: t.date,
+      description: t.description,
+      amount: Number(t.amount),
+      type: t.type as 'expense' | 'income',
+      installmentLabel: t.installment_label,
+    };
+
+    if (t.category_id) {
+      (byCategory[t.category_id] ??= []).push(line);
+    } else {
+      uncategorized.push(line);
+    }
+  }
+
+  return { byCategory, uncategorized };
 }
 
 // Net (expenses minus refunds) of transactions on cardId in month with null category_id.

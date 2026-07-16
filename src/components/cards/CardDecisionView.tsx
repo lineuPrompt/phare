@@ -146,7 +146,13 @@ export default function CardDecisionView({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const remaining = totalGoal !== null ? totalGoal - totalSpent : null;
   const overGoal = remaining !== null && remaining < 0;
-  const hasEnvelope = envelopeItems.length > 0;
+  // Regression fix: this used to gate on envelopeItems.length alone, which
+  // hid the ENTIRE table — including the uncategorized row — whenever a
+  // card had no saved envelope items yet but did have real, uncategorized
+  // entries. Those entries were invisible even though they existed in the
+  // DB. A category-less entry never lands in envelopeItems (it's not tied
+  // to any category), so it must be checked separately here.
+  const hasEnvelope = envelopeItems.length > 0 || uncategorized > 0;
 
   const toggle = (id: string) => {
     setExpanded((prev) => {

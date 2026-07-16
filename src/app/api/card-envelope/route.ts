@@ -7,7 +7,8 @@ import {
   envelopeRemaining,
   envelopeStatus,
   EnvTx,
-  CategoryEntryLine,
+  CardTxRow,
+  groupEntriesByCategory,
 } from '@/lib/envelopeHelpers';
 import { categoryDisplayName } from '@/lib/categoryTranslations';
 
@@ -87,28 +88,13 @@ export async function GET(request: Request) {
     const txns = (rawTxns ?? []) as EnvTx[];
     const byCategory = categoryActualsForCard(txns, cardId, monthParam);
 
-    // Per-category entry lines for the accordion — same rows the actuals
-    // above are computed from, just grouped for display instead of summed.
-    // Bridge lines are excluded (they're computed, not user entries).
-    type RawTxn = EnvTx & { id: string; description: string | null; installment_label: string | null };
-    const entriesByCategory: Record<string, CategoryEntryLine[]> = {};
-    const uncategorizedEntries: CategoryEntryLine[] = [];
-    for (const t of txns as RawTxn[]) {
-      if (t.is_bridge) continue;
-      const line: CategoryEntryLine = {
-        id: t.id,
-        date: t.date,
-        description: t.description,
-        amount: Number(t.amount),
-        type: t.type as 'expense' | 'income',
-        installmentLabel: t.installment_label,
-      };
-      if (t.category_id) {
-        (entriesByCategory[t.category_id] ??= []).push(line);
-      } else {
-        uncategorizedEntries.push(line);
-      }
-    }
+    // Per-category entry lines for the accordion — same calendar-month
+    // filter categoryActualsForCard uses above, so the entry list can never
+    // drift from the $ actual shown next to it. See groupEntriesByCategory's
+    // docstring for the display contract (calendar month, never the
+    // statement cycle).
+    const { byCategory: entriesByCategory, uncategorized: uncategorizedEntries } =
+      groupEntriesByCategory(txns as CardTxRow[], cardId, monthParam);
 
     // All household expense categories — needed both for the editor's
     // add-category dropdown and to name any category that has net activity
