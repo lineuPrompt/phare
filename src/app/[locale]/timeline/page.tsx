@@ -8,9 +8,34 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import TimelineHeader from '@/components/timeline/TimelineHeader';
 import DayLedger from '@/components/timeline/DayLedger';
 import AnchorForm from '@/components/timeline/AnchorForm';
+import TimelineEntryForm from '@/components/timeline/TimelineEntryForm';
 import { buildMonthView, availableMonths, type UnbalancedDay } from '@/lib/timelineDisplayHelpers';
 import type { TimelineDay, DipInfo } from '@/lib/timelineHelpers';
-import type { Account } from '@/components/expenses/types';
+import type { Account, ExpenseCategory } from '@/components/expenses/types';
+import { formatCurrency } from '@/components/expenses/types';
+
+// Closing position for the viewed month — read directly off the already-
+// computed monthView.closesAt (buildMonthView, Phase 3). No new math: this
+// is the one figure the founder wants preserved from the retired Planner.
+function RemainingCashStrip({ amount, label, locale }: { amount: number; label: string; locale: string }) {
+  const positive = amount >= 0;
+  return (
+    <div
+      className="rounded-2xl p-6 flex items-center justify-between"
+      style={{
+        background: positive ? '#F0FDF4' : '#FEF2F2',
+        border: `2px solid ${positive ? '#86EFAC' : '#FECACA'}`,
+      }}
+    >
+      <span className="text-base font-semibold" style={{ color: positive ? '#15803D' : '#B91C1C' }}>
+        {label}
+      </span>
+      <span className="text-2xl font-bold" style={{ color: positive ? '#15803D' : '#B91C1C' }}>
+        {formatCurrency(amount, locale)}
+      </span>
+    </div>
+  );
+}
 
 type TimelineResponse =
   | {
@@ -45,6 +70,8 @@ export default function TimelinePage() {
   const [data, setData] = useState<TimelineResponse | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
   const [showReAnchor, setShowReAnchor] = useState(false);
+  const [showAddEntry, setShowAddEntry] = useState(false);
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
 
   const todayRef = useRef<HTMLDivElement | null>(null);
 
@@ -58,6 +85,13 @@ export default function TimelinePage() {
       .then((d: { accounts: Account[] } | null) => {
         const chequing = d?.accounts.find((a) => a.type === 'chequing');
         if (chequing) setChequingId(chequing.id);
+      })
+      .catch(() => {});
+
+    fetch('/api/categories')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { categories: { id: string; name: string }[] } | null) => {
+        if (d) setCategories(d.categories.map((c) => ({ ...c, type: 'expense' })));
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,6 +134,11 @@ export default function TimelinePage() {
 
   const onAnchorSaved = () => {
     setShowReAnchor(false);
+    load();
+  };
+
+  const onEntrySaved = () => {
+    setShowAddEntry(false);
     load();
   };
 
@@ -153,6 +192,27 @@ export default function TimelinePage() {
     <>
       <TimelineHeader todayBalance={data.todayBalance} dip={data.dip} windowEndDate={windowEndDate} locale={locale} />
 
+      {/* Add entry — the one place chequing transactions get added by hand */}
+      <div>
+        {!showAddEntry && (
+          <button
+            onClick={() => setShowAddEntry(true)}
+            className="px-5 py-2.5 rounded-full text-sm font-semibold cursor-pointer hover:opacity-90 transition-all"
+            style={{ background: '#0F2044', color: 'white' }}
+          >
+            + {t('addEntry.cta')}
+          </button>
+        )}
+        {showAddEntry && (
+          <TimelineEntryForm
+            accountId={chequingId}
+            categories={categories}
+            onSaved={onEntrySaved}
+            onCancel={() => setShowAddEntry(false)}
+          />
+        )}
+      </div>
+
       <div className="flex items-center justify-between">
         <button
           onClick={goPrev}
@@ -183,6 +243,14 @@ export default function TimelinePage() {
       </div>
 
       {monthView && <DayLedger monthView={monthView} today={today} locale={locale} todayRef={todayRef} />}
+
+      {monthView && (
+        <RemainingCashStrip
+          amount={monthView.closesAt}
+          label={t('remainingCash.label', { month: monthLabel })}
+          locale={locale}
+        />
+      )}
 
       <div>
         {!showReAnchor && (

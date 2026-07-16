@@ -371,86 +371,19 @@
       "overview": "Overview",
       "timeline": "Timeline",
       "upload": "New plan",
-      "expenses": "Expenses",
       "reviews": "Reviews",
       "recurring": "Recurring",
-      "planner": "Planner",
       "reconcile": "Audit",
       "goals": "Goals",
       "household": "Household",
       "cards": "Cards"
     }
   },
-  "expenses": {
-    "title": "Expenses",
-    "loading": "Loading your expenses...",
-    "form": {
-      "title": "Add expense",
-      "description": "Description",
-      "category": "Category...",
-      "amount": "Amount",
-      "once": "Once",
-      "monthly": "Monthly",
-      "installments": "Installments",
-      "saving": "Saving...",
-      "save": "Add expense",
-      "saveIncome": "Add income",
-      "moneyOut": "Money out",
-      "moneyIn": "Money in",
-      "newCategory": "+ New category...",
-      "newCategoryName": "Name, then Enter",
-      "account": "Account..."
-    },
-    "summary": {
-      "title": "Month summary",
-      "category": "Category",
-      "budget": "Budget",
-      "spent": "Spent",
-      "difference": "Difference",
-      "status": "Status",
-      "over": "Over",
-      "ok": "OK",
-      "total": "TOTAL",
-      "within": "Within goal",
-      "overGoal": "Over goal",
-      "setGoal": "Set monthly goal",
-      "uncategorized": "Uncategorized"
-    },
-    "goal": {
-      "label": "Monthly card goal",
-      "notSet": "Not set",
-      "set": "Set goal",
-      "edit": "Edit",
-      "save": "Save",
-      "cancel": "Cancel"
-    },
-    "list": {
-      "title": "Entries",
-      "empty": "No expenses this month yet.",
-      "edit": "Edit",
-      "delete": "Delete",
-      "confirmTitle": "Delete this expense?",
-      "deleteOne": "Delete this one",
-      "deleteSeries": "Delete this and all future",
-      "pickCategory": "Pick a category",
-      "cancel": "Cancel"
-    },
-    "flow": {
-      "in": "Money in",
-      "out": "Money out",
-      "net": "Net",
-      "edit": "Edit",
-      "delete": "Delete",
-      "confirmTitle": "Delete this income entry?",
-      "confirmDelete": "Delete",
-      "cancel": "Cancel"
-    }
-  },
   "cards": {
     "title": "Card Envelopes",
     "loading": "Loading...",
     "noCards": "No credit cards set up yet.",
-    "noCardsHint": "Add your credit cards in the Expenses page.",
+    "noCardsHint": "Credit cards are added when you set up your household.",
     "decision": {
       "totalGoal": "Monthly goal",
       "spent": "Spent",
@@ -507,6 +440,38 @@
       "watch": "Watch",
       "ok": "OK",
       "noGoal": "No goal"
+    },
+    "addEntry": {
+      "title": "Add expense",
+      "description": "Description",
+      "category": "Category...",
+      "amount": "Amount",
+      "once": "Once",
+      "monthly": "Monthly",
+      "installments": "Installments",
+      "saving": "Saving...",
+      "save": "Add expense",
+      "saveIncome": "Add income",
+      "moneyOut": "Money out",
+      "moneyIn": "Money in",
+      "newCategory": "+ New category...",
+      "newCategoryName": "Name, then Enter",
+      "account": "Account..."
+    },
+    "monthSummary": {
+      "title": "Month summary",
+      "category": "Category",
+      "budget": "Budget",
+      "spent": "Spent",
+      "difference": "Difference",
+      "status": "Status",
+      "over": "Over",
+      "ok": "OK",
+      "total": "TOTAL",
+      "within": "Within goal",
+      "overGoal": "Over goal",
+      "setGoal": "Set monthly goal",
+      "uncategorized": "Uncategorized"
     }
   },
   "timeline": {
@@ -549,16 +514,30 @@
       "saving": "Saving...",
       "cancel": "Cancel",
       "genericError": "Something went wrong. Try again."
+    },
+    "addEntry": {
+      "cta": "Add entry",
+      "title": "Add entry",
+      "moneyOut": "Money out",
+      "moneyIn": "Money in",
+      "description": "Description",
+      "category": "Category...",
+      "newCategory": "+ New category...",
+      "newCategoryName": "Name, then Enter",
+      "amount": "Amount",
+      "once": "Once",
+      "recurring": "Recurring",
+      "cadenceMonthly": "Monthly",
+      "cadenceBiweekly": "Every 2 weeks",
+      "cadenceSemimonthly": "Twice a month",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "save": "Add expense",
+      "saveIncome": "Add income"
+    },
+    "remainingCash": {
+      "label": "Remaining cash — {month} closes at"
     }
-  },
-  "planner": {
-    "title": "Cash-Flow Planner",
-    "loading": "Loading your cash flow...",
-    "income": "Income",
-    "expenses": "Expenses",
-    "savings": "Savings",
-    "remaining": "Remaining Cash",
-    "empty": "No transactions this month."
   },
   "goals": {
     "title": "Goals",
@@ -655,6 +634,57 @@
       "average": "≈ {amount}/mo average",
       "householdLabel": "Household",
       "needsPayDate": "needs a pay date"
+    }
+  },
+  "reconcile": {
+    "title": "Reconciliation Audit",
+    "subtitle": "Debugging instrument — every money number for the month, traced to the ledger. Two independently-derived nets must agree; a delta is the bug.",
+    "loading": "Loading audit data…",
+    "loadError": "Failed to load reconciliation data.",
+    "reconciled": "Reconciled — both derivation paths agree",
+    "mismatch": "Mismatch — the two derivation paths disagree",
+    "accountType": {
+      "chequing": "Chequing",
+      "creditCard": "Credit card",
+      "savings": "Savings",
+      "tfsa": "TFSA",
+      "rrsp": "RRSP"
+    },
+    "txCount": "{count} tx",
+    "noTransactions": "No transactions this month.",
+    "bridgeBadge": "bridge",
+    "table": {
+      "date": "Date",
+      "description": "Description",
+      "category": "Category",
+      "type": "Type",
+      "amount": "Amount"
+    },
+    "type": {
+      "income": "Income",
+      "expense": "Expense",
+      "transfer": "Transfer"
+    },
+    "bucketBreakdown": {
+      "title": "Bucket Breakdown (path 1 — computeMonthTotals)",
+      "income": "Income",
+      "expenses": "Expenses",
+      "includesBridge": "includes bridge lines",
+      "cardPayments": "Card payments (bridge)",
+      "savingsTransfers": "Savings transfers",
+      "netFromBuckets": "Net (from buckets)"
+    },
+    "dualNet": {
+      "title": "Dual-Net Comparison",
+      "netFromChequing": "Net (chequing ledger direct)",
+      "pathTwo": "path 2 — independent",
+      "match": "match",
+      "mismatchShort": "mismatch",
+      "footnote": "Path 1 uses computeMonthTotals (bucket logic). Path 2 sums chequing rows directly by sign. Equal → ledger is clean."
+    },
+    "perAccount": {
+      "title": "Per-Account Balances (month-scoped)",
+      "empty": "No accounts found."
     }
   },
   "household": {

@@ -1,78 +1,85 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Account, ExpenseCategory } from './types';
+import type { ExpenseCategory } from '@/components/expenses/types';
 
-export default function ExpenseForm({
-  categories,
-  accounts,
-  onSaved,
-  defaultDate,
+type Cadence = 'monthly' | 'biweekly' | 'semimonthly';
+
+export default function TimelineEntryForm({
   accountId,
+  categories,
+  onSaved,
+  onCancel,
 }: {
+  accountId: string;
   categories: ExpenseCategory[];
-  accounts: Account[];
   onSaved: () => void;
-  defaultDate?: string;
-  accountId: string | null;
+  onCancel?: () => void;
 }) {
-  const t = useTranslations('cards.addEntry');
+  const t = useTranslations('timeline.addEntry');
   const today = new Date().toISOString().slice(0, 10);
+
   const [entryType, setEntryType] = useState<'expense' | 'income'>('expense');
-  const [date, setDate] = useState(defaultDate ?? today);
+  const [date, setDate] = useState(today);
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [selectedAccountId, setSelectedAccountId] = useState(accountId ?? '');
   const [amount, setAmount] = useState('');
-  const [repeat, setRepeat] = useState<'once' | 'monthly' | 'installments'>('once');
-  const [installments, setInstallments] = useState('2');
+  const [mode, setMode] = useState<'once' | 'recurring'>('once');
+  const [cadence, setCadence] = useState<Cadence>('monthly');
+  const [secondDay, setSecondDay] = useState('30');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [newCategoryMode, setNewCategoryMode] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [localCategories, setLocalCategories] = useState(categories);
 
-  useEffect(() => { setLocalCategories(categories); }, [categories]);
-  useEffect(() => { setSelectedAccountId(accountId ?? ''); }, [accountId]);
+  const showCategoryField = entryType === 'expense';
 
-  // A "Money in" entry on a credit card is a refund/credit against a
-  // spending category, not household income — it needs a category so it can
-  // net against that category's Spent. Chequing income has no category.
-  const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
-  const isCardAccount = selectedAccount?.type === 'credit_card' || selectedAccount?.type === 'line_of_credit';
-  const showCategoryField = entryType === 'expense' || isCardAccount;
-
-  const switchType = (t: 'expense' | 'income') => {
-    setEntryType(t);
-    // Category is irrelevant for chequing income — clear it to avoid stale state.
-    // Card refunds keep the category selector, so leave it as-is there.
-    if (t === 'income' && !isCardAccount) setCategoryId('');
+  const switchType = (tp: 'expense' | 'income') => {
+    setEntryType(tp);
+    if (tp === 'income') setCategoryId('');
   };
 
   const submit = async () => {
     setSaving(true);
     setError('');
     try {
-      const res = await fetch('/api/expenses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: entryType,
-          date,
-          description: description.trim(),
-          categoryId: showCategoryField ? categoryId : undefined,
-          amount: parseFloat(amount),
-          repeat,
-          installments: repeat === 'installments' ? parseInt(installments, 10) : undefined,
-          accountId: selectedAccountId || null,
-        }),
-      });
+      const res =
+        mode === 'once'
+          ? await fetch('/api/expenses', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: entryType,
+                date,
+                description: description.trim(),
+                categoryId: showCategoryField ? categoryId : undefined,
+                amount: parseFloat(amount),
+                repeat: 'once',
+                accountId,
+              }),
+            })
+          : await fetch('/api/recurring', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                description: description.trim(),
+                amount: parseFloat(amount),
+                type: entryType,
+                cadence,
+                anchorDate: date,
+                secondDay: cadence === 'semimonthly' ? parseInt(secondDay, 10) : null,
+                categoryId: showCategoryField ? categoryId || null : null,
+                accountId,
+              }),
+            });
+
       if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
 
       setDescription('');
       setAmount('');
-      setRepeat('once');
+      setMode('once');
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -101,10 +108,11 @@ export default function ExpenseForm({
 
   const inputStyle = { border: '1.5px solid #D1D5DB', color: '#0F2044' };
 
-  // Category required only for expenses; account required only when multiple accounts exist
-  const canSave = description.trim() && parseFloat(amount) > 0
-    && (entryType === 'income' || categoryId)
-    && (accounts.length <= 1 || selectedAccountId);
+  const canSave =
+    description.trim().length > 0 &&
+    parseFloat(amount) > 0 &&
+    (entryType === 'income' || categoryId) &&
+    (mode === 'once' || cadence !== 'semimonthly' || secondDay);
 
   return (
     <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>
@@ -125,17 +133,12 @@ export default function ExpenseForm({
         ))}
       </div>
 
-      <div className={`grid grid-cols-1 sm:grid-cols-2 ${
-        showCategoryField
-          ? accounts.length > 1 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
-          : accounts.length > 1 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
-      } gap-3 mb-3`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${showCategoryField ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3 mb-3`}>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
           className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
         <input type="text" value={description} onChange={(e) => setDescription(e.target.value)}
           placeholder={t('description')} className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
 
-        {/* Category — expenses, and refunds (income) on a card */}
         {showCategoryField && (
           !newCategoryMode ? (
             <select value={categoryId}
@@ -164,48 +167,56 @@ export default function ExpenseForm({
           )
         )}
 
-        {accounts.length > 1 && (
-          <select value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)}
-            className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
-            <option value="">{t('account')}</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.type === 'chequing' ? '🏦 ' : '💳 '}{a.name}
-              </option>
-            ))}
-          </select>
-        )}
-
         <input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)}
           placeholder={t('amount')} className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
       </div>
 
+      {/* Once / Recurring toggle — recurring routes through the real recurring-item
+          machinery (POST /api/recurring), not a fixed-count burst of rows. */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        {(['once', 'monthly', 'installments'] as const).map((mode) => (
-          <button key={mode} onClick={() => setRepeat(mode)}
+        {(['once', 'recurring'] as const).map((m) => (
+          <button key={m} onClick={() => setMode(m)}
             className="px-4 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all"
             style={{
-              border: repeat === mode ? '2px solid #2ABFBF' : '1.5px solid #D1D5DB',
-              background: repeat === mode ? '#F0FDFD' : 'white',
-              color: repeat === mode ? '#0F2044' : '#6B7280',
+              border: mode === m ? '2px solid #2ABFBF' : '1.5px solid #D1D5DB',
+              background: mode === m ? '#F0FDFD' : 'white',
+              color: mode === m ? '#0F2044' : '#6B7280',
             }}>
-            {t(mode)}
+            {t(m)}
           </button>
         ))}
-        {repeat === 'installments' && (
-          <input type="number" min="2" max="48" value={installments}
-            onChange={(e) => setInstallments(e.target.value)}
-            className="w-20 px-3 py-1.5 rounded-lg text-sm outline-none" style={inputStyle} />
+        {mode === 'recurring' && (
+          <>
+            <select value={cadence} onChange={(e) => setCadence(e.target.value as Cadence)}
+              className="px-3 py-1.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
+              <option value="monthly">{t('cadenceMonthly')}</option>
+              <option value="biweekly">{t('cadenceBiweekly')}</option>
+              <option value="semimonthly">{t('cadenceSemimonthly')}</option>
+            </select>
+            {cadence === 'semimonthly' && (
+              <input type="number" min="1" max="31" value={secondDay}
+                onChange={(e) => setSecondDay(e.target.value)}
+                className="w-20 px-3 py-1.5 rounded-lg text-sm outline-none" style={inputStyle} />
+            )}
+          </>
         )}
       </div>
 
       {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
 
-      <button onClick={submit} disabled={!canSave || saving}
-        className="px-6 py-2.5 rounded-full text-white font-semibold cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
-        style={{ background: entryType === 'income' ? '#16A34A' : '#0F2044' }}>
-        {saving ? t('saving') : entryType === 'income' ? t('saveIncome') : t('save')}
-      </button>
+      <div className="flex gap-2">
+        {onCancel && (
+          <button onClick={onCancel} className="px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer"
+            style={{ border: '1.5px solid #D1D5DB', color: '#6B7280', background: 'white' }}>
+            {t('cancel')}
+          </button>
+        )}
+        <button onClick={submit} disabled={!canSave || saving}
+          className="px-6 py-2.5 rounded-full text-white font-semibold cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
+          style={{ background: entryType === 'income' ? '#16A34A' : '#0F2044' }}>
+          {saving ? t('saving') : entryType === 'income' ? t('saveIncome') : t('save')}
+        </button>
+      </div>
     </div>
   );
 }

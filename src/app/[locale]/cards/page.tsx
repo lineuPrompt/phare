@@ -9,8 +9,10 @@ import CardDecisionView, { EnvelopeItem } from '@/components/cards/CardDecisionV
 import CardEnvelopeEditor from '@/components/cards/CardEnvelopeEditor';
 import CardGrid from '@/components/cards/CardGrid';
 import CrossCardView, { CardOverviewRow } from '@/components/cards/CrossCardView';
-import { GridData } from '@/lib/envelopeHelpers';
-import { Account } from '@/components/expenses/types';
+import ExpenseForm from '@/components/expenses/ExpenseForm';
+import SummaryTable from '@/components/expenses/SummaryTable';
+import { GridData, UNCATEGORIZED_ROW_ID } from '@/lib/envelopeHelpers';
+import { Account, SummaryRow } from '@/components/expenses/types';
 
 type Category = { id: string; name: string };
 
@@ -117,6 +119,36 @@ export default function CardsPage() {
     loadOverview();
   };
 
+  const onExpenseSaved = () => {
+    loadEnvelope();
+    loadGrid();
+    loadOverview();
+  };
+
+  // Month summary table reuses the same envelope actuals CardDecisionView
+  // already renders — one data source, reshaped into SummaryTable's row
+  // shape (categoryId/name/budget/spent/difference) rather than refetched.
+  const summaryRows: SummaryRow[] | null = envelopeData
+    ? [
+        ...envelopeData.envelopeItems.map((i) => ({
+          categoryId: i.categoryId,
+          name: i.categoryName,
+          budget: i.monthlyAmount,
+          spent: i.actual,
+          difference: i.remaining,
+        })),
+        ...(envelopeData.uncategorized > 0
+          ? [{
+              categoryId: UNCATEGORIZED_ROW_ID,
+              name: UNCATEGORIZED_ROW_ID,
+              budget: 0,
+              spent: envelopeData.uncategorized,
+              difference: -envelopeData.uncategorized,
+            }]
+          : []),
+      ]
+    : null;
+
   return (
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
       <Navbar />
@@ -211,6 +243,24 @@ export default function CardsPage() {
                         locale={locale}
                         onSaved={onEnvelopeSaved}
                         onCancel={() => setEditingEnvelope(false)}
+                      />
+                    )}
+
+                    {/* Add expense — card entry lives only here now */}
+                    <ExpenseForm
+                      categories={envelopeData.categories.map((c) => ({ ...c, type: 'expense' }))}
+                      accounts={[envelopeData.card]}
+                      accountId={envelopeData.card.id}
+                      onSaved={onExpenseSaved}
+                    />
+
+                    {/* Month summary */}
+                    {summaryRows && (
+                      <SummaryTable
+                        summary={summaryRows}
+                        totalSpent={envelopeData.totalSpent}
+                        cardGoal={envelopeData.totalGoal}
+                        locale={locale}
                       />
                     )}
 

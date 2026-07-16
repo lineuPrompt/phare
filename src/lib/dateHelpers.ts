@@ -137,6 +137,32 @@ export function materializeRule(
   return [...new Set(all)].sort();
 }
 
+/**
+ * The next occurrence of a recurring rule on or after `today` — used to sort
+ * the Recurring page soonest-first. Two months (today's + next) is always
+ * enough: monthly/semimonthly land at least once in every month, so next
+ * month's occurrence is always >= today even if this month's already passed;
+ * weekly/biweekly are denser still. Returns null when the rule has no known
+ * anchor date yet (needsPayDate items sort last, not fabricated a fake date).
+ */
+export function nextOccurrence(
+  rule: {
+    cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
+    anchorDate: string | null;
+    secondDay?: number | null;
+  },
+  today: string   // YYYY-MM-DD
+): string | null {
+  if (!rule.anchorDate) return null;
+  const dates = materializeRule(
+    { cadence: rule.cadence, anchorDate: rule.anchorDate, secondDay: rule.secondDay ?? null },
+    today.slice(0, 7),
+    2
+  );
+  const upcoming = dates.filter((d) => d >= today);
+  return upcoming.length > 0 ? upcoming[0] : null;
+}
+
 export function formatLocalDate(date: Date): string {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');

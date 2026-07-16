@@ -371,86 +371,19 @@
       "overview": "Aperçu",
       "timeline": "Chronologie",
       "upload": "Nouveau plan",
-      "expenses": "Dépenses",
       "reviews": "Revues",
       "recurring": "Récurrents",
-      "planner": "Planificateur",
       "reconcile": "Audit",
       "goals": "Objectifs",
       "household": "Foyer",
       "cards": "Cartes"
     }
   },
-  "expenses": {
-    "title": "Dépenses",
-    "loading": "Chargement de vos dépenses...",
-    "form": {
-      "title": "Ajouter une dépense",
-      "description": "Description",
-      "category": "Catégorie...",
-      "amount": "Montant",
-      "once": "Une fois",
-      "monthly": "Mensuel",
-      "installments": "Versements",
-      "saving": "Enregistrement...",
-      "save": "Ajouter la dépense",
-      "saveIncome": "Ajouter un revenu",
-      "moneyOut": "Sorties",
-      "moneyIn": "Entrées",
-      "newCategory": "+ Nouvelle catégorie...",
-      "newCategoryName": "Nom, puis Entrée",
-      "account": "Compte..."
-    },
-    "summary": {
-      "title": "Résumé du mois",
-      "category": "Catégorie",
-      "budget": "Budget",
-      "spent": "Dépensé",
-      "difference": "Différence",
-      "status": "Statut",
-      "over": "Dépassé",
-      "ok": "OK",
-      "total": "TOTAL",
-      "within": "Dans l'objectif",
-      "overGoal": "Objectif dépassé",
-      "setGoal": "Définir l'objectif mensuel",
-      "uncategorized": "Sans catégorie"
-    },
-    "goal": {
-      "label": "Objectif mensuel de carte",
-      "notSet": "Non défini",
-      "set": "Définir",
-      "edit": "Modifier",
-      "save": "Enregistrer",
-      "cancel": "Annuler"
-    },
-    "list": {
-      "title": "Entrées",
-      "empty": "Aucune dépense ce mois-ci.",
-      "edit": "Modifier",
-      "delete": "Supprimer",
-      "confirmTitle": "Supprimer cette dépense?",
-      "deleteOne": "Supprimer celle-ci",
-      "deleteSeries": "Supprimer celle-ci et toutes les suivantes",
-      "pickCategory": "Choisir une catégorie",
-      "cancel": "Annuler"
-    },
-    "flow": {
-      "in": "Entrées",
-      "out": "Sorties",
-      "net": "Net",
-      "edit": "Modifier",
-      "delete": "Supprimer",
-      "confirmTitle": "Supprimer ce revenu?",
-      "confirmDelete": "Supprimer",
-      "cancel": "Annuler"
-    }
-  },
   "cards": {
     "title": "Enveloppes de cartes",
     "loading": "Chargement...",
     "noCards": "Aucune carte de crédit configurée.",
-    "noCardsHint": "Ajoutez vos cartes dans la page Dépenses.",
+    "noCardsHint": "Les cartes de crédit sont ajoutées lors de la configuration de votre foyer.",
     "decision": {
       "totalGoal": "Objectif mensuel",
       "spent": "Dépensé",
@@ -507,6 +440,38 @@
       "watch": "À surveiller",
       "ok": "OK",
       "noGoal": "Aucun objectif"
+    },
+    "addEntry": {
+      "title": "Ajouter une dépense",
+      "description": "Description",
+      "category": "Catégorie...",
+      "amount": "Montant",
+      "once": "Une fois",
+      "monthly": "Mensuel",
+      "installments": "Versements",
+      "saving": "Enregistrement...",
+      "save": "Ajouter la dépense",
+      "saveIncome": "Ajouter un revenu",
+      "moneyOut": "Sorties",
+      "moneyIn": "Entrées",
+      "newCategory": "+ Nouvelle catégorie...",
+      "newCategoryName": "Nom, puis Entrée",
+      "account": "Compte..."
+    },
+    "monthSummary": {
+      "title": "Résumé du mois",
+      "category": "Catégorie",
+      "budget": "Budget",
+      "spent": "Dépensé",
+      "difference": "Différence",
+      "status": "Statut",
+      "over": "Dépassé",
+      "ok": "OK",
+      "total": "TOTAL",
+      "within": "Dans l'objectif",
+      "overGoal": "Objectif dépassé",
+      "setGoal": "Définir l'objectif mensuel",
+      "uncategorized": "Sans catégorie"
     }
   },
   "timeline": {
@@ -549,16 +514,30 @@
       "saving": "Enregistrement...",
       "cancel": "Annuler",
       "genericError": "Une erreur est survenue. Réessayez."
+    },
+    "addEntry": {
+      "cta": "Ajouter une entrée",
+      "title": "Ajouter une entrée",
+      "moneyOut": "Sortie d'argent",
+      "moneyIn": "Entrée d'argent",
+      "description": "Description",
+      "category": "Catégorie...",
+      "newCategory": "+ Nouvelle catégorie...",
+      "newCategoryName": "Nom, puis Entrée",
+      "amount": "Montant",
+      "once": "Une fois",
+      "recurring": "Récurrent",
+      "cadenceMonthly": "Mensuel",
+      "cadenceBiweekly": "Aux 2 semaines",
+      "cadenceSemimonthly": "Deux fois par mois",
+      "cancel": "Annuler",
+      "saving": "Enregistrement...",
+      "save": "Ajouter la dépense",
+      "saveIncome": "Ajouter le revenu"
+    },
+    "remainingCash": {
+      "label": "Trésorerie restante — {month} ferme à"
     }
-  },
-  "planner": {
-    "title": "Planificateur de flux de trésorerie",
-    "loading": "Chargement de votre flux de trésorerie...",
-    "income": "Revenus",
-    "expenses": "Dépenses",
-    "savings": "Épargne",
-    "remaining": "Reste en caisse",
-    "empty": "Aucune transaction ce mois-ci."
   },
   "goals": {
     "title": "Objectifs",
@@ -655,6 +634,57 @@
       "average": "≈ {amount}/mois en moyenne",
       "householdLabel": "Ménage",
       "needsPayDate": "date de paie requise"
+    }
+  },
+  "reconcile": {
+    "title": "Audit de rapprochement",
+    "subtitle": "Outil de débogage — chaque chiffre du mois, retracé jusqu'au registre. Les deux calculs indépendants doivent s'accorder; un écart est un bogue.",
+    "loading": "Chargement des données d'audit…",
+    "loadError": "Échec du chargement des données de rapprochement.",
+    "reconciled": "Rapproché — les deux méthodes concordent",
+    "mismatch": "Écart — les deux méthodes ne concordent pas",
+    "accountType": {
+      "chequing": "Compte chèques",
+      "creditCard": "Carte de crédit",
+      "savings": "Épargne",
+      "tfsa": "CELI",
+      "rrsp": "REER"
+    },
+    "txCount": "{count} transactions",
+    "noTransactions": "Aucune transaction ce mois-ci.",
+    "bridgeBadge": "pont",
+    "table": {
+      "date": "Date",
+      "description": "Description",
+      "category": "Catégorie",
+      "type": "Type",
+      "amount": "Montant"
+    },
+    "type": {
+      "income": "Revenu",
+      "expense": "Dépense",
+      "transfer": "Virement"
+    },
+    "bucketBreakdown": {
+      "title": "Répartition par catégorie (méthode 1 — computeMonthTotals)",
+      "income": "Revenus",
+      "expenses": "Dépenses",
+      "includesBridge": "inclut les lignes de pont",
+      "cardPayments": "Paiements de carte (pont)",
+      "savingsTransfers": "Virements d'épargne",
+      "netFromBuckets": "Net (par catégorie)"
+    },
+    "dualNet": {
+      "title": "Comparaison des deux nets",
+      "netFromChequing": "Net (registre du compte chèques direct)",
+      "pathTwo": "méthode 2 — indépendante",
+      "match": "concordance",
+      "mismatchShort": "écart",
+      "footnote": "La méthode 1 utilise computeMonthTotals (logique par catégorie). La méthode 2 additionne directement les lignes du compte chèques selon leur signe. Égalité → le registre est cohérent."
+    },
+    "perAccount": {
+      "title": "Soldes par compte (par mois)",
+      "empty": "Aucun compte trouvé."
     }
   },
   "household": {

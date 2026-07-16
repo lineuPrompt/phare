@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { RecurringItem, RecurringAccount, RecurringCategory, formatCurrency } from './types';
 import { formatSignedAmount } from '@/components/expenses/types';
 import { monthlyEquivalent } from '@/lib/incomeHelpers';
+import { nextOccurrence } from '@/lib/dateHelpers';
 
 // ── RecurringRow ───────────────────────────────────────────────────────────
 //
@@ -317,8 +318,21 @@ export default function RecurringList({
     );
   }
 
-  const income = items.filter((i) => i.type === 'income');
-  const expense = items.filter((i) => i.type === 'expense');
+  // Soonest-first within each group; items with no known pay date yet
+  // (needsPayDate) have no computable next occurrence and sort last rather
+  // than being fabricated a fake date.
+  const today = new Date().toISOString().slice(0, 10);
+  const byNextOccurrence = (a: RecurringItem, b: RecurringItem) => {
+    const na = nextOccurrence({ cadence: a.cadence, anchorDate: a.anchor_date, secondDay: a.second_day }, today);
+    const nb = nextOccurrence({ cadence: b.cadence, anchorDate: b.anchor_date, secondDay: b.second_day }, today);
+    if (na === null && nb === null) return 0;
+    if (na === null) return 1;
+    if (nb === null) return -1;
+    return na.localeCompare(nb);
+  };
+
+  const income = items.filter((i) => i.type === 'income').sort(byNextOccurrence);
+  const expense = items.filter((i) => i.type === 'expense').sort(byNextOccurrence);
 
   return (
     <div className="space-y-6">

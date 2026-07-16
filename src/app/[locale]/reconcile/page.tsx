@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter, usePathname } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
-import { formatCurrency } from '@/components/expenses/types';
+import { formatCurrency, formatSignedAmount } from '@/components/expenses/types';
 import type { ReconciliationResult, AccountAudit } from '@/lib/reconcileHelpers';
 
 type ReconcileData = ReconciliationResult & { month: string };
@@ -71,6 +72,7 @@ function ReconcileStatus({
   difference: number;
   locale: string;
 }) {
+  const t = useTranslations('reconcile');
   if (reconciled) {
     return (
       <div
@@ -78,7 +80,7 @@ function ReconcileStatus({
         style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', color: '#15803D' }}
       >
         <span className="text-lg">✓</span>
-        <span>Reconciled — both derivation paths agree</span>
+        <span>{t('reconciled')}</span>
       </div>
     );
   }
@@ -89,7 +91,7 @@ function ReconcileStatus({
     >
       <div className="flex items-center gap-2">
         <span className="text-lg">✗</span>
-        <span>Mismatch — the two derivation paths disagree</span>
+        <span>{t('mismatch')}</span>
       </div>
       <span className="text-base">
         Δ {difference < 0 ? '−' : '+'}{fmt(difference, locale)}
@@ -103,14 +105,15 @@ function ReconcileStatus({
 // ---------------------------------------------------------------------------
 
 function AccountCard({ account, locale }: { account: AccountAudit; locale: string }) {
+  const t = useTranslations('reconcile');
   const [open, setOpen] = useState(false);
 
   const typeLabel: Record<string, string> = {
-    chequing: 'Chequing',
-    credit_card: 'Credit card',
-    savings: 'Savings',
-    tfsa: 'TFSA',
-    rrsp: 'RRSP',
+    chequing: t('accountType.chequing'),
+    credit_card: t('accountType.creditCard'),
+    savings: t('accountType.savings'),
+    tfsa: t('accountType.tfsa'),
+    rrsp: t('accountType.rrsp'),
   };
 
   const balanceColor =
@@ -135,7 +138,7 @@ function AccountCard({ account, locale }: { account: AccountAudit; locale: strin
             {typeLabel[account.accountType] ?? account.accountType}
           </span>
           <span className="text-xs" style={{ color: '#9CA3AF' }}>
-            {account.transactions.length} tx
+            {t('txCount', { count: account.transactions.length })}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -150,44 +153,59 @@ function AccountCard({ account, locale }: { account: AccountAudit; locale: strin
       {open && (
         <div className="px-4 pb-3">
           {account.transactions.length === 0 ? (
-            <p className="text-xs py-2" style={{ color: '#9CA3AF' }}>No transactions this month.</p>
+            <p className="text-xs py-2" style={{ color: '#9CA3AF' }}>{t('noTransactions')}</p>
           ) : (
             <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ color: '#9CA3AF', borderBottom: '1px solid #F3F4F6' }}>
-                  <th className="text-left py-1.5 font-medium">Date</th>
-                  <th className="text-left py-1.5 font-medium">Description</th>
-                  <th className="text-left py-1.5 font-medium">Type</th>
-                  <th className="text-right py-1.5 font-medium">Amount</th>
+                  <th className="text-left py-1.5 font-medium">{t('table.date')}</th>
+                  <th className="text-left py-1.5 font-medium">{t('table.description')}</th>
+                  <th className="text-left py-1.5 font-medium">{t('table.category')}</th>
+                  <th className="text-left py-1.5 font-medium">{t('table.type')}</th>
+                  <th className="text-right py-1.5 font-medium">{t('table.amount')}</th>
                 </tr>
               </thead>
               <tbody>
-                {account.transactions.map((tx) => (
-                  <tr
-                    key={tx.id}
-                    style={{
-                      borderBottom: '1px solid #F9FAFB',
-                      background: tx.isBridge ? '#FFFBEB' : 'transparent',
-                    }}
-                  >
-                    <td className="py-1.5" style={{ color: '#6B7280' }}>{tx.date}</td>
-                    <td className="py-1.5" style={{ color: '#374151' }}>
-                      {tx.description ?? '—'}
-                      {tx.isBridge && (
-                        <span
-                          className="ml-1 text-xs px-1 rounded"
-                          style={{ background: '#FEF3C7', color: '#92400E' }}
-                        >
-                          bridge
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-1.5" style={{ color: '#6B7280' }}>{tx.type}</td>
-                    <td className="py-1.5 text-right" style={{ color: '#374151' }}>
-                      {formatCurrency(tx.amount, locale)}
-                    </td>
-                  </tr>
-                ))}
+                {account.transactions.map((tx) => {
+                  const signed = formatSignedAmount(tx.amount, tx.type, locale);
+                  return (
+                    <tr
+                      key={tx.id}
+                      style={{
+                        borderBottom: '1px solid #F9FAFB',
+                        background: tx.isBridge ? '#FFFBEB' : 'transparent',
+                      }}
+                    >
+                      <td className="py-1.5" style={{ color: '#6B7280' }}>{tx.date}</td>
+                      <td className="py-1.5" style={{ color: '#374151' }}>
+                        {tx.description ?? '—'}
+                        {tx.installmentLabel && (
+                          <span
+                            className="ml-1.5 text-xs px-1.5 py-0.5 rounded"
+                            style={{ background: '#F0FDFD', color: '#2ABFBF' }}
+                          >
+                            {tx.installmentLabel}
+                          </span>
+                        )}
+                        {tx.isBridge && (
+                          <span
+                            className="ml-1 text-xs px-1 rounded"
+                            style={{ background: '#FEF3C7', color: '#92400E' }}
+                          >
+                            {t('bridgeBadge')}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1.5" style={{ color: tx.categoryName ? '#6B7280' : '#D1D5DB' }}>
+                        {tx.categoryName ?? '—'}
+                      </td>
+                      <td className="py-1.5" style={{ color: '#6B7280' }}>{t(`type.${tx.type}`)}</td>
+                      <td className="py-1.5 text-right font-medium" style={{ color: signed.color }}>
+                        {signed.text}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -222,6 +240,7 @@ function buildMonthOptions(locale: string) {
 // ---------------------------------------------------------------------------
 
 export default function ReconcilePage() {
+  const t = useTranslations('reconcile');
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
@@ -245,9 +264,9 @@ export default function ReconcilePage() {
         return json as ReconcileData;
       })
       .then((d) => { if (d) setData(d); })
-      .catch(() => setError('Failed to load reconciliation data.'))
+      .catch(() => setError(t('loadError')))
       .finally(() => setLoading(false));
-  }, [selectedMonth, router, locale]);
+  }, [selectedMonth, router, locale, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -261,11 +280,10 @@ export default function ReconcilePage() {
 
             <div>
               <h1 className="text-3xl font-bold" style={{ color: '#0F2044' }}>
-                Reconciliation Audit
+                {t('title')}
               </h1>
               <p className="mt-1 text-sm" style={{ color: '#6B7280' }}>
-                Debugging instrument — every money number for the month, traced to the ledger.
-                Two independently-derived nets must agree; a delta is the bug.
+                {t('subtitle')}
               </p>
             </div>
 
@@ -289,7 +307,7 @@ export default function ReconcilePage() {
 
             {loading && (
               <p className="text-center py-12 text-sm" style={{ color: '#6B7280' }}>
-                Loading audit data…
+                {t('loading')}
               </p>
             )}
 
@@ -322,26 +340,26 @@ export default function ReconcilePage() {
                       className="text-xs font-semibold uppercase tracking-wide mb-3"
                       style={{ color: '#6B7280' }}
                     >
-                      Bucket Breakdown (path 1 — computeMonthTotals)
+                      {t('bucketBreakdown.title')}
                     </h2>
-                    <Row label="Income" value={data.totalIncome} locale={locale} color="#16A34A" bold />
+                    <Row label={t('bucketBreakdown.income')} value={data.totalIncome} locale={locale} color="#16A34A" bold />
                     <Row
-                      label="Expenses"
+                      label={t('bucketBreakdown.expenses')}
                       value={data.totalExpenses}
                       locale={locale}
-                      note="includes bridge lines"
+                      note={t('bucketBreakdown.includesBridge')}
                       color="#DC2626"
                     />
                     <Row
-                      label="Card payments (bridge)"
+                      label={t('bucketBreakdown.cardPayments')}
                       value={data.totalBridgePayments}
                       locale={locale}
                       indent
                       color="#9A3412"
                     />
-                    <Row label="Savings transfers" value={data.totalSavings} locale={locale} color="#2563EB" />
+                    <Row label={t('bucketBreakdown.savingsTransfers')} value={data.totalSavings} locale={locale} color="#2563EB" />
                     <Divider />
-                    <Row label="Net (from buckets)" value={data.netFromBuckets} locale={locale} bold />
+                    <Row label={t('bucketBreakdown.netFromBuckets')} value={data.netFromBuckets} locale={locale} bold />
                   </div>
 
                   {/* Right: dual-net comparison */}
@@ -353,14 +371,14 @@ export default function ReconcilePage() {
                       className="text-xs font-semibold uppercase tracking-wide mb-3"
                       style={{ color: '#6B7280' }}
                     >
-                      Dual-Net Comparison
+                      {t('dualNet.title')}
                     </h2>
-                    <Row label="Net (from buckets)" value={data.netFromBuckets} locale={locale} bold />
+                    <Row label={t('bucketBreakdown.netFromBuckets')} value={data.netFromBuckets} locale={locale} bold />
                     <Row
-                      label="Net (chequing ledger direct)"
+                      label={t('dualNet.netFromChequing')}
                       value={data.netFromChequing}
                       locale={locale}
-                      note="path 2 — independent"
+                      note={t('dualNet.pathTwo')}
                       bold
                     />
                     <Divider />
@@ -371,7 +389,7 @@ export default function ReconcilePage() {
                           fontWeight: 600,
                         }}
                       >
-                        {data.reconciled ? '✓ match' : '✗ mismatch'}
+                        {data.reconciled ? `✓ ${t('dualNet.match')}` : `✗ ${t('dualNet.mismatchShort')}`}
                       </span>
                       {!data.reconciled && (
                         <span
@@ -383,8 +401,7 @@ export default function ReconcilePage() {
                       )}
                     </div>
                     <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>
-                      Path 1 uses computeMonthTotals (bucket logic).
-                      Path 2 sums chequing rows directly by sign. Equal → ledger is clean.
+                      {t('dualNet.footnote')}
                     </p>
                   </div>
                 </div>
@@ -395,11 +412,11 @@ export default function ReconcilePage() {
                     className="text-xs font-semibold uppercase tracking-wide mb-3"
                     style={{ color: '#6B7280' }}
                   >
-                    Per-Account Balances (month-scoped)
+                    {t('perAccount.title')}
                   </h2>
                   <div className="space-y-2">
                     {data.accounts.length === 0 ? (
-                      <p className="text-sm" style={{ color: '#9CA3AF' }}>No accounts found.</p>
+                      <p className="text-sm" style={{ color: '#9CA3AF' }}>{t('perAccount.empty')}</p>
                     ) : (
                       data.accounts.map((account) => (
                         <AccountCard key={account.accountId} account={account} locale={locale} />

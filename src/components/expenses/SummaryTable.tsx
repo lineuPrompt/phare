@@ -13,7 +13,7 @@ export default function SummaryTable({
   cardGoal: number | null;
   locale: string;
 }) {
-  const t = useTranslations('expenses.summary');
+  const t = useTranslations('cards.monthSummary');
   const withinGoal = cardGoal !== null && totalSpent <= cardGoal;
 
   return (

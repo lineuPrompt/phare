@@ -21,19 +21,22 @@ export default function Sidebar({ locale, role: roleProp }: { locale: string; ro
       .catch(() => {});
   }, [roleProp]);
 
+  // IA consolidation: Timeline owns chequing, Cards owns cards, Expenses and
+  // Planner are retired. Order follows the decision surfaces top to bottom;
+  // Upload ("New plan") isn't part of that flow but has no other home and
+  // touching the AI/plan flow was out of scope, so it's kept, placed after
+  // Household rather than removed.
   const items = [
     { href: `/${locale}/dashboard`, label: t('overview'),  icon: '🏠' },
     { href: `/${locale}/timeline`,  label: t('timeline'),  icon: '📈' },
-    { href: `/${locale}/expenses`,  label: t('expenses'),  icon: '🧾' },
     { href: `/${locale}/cards`,     label: t('cards'),     icon: '💳' },
     { href: `/${locale}/goals`,     label: t('goals'),     icon: '🎯' },
-    { href: `/${locale}/planner`,   label: t('planner'),   icon: '📊' },
-    { href: `/${locale}/upload`,    label: t('upload'),    icon: '📄' },
     { href: `/${locale}/recurring`, label: t('recurring'), icon: '🔁' },
     { href: `/${locale}/reconcile`, label: t('reconcile'), icon: '🔍' },
     ...(role === 'owner'
       ? [{ href: `/${locale}/household`, label: t('household'), icon: '👨‍👩‍👧' }]
       : []),
+    { href: `/${locale}/upload`,    label: t('upload'),    icon: '📄' },
   ];
 
   const comingSoon = [

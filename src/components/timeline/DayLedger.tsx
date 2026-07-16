@@ -20,7 +20,10 @@ function sourceHref(
   if (entry.isBridge) return `/${locale}/cards`;
   if (entry.recurringItemId) return `/${locale}/recurring`;
   if (entry.transferPeerId) return `/${locale}/goals`;
-  return `/${locale}/expenses`;
+  // One-off entries have no editable home post-consolidation (Expenses is
+  // retired; Timeline's own ledger is read-only) — Audit is where they can
+  // still be traced.
+  return `/${locale}/reconcile`;
 }
 
 function EntryRow({ entry, locale, muted }: { entry: TimelineTx & { isFuture?: boolean }; locale: string; muted: boolean }) {

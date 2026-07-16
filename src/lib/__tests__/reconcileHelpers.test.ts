@@ -200,6 +200,32 @@ describe('reconcileMonth — empty month', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 4b. Per-transaction display fields — category name and installment label
+//     pass through to the audit line (additive fields for the Phase B "raw
+//     transaction list" moved from Expenses onto Audit).
+// ---------------------------------------------------------------------------
+
+describe('reconcileMonth — category and installment passthrough', () => {
+  it('carries categoryName and installmentLabel onto each account transaction line', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ type: 'expense', account_id: CHQ, amount: 50, categoryName: 'Groceries', installment_label: '2/12' }),
+    ];
+    const result = reconcileMonth(transactions, accounts);
+    const chq = result.accounts.find((a) => a.accountId === CHQ)!;
+    expect(chq.transactions[0].categoryName).toBe('Groceries');
+    expect(chq.transactions[0].installmentLabel).toBe('2/12');
+  });
+
+  it('defaults both to null when absent', () => {
+    const transactions: ReconcileTxRow[] = [tx({ type: 'expense', account_id: CHQ, amount: 50 })];
+    const result = reconcileMonth(transactions, accounts);
+    const chq = result.accounts.find((a) => a.accountId === CHQ)!;
+    expect(chq.transactions[0].categoryName).toBeNull();
+    expect(chq.transactions[0].installmentLabel).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. chequingLedgerNet — standalone
 // ---------------------------------------------------------------------------
 

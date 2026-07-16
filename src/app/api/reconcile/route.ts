@@ -49,7 +49,7 @@ export async function GET(request: Request) {
 
       supabase
         .from('transactions')
-        .select('id, date, description, amount, type, account_id, is_bridge')
+        .select('id, date, description, amount, type, account_id, is_bridge, installment_label, categories(name)')
         .eq('household_id', householdId)
         .gte('date', monthStart)
         .lt('date', monthEnd)
@@ -57,7 +57,8 @@ export async function GET(request: Request) {
     ]);
 
     const accounts = (acctResult.data ?? []) as ReconcileAccountRow[];
-    const transactions = (txResult.data ?? []) as ReconcileTxRow[];
+    const transactions = ((txResult.data ?? []) as unknown as Array<ReconcileTxRow & { categories: { name: string } | null }>)
+      .map((t) => ({ ...t, categoryName: t.categories?.name ?? null }));
 
     const result = reconcileMonth(transactions, accounts);
 

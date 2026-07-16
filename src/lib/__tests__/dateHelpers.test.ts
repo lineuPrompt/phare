@@ -7,6 +7,7 @@ import {
   monthNameToNumber,
   occurrencesInMonth,
   bridgePaymentDate,
+  nextOccurrence,
 } from '../dateHelpers';
 
 describe('monthNameToNumber', () => {
@@ -379,5 +380,44 @@ describe('bridgePaymentDate', () => {
 
   it('preserves a normal mid-month day', () => {
     expect(bridgePaymentDate('2026-09', 10)).toBe('2026-10-10');
+  });
+});
+
+describe('nextOccurrence', () => {
+  it('returns null when anchorDate is not yet known', () => {
+    expect(nextOccurrence({ cadence: 'monthly', anchorDate: null }, '2026-07-15')).toBeNull();
+  });
+
+  it('monthly: returns this month\'s date when it has not passed yet', () => {
+    expect(nextOccurrence({ cadence: 'monthly', anchorDate: '2026-01-20' }, '2026-07-15')).toBe('2026-07-20');
+  });
+
+  it('monthly: rolls to next month when this month\'s date already passed', () => {
+    expect(nextOccurrence({ cadence: 'monthly', anchorDate: '2026-01-05' }, '2026-07-15')).toBe('2026-08-05');
+  });
+
+  it('monthly: today itself counts as the next occurrence', () => {
+    expect(nextOccurrence({ cadence: 'monthly', anchorDate: '2026-01-15' }, '2026-07-15')).toBe('2026-07-15');
+  });
+
+  it('semimonthly: picks the earlier upcoming day; rolls to the 1st once the 15th has passed', () => {
+    // Today is before the 1st this month → the 1st itself is next.
+    expect(nextOccurrence({ cadence: 'semimonthly', anchorDate: '2026-06-01', secondDay: 15 }, '2026-06-25')).toBe('2026-07-01');
+    // Today is between the 1st and 15th → the 15th is next.
+    expect(nextOccurrence({ cadence: 'semimonthly', anchorDate: '2026-01-01', secondDay: 15 }, '2026-07-10')).toBe('2026-07-15');
+  });
+
+  it('biweekly: returns the nearest occurrence on or after today', () => {
+    // Anchor on a Monday; step 14 days at a time.
+    const result = nextOccurrence({ cadence: 'biweekly', anchorDate: '2026-07-06' }, '2026-07-15');
+    expect(result! >= '2026-07-15').toBe(true);
+    // And it must actually be a real biweekly occurrence, not an arbitrary date.
+    const diffDays = (new Date(result! + 'T00:00:00').getTime() - new Date('2026-07-06T00:00:00').getTime()) / 86400000;
+    expect(diffDays % 14).toBe(0);
+  });
+
+  it('clamps a monthly anchor day past the end of a shorter month', () => {
+    // Anchor on the 31st; June only has 30 days.
+    expect(nextOccurrence({ cadence: 'monthly', anchorDate: '2026-01-31' }, '2026-06-15')).toBe('2026-06-30');
   });
 });

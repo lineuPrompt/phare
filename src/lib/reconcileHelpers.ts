@@ -16,6 +16,8 @@ export type ReconcileTxRow = TxRow & {
   date: string;
   description: string | null;
   is_bridge?: boolean | null;
+  categoryName?: string | null;
+  installment_label?: string | null;
 };
 
 // AccountRow extended with a display name for the audit table.
@@ -30,6 +32,8 @@ export type TransactionAuditLine = {
   amount: number;
   type: string;
   isBridge: boolean;
+  categoryName: string | null;
+  installmentLabel: string | null;
 };
 
 export type AccountAudit = {
@@ -168,6 +172,8 @@ export function reconcileMonth(
         amount: Number(tx.amount),
         type: tx.type,
         isBridge: Boolean(tx.is_bridge),
+        categoryName: tx.categoryName ?? null,
+        installmentLabel: tx.installment_label ?? null,
       })),
     };
   });
