@@ -23,14 +23,6 @@ export type Expense = {
   household_members: { name: string } | null;
 };
 
-export type SummaryRow = {
-  categoryId: string;
-  name: string;
-  budget: number;
-  spent: number;
-  difference: number;
-};
-
 export type MonthData = {
   month: string;
   accounts: Account[];
@@ -38,7 +30,6 @@ export type MonthData = {
   expenses: Expense[];
   income: Expense[];
   totalIncome: number;
-  summary: SummaryRow[];
   totalSpent: number;
   net: number;
   cardGoal: number | null;

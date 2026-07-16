@@ -12,6 +12,18 @@ export type EnvTx = {
 
 export type EnvelopeStatus = 'ok' | 'watch' | 'over' | 'unset';
 
+// Display shape for one raw transaction line in a category's entry
+// accordion (Cards page). Not aggregated — this is the per-entry view
+// alongside the aggregated actual/remaining/status figures above.
+export type CategoryEntryLine = {
+  id: string;
+  date: string;
+  description: string | null;
+  amount: number;
+  type: 'expense' | 'income';
+  installmentLabel: string | null;
+};
+
 function r2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -206,84 +218,7 @@ export function buildGrid(
   return { months, currentMonth, rows, uncategorizedActuals, totalActuals, totalGoals };
 }
 
-// ---------------------------------------------------------------------------
-// Single-month card summary (the Expenses page's per-category table for a
-// card account). TOTAL is the sum of the rows in this same result — not a
-// separately computed number — so the two can never drift apart, and a
-// category can never fan out into more than one row here even if the
-// caller's query ever returns overlapping rows for a month.
-// ---------------------------------------------------------------------------
-
+// Sentinel categoryId for the always-net "no category" row shown alongside
+// per-category rows on the Cards page (decision table, and its per-category
+// entry accordion).
 export const UNCATEGORIZED_ROW_ID = 'uncategorized';
-
-export type CardSummaryRow = {
-  categoryId: string; // UNCATEGORIZED_ROW_ID for the uncategorized row
-  name: string;
-  budget: number;
-  spent: number;
-  difference: number;
-};
-
-// items: this card's envelope items for exactly the viewed month (caller's
-// responsibility to scope the query — this function structurally cannot
-// double a category even if the caller's items list itself contains
-// duplicate rows for the same category, e.g. from a missing month filter).
-// categoryNames: household category id -> display name, for any category
-// with activity but no saved envelope item.
-export function buildCardSummary(
-  items: { categoryId: string; categoryName: string; monthlyAmount: number }[],
-  categoryNames: Map<string, string>,
-  transactions: EnvTx[],
-  cardId: string,
-  month: string
-): { summary: CardSummaryRow[]; totalSpent: number } {
-  const byCategory = categoryActualsForCard(transactions, cardId, month);
-  const uncategorized = uncategorizedSpend(transactions, cardId, month);
-
-  // Dedupe by categoryId — last one wins. A structural guard: this can't
-  // fan out into duplicate summary rows no matter what the caller's items
-  // query returns.
-  const dedupedItems = new Map<string, { categoryName: string; monthlyAmount: number }>();
-  for (const item of items) {
-    dedupedItems.set(item.categoryId, { categoryName: item.categoryName, monthlyAmount: item.monthlyAmount });
-  }
-
-  const summary: CardSummaryRow[] = [];
-  const covered = new Set<string>();
-  for (const [categoryId, { categoryName, monthlyAmount }] of dedupedItems) {
-    const spent = byCategory.get(categoryId) ?? 0;
-    summary.push({
-      categoryId,
-      name: categoryName,
-      budget: monthlyAmount,
-      spent: r2(spent),
-      difference: r2(monthlyAmount - spent),
-    });
-    covered.add(categoryId);
-  }
-
-  for (const [categoryId, spent] of byCategory) {
-    if (covered.has(categoryId)) continue;
-    summary.push({
-      categoryId,
-      name: categoryNames.get(categoryId) ?? '?',
-      budget: 0,
-      spent: r2(spent),
-      difference: r2(-spent),
-    });
-  }
-
-  if (uncategorized !== 0) {
-    summary.push({
-      categoryId: UNCATEGORIZED_ROW_ID,
-      name: UNCATEGORIZED_ROW_ID,
-      budget: 0,
-      spent: r2(uncategorized),
-      difference: r2(-uncategorized),
-    });
-  }
-
-  const totalSpent = r2(summary.reduce((s, r) => s + r.spent, 0));
-
-  return { summary, totalSpent };
-}

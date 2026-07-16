@@ -402,7 +402,16 @@
       "overGoal": "Objectif dépassé",
       "uncategorized": "Sans catégorie",
       "noEnvelope": "Aucune enveloppe définie — ajoutez des catégories ci-dessous pour suivre vos dépenses par catégorie.",
-      "goalVsAllocated": "Objectif {goal} · sous-budgets {sum} · {over} en surallocation"
+      "goalVsAllocated": "Objectif {goal} · sous-budgets {sum} · {over} en surallocation",
+      "entries": {
+        "noEntries": "Aucune entrée ce mois-ci.",
+        "edit": "Modifier",
+        "delete": "Supprimer",
+        "save": "Enregistrer",
+        "saving": "Enregistrement...",
+        "cancel": "Annuler",
+        "confirmDelete": "Supprimer cette entrée?"
+      }
     },
     "editor": {
       "title": "Modifier l'enveloppe",
@@ -457,21 +466,6 @@
       "newCategory": "+ Nouvelle catégorie...",
       "newCategoryName": "Nom, puis Entrée",
       "account": "Compte..."
-    },
-    "monthSummary": {
-      "title": "Résumé du mois",
-      "category": "Catégorie",
-      "budget": "Budget",
-      "spent": "Dépensé",
-      "difference": "Différence",
-      "status": "Statut",
-      "over": "Dépassé",
-      "ok": "OK",
-      "total": "TOTAL",
-      "within": "Dans l'objectif",
-      "overGoal": "Objectif dépassé",
-      "setGoal": "Définir l'objectif mensuel",
-      "uncategorized": "Sans catégorie"
     }
   },
   "timeline": {

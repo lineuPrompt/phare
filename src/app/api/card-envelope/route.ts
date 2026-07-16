@@ -7,6 +7,7 @@ import {
   envelopeRemaining,
   envelopeStatus,
   EnvTx,
+  CategoryEntryLine,
 } from '@/lib/envelopeHelpers';
 import { categoryDisplayName } from '@/lib/categoryTranslations';
 
@@ -77,7 +78,7 @@ export async function GET(request: Request) {
 
     const { data: rawTxns } = await supabase
       .from('transactions')
-      .select('account_id, amount, category_id, type, date, is_bridge')
+      .select('id, account_id, amount, category_id, type, date, is_bridge, description, installment_label')
       .eq('household_id', householdId)
       .eq('account_id', cardId)
       .gte('date', monthStart)
@@ -85,6 +86,29 @@ export async function GET(request: Request) {
 
     const txns = (rawTxns ?? []) as EnvTx[];
     const byCategory = categoryActualsForCard(txns, cardId, monthParam);
+
+    // Per-category entry lines for the accordion — same rows the actuals
+    // above are computed from, just grouped for display instead of summed.
+    // Bridge lines are excluded (they're computed, not user entries).
+    type RawTxn = EnvTx & { id: string; description: string | null; installment_label: string | null };
+    const entriesByCategory: Record<string, CategoryEntryLine[]> = {};
+    const uncategorizedEntries: CategoryEntryLine[] = [];
+    for (const t of txns as RawTxn[]) {
+      if (t.is_bridge) continue;
+      const line: CategoryEntryLine = {
+        id: t.id,
+        date: t.date,
+        description: t.description,
+        amount: Number(t.amount),
+        type: t.type as 'expense' | 'income',
+        installmentLabel: t.installment_label,
+      };
+      if (t.category_id) {
+        (entriesByCategory[t.category_id] ??= []).push(line);
+      } else {
+        uncategorizedEntries.push(line);
+      }
+    }
 
     // All household expense categories — needed both for the editor's
     // add-category dropdown and to name any category that has net activity
@@ -142,6 +166,8 @@ export async function GET(request: Request) {
       uncategorized,
       totalSpent,
       categories: categoriesForEditor,
+      entriesByCategory,
+      uncategorizedEntries,
     });
   } catch (error) {
     console.error('GET /api/card-envelope error:', error);

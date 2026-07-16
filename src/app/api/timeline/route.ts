@@ -117,7 +117,7 @@ export async function GET(request: Request) {
 
     const { data: cardAccounts } = await supabase
       .from('accounts')
-      .select('id, name, payment_day')
+      .select('id, name, payment_day, statement_close_day')
       .eq('household_id', householdId)
       .eq('type', 'credit_card');
 
@@ -125,6 +125,7 @@ export async function GET(request: Request) {
       id: a.id as string,
       name: a.name as string,
       payment_day: (a.payment_day ?? null) as number | null,
+      statement_close_day: (a.statement_close_day ?? null) as number | null,
     }));
 
     const spendMonths: string[] = [];

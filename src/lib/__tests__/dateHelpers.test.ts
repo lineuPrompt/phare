@@ -8,6 +8,7 @@ import {
   occurrencesInMonth,
   bridgePaymentDate,
   nextOccurrence,
+  statementCycleWindow,
 } from '../dateHelpers';
 
 describe('monthNameToNumber', () => {
@@ -380,6 +381,53 @@ describe('bridgePaymentDate', () => {
 
   it('preserves a normal mid-month day', () => {
     expect(bridgePaymentDate('2026-09', 10)).toBe('2026-10-10');
+  });
+});
+
+describe('statementCycleWindow', () => {
+  it('Costco fixture: close 15th → cycle month Jul, window Jun16-Jul15, payment Aug 5', () => {
+    const window = statementCycleWindow('2026-07', 15);
+    expect(window).toEqual({ start: '2026-06-16', end: '2026-07-15' });
+    expect(bridgePaymentDate('2026-07', 5)).toBe('2026-08-05');
+  });
+
+  it('Visa Avion fixture: close 27th → cycle month Jul, window Jun28-Jul27, payment Aug 17', () => {
+    const window = statementCycleWindow('2026-07', 27);
+    expect(window).toEqual({ start: '2026-06-28', end: '2026-07-27' });
+    expect(bridgePaymentDate('2026-07', 17)).toBe('2026-08-17');
+  });
+
+  it('falls back to the plain calendar month when closeDay is null', () => {
+    expect(statementCycleWindow('2026-07', null)).toEqual({ start: '2026-07-01', end: '2026-07-31' });
+    expect(statementCycleWindow('2026-02', null)).toEqual({ start: '2026-02-01', end: '2026-02-28' });
+  });
+
+  it('an entry exactly on the close day is in-cycle (inclusive end)', () => {
+    const window = statementCycleWindow('2026-07', 15);
+    expect('2026-07-15' >= window.start && '2026-07-15' <= window.end).toBe(true);
+  });
+
+  it('an entry the day after close belongs to the NEXT cycle, not this one', () => {
+    const window = statementCycleWindow('2026-07', 15);
+    expect('2026-07-16' <= window.end).toBe(false);
+    const nextWindow = statementCycleWindow('2026-08', 15);
+    expect('2026-07-16' >= nextWindow.start && '2026-07-16' <= nextWindow.end).toBe(true);
+  });
+
+  it('handles a cycle spanning a year boundary', () => {
+    const window = statementCycleWindow('2026-01', 15);
+    expect(window).toEqual({ start: '2025-12-16', end: '2026-01-15' });
+  });
+
+  it('clamps close day to short months (e.g. close day 31 in February)', () => {
+    const window = statementCycleWindow('2026-02', 31);
+    // Feb 2026 has 28 days, Jan 2026 has 31 days.
+    expect(window).toEqual({ start: '2026-02-01', end: '2026-02-28' });
+  });
+
+  it('clamps the previous month close day too (close day 31, cycle month March → prev Feb clamps to 28)', () => {
+    const window = statementCycleWindow('2026-03', 31);
+    expect(window).toEqual({ start: '2026-03-01', end: '2026-03-31' });
   });
 });
 

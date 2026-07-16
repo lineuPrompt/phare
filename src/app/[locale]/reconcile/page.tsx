@@ -216,23 +216,15 @@ function AccountCard({ account, locale }: { account: AccountAudit; locale: strin
 }
 
 // ---------------------------------------------------------------------------
-// Month picker — rolling 13 months (past 12 + current)
+// Month picker — only months with any transaction, plus always the current
+// month (see GET /api/reconcile/months).
 // ---------------------------------------------------------------------------
 
-function buildMonthOptions(locale: string) {
-  const now = new Date();
-  const options: { value: string; label: string }[] = [];
-  for (let i = 12; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    options.push({
-      value: d.toISOString().slice(0, 7),
-      label: d.toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', {
-        month: 'short',
-        year: 'numeric',
-      }),
-    });
-  }
-  return options;
+function monthLabel(value: string, locale: string) {
+  return new Date(value + '-01T00:00:00').toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', {
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -250,8 +242,14 @@ export default function ReconcilePage() {
   const [data, setData] = useState<ReconcileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [months, setMonths] = useState<string[]>([]);
 
-  const months = buildMonthOptions(locale);
+  useEffect(() => {
+    fetch('/api/reconcile/months')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { months: string[] } | null) => { if (d) setMonths(d.months); })
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -287,20 +285,20 @@ export default function ReconcilePage() {
               </p>
             </div>
 
-            {/* Month selector */}
+            {/* Month selector — only months with data, plus always the current month */}
             <div className="flex gap-2 overflow-x-auto pb-1">
               {months.map((mo) => (
                 <button
-                  key={mo.value}
-                  onClick={() => setSelectedMonth(mo.value)}
+                  key={mo}
+                  onClick={() => setSelectedMonth(mo)}
                   className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap cursor-pointer transition-all shrink-0"
                   style={{
-                    background: selectedMonth === mo.value ? '#0F2044' : 'white',
-                    color: selectedMonth === mo.value ? 'white' : '#6B7280',
-                    border: selectedMonth === mo.value ? '2px solid #0F2044' : '1.5px solid #D1D5DB',
+                    background: selectedMonth === mo ? '#0F2044' : 'white',
+                    color: selectedMonth === mo ? 'white' : '#6B7280',
+                    border: selectedMonth === mo ? '2px solid #0F2044' : '1.5px solid #D1D5DB',
                   }}
                 >
-                  {mo.label}
+                  {monthLabel(mo, locale)}
                 </button>
               ))}
             </div>

@@ -402,7 +402,16 @@
       "overGoal": "Over goal",
       "uncategorized": "Uncategorized",
       "noEnvelope": "No envelope set — add categories below to track spending by category.",
-      "goalVsAllocated": "Goal {goal} · sub-budgets {sum} · {over} over-allocated"
+      "goalVsAllocated": "Goal {goal} · sub-budgets {sum} · {over} over-allocated",
+      "entries": {
+        "noEntries": "No entries this month.",
+        "edit": "Edit",
+        "delete": "Delete",
+        "save": "Save",
+        "saving": "Saving...",
+        "cancel": "Cancel",
+        "confirmDelete": "Delete this entry?"
+      }
     },
     "editor": {
       "title": "Edit envelope",
@@ -457,21 +466,6 @@
       "newCategory": "+ New category...",
       "newCategoryName": "Name, then Enter",
       "account": "Account..."
-    },
-    "monthSummary": {
-      "title": "Month summary",
-      "category": "Category",
-      "budget": "Budget",
-      "spent": "Spent",
-      "difference": "Difference",
-      "status": "Status",
-      "over": "Over",
-      "ok": "OK",
-      "total": "TOTAL",
-      "within": "Within goal",
-      "overGoal": "Over goal",
-      "setGoal": "Set monthly goal",
-      "uncategorized": "Uncategorized"
     }
   },
   "timeline": {

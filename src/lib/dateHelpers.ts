@@ -225,3 +225,48 @@ export function bridgePaymentDate(spendMonth: string, payDay: number): string {
   const dd = String(day).padStart(2, '0');
   return `${payYear}-${mm}-${dd}`;
 }
+
+/**
+ * A card's statement cycle for a given "cycle month" (the YYYY-MM containing
+ * the statement's close date): the window of spending that lands on that
+ * statement, running from the day after the PREVIOUS close date through this
+ * cycle's close date, inclusive on both ends.
+ *
+ * When closeDay is null (card has no statement close day set), falls back to
+ * the plain calendar month — this is the pre-existing behavior for cards
+ * that haven't set a close day yet.
+ *
+ * e.g. cycleMonth 2026-07, closeDay 15 → { start: '2026-06-16', end: '2026-07-15' }
+ *      cycleMonth 2026-01, closeDay 31 → { start: '2025-12-32'→clamped, end: '2026-01-31' }
+ *      (Dec has 31 days so prev close clamps to Dec 31, start = Jan 1)
+ */
+export function statementCycleWindow(
+  cycleMonth: string,
+  closeDay: number | null
+): { start: string; end: string } {
+  const [y, m] = cycleMonth.split('-').map(Number);
+
+  if (closeDay === null) {
+    const lastDay = new Date(y, m, 0).getDate();
+    return { start: `${cycleMonth}-01`, end: `${cycleMonth}-${String(lastDay).padStart(2, '0')}` };
+  }
+
+  // This cycle's close date, clamped to this month's length.
+  const thisLastDay = new Date(y, m, 0).getDate();
+  const thisCloseDay = Math.min(closeDay, thisLastDay);
+  const end = `${cycleMonth}-${String(thisCloseDay).padStart(2, '0')}`;
+
+  // Previous month's close date, clamped to that month's length.
+  const prevMonthIndex0 = (m - 1) - 1; // 0-based index of the previous month
+  const prevYear = y + Math.floor(prevMonthIndex0 / 12);
+  const prevMonth0 = ((prevMonthIndex0 % 12) + 12) % 12;
+  const prevLastDay = new Date(prevYear, prevMonth0 + 1, 0).getDate();
+  const prevCloseDay = Math.min(closeDay, prevLastDay);
+
+  // start = the day after the previous close date.
+  const startDate = new Date(prevYear, prevMonth0, prevCloseDay);
+  startDate.setDate(startDate.getDate() + 1);
+  const start = formatLocalDate(startDate);
+
+  return { start, end };
+}
