@@ -540,17 +540,23 @@
     "type": {
       "savings": "Épargne",
       "tfsa": "CELI",
-      "rrsp": "REER"
+      "rrsp": "REER",
+      "debt": "Dette"
     },
     "typeDesc": {
       "savings": "Compte d'épargne ordinaire",
       "tfsa": "Compte d'épargne libre d'impôt — la croissance est exempte d'impôt",
-      "rrsp": "Régime enregistré d'épargne-retraite — les cotisations réduisent le revenu imposable"
+      "rrsp": "Régime enregistré d'épargne-retraite — les cotisations réduisent le revenu imposable",
+      "debt": "Marge de crédit, prêt ou solde de carte que vous remboursez"
     },
     "balance": "Solde",
     "of": "sur",
     "saved": "économisé",
     "noTarget": "Aucun objectif fixé",
+    "currentlyOwed": "actuellement dû",
+    "makePayment": "Faire un paiement",
+    "payoffPlan": "Paiement de {amount}/mois · remboursé d'ici {date}",
+    "debtPaidOff": "Remboursé",
     "create": {
       "title": "Créer un objectif d'épargne",
       "name": "Nom",
@@ -559,6 +565,9 @@
       "goalTarget": "Montant cible",
       "goalTargetPlaceholder": "Optionnel",
       "goalTargetDate": "Date cible",
+      "payoffDate": "Date cible de remboursement",
+      "amountOwed": "Montant actuellement dû",
+      "amountOwedPlaceholder": "ex. 5000",
       "saving": "Création...",
       "save": "Créer l'objectif"
     },

@@ -28,15 +28,23 @@ export type RecurringContribution = {
   secondDay: number | null;
 };
 
+export type DebtPayoff = {
+  description: string;
+  targetDate: string; // YYYY-MM
+  monthlyPayment: number;
+};
+
 export type GoalAccount = {
   id: string;
   name: string;
   type: string;
+  isDebt: boolean;
   balance: number;
   goalTarget: number | null;
   goalTargetDate: string | null;
   transfers: GoalTransfer[];
   recurringContribution: RecurringContribution | null;
+  debtPayoff: DebtPayoff | null;
 };
 
 export type DashboardData = {

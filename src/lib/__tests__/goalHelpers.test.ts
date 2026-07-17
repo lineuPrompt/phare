@@ -98,6 +98,45 @@ describe('requiredMonthlyContribution', () => {
       status: 'ok', monthlyRequired: 333.33, monthsToTarget: 18,
     });
   });
+
+  // ---------------------------------------------------------------------
+  // Negative domain — debt (Build 4 Phase 3). Debt is target=0, saved=the
+  // current negative balance. Per spec this works UNCHANGED: no special
+  // debt branch in the function itself.
+  // ---------------------------------------------------------------------
+  it('debt: computes the required monthly payment from a negative balance toward target 0', () => {
+    // Owes $5000, target $0, 18 months to payoff.
+    expect(requiredMonthlyContribution(0, -5000, '2028-01-01', '2026-07-10')).toEqual({
+      status: 'ok', monthlyRequired: 277.78, monthsToTarget: 18,
+    });
+  });
+
+  it('debt: is funded (paid off) exactly when the negative balance reaches 0', () => {
+    expect(requiredMonthlyContribution(0, 0, '2028-01-01', '2026-07-10')).toEqual({ status: 'funded' });
+    expect(requiredMonthlyContribution(0, -0.01, '2028-01-01', '2026-07-10')).not.toEqual({ status: 'funded' });
+  });
+
+  it('debt: a balance that has gone positive (overpayment) still reads funded, never negative-required', () => {
+    expect(requiredMonthlyContribution(0, 50, '2028-01-01', '2026-07-10')).toEqual({ status: 'funded' });
+  });
+
+  it('debt: past_due works the same way in the negative domain', () => {
+    expect(requiredMonthlyContribution(0, -3000, '2026-01-01', '2026-07-10')).toEqual({ status: 'past_due' });
+  });
+
+  it('debt: no_date works the same way in the negative domain', () => {
+    expect(requiredMonthlyContribution(0, -3000, null, '2026-07-10')).toEqual({ status: 'no_date' });
+  });
+
+  it('debt: monthlyRequired shrinks as the balance climbs toward 0 across payments', () => {
+    const early = requiredMonthlyContribution(0, -5000, '2028-01-01', '2026-07-10');
+    const later = requiredMonthlyContribution(0, -3000, '2028-01-01', '2026-07-10');
+    expect(early.status).toBe('ok');
+    expect(later.status).toBe('ok');
+    if (early.status === 'ok' && later.status === 'ok') {
+      expect(later.monthlyRequired).toBeLessThan(early.monthlyRequired);
+    }
+  });
 });
 
 describe('achievableMonth', () => {
@@ -239,6 +278,26 @@ describe('computeDebtPayoff', () => {
 
   it('is null when the target date has already passed — never shows a stale card', () => {
     expect(computeDebtPayoff({ name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 0, targetDate: '2026-01-01' }, today)).toBeNull();
+  });
+
+  // -------------------------------------------------------------------
+  // Explicit debt-type convention (Build 4 Phase 3): target=0, savedSoFar
+  // is the account's own negative balance — used by GET /api/goals and
+  // regenerate-plan for an explicitly-typed debt account, instead of the
+  // positive-target/zero-start convention the isDebtGoalName heuristic
+  // path above uses. Same pure function, same result shape either way.
+  // -------------------------------------------------------------------
+  it('explicit debt-type convention: target 0, saved = negative balance, produces the same payoff math', () => {
+    const result = computeDebtPayoff({ name: "Emma's line", targetAmount: 0, savedSoFar: -5000, targetDate: '2026-09-01' }, today);
+    expect(result).toEqual({
+      description: "Emma's line",
+      targetDate: '2026-09',
+      monthlyPayment: 5000 / 2, // 2 months (Jul 10 -> Sep 1 is 2 whole calendar months)
+    });
+  });
+
+  it('explicit debt-type convention: null once the balance reaches 0 (paid off), no fabricated card', () => {
+    expect(computeDebtPayoff({ name: "Emma's line", targetAmount: 0, savedSoFar: 0, targetDate: '2026-09-01' }, today)).toBeNull();
   });
 });
 

@@ -169,7 +169,7 @@ export default function GoalsPage() {
             {!loading && goals.length > 0 && (
               <div className="space-y-4">
                 {goals.map((goal) => {
-                  const pct = goal.goalTarget && goal.goalTarget > 0
+                  const pct = !goal.isDebt && goal.goalTarget && goal.goalTarget > 0
                     ? Math.min(100, Math.round((goal.balance / goal.goalTarget) * 100))
                     : null;
                   const isOpen = transferFor === goal.id;
@@ -187,33 +187,68 @@ export default function GoalsPage() {
                             <h3 className="text-lg font-bold" style={{ color: '#0F2044' }}>{goal.name}</h3>
                             <span
                               className="px-2 py-0.5 rounded-full text-xs font-semibold"
-                              style={{ background: '#F0FDFD', color: '#2ABFBF' }}
+                              style={{
+                                background: goal.isDebt ? '#FEF2F2' : '#F0FDFD',
+                                color: goal.isDebt ? '#DC2626' : '#2ABFBF',
+                              }}
                             >
-                              {t(`type.${goal.type as 'savings' | 'tfsa' | 'rrsp'}`)}
+                              {t(`type.${goal.type as 'savings' | 'tfsa' | 'rrsp' | 'debt'}`)}
                             </span>
                           </div>
-                          <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
-                            <span className="text-2xl font-bold" style={{ color: '#0F2044' }}>
-                              {formatCurrency(goal.balance, locale)}
-                            </span>
-                            {goal.goalTarget && (
-                              <span className="text-sm" style={{ color: '#6B7280' }}>
-                                {t('of')} {formatCurrency(goal.goalTarget, locale)}
+                          {goal.isDebt ? (
+                            // Debt: current amount owed, honestly signed — never
+                            // framed like a positive "saved" total.
+                            <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-2xl font-bold" style={{ color: '#DC2626' }}>
+                                {goal.balance < 0 ? '−' : ''}{formatCurrency(Math.abs(goal.balance), locale)}
                               </span>
-                            )}
-                          </div>
+                              <span className="text-sm" style={{ color: '#6B7280' }}>{t('currentlyOwed')}</span>
+                            </div>
+                          ) : (
+                            <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-2xl font-bold" style={{ color: '#0F2044' }}>
+                                {formatCurrency(goal.balance, locale)}
+                              </span>
+                              {goal.goalTarget && (
+                                <span className="text-sm" style={{ color: '#6B7280' }}>
+                                  {t('of')} {formatCurrency(goal.goalTarget, locale)}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {!isOpen && (
                           <button
                             onClick={() => setTransferFor(goal.id)}
                             className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold"
-                            style={{ background: '#2ABFBF', color: 'white' }}
+                            style={{ background: goal.isDebt ? '#DC2626' : '#2ABFBF', color: 'white' }}
                           >
-                            {t('addMoney')}
+                            {goal.isDebt ? t('makePayment') : t('addMoney')}
                           </button>
                         )}
                       </div>
+
+                      {/* Debt payoff plan — code-computed, never a stated
+                          balance turned into a promise; omitted entirely when
+                          not computable (funded, past due, or no payoff date). */}
+                      {goal.isDebt && goal.debtPayoff && (
+                        <div className="rounded-xl px-4 py-3" style={{ background: '#FEF2F2' }}>
+                          <p className="text-sm font-medium" style={{ color: '#0F2044' }}>
+                            {t('payoffPlan', {
+                              amount: formatCurrency(goal.debtPayoff.monthlyPayment, locale),
+                              date: new Date(goal.debtPayoff.targetDate + '-01T00:00:00').toLocaleDateString(
+                                locale === 'fr' ? 'fr-CA' : 'en-CA', { month: 'long', year: 'numeric' }
+                              ),
+                            })}
+                          </p>
+                        </div>
+                      )}
+                      {goal.isDebt && goal.balance >= 0 && (
+                        <p className="text-sm font-semibold" style={{ color: '#16A34A' }}>
+                          ✓ {t('debtPaidOff')}
+                        </p>
+                      )}
 
                       {/* Progress bar */}
                       {pct !== null && (

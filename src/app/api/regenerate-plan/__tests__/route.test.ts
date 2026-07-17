@@ -91,6 +91,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
       sinking_funds: [
         { data: [{ name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 'March' }], error: null },
       ],
+      recurring_items: [{ data: [], error: null }],
       conversations: [{ error: null }],
     });
 
@@ -136,6 +137,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
         },
       ],
       sinking_funds: [{ data: [], error: null }],
+      recurring_items: [{ data: [], error: null }],
       conversations: [{ error: null }],
     });
 
@@ -169,6 +171,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
       transactions: [{ data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
+      recurring_items: [{ data: [], error: null }],
       conversations: [{ error: null }],
     });
 
@@ -186,5 +189,84 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
     expect(planPromptSent).not.toContain('"goals"');
     expect(planPromptSent).not.toContain('"debtPayoff"');
     expect(planPromptSent).not.toContain('monthlyContribution');
+  });
+
+  it('Phase 3: an explicitly-typed debt account is detected without name matching (isDebtGoalName retired for it)', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      transactions: [
+        { data: [], error: null }, // month-scoped headline figures
+        // All-time fetch for the debt account's balance: opened at -5000, one $200 payment.
+        { data: [
+          { amount: -5000, type: 'transfer', account_id: 'debt-1' },
+          { amount: 200, type: 'transfer', account_id: 'debt-1' },
+        ], error: null },
+      ],
+      accounts: [
+        {
+          data: [
+            { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null },
+            // Deliberately NOT named anything isDebtGoalName would match —
+            // proves detection comes from type='debt', not the keyword heuristic.
+            { id: 'debt-1', name: "Emma's line", type: 'debt', goal_target: 0, goal_target_date: '2028-01-01' },
+          ],
+          error: null,
+        },
+      ],
+      sinking_funds: [{ data: [], error: null }],
+      recurring_items: [{ data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    expect(res.status).toBe(200);
+
+    const planPromptSent = createMock.mock.calls[0][0].messages[0].content as string;
+    // The debt account's own name reached the AI context as the debt line —
+    // proof detection worked from type='debt' with no keyword in the name.
+    expect(planPromptSent).toContain("Emma's line");
+  });
+
+  it('Phase 3: recurring contributions and debt payments are narrated as already-committed, not extra room', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      transactions: [{ data: [], error: null }],
+      accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+      sinking_funds: [{ data: [], error: null }],
+      recurring_items: [
+        { data: [{ amount: 500, cadence: 'monthly', accounts: { name: 'RRSP — Retraite', type: 'rrsp' } }], error: null },
+      ],
+      conversations: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    expect(res.status).toBe(200);
+
+    const planPromptSent = createMock.mock.calls[0][0].messages[0].content as string;
+    expect(planPromptSent).toContain('RRSP — Retraite');
+    expect(planPromptSent).toContain('already deducted');
+    expect(planPromptSent).toContain('already accounted for');
   });
 });

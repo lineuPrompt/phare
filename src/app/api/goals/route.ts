@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { GOAL_ACCOUNT_TYPES, computeGoalBalance } from '@/lib/dashboardHelpers';
+import { computeDebtPayoff } from '@/lib/goalHelpers';
+import { formatLocalDate } from '@/lib/dateHelpers';
 
 export async function GET() {
   try {
@@ -60,6 +62,8 @@ export async function GET() {
       );
     }
 
+    const today = formatLocalDate(new Date());
+
     const goals = goalAccounts.map((a) => {
       // Goal-side transfer rows: account_id = this goal, type = 'transfer'
       const transfers = txData
@@ -72,14 +76,29 @@ export async function GET() {
         }));
 
       const rule = recurringByGoal.get(a.id) ?? null;
+      const isDebt = a.type === 'debt';
+      const balance = computeGoalBalance(txData, a.id);
+      // 0 is a legitimate target (always true for debt) — must not collapse to null.
+      const goalTarget = a.goal_target != null ? Number(a.goal_target) : null;
+      const goalTargetDate = a.goal_target_date ?? null;
+
+      // Debt payoff, computed directly from this explicitly-typed account —
+      // never the isDebtGoalName keyword heuristic, which only applies to
+      // typeless template-parsed rows (see api/plan/route.ts). Same pure
+      // requiredMonthlyContribution every other goal uses; target and saved
+      // are simply in the negative domain here.
+      const debtPayoff = isDebt
+        ? computeDebtPayoff({ name: a.name, targetAmount: goalTarget ?? 0, savedSoFar: balance, targetDate: goalTargetDate }, today)
+        : null;
 
       return {
         id:             a.id,
         name:           a.name,
         type:           a.type,
-        balance:        computeGoalBalance(txData, a.id),
-        goalTarget:     a.goal_target ? Number(a.goal_target) : null,
-        goalTargetDate: a.goal_target_date ?? null,
+        isDebt,
+        balance,
+        goalTarget,
+        goalTargetDate,
         transfers,
         recurringContribution: rule ? {
           recurringItemId: rule.id,
@@ -88,6 +107,7 @@ export async function GET() {
           anchorDate: rule.anchor_date,
           secondDay: rule.second_day,
         } : null,
+        debtPayoff,
       };
     });
 

@@ -38,6 +38,7 @@ function EntryRow({ entry, locale, muted }: { entry: TimelineTx & { isFuture?: b
         style={{ color: muted ? '#9CA3AF' : isFuture ? '#6B7280' : '#0F2044' }}
       >
         {entry.isBridge && <span className="mr-1">💳</span>}
+        {!entry.isBridge && entry.type === 'transfer' && <span className="mr-1">🪙</span>}
         {entry.description ?? t('untitled')}
         {entry.installmentLabel && (
           <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ background: '#F0FDFD', color: '#2ABFBF' }}>

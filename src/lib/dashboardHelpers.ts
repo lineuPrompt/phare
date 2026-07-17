@@ -42,7 +42,10 @@
  * card-side income (refund) row.
  */
 
-export const GOAL_ACCOUNT_TYPES = ['savings', 'tfsa', 'rrsp'] as const;
+// 'debt' (Build 4 Phase 3): a goal account with a negative balance, target 0
+// by default, paid down via recurring transfers — same balance derivation
+// (Σ transfer transactions), no separate concept or interest modeling.
+export const GOAL_ACCOUNT_TYPES = ['savings', 'tfsa', 'rrsp', 'debt'] as const;
 export type GoalAccountType = (typeof GOAL_ACCOUNT_TYPES)[number];
 
 export type TxRow = {

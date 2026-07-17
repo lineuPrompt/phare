@@ -540,17 +540,23 @@
     "type": {
       "savings": "Savings",
       "tfsa": "TFSA",
-      "rrsp": "RRSP"
+      "rrsp": "RRSP",
+      "debt": "Debt"
     },
     "typeDesc": {
       "savings": "Regular savings account",
       "tfsa": "Tax-Free Savings Account — contributions grow tax-free",
-      "rrsp": "Registered Retirement Savings Plan — contributions reduce taxable income"
+      "rrsp": "Registered Retirement Savings Plan — contributions reduce taxable income",
+      "debt": "Credit line, loan, or card balance you're paying down"
     },
     "balance": "Balance",
     "of": "of",
     "saved": "saved",
     "noTarget": "No target set",
+    "currentlyOwed": "currently owed",
+    "makePayment": "Make a payment",
+    "payoffPlan": "Paying {amount}/mo · payoff {date}",
+    "debtPaidOff": "Paid off",
     "create": {
       "title": "Create a savings goal",
       "name": "Name",
@@ -559,6 +565,9 @@
       "goalTarget": "Target amount",
       "goalTargetPlaceholder": "Optional",
       "goalTargetDate": "Target date",
+      "payoffDate": "Target payoff date",
+      "amountOwed": "Amount currently owed",
+      "amountOwedPlaceholder": "e.g. 5000",
       "saving": "Creating...",
       "save": "Create goal"
     },

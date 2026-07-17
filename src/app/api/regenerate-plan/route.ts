@@ -153,12 +153,38 @@ export async function POST(request: Request) {
       targetAmount: Number(a.goal_target),
       savedSoFar: computeGoalBalance(goalTxData, a.id),
       targetDate: a.goal_target_date ?? null,
+      isDebt: a.type === 'debt',
     }));
-    const debtGoalLine = rawGoals.find((g) => isDebtGoalName(g.name));
+    // Debt detection: an explicitly-typed debt ACCOUNT (Build 4 Phase 3)
+    // always wins — isDebtGoalName's keyword match is retired the moment a
+    // real debt type exists, and remains only as a fallback for goals that
+    // predate this feature or came from a typeless template import (where no
+    // account type is available yet — see api/plan/route.ts, unchanged).
+    const explicitDebt = rawGoals.find((g) => g.isDebt);
+    const debtGoalLine = explicitDebt ?? rawGoals.find((g) => isDebtGoalName(g.name));
     const nonDebtGoals = rawGoals.filter((g) => g !== debtGoalLine);
     const today = formatLocalDate(new Date());
     const computedDebtPayoff: DebtPayoffResult | null = computeDebtPayoff(debtGoalLine, today);
     const computedGoals: GoalResult[] = evaluateGoals(nonDebtGoals, netCashFlow, today);
+
+    // ── Recurring contributions & debt payments already committed ───────────
+    // Fetched so the AI can narrate them as already-netted-out capacity
+    // ("your $500/mo RRSP contribution is already counted") rather than
+    // treating net cash flow as fully discretionary. Code-computed list,
+    // never a number the AI invents — it only narrates what's here.
+    const { data: recurringTransferRows } = await supabase
+      .from('recurring_items')
+      .select('amount, cadence, accounts:accounts!recurring_items_destination_account_id_fkey(name, type)')
+      .eq('household_id', householdId)
+      .eq('type', 'transfer')
+      .eq('active', true);
+    const committedTransfers = ((recurringTransferRows ?? []) as unknown as { amount: number | string; cadence: string; accounts: { name: string; type: string } | null }[])
+      .map((r) => ({
+        destination: r.accounts?.name ?? 'goal',
+        isDebtPayment: r.accounts?.type === 'debt',
+        amount: Number(r.amount),
+        cadence: r.cadence,
+      }));
 
     // ── Income lines: aggregate by source for AI context ─────────────────────
     // (e.g. Lineu bi-weekly appears 3× in July → one aggregated line: $8,247)
@@ -212,7 +238,9 @@ export async function POST(request: Request) {
       `Expense lines (chequing, avoids card double-count): ${JSON.stringify(expenseLines)}\n` +
       `Their sinking funds (already set up, or none): ${JSON.stringify(sinkingFunds)}\n` +
       `Their goals — ALREADY evaluated in code, do not recompute or contradict these numbers, just narrate them naturally where relevant: ${JSON.stringify(computedGoals)}\n` +
-      `Their debt payoff — ALREADY evaluated in code (null means no debt evident or nothing computable), do not recompute or contradict: ${JSON.stringify(computedDebtPayoff)}`;
+      `Their debt payoff — ALREADY evaluated in code (null means no debt evident or nothing computable), do not recompute or contradict: ${JSON.stringify(computedDebtPayoff)}\n` +
+      `Their recurring contributions and debt payments (or none) — these are already deducted inside the ` +
+      `savings figure and net cash flow above, NOT extra discretionary room: ${JSON.stringify(committedTransfers)}`;
 
     // ── Generate plan (AI interprets verified numbers only) ──────────────────
     // The AI may NEVER instantiate structured objects here either — same hard
@@ -239,6 +267,7 @@ export async function POST(request: Request) {
       `- Classify income lines too: category "Income", isFixed true.\n` +
       `- Do NOT output any sinking funds, goals, or debt payoff as structured data — there is no field for them in the JSON above. If you want to suggest one, put it in topRecommendation as a suggestion phrased as a suggestion ("Consider…"), never as a fund/goal/debt-plan they already have and never with a monthly amount presented as theirs.\n` +
       `- Their goals and debt payoff (if any) are already evaluated (contribution, on-track verdict, and dates are all real, code-computed numbers) — do not invent or restate any of those figures anywhere; if you reference one in topRecommendation, use the exact numbers given.\n` +
+      `- Their recurring contributions and debt payments (if any) are already subtracted from the net cash flow figure above — if you mention one, say it's already accounted for (e.g. "your $500/mo RRSP contribution is already counted"), never present it as new discretionary room and never double-count it against a separate suggestion.\n` +
       `- Canadian context: RRSP, RESP, TFSA, CESG.\n` +
       `- If net cash flow is negative, topRecommendation must address that first.\n` +
       `- topRecommendation: one specific sentence with a dollar amount.`;

@@ -40,7 +40,7 @@ const VALID_TYPES = ['chequing', 'credit_card', 'line_of_credit', ...GOAL_ACCOUN
 // POST: create an account (credit card, line of credit, or goal account)
 export async function POST(request: Request) {
   try {
-    const { name, type, statementCloseDay, paymentDay, goalTarget, goalTargetDate } = await request.json();
+    const { name, type, statementCloseDay, paymentDay, goalTarget, goalTargetDate, openingBalance } = await request.json();
     if (!name?.trim() || !type) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
@@ -82,6 +82,31 @@ export async function POST(request: Request) {
     if (error) {
       console.error('Account create error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Opening balance — seeds a real ledger row (same "Starting balance"
+    // pattern save-plan uses for imported goals), never a balance field
+    // mutation. computeGoalBalance() (Σ transfer transactions) stays the
+    // single source of truth. Used for a debt account's starting negative
+    // balance ("Credit line: −$5,000"); no chequing-side peer, since this is
+    // money the household already owed/had before Phare, not a transfer
+    // happening today.
+    if (openingBalance != null && Number(openingBalance) !== 0) {
+      const { error: openingErr } = await supabase.from('transactions').insert({
+        household_id: householdId,
+        member_id: null,
+        category_id: null,
+        description: 'Starting balance / Solde initial',
+        amount: Number(openingBalance),
+        date: new Date().toISOString().slice(0, 10),
+        type: 'transfer',
+        source: 'manual',
+        account_id: account.id,
+      });
+      if (openingErr) {
+        console.error('Account opening balance insert error:', openingErr);
+        // Non-fatal: account created, just the opening balance didn't seed.
+      }
     }
 
     // Log created_first_goal the first time a goal account is created.
