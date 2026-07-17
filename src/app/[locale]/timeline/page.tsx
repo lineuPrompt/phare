@@ -261,6 +261,35 @@ export default function TimelinePage() {
         />
       )}
 
+      <div className="flex items-center justify-between">
+        <button
+          onClick={goPrev}
+          disabled={monthIdx <= 0}
+          title={monthIdx <= 0 ? t('nav.outOfRange') : undefined}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+          style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
+        >
+          ← {t('nav.prev')}
+        </button>
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold" style={{ color: '#0F2044' }}>{monthLabel}</span>
+          {selectedMonth !== currentMonthKey() && (
+            <button onClick={goToday} className="text-xs px-2 py-1 rounded-full cursor-pointer" style={{ background: '#F0FDFD', color: '#2ABFBF' }}>
+              {t('nav.today')}
+            </button>
+          )}
+        </div>
+        <button
+          onClick={goNext}
+          disabled={monthIdx < 0 || monthIdx >= months.length - 1}
+          title={monthIdx >= months.length - 1 ? t('nav.outOfRange') : undefined}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+          style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
+        >
+          {t('nav.next')} →
+        </button>
+      </div>
+
       <div>
         {!showReAnchor && (
           <button onClick={() => setShowReAnchor(true)} className="text-sm cursor-pointer" style={{ color: '#6B7280' }}>
