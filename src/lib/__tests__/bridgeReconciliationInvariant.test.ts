@@ -256,3 +256,58 @@ describe('Phase 1.2 invariant — reconciliation stays balanced through card-ent
     expect(bridgeRow(supabase)).toBeUndefined();
   });
 });
+
+describe('Refund netting — bridge nets money-in against spend within the cycle', () => {
+  it('a refund in-cycle reduces the bridge amount, reconciled throughout', async () => {
+    const supabase = makeFakeSupabase([
+      { id: 'card-1', household_id: HOUSEHOLD, account_id: CARD, amount: 100, type: 'expense', date: '2026-07-01', description: 'Groceries', is_bridge: false },
+    ]);
+    await ensure(supabase);
+    expect(bridgeRow(supabase)!.amount).toBe(100);
+    expect(reconcileAll(supabase).reconciled).toBe(true);
+
+    // Founder adds a $30 refund within the same cycle.
+    supabase.addRow({ id: 'refund-1', household_id: HOUSEHOLD, account_id: CARD, amount: 30, type: 'income', date: '2026-07-05', description: 'Refund', is_bridge: false });
+    await ensure(supabase);
+
+    expect(bridgeRow(supabase)!.amount).toBe(70); // 100 − 30, netted
+    const result = reconcileAll(supabase);
+    expect(result.reconciled).toBe(true);
+    expect(result.netDifference).toBe(0);
+  });
+
+  it('a refund exceeding spend removes the bridge row entirely — no negative payment', async () => {
+    const supabase = makeFakeSupabase([
+      { id: 'card-1', household_id: HOUSEHOLD, account_id: CARD, amount: 50, type: 'expense', date: '2026-07-01', description: 'Groceries', is_bridge: false },
+    ]);
+    await ensure(supabase);
+    expect(bridgeRow(supabase)!.amount).toBe(50);
+
+    // Refund of $80 exceeds the $50 spend — net is -$30.
+    supabase.addRow({ id: 'refund-1', household_id: HOUSEHOLD, account_id: CARD, amount: 80, type: 'income', date: '2026-07-05', description: 'Big refund', is_bridge: false });
+    await ensure(supabase);
+
+    expect(bridgeRow(supabase)).toBeUndefined(); // no negative payment, row removed
+    const result = reconcileAll(supabase);
+    expect(result.reconciled).toBe(true);
+    expect(result.netDifference).toBe(0);
+  });
+
+  it('deleting the refund brings the bridge back to the pre-refund amount, reconciled at every step', async () => {
+    const supabase = makeFakeSupabase([
+      { id: 'card-1', household_id: HOUSEHOLD, account_id: CARD, amount: 100, type: 'expense', date: '2026-07-01', description: 'Groceries', is_bridge: false },
+    ]);
+    await ensure(supabase);
+    expect(reconcileAll(supabase).reconciled).toBe(true);
+
+    supabase.addRow({ id: 'refund-1', household_id: HOUSEHOLD, account_id: CARD, amount: 40, type: 'income', date: '2026-07-05', description: 'Refund', is_bridge: false });
+    await ensure(supabase);
+    expect(bridgeRow(supabase)!.amount).toBe(60); // 100 − 40
+    expect(reconcileAll(supabase).reconciled).toBe(true);
+
+    supabase.deleteRow('refund-1');
+    await ensure(supabase);
+    expect(bridgeRow(supabase)!.amount).toBe(100); // back to pre-refund total
+    expect(reconcileAll(supabase).reconciled).toBe(true);
+  });
+});

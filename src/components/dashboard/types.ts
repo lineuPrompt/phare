@@ -20,6 +20,14 @@ export type GoalTransfer = {
   amount: number;
 };
 
+export type RecurringContribution = {
+  recurringItemId: string;
+  amount: number;
+  cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
+  anchorDate: string | null; // null = needs a date, not yet materializing
+  secondDay: number | null;
+};
+
 export type GoalAccount = {
   id: string;
   name: string;
@@ -28,6 +36,7 @@ export type GoalAccount = {
   goalTarget: number | null;
   goalTargetDate: string | null;
   transfers: GoalTransfer[];
+  recurringContribution: RecurringContribution | null;
 };
 
 export type DashboardData = {

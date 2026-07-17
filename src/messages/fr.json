@@ -584,7 +584,31 @@
     "confirmDeleteTitle": "Supprimer cette cotisation?",
     "confirmDeleteBtn": "Supprimer",
     "cancelEdit": "Annuler",
-    "saveEdit": "Enregistrer"
+    "saveEdit": "Enregistrer",
+    "recurring": {
+      "title": "Configurer une contribution récurrente",
+      "setUp": "Configurer une contribution récurrente",
+      "amount": "Montant",
+      "cadence": "Fréquence",
+      "cadenceMonthly": "Mensuel",
+      "cadenceBiweekly": "Aux 2 semaines",
+      "cadenceSemimonthly": "Deux fois par mois",
+      "cadenceWeekly": "Hebdomadaire",
+      "firstDate": "Date du premier transfert",
+      "secondDay": "Deuxième jour du mois",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "next": "prochain : {date}",
+      "needsDate": "date requise",
+      "cadenceShort": {
+        "monthly": "/mois",
+        "biweekly": "/2sem",
+        "semimonthly": "/2xmois",
+        "weekly": "/sem"
+      },
+      "projection": "À {amount} : {total} contribué d'ici {date}"
+    }
   },
   "recurring": {
     "title": "Récurrents",
@@ -594,20 +618,24 @@
       "title": "Ajouter une ligne récurrente",
       "income": "Entrées",
       "expense": "Sorties",
+      "transfer": "Contribution",
       "description": "Description",
       "amount": "Montant",
       "monthly": "Mensuel",
       "biweekly": "Aux 2 semaines",
       "semimonthly": "Deux fois par mois",
+      "weekly": "Hebdomadaire",
       "secondDay": "Deuxième jour du mois",
       "saving": "Enregistrement...",
       "save": "Ajouter",
-      "category": "Catégorie..."
+      "category": "Catégorie...",
+      "noGoals": "Créez d'abord un objectif"
     },
     "list": {
       "empty": "Aucune ligne récurrente. Ajoutez votre hypothèque, salaire, prêts ci-dessus.",
       "incomeTitle": "Entrées",
       "expenseTitle": "Sorties",
+      "transferTitle": "Contributions récurrentes",
       "edit": "Modifier",
       "save": "Enregistrer",
       "noCategory": "Sans catégorie",

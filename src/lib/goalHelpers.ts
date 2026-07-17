@@ -8,7 +8,7 @@
  * for save-plan to persist, but only the month/year matter to this module.
  */
 
-import { monthNameToNumber } from './dateHelpers';
+import { monthNameToNumber, materializeRule } from './dateHelpers';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -247,4 +247,49 @@ export function evaluateGoals(
         : achievableMonth(g.targetAmount, g.savedSoFar, remainingCapacity, today),
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Recurring contribution projection (Build 4 Phase 2, optional per spec).
+//
+// HARD RULE: Phare tracks contributions, never external balances or market
+// returns. This projects currentBalance + (future recurring-transfer
+// occurrences × amount) over a calendar window — pure addition, using the
+// exact same materializeRule engine recurring items already use to place
+// real dates. It must never apply a rate of return. If a feature needs a
+// return-rate assumption to work, it does not belong here and does not ship.
+// ---------------------------------------------------------------------------
+
+export type ContributionRule = {
+  cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
+  anchorDate: string | null; // null = needs a date — nothing to project yet
+  secondDay?: number | null;
+};
+
+/**
+ * Projects total contributions (current balance + every future occurrence
+ * of the recurring rule) from `fromDate` through `toDate`, inclusive.
+ * Returns currentBalance unchanged when toDate is on/before fromDate, or
+ * when the rule has no anchor date yet.
+ */
+export function projectedContribution(
+  currentBalance: number,
+  rule: ContributionRule | null,
+  amount: number,
+  fromDate: string,
+  toDate: string
+): number {
+  if (!rule || !rule.anchorDate || toDate <= fromDate) return round2(currentBalance);
+
+  const monthCount = monthsBetween(fromDate, toDate) + 1;
+  if (monthCount <= 0) return round2(currentBalance);
+
+  const dates = materializeRule(
+    { cadence: rule.cadence, anchorDate: rule.anchorDate, secondDay: rule.secondDay ?? null },
+    fromDate.slice(0, 7),
+    monthCount
+  );
+
+  const occurrences = dates.filter((d) => d >= fromDate && d <= toDate).length;
+  return round2(currentBalance + occurrences * amount);
 }

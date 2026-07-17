@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { RecurringItem, RecurringAccount, RecurringCategory, formatCurrency } from './types';
+import { RecurringItem, RecurringAccount, RecurringCategory, RecurringGoalAccount, formatCurrency } from './types';
 import { formatSignedAmount } from '@/components/expenses/types';
 import { monthlyEquivalent } from '@/lib/incomeHelpers';
 import { nextOccurrence } from '@/lib/dateHelpers';
@@ -23,12 +23,14 @@ type RecurringRowProps = {
   item: RecurringItem;
   accounts: RecurringAccount[];
   categories: RecurringCategory[];
+  goalAccounts: RecurringGoalAccount[];
   locale: string;
   onChanged: () => void;
 };
 
-function RecurringRow({ item, accounts, categories, locale, onChanged }: RecurringRowProps) {
+function RecurringRow({ item, accounts, categories, goalAccounts, locale, onChanged }: RecurringRowProps) {
   const t = useTranslations('recurring.list');
+  const isTransfer = item.type === 'transfer';
 
   const [isEditing, setIsEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -42,6 +44,7 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
   const [editSecondDay, setEditSecondDay] = useState('30');
   const [editCategoryId, setEditCategoryId] = useState('');
   const [editAccountId, setEditAccountId] = useState('');
+  const [editDestinationId, setEditDestinationId] = useState('');
 
   const inputStyle = { border: '1px solid #D1D5DB', color: '#0F2044' };
 
@@ -53,6 +56,7 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
     setEditSecondDay(String(item.second_day ?? 30));
     setEditCategoryId(item.category_id ?? '');
     setEditAccountId(item.account_id);
+    setEditDestinationId(item.destination_account_id ?? '');
     setIsEditing(true);
   };
 
@@ -72,6 +76,7 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
           secondDay: editCadence === 'semimonthly' ? parseInt(editSecondDay, 10) : null,
           categoryId: editCategoryId || null,
           accountId: editAccountId,
+          destinationAccountId: editDestinationId || null,
         }),
       });
       if (!res.ok) {
@@ -94,8 +99,7 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
   const canSaveEdit =
     editDesc.trim().length > 0 &&
     parseFloat(editAmount) > 0 &&
-    editAccountId &&
-    (item.type === 'income' || editCategoryId);
+    (isTransfer ? !!editDestinationId : !!editAccountId && (item.type === 'income' || editCategoryId));
 
   if (isEditing) {
     return (
@@ -152,30 +156,45 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
             />
           )}
         </div>
-        {/* Row 3: account + category */}
+        {/* Row 3: transfer → destination goal; income/expense → account + category */}
         <div className="flex flex-wrap gap-2">
-          <select
-            value={editAccountId}
-            onChange={(e) => setEditAccountId(e.target.value)}
-            className="px-2 py-1.5 rounded text-sm outline-none bg-white"
-            style={inputStyle}
-          >
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.type === 'chequing' ? '🏦' : '💳'} {a.name}
-              </option>
-            ))}
-          </select>
-          {item.type === 'expense' && categories.length > 0 && (
+          {isTransfer ? (
             <select
-              value={editCategoryId}
-              onChange={(e) => setEditCategoryId(e.target.value)}
+              value={editDestinationId}
+              onChange={(e) => setEditDestinationId(e.target.value)}
               className="px-2 py-1.5 rounded text-sm outline-none bg-white"
               style={inputStyle}
             >
-              <option value="">{t('noCategory')}</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {goalAccounts.map((g) => (
+                <option key={g.id} value={g.id}>🎯 {g.name}</option>
+              ))}
             </select>
+          ) : (
+            <>
+              <select
+                value={editAccountId}
+                onChange={(e) => setEditAccountId(e.target.value)}
+                className="px-2 py-1.5 rounded text-sm outline-none bg-white"
+                style={inputStyle}
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.type === 'chequing' ? '🏦' : '💳'} {a.name}
+                  </option>
+                ))}
+              </select>
+              {item.type === 'expense' && categories.length > 0 && (
+                <select
+                  value={editCategoryId}
+                  onChange={(e) => setEditCategoryId(e.target.value)}
+                  className="px-2 py-1.5 rounded text-sm outline-none bg-white"
+                  style={inputStyle}
+                >
+                  <option value="">{t('noCategory')}</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              )}
+            </>
           )}
           <div className="flex gap-1 ml-auto">
             <button
@@ -232,6 +251,7 @@ function RecurringRow({ item, accounts, categories, locale, onChanged }: Recurri
             )}
             {item.categories?.name ? ` · ${item.categories.name}` : ''}
             {item.accounts?.name ? ` · ${item.accounts.type === 'chequing' ? '🏦' : '💳'} ${item.accounts.name}` : ''}
+            {isTransfer && item.destination_accounts?.name ? ` · → 🎯 ${item.destination_accounts.name}` : ''}
             {!item.anchor_date ? ` · ⚠ ${t('needsPayDate')}` : ''}
           </p>
         </div>
@@ -299,12 +319,14 @@ export default function RecurringList({
   items,
   accounts,
   categories,
+  goalAccounts,
   locale,
   onChanged,
 }: {
   items: RecurringItem[];
   accounts: RecurringAccount[];
   categories: RecurringCategory[];
+  goalAccounts: RecurringGoalAccount[];
   locale: string;
   onChanged: () => void;
 }) {
@@ -333,6 +355,7 @@ export default function RecurringList({
 
   const income = items.filter((i) => i.type === 'income').sort(byNextOccurrence);
   const expense = items.filter((i) => i.type === 'expense').sort(byNextOccurrence);
+  const transfer = items.filter((i) => i.type === 'transfer').sort(byNextOccurrence);
 
   return (
     <div className="space-y-6">
@@ -347,6 +370,7 @@ export default function RecurringList({
               item={i}
               accounts={accounts}
               categories={categories}
+              goalAccounts={goalAccounts}
               locale={locale}
               onChanged={onChanged}
             />
@@ -365,6 +389,26 @@ export default function RecurringList({
               item={i}
               accounts={accounts}
               categories={categories}
+              goalAccounts={goalAccounts}
+              locale={locale}
+              onChanged={onChanged}
+            />
+          ))}
+        </div>
+      )}
+
+      {transfer.length > 0 && (
+        <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>
+          <h3 className="text-sm font-bold mb-3 uppercase tracking-wide" style={{ color: '#2ABFBF' }}>
+            {t('transferTitle')}
+          </h3>
+          {transfer.map((i) => (
+            <RecurringRow
+              key={i.id}
+              item={i}
+              accounts={accounts}
+              categories={categories}
+              goalAccounts={goalAccounts}
               locale={locale}
               onChanged={onChanged}
             />

@@ -36,7 +36,11 @@ function r2(n: number): number {
 
 // expense adds to spend, income (a refund/credit on a card) nets against it.
 // Any other transaction type (e.g. transfer) doesn't belong to card spend.
-function signedAmount(t: EnvTx): number | null {
+// Exported so bridgeHelpers.ts can net a card's cycle spend by the exact
+// same rule — the bridge amount and the envelope actual must never disagree
+// on what counts as a refund. Takes the minimal shape (not the full EnvTx)
+// so callers don't need to fabricate unrelated fields just to call it.
+export function signedAmount(t: { type: string; amount: number | string }): number | null {
   if (t.type === 'expense') return Number(t.amount);
   if (t.type === 'income') return -Number(t.amount);
   return null;

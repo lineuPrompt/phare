@@ -584,7 +584,31 @@
     "confirmDeleteTitle": "Delete this contribution?",
     "confirmDeleteBtn": "Delete",
     "cancelEdit": "Cancel",
-    "saveEdit": "Save"
+    "saveEdit": "Save",
+    "recurring": {
+      "title": "Set up recurring contribution",
+      "setUp": "Set up recurring contribution",
+      "amount": "Amount",
+      "cadence": "Frequency",
+      "cadenceMonthly": "Monthly",
+      "cadenceBiweekly": "Every 2 weeks",
+      "cadenceSemimonthly": "Twice a month",
+      "cadenceWeekly": "Weekly",
+      "firstDate": "First transfer date",
+      "secondDay": "Second day of month",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "next": "next: {date}",
+      "needsDate": "needs a date",
+      "cadenceShort": {
+        "monthly": "/mo",
+        "biweekly": "/2wk",
+        "semimonthly": "/2xmo",
+        "weekly": "/wk"
+      },
+      "projection": "At {amount}: {total} contributed by {date}"
+    }
   },
   "recurring": {
     "title": "Recurring",
@@ -594,20 +618,24 @@
       "title": "Add a recurring line",
       "income": "Money in",
       "expense": "Money out",
+      "transfer": "Contribution",
       "description": "Description",
       "amount": "Amount",
       "monthly": "Monthly",
       "biweekly": "Every 2 weeks",
       "semimonthly": "Twice a month",
+      "weekly": "Weekly",
       "secondDay": "Second day of month",
       "saving": "Saving...",
       "save": "Add",
-      "category": "Category..."
+      "category": "Category...",
+      "noGoals": "Create a goal first"
     },
     "list": {
       "empty": "No recurring lines yet. Add your mortgage, salary, loans above.",
       "incomeTitle": "Money in",
       "expenseTitle": "Money out",
+      "transferTitle": "Recurring contributions",
       "edit": "Edit",
       "save": "Save",
       "noCategory": "No category",

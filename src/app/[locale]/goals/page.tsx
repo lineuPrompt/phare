@@ -7,7 +7,10 @@ import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import CreateGoalForm from '@/components/goals/CreateGoalForm';
 import TransferForm from '@/components/goals/TransferForm';
+import RecurringContributionForm from '@/components/goals/RecurringContributionForm';
 import { formatCurrency, type GoalAccount, type GoalTransfer } from '@/components/dashboard/types';
+import { nextOccurrence } from '@/lib/dateHelpers';
+import { projectedContribution } from '@/lib/goalHelpers';
 
 // Inline edit state for a single transfer row
 type TransferEdit = {
@@ -20,6 +23,7 @@ type TransferEdit = {
 export default function GoalsPage() {
   const t = useTranslations('goals');
   const tDash = useTranslations('dashboard');
+  const tGoalsRecurring = useTranslations('goals.recurring');
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
@@ -28,6 +32,7 @@ export default function GoalsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [transferFor, setTransferFor] = useState<string | null>(null);
+  const [recurringSetupFor, setRecurringSetupFor] = useState<string | null>(null);
 
   // Transfer edit/delete state
   const [editing, setEditing] = useState<TransferEdit | null>(null);
@@ -56,6 +61,13 @@ export default function GoalsPage() {
     setTransferFor(null);
     load();
   }
+
+  function handleRecurringSaved() {
+    setRecurringSetupFor(null);
+    load();
+  }
+
+  const cadenceShort = (cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly') => tGoalsRecurring(`cadenceShort.${cadence}`);
 
   function startEdit(tr: GoalTransfer) {
     setEditing({
@@ -227,6 +239,67 @@ export default function GoalsPage() {
                           )}
                         </div>
                       )}
+
+                      {/* Recurring contribution — set up, or show what's already running */}
+                      <div className="pt-3 border-t" style={{ borderColor: '#F3F4F6' }}>
+                        {goal.recurringContribution ? (
+                          (() => {
+                            const rc = goal.recurringContribution!;
+                            const today = new Date().toISOString().slice(0, 10);
+                            const next = nextOccurrence(
+                              { cadence: rc.cadence, anchorDate: rc.anchorDate, secondDay: rc.secondDay },
+                              today
+                            );
+                            const projection = goal.goalTargetDate
+                              ? projectedContribution(goal.balance, rc.anchorDate ? { cadence: rc.cadence, anchorDate: rc.anchorDate, secondDay: rc.secondDay } : null, rc.amount, today, goal.goalTargetDate)
+                              : null;
+                            return (
+                              <div>
+                                <p className="text-sm font-medium" style={{ color: '#0F2044' }}>
+                                  {formatCurrency(rc.amount, locale)}{cadenceShort(rc.cadence)}
+                                  {next && ` · ${tGoalsRecurring('next', {
+                                    date: new Date(next + 'T00:00:00').toLocaleDateString(
+                                      locale === 'fr' ? 'fr-CA' : 'en-CA', { month: 'short', day: 'numeric' }
+                                    ),
+                                  })}`}
+                                  {!rc.anchorDate && ` · ⚠ ${tGoalsRecurring('needsDate')}`}
+                                </p>
+                                {projection !== null && goal.goalTargetDate && (
+                                  <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>
+                                    {tGoalsRecurring('projection', {
+                                      amount: formatCurrency(rc.amount, locale) + cadenceShort(rc.cadence),
+                                      total: formatCurrency(projection, locale),
+                                      date: new Date(goal.goalTargetDate).toLocaleDateString(
+                                        locale === 'fr' ? 'fr-CA' : 'en-CA', { month: 'long', year: 'numeric' }
+                                      ),
+                                    })}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })()
+                        ) : recurringSetupFor === goal.id ? (
+                          <div>
+                            <h4 className="text-sm font-semibold mb-3" style={{ color: '#0F2044' }}>
+                              {tGoalsRecurring('title')}
+                            </h4>
+                            <RecurringContributionForm
+                              goalId={goal.id}
+                              goalName={goal.name}
+                              onSaved={handleRecurringSaved}
+                              onCancel={() => setRecurringSetupFor(null)}
+                            />
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setRecurringSetupFor(goal.id)}
+                            className="text-sm font-medium cursor-pointer"
+                            style={{ color: '#2ABFBF' }}
+                          >
+                            + {tGoalsRecurring('setUp')}
+                          </button>
+                        )}
+                      </div>
 
                       {/* Inline transfer form */}
                       {isOpen && (

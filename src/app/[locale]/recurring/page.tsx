@@ -7,7 +7,7 @@ import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import RecurringForm from '@/components/recurring/RecurringForm';
 import RecurringList from '@/components/recurring/RecurringList';
-import { RecurringAccount, RecurringCategory, RecurringItem } from '@/components/recurring/types';
+import { RecurringAccount, RecurringCategory, RecurringGoalAccount, RecurringItem } from '@/components/recurring/types';
 
 export default function RecurringPage() {
   const t = useTranslations('recurring');
@@ -18,6 +18,7 @@ export default function RecurringPage() {
   const [items, setItems] = useState<RecurringItem[]>([]);
   const [accounts, setAccounts] = useState<RecurringAccount[]>([]);
   const [categories, setCategories] = useState<RecurringCategory[]>([]);
+  const [goalAccounts, setGoalAccounts] = useState<RecurringGoalAccount[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
@@ -31,6 +32,7 @@ export default function RecurringPage() {
           setItems(d.items);
           setAccounts(d.accounts ?? []);
           setCategories(d.categories ?? []);
+          setGoalAccounts(d.goalAccounts ?? []);
         }
       })
       .finally(() => setLoading(false));
@@ -50,11 +52,11 @@ export default function RecurringPage() {
               <p className="mt-1" style={{ color: '#6B7280' }}>{t('subtitle')}</p>
             </div>
 
-            <RecurringForm accounts={accounts} categories={categories} onSaved={load} />
+            <RecurringForm accounts={accounts} categories={categories} goalAccounts={goalAccounts} onSaved={load} />
 
             {loading
               ? <p className="text-center py-12" style={{ color: '#6B7280' }}>{t('loading')}</p>
-              : <RecurringList items={items} accounts={accounts} categories={categories} locale={locale} onChanged={load} />}
+              : <RecurringList items={items} accounts={accounts} categories={categories} goalAccounts={goalAccounts} locale={locale} onChanged={load} />}
           </div>
         </div>
       </div>

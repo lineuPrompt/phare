@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeBridgeSync, type BridgeCardInfo, type ExistingBridgeRow } from '../bridgeHelpers';
+import { computeBridgeSync, netCycleSpend, type BridgeCardInfo, type ExistingBridgeRow } from '../bridgeHelpers';
 
 const HOUSEHOLD = 'hh-1';
 const CHEQUING = 'acc-chq-1';
@@ -184,5 +184,80 @@ describe('computeBridgeSync — living rows (recompute on every call)', () => {
       existingBridges: [existingVisa, existingMc],
     });
     expect(result.toUpdate).toEqual([{ id: 'bridge-mc-1', amount: 90.00 }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Refund netting (bridges net refunds against spend, same rule as envelope
+// actuals). netCycleSpend is the pure per-card, per-window net; computeBridgeSync
+// already clamps any total <= 0 to "no bridge" (delete existing / insert nothing) —
+// these tests confirm that clamp actually fires for a net-negative cycle.
+// ---------------------------------------------------------------------------
+
+describe('netCycleSpend — refund netting within a cycle window', () => {
+  const WINDOW = { start: '2026-06-16', end: '2026-07-15' };
+
+  it('a refund in-cycle reduces the net below raw spend', () => {
+    const net = netCycleSpend(
+      [
+        { date: '2026-07-01', type: 'expense', amount: 100 },
+        { date: '2026-07-05', type: 'income', amount: 30 }, // refund
+      ],
+      WINDOW
+    );
+    expect(net).toBe(70);
+  });
+
+  it('a refund that exceeds spend nets negative (caller clamps to zero)', () => {
+    const net = netCycleSpend(
+      [
+        { date: '2026-07-01', type: 'expense', amount: 50 },
+        { date: '2026-07-05', type: 'income', amount: 80 }, // refund exceeds spend
+      ],
+      WINDOW
+    );
+    expect(net).toBe(-30);
+  });
+
+  it('ignores transactions outside the window', () => {
+    const net = netCycleSpend(
+      [
+        { date: '2026-07-01', type: 'expense', amount: 100 },
+        { date: '2026-07-16', type: 'income', amount: 30 }, // next cycle — not netted here
+      ],
+      WINDOW
+    );
+    expect(net).toBe(100);
+  });
+
+  it('ignores transfer rows entirely', () => {
+    const net = netCycleSpend(
+      [
+        { date: '2026-07-01', type: 'expense', amount: 100 },
+        { date: '2026-07-02', type: 'transfer', amount: 500 },
+      ],
+      WINDOW
+    );
+    expect(net).toBe(100);
+  });
+});
+
+describe('computeBridgeSync — refund-exceeds-spend never produces a negative payment', () => {
+  it('a net-negative cycle total produces no insert (never a negative bridge)', () => {
+    const result = base({
+      cardTotals: new Map([['card-visa', -30], ['card-mc', 75.50]]),
+      existingBridges: [],
+    });
+    expect(result.toInsert.map((r) => r.bridge_source_account)).not.toContain('card-visa');
+    expect(result.toInsert.every((r) => r.amount > 0)).toBe(true);
+  });
+
+  it('a cycle that goes net-negative after previously having a bridge row deletes it', () => {
+    const existingVisa: ExistingBridgeRow = { id: 'bridge-visa-1', bridge_source_account: 'card-visa', amount: 100 };
+    const result = base({
+      cardTotals: new Map([['card-visa', -30], ['card-mc', 75.50]]),
+      existingBridges: [existingVisa],
+    });
+    expect(result.toDelete).toEqual(['bridge-visa-1']);
   });
 });

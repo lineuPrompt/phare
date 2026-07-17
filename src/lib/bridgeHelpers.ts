@@ -12,6 +12,16 @@
  * in dateHelpers.ts) — not a plain calendar month. Cards without a
  * statement_close_day set fall back to the calendar month.
  *
+ * REFUND NETTING
+ * ---------------
+ * The bridge amount for a cycle is that card's expenses MINUS its money-in
+ * (refund) entries within the same window — the exact same netting rule
+ * envelopeHelpers.ts's category actuals use (signedAmount: expense adds,
+ * income subtracts). Never show a negative payment: if refunds exceed
+ * spend in a cycle, the bridge for that payment date is zero (existing row
+ * deleted, no row inserted) — a resulting credit balance carrying forward
+ * to the next cycle is explicitly out of scope.
+ *
  * LIVING ROWS — NOT INSERT-ONCE
  * ------------------------------
  * ensureBridgesForWindow recomputes each card's cycle total from current
@@ -36,6 +46,7 @@
  */
 
 import { bridgePaymentDate, statementCycleWindow } from './dateHelpers';
+import { signedAmount } from './envelopeHelpers';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -84,6 +95,27 @@ function r2(n: number): number {
 }
 
 // ── Pure function ─────────────────────────────────────────────────────────────
+
+/**
+ * Pure. Nets a card's expense-minus-refund total within a statement-cycle
+ * window — the same signedAmount rule envelopeHelpers.ts's category actuals
+ * use. Transactions outside [window.start, window.end] are ignored. Can
+ * return a negative number (refunds exceeded spend in this cycle) — the
+ * caller (computeBridgeSync) is responsible for treating that as "no
+ * payment," never a negative one.
+ */
+export function netCycleSpend(
+  txns: { date: string; type: string; amount: number }[],
+  window: { start: string; end: string }
+): number {
+  let sum = 0;
+  for (const t of txns) {
+    if (t.date < window.start || t.date > window.end) continue;
+    const signed = signedAmount(t);
+    if (signed !== null) sum += signed;
+  }
+  return r2(sum);
+}
 
 /**
  * Pure. Given each card's freshly-recomputed cycle total and the bridge row
@@ -185,21 +217,22 @@ export async function ensureBridgesForWindow(params: {
     windowsByCard.set(card.id, perMonth);
   }
 
-  // One query for every card's spend across the whole span.
+  // One query for every card's expense AND income (refund) rows across the
+  // whole span — netting needs both sides of the ledger, not just spend.
   const { data: spendTxns } = await supabase
     .from('transactions')
-    .select('account_id, amount, date')
+    .select('account_id, amount, date, type')
     .eq('household_id', householdId)
     .in('account_id', cardIds)
-    .eq('type', 'expense')
+    .in('type', ['expense', 'income'])
     .gte('date', minStart as string)
     .lte('date', maxEnd as string);
 
-  const txnsByCard = new Map<string, { amount: number; date: string }[]>();
-  for (const t of (spendTxns ?? []) as { account_id: string | null; amount: number; date: string }[]) {
+  const txnsByCard = new Map<string, { amount: number; date: string; type: string }[]>();
+  for (const t of (spendTxns ?? []) as { account_id: string | null; amount: number; date: string; type: string }[]) {
     if (!t.account_id) continue;
     const list = txnsByCard.get(t.account_id) ?? [];
-    list.push({ amount: Number(t.amount), date: t.date });
+    list.push({ amount: Number(t.amount), date: t.date, type: t.type });
     txnsByCard.set(t.account_id, list);
   }
 
@@ -229,11 +262,7 @@ export async function ensureBridgesForWindow(params: {
     for (const card of cards) {
       const w = windowsByCard.get(card.id)!.get(cycleMonth)!;
       const txns = txnsByCard.get(card.id) ?? [];
-      let sum = 0;
-      for (const t of txns) {
-        if (t.date >= w.start && t.date <= w.end) sum += t.amount;
-      }
-      cardTotals.set(card.id, r2(sum));
+      cardTotals.set(card.id, netCycleSpend(txns, w));
     }
 
     const { toInsert, toUpdate, toDelete } = computeBridgeSync({

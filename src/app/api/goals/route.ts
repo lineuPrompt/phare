@@ -37,6 +37,29 @@ export async function GET() {
       txData = (txResult ?? []) as TxResult[];
     }
 
+    // Each goal's active recurring transfer rule, if any (Build 4 Phase 2) —
+    // "$500/mo · next: Aug 1" on the goal card, and the source for the
+    // optional contribution projection. A goal can have at most one active
+    // recurring transfer rule at a time in this UI (created from either the
+    // Goals or Recurring page).
+    type RecurringRuleRow = {
+      id: string; amount: number | string; cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
+      anchor_date: string | null; second_day: number | null; destination_account_id: string | null;
+    };
+    let recurringByGoal = new Map<string, RecurringRuleRow>();
+    if (goalIds.length > 0) {
+      const { data: ruleRows } = await supabase
+        .from('recurring_items')
+        .select('id, amount, cadence, anchor_date, second_day, destination_account_id')
+        .eq('household_id', householdId)
+        .eq('type', 'transfer')
+        .eq('active', true)
+        .in('destination_account_id', goalIds);
+      recurringByGoal = new Map(
+        ((ruleRows ?? []) as RecurringRuleRow[]).map((r) => [r.destination_account_id as string, r])
+      );
+    }
+
     const goals = goalAccounts.map((a) => {
       // Goal-side transfer rows: account_id = this goal, type = 'transfer'
       const transfers = txData
@@ -48,6 +71,8 @@ export async function GET() {
           amount:      Number(tx.amount),
         }));
 
+      const rule = recurringByGoal.get(a.id) ?? null;
+
       return {
         id:             a.id,
         name:           a.name,
@@ -56,6 +81,13 @@ export async function GET() {
         goalTarget:     a.goal_target ? Number(a.goal_target) : null,
         goalTargetDate: a.goal_target_date ?? null,
         transfers,
+        recurringContribution: rule ? {
+          recurringItemId: rule.id,
+          amount: Number(rule.amount),
+          cadence: rule.cadence,
+          anchorDate: rule.anchor_date,
+          secondDay: rule.second_day,
+        } : null,
       };
     });
 

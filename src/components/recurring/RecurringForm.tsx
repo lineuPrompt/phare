@@ -2,35 +2,45 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { RecurringAccount, RecurringCategory } from './types';
+import { RecurringAccount, RecurringCategory, RecurringGoalAccount } from './types';
 
 export default function RecurringForm({
   accounts,
   categories,
+  goalAccounts,
   onSaved,
 }: {
   accounts: RecurringAccount[];
   categories: RecurringCategory[];
+  goalAccounts: RecurringGoalAccount[];
   onSaved: () => void;
 }) {
   const t = useTranslations('recurring.form');
   const today = new Date().toISOString().slice(0, 10);
 
-  const [type, setType] = useState<'income' | 'expense'>('expense');
+  const [type, setType] = useState<'income' | 'expense' | 'transfer'>('expense');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
-  const [cadence, setCadence] = useState<'monthly' | 'biweekly' | 'semimonthly'>('monthly');
+  const [cadence, setCadence] = useState<'monthly' | 'biweekly' | 'semimonthly' | 'weekly'>('monthly');
   const [anchorDate, setAnchorDate] = useState(today);
   const [secondDay, setSecondDay] = useState('30');
   const [categoryId, setCategoryId] = useState('');
   const [accountId, setAccountId] = useState('');
+  const [destinationAccountId, setDestinationAccountId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const isTransfer = type === 'transfer';
+
   const submit = async () => {
     const resolvedAccountId = accountId || accounts[0]?.id;
-    if (!resolvedAccountId) {
+    if (!isTransfer && !resolvedAccountId) {
       setError('Add an account before saving a recurring item');
+      return;
+    }
+    const resolvedDestinationId = destinationAccountId || goalAccounts[0]?.id;
+    if (isTransfer && !resolvedDestinationId) {
+      setError('Add a goal before saving a recurring contribution');
       return;
     }
 
@@ -45,10 +55,11 @@ export default function RecurringForm({
           amount: parseFloat(amount),
           type,
           cadence,
-          anchorDate,
+          anchorDate: anchorDate || null,
           secondDay: cadence === 'semimonthly' ? parseInt(secondDay, 10) : null,
-          categoryId: categoryId || null,
-          accountId: resolvedAccountId,
+          categoryId: isTransfer ? null : (categoryId || null),
+          accountId: isTransfer ? null : resolvedAccountId,
+          destinationAccountId: isTransfer ? resolvedDestinationId : null,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
@@ -64,15 +75,16 @@ export default function RecurringForm({
   };
 
   const inputStyle = { border: '1.5px solid #D1D5DB', color: '#0F2044' };
-  const canSave = description.trim() && parseFloat(amount) > 0 && accounts.length > 0 && (type === 'income' || categoryId);
+  const canSave = description.trim() && parseFloat(amount) > 0
+    && (isTransfer ? goalAccounts.length > 0 : accounts.length > 0 && (type === 'income' || categoryId));
 
   return (
     <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>
       <h3 className="text-lg font-bold mb-4" style={{ color: '#0F2044' }}>{t('title')}</h3>
 
-      {/* Income / Expense toggle */}
+      {/* Income / Expense / Transfer toggle */}
       <div className="flex gap-2 mb-4">
-        {(['expense', 'income'] as const).map((tp) => (
+        {(['expense', 'income', 'transfer'] as const).map((tp) => (
           <button key={tp} onClick={() => setType(tp)}
             className="px-4 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all"
             style={{
@@ -98,19 +110,33 @@ export default function RecurringForm({
           <option value="monthly">{t('monthly')}</option>
           <option value="biweekly">{t('biweekly')}</option>
           <option value="semimonthly">{t('semimonthly')}</option>
+          {isTransfer && <option value="weekly">{t('weekly')}</option>}
         </select>
         <input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)}
           className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-        <select value={accountId || accounts[0]?.id || ''} onChange={(e) => setAccountId(e.target.value)}
-          className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>{account.name}</option>
-          ))}
-        </select>
-        {/* Category — optional for expenses; hidden for income */}
+        {isTransfer ? (
+          // Transfer: destination goal account replaces the regular account
+          // selector. Source is always chequing, resolved server-side —
+          // never picked here, same as a one-off transfer.
+          <select value={destinationAccountId || goalAccounts[0]?.id || ''} onChange={(e) => setDestinationAccountId(e.target.value)}
+            className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
+            {goalAccounts.length === 0 && <option value="">{t('noGoals')}</option>}
+            {goalAccounts.map((g) => (
+              <option key={g.id} value={g.id}>🎯 {g.name}</option>
+            ))}
+          </select>
+        ) : (
+          <select value={accountId || accounts[0]?.id || ''} onChange={(e) => setAccountId(e.target.value)}
+            className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>{account.name}</option>
+            ))}
+          </select>
+        )}
+        {/* Category — optional for expenses; hidden for income and transfer */}
         {type === 'expense' && categories.length > 0 && (
           <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}
             className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>

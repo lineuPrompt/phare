@@ -10,6 +10,8 @@ import {
   evaluateGoals,
   isDebtGoalName,
   computeDebtPayoff,
+  projectedContribution,
+  type ContributionRule,
 } from '../goalHelpers';
 
 describe('monthsBetween', () => {
@@ -237,5 +239,51 @@ describe('computeDebtPayoff', () => {
 
   it('is null when the target date has already passed — never shows a stale card', () => {
     expect(computeDebtPayoff({ name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 0, targetDate: '2026-01-01' }, today)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// projectedContribution — Build 4 Phase 2 (recurring transfers)
+// ---------------------------------------------------------------------------
+
+describe('projectedContribution', () => {
+  const monthlyRule: ContributionRule = { cadence: 'monthly', anchorDate: '2026-08-01' };
+
+  it('adds one occurrence per month for a monthly rule', () => {
+    // 2026-08-01 through 2026-10-01 inclusive → Aug, Sep, Oct = 3 occurrences
+    const total = projectedContribution(0, monthlyRule, 500, '2026-08-01', '2026-10-01');
+    expect(total).toBe(1500);
+  });
+
+  it('adds the current balance on top of projected occurrences', () => {
+    const total = projectedContribution(2000, monthlyRule, 500, '2026-08-01', '2026-10-01');
+    expect(total).toBe(3500); // 2000 + 3×500
+  });
+
+  it('bi-weekly rule: three-occurrence months emerge naturally, same engine as materialization', () => {
+    const biweekly: ContributionRule = { cadence: 'biweekly', anchorDate: '2026-01-02' };
+    // A little over a year: enough to accumulate more than 26 occurrences.
+    const total = projectedContribution(0, biweekly, 100, '2026-01-02', '2027-01-15');
+    expect(total).toBeGreaterThan(26 * 100); // more than exactly 2/month over the year
+  });
+
+  it('returns the balance unchanged when toDate is on/before fromDate', () => {
+    expect(projectedContribution(1000, monthlyRule, 500, '2026-08-01', '2026-08-01')).toBe(1000);
+    expect(projectedContribution(1000, monthlyRule, 500, '2026-08-01', '2026-07-01')).toBe(1000);
+  });
+
+  it('returns the balance unchanged when the rule has no anchor date yet (needs a date)', () => {
+    const needsDate: ContributionRule = { cadence: 'monthly', anchorDate: null };
+    expect(projectedContribution(1000, needsDate, 500, '2026-08-01', '2027-08-01')).toBe(1000);
+  });
+
+  it('returns the balance unchanged when rule is null', () => {
+    expect(projectedContribution(1000, null, 500, '2026-08-01', '2027-08-01')).toBe(1000);
+  });
+
+  it('never assumes a rate of return — result is exactly balance + occurrences×amount, nothing more', () => {
+    const total = projectedContribution(6500, monthlyRule, 500, '2026-08-01', '2027-12-01');
+    // Aug 2026 through Dec 2027 inclusive = 17 months = 17 occurrences
+    expect(total).toBe(6500 + 17 * 500);
   });
 });
