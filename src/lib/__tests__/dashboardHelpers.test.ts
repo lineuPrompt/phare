@@ -397,12 +397,17 @@ describe('computeGoalBalance', () => {
   it('a debt with future materialized payments still shows the true (unpaid) balance today', () => {
     // Opening -500, then twelve future $500 payments materialized ahead of
     // time by Phase 2 — none of them have happened yet.
-    const futurePayments: TxRow[] = Array.from({ length: 12 }, (_, i) => ({
-      type: 'transfer' as const,
-      account_id: SAVINGS_ID,
-      amount: 500,
-      date: `2026-${String(8 + i > 12 ? i - 4 : 8 + i).padStart(2, '0')}-01`,
-    }));
+    const futurePayments: TxRow[] = Array.from({ length: 12 }, (_, i) => {
+      const monthIndex0 = 7 + i; // August (index 7) onward, 0-based
+      const year = 2026 + Math.floor(monthIndex0 / 12);
+      const month = (monthIndex0 % 12) + 1;
+      return {
+        type: 'transfer' as const,
+        account_id: SAVINGS_ID,
+        amount: 500,
+        date: `${year}-${String(month).padStart(2, '0')}-01`,
+      };
+    });
     const txns: TxRow[] = [
       { type: 'transfer', account_id: SAVINGS_ID, amount: -500, date: PAST1 }, // opening balance
       ...futurePayments,

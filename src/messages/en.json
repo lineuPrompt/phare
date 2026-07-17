@@ -514,7 +514,9 @@
       "title": "Add entry",
       "moneyOut": "Money out",
       "moneyIn": "Money in",
+      "transfer": "Contribution",
       "description": "Description",
+      "descriptionOptional": "Description (optional)",
       "category": "Category...",
       "newCategory": "+ New category...",
       "newCategoryName": "Name, then Enter",
@@ -527,7 +529,10 @@
       "cancel": "Cancel",
       "saving": "Saving...",
       "save": "Add expense",
-      "saveIncome": "Add income"
+      "saveIncome": "Add income",
+      "saveTransfer": "Add contribution",
+      "noGoals": "Create a goal first",
+      "debtOption": "{name} (payment)"
     },
     "remainingCash": {
       "label": "Remaining cash — {month} closes at"

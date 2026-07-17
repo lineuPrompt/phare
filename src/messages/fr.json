@@ -514,7 +514,9 @@
       "title": "Ajouter une entrée",
       "moneyOut": "Sortie d'argent",
       "moneyIn": "Entrée d'argent",
+      "transfer": "Contribution",
       "description": "Description",
+      "descriptionOptional": "Description (optionnel)",
       "category": "Catégorie...",
       "newCategory": "+ Nouvelle catégorie...",
       "newCategoryName": "Nom, puis Entrée",
@@ -527,7 +529,10 @@
       "cancel": "Annuler",
       "saving": "Enregistrement...",
       "save": "Ajouter la dépense",
-      "saveIncome": "Ajouter le revenu"
+      "saveIncome": "Ajouter le revenu",
+      "saveTransfer": "Ajouter la contribution",
+      "noGoals": "Créez d'abord un objectif",
+      "debtOption": "{name} (paiement)"
     },
     "remainingCash": {
       "label": "Trésorerie restante — {month} ferme à"

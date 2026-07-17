@@ -125,7 +125,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
         // Month-scoped fetch (headline figures)
         { data: [{ amount: 5000, type: 'income', description: 'Salary', account_id: 'chq-1' }], error: null },
         // All-time fetch for goal-account balance
-        { data: [{ amount: 2000, type: 'transfer', account_id: 'goal-1' }], error: null },
+        { data: [{ amount: 2000, type: 'transfer', account_id: 'goal-1', date: '2026-01-01' }], error: null },
       ],
       accounts: [
         {
@@ -202,8 +202,8 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
         { data: [], error: null }, // month-scoped headline figures
         // All-time fetch for the debt account's balance: opened at -5000, one $200 payment.
         { data: [
-          { amount: -5000, type: 'transfer', account_id: 'debt-1' },
-          { amount: 200, type: 'transfer', account_id: 'debt-1' },
+          { amount: -5000, type: 'transfer', account_id: 'debt-1', date: '2026-05-01' },
+          { amount: 200, type: 'transfer', account_id: 'debt-1', date: '2026-06-01' },
         ], error: null },
       ],
       accounts: [
