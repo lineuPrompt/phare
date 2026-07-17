@@ -11,6 +11,7 @@ type Member = {
   name: string;
   user_id: string | null;
   users?: { email: string; role: string } | null;
+  pending?: boolean;
 };
 
 export default function HouseholdPage() {
@@ -35,6 +36,9 @@ export default function HouseholdPage() {
   // member (e.g. two people named "Julia" added via onboarding discovery) —
   // never guessed, the owner picks attach-to-X or create-as-new explicitly.
   const [disambiguation, setDisambiguation] = useState<{ candidates: { id: string; name: string }[] } | null>(null);
+
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<{ id: string; message: string } | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -89,6 +93,34 @@ export default function HouseholdPage() {
     }
   };
 
+  const handleResend = async (id: string) => {
+    setResendingId(id);
+    setResendError(null);
+    try {
+      const res = await fetch(`/api/household/members/${id}/resend`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        const message = typeof data.retryAfterSeconds === 'number'
+          ? t('resendRateLimited', { seconds: data.retryAfterSeconds })
+          : (data.error ?? t('resendFailed'));
+        setResendError({ id, message });
+        return;
+      }
+
+      setDisambiguation(null);
+      setAttachedTo(null);
+      setAddedEmail(`resent:${data.email}`);
+
+      fetch('/api/household/members')
+        .then((r) => r.json())
+        .then((d) => setMembers(d.members ?? []));
+    } catch (err) {
+      setResendError({ id, message: err instanceof Error ? err.message : t('resendFailed') });
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   if (loading) {
     return (
       <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
@@ -139,29 +171,57 @@ export default function HouseholdPage() {
                     const isMe = m.user_id === myUserId;
                     const memberRole = m.users?.role ?? 'member';
                     return (
-                      <li key={m.id} className="py-3 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium" style={{ color: '#0F2044' }}>
-                            {m.name}
-                            {isMe && (
-                              <span className="ml-2 text-xs" style={{ color: '#9CA3AF' }}>
-                                ({t('you')})
+                      <li key={m.id} className="py-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium" style={{ color: '#0F2044' }}>
+                              {m.name}
+                              {isMe && (
+                                <span className="ml-2 text-xs" style={{ color: '#9CA3AF' }}>
+                                  ({t('you')})
+                                </span>
+                              )}
+                            </p>
+                            {m.users?.email && (
+                              <p className="text-xs" style={{ color: '#6B7280' }}>{m.users.email}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {m.pending && (
+                              <span
+                                className="text-xs font-medium px-2 py-0.5 rounded-full"
+                                style={{ background: '#FEF3C7', color: '#92400E' }}
+                              >
+                                {t('pendingBadge')}
                               </span>
                             )}
-                          </p>
-                          {m.users?.email && (
-                            <p className="text-xs" style={{ color: '#6B7280' }}>{m.users.email}</p>
-                          )}
+                            <span
+                              className="text-xs font-medium px-2 py-0.5 rounded-full"
+                              style={{
+                                background: memberRole === 'owner' ? '#EEF2FF' : '#F0FDFD',
+                                color:      memberRole === 'owner' ? '#4F46E5' : '#0F766E',
+                              }}
+                            >
+                              {memberRole === 'owner' ? t('ownerBadge') : t('memberBadge')}
+                            </span>
+                          </div>
                         </div>
-                        <span
-                          className="text-xs font-medium px-2 py-0.5 rounded-full"
-                          style={{
-                            background: memberRole === 'owner' ? '#EEF2FF' : '#F0FDFD',
-                            color:      memberRole === 'owner' ? '#4F46E5' : '#0F766E',
-                          }}
-                        >
-                          {memberRole === 'owner' ? t('ownerBadge') : t('memberBadge')}
-                        </span>
+
+                        {m.pending && (
+                          <div className="mt-2">
+                            <button
+                              onClick={() => handleResend(m.id)}
+                              disabled={resendingId === m.id}
+                              className="text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
+                              style={{ border: '1.5px solid #D1D5DB', color: '#0F2044', background: 'white' }}
+                            >
+                              {resendingId === m.id ? t('resending') : t('resendInvite')}
+                            </button>
+                            {resendError?.id === m.id && (
+                              <p className="text-xs mt-1" style={{ color: '#DC2626' }}>{resendError.message}</p>
+                            )}
+                          </div>
+                        )}
                       </li>
                     );
                   })}

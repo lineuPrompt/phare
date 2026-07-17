@@ -763,6 +763,11 @@
     "you": "vous",
     "ownerBadge": "Propriétaire",
     "memberBadge": "Membre",
+    "pendingBadge": "En attente",
+    "resendInvite": "Renvoyer l'invitation",
+    "resending": "Envoi en cours...",
+    "resendFailed": "Impossible de renvoyer l'invitation.",
+    "resendRateLimited": "Veuillez patienter {seconds} s avant de renvoyer.",
     "notOwner": "Seul le propriétaire du foyer peut gérer les membres.",
     "loading": "Chargement..."
   }

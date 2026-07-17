@@ -763,6 +763,11 @@
     "you": "you",
     "ownerBadge": "Owner",
     "memberBadge": "Member",
+    "pendingBadge": "Pending",
+    "resendInvite": "Resend invite",
+    "resending": "Resending...",
+    "resendFailed": "Couldn't resend the invite.",
+    "resendRateLimited": "Please wait {seconds}s before resending.",
     "notOwner": "Only the household owner can manage members.",
     "loading": "Loading..."
   }

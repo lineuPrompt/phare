@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { findMemberNameCandidates } from '@/lib/incomeHelpers';
+import { isPendingMember } from '@/lib/memberProvisioningHelpers';
 
 // ---------------------------------------------------------------------------
 // Auth guard — exported for unit testing
@@ -51,6 +52,22 @@ export async function GET() {
     if (error) {
       console.error('Members GET error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Pending status comes from the auth user's last_sign_in_at, which only
+    // the service-role client can read — computed here (owner-only) so a
+    // member-role caller never triggers Admin API calls for a page they
+    // can't act on anyway (the household page is owner-only client-side).
+    if (caller.role === 'owner' && members && members.length > 0) {
+      const admin = createAdminClient();
+      const withPending = await Promise.all(
+        members.map(async (m) => {
+          if (!m.user_id) return { ...m, pending: false };
+          const { data: authUser } = await admin.auth.admin.getUserById(m.user_id);
+          return { ...m, pending: isPendingMember(m.user_id, authUser?.user?.last_sign_in_at ?? null) };
+        })
+      );
+      return NextResponse.json({ members: withPending });
     }
 
     return NextResponse.json({ members: members ?? [] });
