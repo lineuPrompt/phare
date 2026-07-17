@@ -139,19 +139,23 @@ export async function POST(request: Request) {
       (a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type) && a.goal_target != null
     );
     const goalIds = goalAccountList.map((a) => a.id);
-    let goalTxData: { amount: number | string; type: string; account_id: string | null }[] = [];
+    let goalTxData: { amount: number | string; type: string; account_id: string | null; date?: string }[] = [];
     if (goalIds.length > 0) {
       const { data } = await supabase
         .from('transactions')
-        .select('amount, type, account_id')
+        .select('amount, type, account_id, date')
         .eq('household_id', householdId)
         .in('account_id', goalIds);
       goalTxData = data ?? [];
     }
+    const today = formatLocalDate(new Date());
     const rawGoals = goalAccountList.map((a) => ({
       name: a.name,
       targetAmount: Number(a.goal_target),
-      savedSoFar: computeGoalBalance(goalTxData, a.id),
+      // Today-cutoff balance: recurring transfers materialize future-dated
+      // rows ahead of time (Phase 2) — a goal/debt's real progress must
+      // never count a payment that hasn't happened yet.
+      savedSoFar: computeGoalBalance(goalTxData, a.id, today),
       targetDate: a.goal_target_date ?? null,
       isDebt: a.type === 'debt',
     }));
@@ -163,7 +167,6 @@ export async function POST(request: Request) {
     const explicitDebt = rawGoals.find((g) => g.isDebt);
     const debtGoalLine = explicitDebt ?? rawGoals.find((g) => isDebtGoalName(g.name));
     const nonDebtGoals = rawGoals.filter((g) => g !== debtGoalLine);
-    const today = formatLocalDate(new Date());
     const computedDebtPayoff: DebtPayoffResult | null = computeDebtPayoff(debtGoalLine, today);
     const computedGoals: GoalResult[] = evaluateGoals(nonDebtGoals, netCashFlow, today);
 

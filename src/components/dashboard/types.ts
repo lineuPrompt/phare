@@ -43,6 +43,10 @@ export type GoalAccount = {
   goalTarget: number | null;
   goalTargetDate: string | null;
   transfers: GoalTransfer[];
+  // Materialized transfer rows dated after today (Phase 2 recurring
+  // transfers materialize up to 12 months ahead) — real future entries,
+  // shown separately from history, never counted in `balance`.
+  upcomingTransfers: GoalTransfer[];
   recurringContribution: RecurringContribution | null;
   debtPayoff: DebtPayoff | null;
 };

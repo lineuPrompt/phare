@@ -210,7 +210,7 @@ export async function POST(request: Request) {
         if (rpcErr) {
           console.error('Recurring transfer materialization RPC error:', rpcErr);
           return NextResponse.json(
-            { error: 'Item created but materialization failed partway through', created: true, id: item.id, materialized },
+            { error: rpcErr.message || 'Item created but materialization failed partway through', created: true, id: item.id, materialized },
             { status: 500 }
           );
         }

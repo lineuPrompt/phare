@@ -459,10 +459,10 @@ describe('transfer edit — amount change reflects in savings and reconciliation
     // The goal-side row uses computeGoalBalance, not computeMonthTotals
     // Verify that after editing $200 → $300, computeGoalBalance returns 300
     const txAfter: TxRow[] = [
-      { type: 'transfer', account_id: GOAL_ID, amount: 300 }, // edited row
+      { type: 'transfer', account_id: GOAL_ID, amount: 300, date: '2026-07-01' }, // edited row
     ];
-    // contract: goal balance = sum of transfer inflows for that account
-    const balance = computeGoalBalance(txAfter, GOAL_ID);
+    // contract: goal balance = sum of transfer inflows dated on/before today for that account
+    const balance = computeGoalBalance(txAfter, GOAL_ID, '2026-07-10');
     expect(balance).toBe(300);
   });
 });

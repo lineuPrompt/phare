@@ -78,7 +78,11 @@ export async function POST(request: Request) {
 
     if (rpcErr) {
       console.error('create_transfer RPC error:', rpcErr);
-      return NextResponse.json({ error: 'Failed to create transfer' }, { status: 500 });
+      // Honest-error contract: surface the real server reason, not a
+      // generic message that would have hidden the create_transfer
+      // overload-ambiguity bug (fixed in 20260719000000) from ever being
+      // diagnosed from the client side.
+      return NextResponse.json({ error: rpcErr.message || 'Failed to create transfer' }, { status: 500 });
     }
 
     return NextResponse.json({

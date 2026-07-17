@@ -72,6 +72,7 @@ export default function TimelinePage() {
   const [showReAnchor, setShowReAnchor] = useState(false);
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  const [goalAccounts, setGoalAccounts] = useState<{ id: string; name: string; isDebt: boolean }[]>([]);
 
   const todayRef = useRef<HTMLDivElement | null>(null);
 
@@ -92,6 +93,13 @@ export default function TimelinePage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { categories: { id: string; name: string }[] } | null) => {
         if (d) setCategories(d.categories.map((c) => ({ ...c, type: 'expense' })));
+      })
+      .catch(() => {});
+
+    fetch('/api/goals')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { goals: { id: string; name: string; isDebt: boolean }[] } | null) => {
+        if (d) setGoalAccounts(d.goals.map((g) => ({ id: g.id, name: g.name, isDebt: g.isDebt })));
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -207,6 +215,7 @@ export default function TimelinePage() {
           <TimelineEntryForm
             accountId={chequingId}
             categories={categories}
+            goalAccounts={goalAccounts}
             onSaved={onEntrySaved}
             onCancel={() => setShowAddEntry(false)}
           />

@@ -588,6 +588,8 @@
     "viewAll": "Voir tous les objectifs",
     "history": "Historique des cotisations",
     "noHistory": "Aucune cotisation pour l'instant.",
+    "upcoming": "À venir",
+    "next12Months": "12 prochains mois affichés",
     "editContribution": "Modifier",
     "deleteContribution": "Supprimer",
     "confirmDeleteTitle": "Supprimer cette cotisation?",

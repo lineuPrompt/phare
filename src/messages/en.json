@@ -588,6 +588,8 @@
     "viewAll": "View all goals",
     "history": "Contribution history",
     "noHistory": "No contributions yet.",
+    "upcoming": "Upcoming",
+    "next12Months": "next 12 months shown",
     "editContribution": "Edit",
     "deleteContribution": "Delete",
     "confirmDeleteTitle": "Delete this contribution?",

@@ -161,21 +161,22 @@ export async function GET(request: Request) {
     );
     const goalIds = goalAccountList.map((a) => a.id);
 
-    let goalTxData: { amount: number | string; type: string; account_id: string | null }[] = [];
+    let goalTxData: { amount: number | string; type: string; account_id: string | null; date?: string }[] = [];
     if (goalIds.length > 0) {
       const { data } = await supabase
         .from('transactions')
-        .select('amount, type, account_id')
+        .select('amount, type, account_id, date')
         .eq('household_id', householdId)
         .in('account_id', goalIds);
       goalTxData = data ?? [];
     }
 
+    const todayForGoalBalance = new Date().toISOString().slice(0, 10);
     const goalAccounts = goalAccountList.map((a) => ({
       id:             a.id,
       name:           a.name,
       type:           a.type,
-      balance:        computeGoalBalance(goalTxData, a.id),
+      balance:        computeGoalBalance(goalTxData, a.id, todayForGoalBalance),
       goalTarget:     a.goal_target ? Number(a.goal_target) : null,
       goalTargetDate: a.goal_target_date ?? null,
     }));

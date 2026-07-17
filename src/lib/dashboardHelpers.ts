@@ -52,6 +52,11 @@ export type TxRow = {
   amount: number | string;
   type: string;
   account_id: string | null;
+  // Optional here — computeMonthTotals doesn't need it (callers already
+  // date-scope their query). computeGoalBalance below requires it at
+  // runtime for its today cutoff; a row with no date is excluded, never
+  // assumed to be in the past.
+  date?: string;
 };
 
 export type AccountRow = {
@@ -103,20 +108,33 @@ export function computeMonthTotals(
 }
 
 /**
- * Derives a goal account's current balance from its transaction ledger.
- * Balance = sum of all transfer inflows into this account.
- * No static current_balance column is used or trusted.
+ * Derives a goal account's CURRENT balance from its transaction ledger.
+ * Balance = sum of all transfer inflows into this account DATED ON OR
+ * BEFORE `today`. No static current_balance column is used or trusted.
  *
- * CONTRACT: caller MUST pass the account's FULL transaction history across ALL
- * time — never a month-scoped slice. A partial slice underestimates the balance
- * by omitting older deposits.
+ * CONTRACT: caller MUST pass the account's FULL transaction history across
+ * ALL time — never a month-scoped slice. A partial slice underestimates the
+ * balance by omitting older deposits.
+ *
+ * TODAY CUTOFF — Phase 3 round-2 fix (2026-07-17)
+ * --------------------------------------------------
+ * Recurring transfers materialize 12 months of REAL, future-dated
+ * transaction rows (Phase 2) the moment a rule is created — that's correct
+ * for the timeline, which shows real future entries. But it means "full
+ * history" now legitimately includes rows that haven't happened yet, and a
+ * "current balance" must not count them: a debt with an opening -$500 and
+ * twelve materialized future $500 payments would otherwise show $5,500
+ * "currently owed" and read as paid off, months before a single payment
+ * actually lands. A row with no date at all is excluded, never assumed to
+ * be in the past.
  */
 export function computeGoalBalance(
   transactions: TxRow[],
-  goalAccountId: string
+  goalAccountId: string,
+  today: string
 ): number {
   const total = transactions
-    .filter((tx) => tx.account_id === goalAccountId && tx.type === 'transfer')
+    .filter((tx) => tx.account_id === goalAccountId && tx.type === 'transfer' && tx.date !== undefined && tx.date <= today)
     .reduce((sum, tx) => sum + Number(tx.amount), 0);
   return Math.round(total * 100) / 100;
 }

@@ -255,74 +255,90 @@ describe('computeMonthTotals — full reconciliation', () => {
 
 // ---------------------------------------------------------------------------
 // computeGoalBalance
+//
+// Phase 3 round-2 fix (2026-07-17): recurring transfers materialize 12
+// months of REAL future-dated rows (Phase 2). Summing all of them
+// unconditionally overstated a goal's/debt's CURRENT balance by every
+// not-yet-happened payment — a debt showing "paid off" months before a
+// single future payment actually landed. computeGoalBalance now takes a
+// required `today` cutoff and only counts transactions dated on or before
+// it. Every fixture below gets an explicit `date`; TODAY is fixed so past
+// vs. future is unambiguous across the whole file.
 // ---------------------------------------------------------------------------
+
+const TODAY = '2026-07-10';
+const PAST1 = '2026-05-01';
+const PAST2 = '2026-06-01';
+const PAST3 = '2026-07-01';
+const FUTURE1 = '2026-08-01';
+const FUTURE2 = '2026-09-01';
 
 describe('computeGoalBalance', () => {
   it('returns 0 for an empty transaction list', () => {
-    expect(computeGoalBalance([], SAVINGS_ID)).toBe(0);
+    expect(computeGoalBalance([], SAVINGS_ID, TODAY)).toBe(0);
   });
 
   it('returns 0 when no transactions match the goal account', () => {
     const txns: TxRow[] = [
-      { type: 'transfer', account_id: CHEQUING_ID, amount: 500 },
+      { type: 'transfer', account_id: CHEQUING_ID, amount: 500, date: PAST1 },
     ];
-    expect(computeGoalBalance(txns, SAVINGS_ID)).toBe(0);
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(0);
   });
 
   it('sums transfer inflows for the goal account', () => {
     const txns: TxRow[] = [
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 300 },
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 200 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 300, date: PAST1 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 200, date: PAST2 },
     ];
-    expect(computeGoalBalance(txns, SAVINGS_ID)).toBe(500);
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(500);
   });
 
   it('only counts type=transfer rows (ignores other types)', () => {
     const txns: TxRow[] = [
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 400 },
-      { type: 'income',   account_id: SAVINGS_ID, amount: 999 }, // should not happen, but guard
-      { type: 'expense',  account_id: SAVINGS_ID, amount: 50  }, // should not happen, but guard
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 400, date: PAST1 },
+      { type: 'income',   account_id: SAVINGS_ID, amount: 999, date: PAST1 }, // should not happen, but guard
+      { type: 'expense',  account_id: SAVINGS_ID, amount: 50,  date: PAST1 }, // should not happen, but guard
     ];
-    expect(computeGoalBalance(txns, SAVINGS_ID)).toBe(400);
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(400);
   });
 
   it('does not mix balances across different goal accounts', () => {
     const txns: TxRow[] = [
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 300 },
-      { type: 'transfer', account_id: TFSA_ID,    amount: 500 },
-      { type: 'transfer', account_id: RRSP_ID,    amount: 200 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 300, date: PAST1 },
+      { type: 'transfer', account_id: TFSA_ID,    amount: 500, date: PAST1 },
+      { type: 'transfer', account_id: RRSP_ID,    amount: 200, date: PAST1 },
     ];
-    expect(computeGoalBalance(txns, SAVINGS_ID)).toBe(300);
-    expect(computeGoalBalance(txns, TFSA_ID)).toBe(500);
-    expect(computeGoalBalance(txns, RRSP_ID)).toBe(200);
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(300);
+    expect(computeGoalBalance(txns, TFSA_ID, TODAY)).toBe(500);
+    expect(computeGoalBalance(txns, RRSP_ID, TODAY)).toBe(200);
   });
 
   it('rounds to two decimal places', () => {
     const txns: TxRow[] = [
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 0.1 },
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 0.2 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 0.1, date: PAST1 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 0.2, date: PAST1 },
     ];
-    expect(computeGoalBalance(txns, SAVINGS_ID)).toBe(0.30);
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(0.30);
   });
 
   it('handles string amounts (Supabase numeric type)', () => {
     const txns: TxRow[] = [
-      { type: 'transfer', account_id: SAVINGS_ID, amount: '750.50' as unknown as number },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: '750.50' as unknown as number, date: PAST1 },
     ];
-    expect(computeGoalBalance(txns, SAVINGS_ID)).toBe(750.50);
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(750.50);
   });
 
   it('after a transfer pair: chequing balance down, goal balance up, net worth unchanged', () => {
     // Before transfer: income 5000, expenses 1000
     // Transfer 500 chequing → savings
     const txns: TxRow[] = [
-      { type: 'income',   account_id: CHEQUING_ID, amount: 5000 },
-      { type: 'expense',  account_id: CHEQUING_ID, amount: 1000 },
-      { type: 'transfer', account_id: CHEQUING_ID, amount: 500  }, // chequing outflow
-      { type: 'transfer', account_id: SAVINGS_ID,  amount: 500  }, // goal inflow
+      { type: 'income',   account_id: CHEQUING_ID, amount: 5000, date: PAST1 },
+      { type: 'expense',  account_id: CHEQUING_ID, amount: 1000, date: PAST1 },
+      { type: 'transfer', account_id: CHEQUING_ID, amount: 500,  date: PAST1 }, // chequing outflow
+      { type: 'transfer', account_id: SAVINGS_ID,  amount: 500,  date: PAST1 }, // goal inflow
     ];
     const buckets = computeMonthTotals(txns, accounts);
-    const goalBalance = computeGoalBalance(txns, SAVINGS_ID);
+    const goalBalance = computeGoalBalance(txns, SAVINGS_ID, TODAY);
 
     // Chequing after transfer: income - expenses - savings = 5000 - 1000 - 500 = 3500
     expect(buckets.netCashFlow).toBe(3500);
@@ -335,12 +351,12 @@ describe('computeGoalBalance', () => {
   it('transfer edit: updated amount reflected in both savings bucket and goal balance', () => {
     // Simulates the state AFTER an edit: old pair gone, new pair with different amount
     const afterEdit: TxRow[] = [
-      { type: 'income',   account_id: CHEQUING_ID, amount: 5000 },
-      { type: 'transfer', account_id: CHEQUING_ID, amount: 750  }, // edited amount
-      { type: 'transfer', account_id: SAVINGS_ID,  amount: 750  },
+      { type: 'income',   account_id: CHEQUING_ID, amount: 5000, date: PAST1 },
+      { type: 'transfer', account_id: CHEQUING_ID, amount: 750,  date: PAST1 }, // edited amount
+      { type: 'transfer', account_id: SAVINGS_ID,  amount: 750,  date: PAST1 },
     ];
     const buckets = computeMonthTotals(afterEdit, accounts);
-    const goalBalance = computeGoalBalance(afterEdit, SAVINGS_ID);
+    const goalBalance = computeGoalBalance(afterEdit, SAVINGS_ID, TODAY);
     expect(buckets.totalSavings).toBe(750);
     expect(goalBalance).toBe(750);
     expect(buckets.netCashFlow + goalBalance).toBe(buckets.totalIncome - buckets.totalExpenses);
@@ -349,20 +365,66 @@ describe('computeGoalBalance', () => {
   it('transfer deletion: both sides removed, balances revert correctly', () => {
     // State AFTER deleting the transfer pair: back to no transfer
     const afterDelete: TxRow[] = [
-      { type: 'income',   account_id: CHEQUING_ID, amount: 5000 },
-      { type: 'expense',  account_id: CHEQUING_ID, amount: 1000 },
+      { type: 'income',   account_id: CHEQUING_ID, amount: 5000, date: PAST1 },
+      { type: 'expense',  account_id: CHEQUING_ID, amount: 1000, date: PAST1 },
     ];
     const buckets = computeMonthTotals(afterDelete, accounts);
-    const goalBalance = computeGoalBalance(afterDelete, SAVINGS_ID);
+    const goalBalance = computeGoalBalance(afterDelete, SAVINGS_ID, TODAY);
     expect(buckets.totalSavings).toBe(0);
     expect(goalBalance).toBe(0);
     expect(buckets.netCashFlow).toBe(4000); // reverted to pre-transfer net
+  });
+
+  // -------------------------------------------------------------------
+  // Future-dated cutoff — the actual Phase 3 round-2 bug.
+  // -------------------------------------------------------------------
+  it('excludes transactions dated after today — a future materialized payment is not yet "in" the balance', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 200, date: PAST1 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 300, date: FUTURE1 }, // not yet happened
+    ];
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(200);
+  });
+
+  it('includes a transaction dated exactly today (inclusive cutoff)', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 200, date: PAST1 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 300, date: TODAY },
+    ];
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(500);
+  });
+
+  it('a debt with future materialized payments still shows the true (unpaid) balance today', () => {
+    // Opening -500, then twelve future $500 payments materialized ahead of
+    // time by Phase 2 — none of them have happened yet.
+    const futurePayments: TxRow[] = Array.from({ length: 12 }, (_, i) => ({
+      type: 'transfer' as const,
+      account_id: SAVINGS_ID,
+      amount: 500,
+      date: `2026-${String(8 + i > 12 ? i - 4 : 8 + i).padStart(2, '0')}-01`,
+    }));
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: SAVINGS_ID, amount: -500, date: PAST1 }, // opening balance
+      ...futurePayments,
+    ];
+    // Still -500 today — none of the future payments count yet.
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(-500);
+  });
+
+  it('the day a materialized payment\'s date arrives, it counts', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: SAVINGS_ID, amount: -500, date: PAST1 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 200,  date: PAST3 }, // already arrived
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 200,  date: FUTURE1 }, // not yet
+    ];
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(-300); // -500 + 200
   });
 });
 
 // ---------------------------------------------------------------------------
 // computeGoalBalance — full-history contract
-// The dashboard endpoint must pass ALL-TIME transactions, not a month slice.
+// The dashboard endpoint must pass ALL-TIME transactions (past AND future —
+// the cutoff itself does the future-exclusion), not a month slice.
 // These tests verify the accumulation behavior that enforces that contract.
 // ---------------------------------------------------------------------------
 
@@ -371,23 +433,23 @@ describe('computeGoalBalance — full history contract', () => {
     // Three deposits that would span different calendar months in production.
     // The function sees them all because the caller passes the full history.
     const allTime: TxRow[] = [
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 200 }, // month 1
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 300 }, // month 2
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 150 }, // month 3
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 200, date: PAST1 }, // month 1
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 300, date: PAST2 }, // month 2
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 150, date: PAST3 }, // month 3
     ];
-    expect(computeGoalBalance(allTime, SAVINGS_ID)).toBe(650);
+    expect(computeGoalBalance(allTime, SAVINGS_ID, TODAY)).toBe(650);
   });
 
   it('a month-scoped slice underestimates the balance vs full history', () => {
     const fullHistory: TxRow[] = [
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 500 }, // prior month
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 200 }, // current month
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 500, date: PAST1 }, // prior month
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 200, date: PAST3 }, // current month
     ];
     const currentMonthOnly: TxRow[] = [
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 200 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 200, date: PAST3 },
     ];
-    const fullBalance  = computeGoalBalance(fullHistory, SAVINGS_ID);
-    const sliceBalance = computeGoalBalance(currentMonthOnly, SAVINGS_ID);
+    const fullBalance  = computeGoalBalance(fullHistory, SAVINGS_ID, TODAY);
+    const sliceBalance = computeGoalBalance(currentMonthOnly, SAVINGS_ID, TODAY);
     expect(fullBalance).toBe(700);
     expect(sliceBalance).toBe(200);
     // The slice underestimates by exactly the prior-month deposit.
@@ -396,15 +458,24 @@ describe('computeGoalBalance — full history contract', () => {
 
   it('balance across all three goal types accumulates independently over time', () => {
     const allTime: TxRow[] = [
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 100 },
-      { type: 'transfer', account_id: TFSA_ID,    amount: 200 },
-      { type: 'transfer', account_id: RRSP_ID,    amount: 300 },
-      { type: 'transfer', account_id: SAVINGS_ID, amount: 50  }, // second deposit to savings
-      { type: 'transfer', account_id: TFSA_ID,    amount: 75  }, // second deposit to TFSA
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 100, date: PAST1 },
+      { type: 'transfer', account_id: TFSA_ID,    amount: 200, date: PAST1 },
+      { type: 'transfer', account_id: RRSP_ID,    amount: 300, date: PAST1 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 50,  date: PAST2 }, // second deposit to savings
+      { type: 'transfer', account_id: TFSA_ID,    amount: 75,  date: PAST2 }, // second deposit to TFSA
     ];
-    expect(computeGoalBalance(allTime, SAVINGS_ID)).toBe(150);
-    expect(computeGoalBalance(allTime, TFSA_ID)).toBe(275);
-    expect(computeGoalBalance(allTime, RRSP_ID)).toBe(300);
+    expect(computeGoalBalance(allTime, SAVINGS_ID, TODAY)).toBe(150);
+    expect(computeGoalBalance(allTime, TFSA_ID, TODAY)).toBe(275);
+    expect(computeGoalBalance(allTime, RRSP_ID, TODAY)).toBe(300);
+  });
+
+  it('a goal with future contributions excludes them from today\'s progress', () => {
+    const withFuture: TxRow[] = [
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 1000, date: PAST1 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 500,  date: FUTURE1 },
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 500,  date: FUTURE2 },
+    ];
+    expect(computeGoalBalance(withFuture, SAVINGS_ID, TODAY)).toBe(1000);
   });
 });
 

@@ -203,7 +203,7 @@ export async function PATCH(
         });
         if (rpcErr) {
           console.error('Recurring transfer re-materialization RPC error:', rpcErr);
-          return NextResponse.json({ error: 'Rule updated but re-materialization failed partway through', updated: true, materialized }, { status: 500 });
+          return NextResponse.json({ error: rpcErr.message || 'Rule updated but re-materialization failed partway through', updated: true, materialized }, { status: 500 });
         }
         materialized += 1;
       }

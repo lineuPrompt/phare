@@ -422,8 +422,8 @@ export default function GoalsPage() {
                                 <span className="flex-1 min-w-0 truncate text-sm" style={{ color: '#0F2044' }}>
                                   {tr.description ?? '—'}
                                 </span>
-                                <span className="text-sm font-medium shrink-0" style={{ color: '#2ABFBF' }}>
-                                  +{formatCurrency(tr.amount, locale)}
+                                <span className="text-sm font-medium shrink-0" style={{ color: tr.amount < 0 ? '#DC2626' : '#2ABFBF' }}>
+                                  {tr.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tr.amount), locale)}
                                 </span>
                                 <div className="flex gap-1 shrink-0">
                                   <button
@@ -442,6 +442,37 @@ export default function GoalsPage() {
                           })}
                         </div>
                       </div>
+
+                      {/* Upcoming — materialized future rows (Phase 2 recurring
+                          transfers), shown separately, never counted in the
+                          balance above. Next 12 months only (the materialization
+                          window), not the whole life of the plan. */}
+                      {goal.upcomingTransfers.length > 0 && (
+                        <div className="pt-3 border-t" style={{ borderColor: '#F3F4F6' }}>
+                          <h4 className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: '#9CA3AF' }}>
+                            {t('upcoming')} · {t('next12Months')}
+                          </h4>
+                          <div className="space-y-1">
+                            {goal.upcomingTransfers.map((tr) => (
+                              <div
+                                key={tr.id}
+                                className="flex items-center gap-3 py-1.5 px-2"
+                                style={{ borderBottom: '1px solid #F9FAFB' }}
+                              >
+                                <span className="text-sm w-14 shrink-0" style={{ color: '#9CA3AF' }}>
+                                  {fmtDate(tr.date)}
+                                </span>
+                                <span className="flex-1 min-w-0 truncate text-sm" style={{ color: '#9CA3AF' }}>
+                                  {tr.description ?? '—'}
+                                </span>
+                                <span className="text-sm font-medium shrink-0" style={{ color: '#9CA3AF' }}>
+                                  {tr.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tr.amount), locale)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
