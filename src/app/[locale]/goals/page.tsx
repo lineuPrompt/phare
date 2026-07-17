@@ -453,23 +453,84 @@ export default function GoalsPage() {
                             {t('upcoming')} · {t('next12Months')}
                           </h4>
                           <div className="space-y-1">
-                            {goal.upcomingTransfers.map((tr) => (
-                              <div
-                                key={tr.id}
-                                className="flex items-center gap-3 py-1.5 px-2"
-                                style={{ borderBottom: '1px solid #F9FAFB' }}
-                              >
-                                <span className="text-sm w-14 shrink-0" style={{ color: '#9CA3AF' }}>
-                                  {fmtDate(tr.date)}
-                                </span>
-                                <span className="flex-1 min-w-0 truncate text-sm" style={{ color: '#9CA3AF' }}>
-                                  {tr.description ?? '—'}
-                                </span>
-                                <span className="text-sm font-medium shrink-0" style={{ color: '#9CA3AF' }}>
-                                  {tr.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tr.amount), locale)}
-                                </span>
-                              </div>
-                            ))}
+                            {goal.upcomingTransfers.map((tr) => {
+                              const isEditingThis = editing?.id === tr.id;
+
+                              if (isEditingThis && editing) {
+                                return (
+                                  <div
+                                    key={tr.id}
+                                    className="flex flex-wrap items-center gap-2 py-2 px-2 rounded-lg"
+                                    style={{ background: '#F0FDFD' }}
+                                  >
+                                    <input
+                                      type="date"
+                                      value={editing.date}
+                                      onChange={(e) => setEditing({ ...editing, date: e.target.value })}
+                                      className="px-2 py-1.5 rounded text-sm outline-none"
+                                      style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
+                                    />
+                                    <input
+                                      type="text"
+                                      value={editing.description}
+                                      onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+                                      placeholder={t('transfer.descriptionPlaceholder')}
+                                      className="flex-1 min-w-[100px] px-2 py-1.5 rounded text-sm outline-none"
+                                      style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
+                                    />
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={editing.amount}
+                                      onChange={(e) => setEditing({ ...editing, amount: e.target.value })}
+                                      className="w-24 px-2 py-1.5 rounded text-sm outline-none"
+                                      style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
+                                    />
+                                    <button
+                                      onClick={saveEdit}
+                                      disabled={saving || !editing.amount || parseFloat(editing.amount) <= 0}
+                                      className="px-3 py-1.5 rounded text-sm font-medium text-white cursor-pointer disabled:opacity-40"
+                                      style={{ background: '#2ABFBF' }}
+                                    >✓</button>
+                                    <button
+                                      onClick={() => setEditing(null)}
+                                      className="px-3 py-1.5 rounded text-sm cursor-pointer"
+                                      style={{ color: '#6B7280' }}
+                                    >✕</button>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div
+                                  key={tr.id}
+                                  className="flex items-center gap-3 py-1.5 px-2 group"
+                                  style={{ borderBottom: '1px solid #F9FAFB' }}
+                                >
+                                  <span className="text-sm w-14 shrink-0" style={{ color: '#9CA3AF' }}>
+                                    {fmtDate(tr.date)}
+                                  </span>
+                                  <span className="flex-1 min-w-0 truncate text-sm" style={{ color: '#9CA3AF' }}>
+                                    {tr.description ?? '—'}
+                                  </span>
+                                  <span className="text-sm font-medium shrink-0" style={{ color: '#9CA3AF' }}>
+                                    {tr.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tr.amount), locale)}
+                                  </span>
+                                  <div className="flex gap-1 shrink-0">
+                                    <button
+                                      onClick={() => startEdit(tr)}
+                                      className="px-2 py-1 rounded text-xs cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                                      style={{ color: '#2ABFBF' }}
+                                    >{t('editContribution')}</button>
+                                    <button
+                                      onClick={() => setConfirmDelete(tr)}
+                                      className="px-2 py-1 rounded text-xs cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                                      style={{ color: '#DC2626' }}
+                                    >{t('deleteContribution')}</button>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}

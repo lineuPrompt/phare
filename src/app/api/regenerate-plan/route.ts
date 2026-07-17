@@ -41,6 +41,7 @@ import { anthropic } from '@/lib/anthropic';
 import { assembleCalculatedBudget, dedupeSinkingFunds } from '@/lib/planHelpers';
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff, GoalResult, DebtPayoffResult } from '@/lib/goalHelpers';
+import { detectWindfalls } from '@/lib/reviewContextHelpers';
 import { formatLocalDate } from '@/lib/dateHelpers';
 
 const SEED_CATEGORIES = [
@@ -89,11 +90,14 @@ export async function POST(request: Request) {
     const monthStart = firstOfMonth(year, month);
     const monthEnd = firstOfMonth(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1);
 
-    // ── Three queries — no recurring_items, no budgets for headline figures ──
+    // ── recurring_item_id is now selected too (headline figures still come
+    // entirely from computeMonthTotals over these same rows) — needed to
+    // count each recurring item's occurrences this month for windfall
+    // detection below (Part B.4). ──
     const [allTxResult, acctResult, sfResult] = await Promise.all([
       supabase
         .from('transactions')
-        .select('amount, type, description, account_id')
+        .select('amount, type, description, account_id, recurring_item_id')
         .eq('household_id', householdId)
         .gte('date', monthStart)
         .lt('date', monthEnd),
@@ -189,6 +193,30 @@ export async function POST(request: Request) {
         cadence: r.cadence,
       }));
 
+    // ── Windfall awareness (Part B.4) ────────────────────────────────────────
+    // An extra biweekly paycheque or a third mortgage payment this month is a
+    // real, code-detected fact — passed to the review as something it MUST
+    // acknowledge and MUST NOT present as a new run-rate ("July has three of
+    // Lineu's paycheques — $2,749 extra that won't repeat in August").
+    const { data: activeRecurringItems } = await supabase
+      .from('recurring_items')
+      .select('id, description, cadence, type')
+      .eq('household_id', householdId)
+      .in('type', ['income', 'expense'])
+      .eq('active', true);
+    const windfalls = detectWindfalls(
+      allTxns.map((tx) => ({ recurring_item_id: tx.recurring_item_id ?? null, amount: tx.amount })),
+      (activeRecurringItems ?? []) as { id: string; description: string; cadence: string; type: string }[]
+    );
+
+    // ── Named review period (Part B.5) ───────────────────────────────────────
+    // The AI must never guess or default to a different month than the one
+    // actually reviewed — it's a computed input, not something to infer.
+    const reviewMonthName = new Date(monthStart + 'T00:00:00').toLocaleDateString(
+      locale === 'fr' ? 'fr-CA' : 'en-CA',
+      { month: 'long', year: 'numeric' }
+    );
+
     // ── Income lines: aggregate by source for AI context ─────────────────────
     // (e.g. Lineu bi-weekly appears 3× in July → one aggregated line: $8,247)
     const incomeBySource = new Map<string, number>();
@@ -232,6 +260,7 @@ export async function POST(request: Request) {
 
     const currentMonthLabel = monthStart.slice(0, 7); // YYYY-MM
     const aiContext =
+      `The reviewed period is ${reviewMonthName} (${currentMonthLabel}) — refer to it by this exact name, never a different month.\n` +
       `Net cash flow: $${netCashFlow}/month ` +
       `(income $${incomeTotal}, expenses $${expenseTotal}, savings $${totalSavings})\n` +
       `Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts)\n` +
@@ -243,7 +272,10 @@ export async function POST(request: Request) {
       `Their goals — ALREADY evaluated in code, do not recompute or contradict these numbers, just narrate them naturally where relevant: ${JSON.stringify(computedGoals)}\n` +
       `Their debt payoff — ALREADY evaluated in code (null means no debt evident or nothing computable), do not recompute or contradict: ${JSON.stringify(computedDebtPayoff)}\n` +
       `Their recurring contributions and debt payments (or none) — these are already deducted inside the ` +
-      `savings figure and net cash flow above, NOT extra discretionary room: ${JSON.stringify(committedTransfers)}`;
+      `savings figure and net cash flow above, NOT extra discretionary room: ${JSON.stringify(committedTransfers)}\n` +
+      `Windfalls this month (or none) — a recurring item that landed MORE times than its usual cadence this ` +
+      `specific month (e.g. a third biweekly paycheque instead of two). Each one MUST be acknowledged as a ` +
+      `one-time timing event, MUST NOT be treated as a new ongoing run-rate: ${JSON.stringify(windfalls)}`;
 
     // ── Generate plan (AI interprets verified numbers only) ──────────────────
     // The AI may NEVER instantiate structured objects here either — same hard
@@ -316,25 +348,47 @@ export async function POST(request: Request) {
     });
 
     const plan = {
+      reviewMonth: reviewMonthName,
       monthlyBudget: { ...monthlyBudget, categories: classifiedCategories },
       seedCategories: SEED_CATEGORIES,
       sinkingFunds: finalSinkingFunds,
       // Code-computed from real goal accounts — never AI-emitted.
       debtPayoff: computedDebtPayoff,
       goals: computedGoals,
+      windfalls,
       topRecommendation: aiPart.topRecommendation ?? '',
     };
 
     // ── Generate review (blocking) ────────────────────────────────────────────
+    // Part B hardening (2026-07-19), against four real failures in the
+    // founder's July 17 review: a wrong month name, a windfall paycheque
+    // narrated as a new run-rate, an on-track claim beyond what evaluateGoals
+    // actually verified, and prose arithmetic that didn't match its own parts.
     const reviewPrompt =
       `You are Phare, an AI financial coach for Canadian families. Write this family's monthly review in ${lang}.\n\n` +
       `Their plan:\n${JSON.stringify(plan)}\n\n` +
       `Write four paragraphs maximum. Specific numbers. One clear recommendation. Plain language. ` +
       `It must feel like a letter from a trusted financial advisor, not a report.\n\n` +
-      `Good tone: "June was a solid month overall. You stayed within budget in four of five categories..."\n` +
+      `Good tone: "${reviewMonthName} was a solid month overall. You stayed within budget in four of five categories..."\n` +
       `Bad tone: "Based on a comprehensive analysis of your financial data..."\n\n` +
       `Start with what is going well, then what to watch, then the one thing to do this month. ` +
-      `Write ONLY the review text, no preamble, no headings.`;
+      `Write ONLY the review text, no preamble, no headings.\n\n` +
+      `Hard rules — every one of these caused a real, published mistake before, do not repeat any of them:\n` +
+      `- The reviewed month is "reviewMonth" above: ${reviewMonthName}. Refer to it by exactly this name. ` +
+      `Never name a different month (not last month, not a guess, not an example from your own training) — ` +
+      `this field is the only source of truth for which period you are reviewing.\n` +
+      `- NO ARITHMETIC: every number in "plan" is already fully computed. You may only restate a figure exactly ` +
+      `as given — you may NOT add, subtract, multiply, divide, average, or otherwise derive any number that is ` +
+      `not already present as a single value above. If no single given figure says what you want to say, don't ` +
+      `say it with a number.\n` +
+      `- ON-TRACK CLAIMS: for any goal or debt, you may state its status only by directly restating what "goals"/` +
+      `"debtPayoff" already say (onTrack, fundedAlready, pastDue, monthlyContribution, estimatedDate) — never ` +
+      `assert or imply "on track", "behind", or "funded" beyond exactly what those fields already say for that ` +
+      `specific goal.\n` +
+      `- WINDFALLS: if "windfalls" is non-empty, you MUST explicitly acknowledge each one by name and amount, ` +
+      `framed as a one-time timing event that will NOT repeat next month (e.g. "${reviewMonthName} included a ` +
+      `third biweekly paycheque — $X extra that won't repeat next month") — never described as a new normal ` +
+      `income/expense level going forward.`;
 
     const reviewMessage = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',

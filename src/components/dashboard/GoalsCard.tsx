@@ -41,7 +41,7 @@ export default function GoalsCard({
       ) : (
         <div className="space-y-5">
           {goals.map((goal) => {
-            const pct = goal.goalTarget && goal.goalTarget > 0
+            const pct = !goal.isDebt && goal.goalTarget && goal.goalTarget > 0
               ? Math.min(100, Math.round((goal.balance / goal.goalTarget) * 100))
               : null;
 
@@ -52,20 +52,51 @@ export default function GoalsCard({
                     <p className="font-medium truncate" style={{ color: '#0F2044' }}>{goal.name}</p>
                     <span
                       className="shrink-0 px-1.5 py-0.5 rounded-full text-xs font-semibold"
-                      style={{ background: '#F0FDFD', color: '#2ABFBF' }}
+                      style={{
+                        background: goal.isDebt ? '#FEF2F2' : '#F0FDFD',
+                        color: goal.isDebt ? '#DC2626' : '#2ABFBF',
+                      }}
                     >
-                      {tGoals(`type.${goal.type as 'savings' | 'tfsa' | 'rrsp'}`)}
+                      {tGoals(`type.${goal.type as 'savings' | 'tfsa' | 'rrsp' | 'debt'}`)}
                     </span>
+                    {/* Code-computed verdict, rendered directly — never the AI's
+                        words. Sits right next to ReviewCard's prose on this
+                        same page (Part B.6): if a narration ever asserted a
+                        different status, this is the visible, ground-truth
+                        contradiction. */}
+                    {!goal.isDebt && goal.onTrack !== null && (
+                      <span
+                        className="shrink-0 text-xs font-semibold px-1.5 py-0.5 rounded-full"
+                        style={{
+                          background: goal.onTrack ? '#F0FDF4' : '#FEF3C7',
+                          color: goal.onTrack ? '#15803D' : '#D97706',
+                        }}
+                      >
+                        {goal.onTrack ? `✓ ${t('onTrack')}` : `⚠ ${t('behindTrack')}`}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-sm font-medium shrink-0 ml-2" style={{ color: '#6B7280' }}>
-                    {formatCurrency(goal.balance, locale)}
-                    {goal.goalTarget
-                      ? ` / ${formatCurrency(goal.goalTarget, locale)}`
-                      : ''}
+                  <p className="text-sm font-medium shrink-0 ml-2" style={{ color: goal.isDebt ? '#DC2626' : '#6B7280' }}>
+                    {goal.isDebt
+                      ? `${goal.balance < 0 ? '−' : ''}${formatCurrency(Math.abs(goal.balance), locale)}`
+                      : `${formatCurrency(goal.balance, locale)}${goal.goalTarget ? ` / ${formatCurrency(goal.goalTarget, locale)}` : ''}`}
                   </p>
                 </div>
 
-                {pct !== null ? (
+                {goal.isDebt ? (
+                  goal.debtPayoff ? (
+                    <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
+                      {tGoals('payoffPlan', {
+                        amount: formatCurrency(goal.debtPayoff.monthlyPayment, locale),
+                        date: new Date(goal.debtPayoff.targetDate + '-01T00:00:00').toLocaleDateString(
+                          locale === 'fr' ? 'fr-CA' : 'en-CA', { month: 'long', year: 'numeric' }
+                        ),
+                      })}
+                    </p>
+                  ) : goal.balance >= 0 ? (
+                    <p className="text-xs mt-1 font-semibold" style={{ color: '#16A34A' }}>✓ {tGoals('debtPaidOff')}</p>
+                  ) : null
+                ) : pct !== null ? (
                   <>
                     <div className="w-full h-2.5 rounded-full" style={{ background: '#F3F4F6' }}>
                       <div

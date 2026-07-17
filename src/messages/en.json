@@ -359,6 +359,8 @@
     "goals": "Your goals",
     "noGoals": "No savings goals yet",
     "createGoalCta": "Create your first savings goal",
+    "onTrack": "On track",
+    "behindTrack": "Behind",
     "review": "Your latest review",
     "reviewDate": "Written on {date}",
     "noPlan": "You don't have a plan yet.",
@@ -485,7 +487,14 @@
       "empty": "Nothing on the books this month.",
       "balancesBegin": "Balances begin {date} — the date of your first anchor.",
       "noBalanceYet": "no balance yet",
-      "untitled": "Entry"
+      "untitled": "Entry",
+      "endOfDay": "End of day",
+      "edit": "Edit",
+      "delete": "Delete",
+      "save": "Save",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "confirmDelete": "Delete this transfer?"
     },
     "nav": {
       "prev": "Previous",

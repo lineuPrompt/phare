@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     // Verify goal account belongs to this household and is a goal type (400 — user error)
     const { data: goalAccount } = await supabase
       .from('accounts')
-      .select('id, type')
+      .select('id, name, type')
       .eq('id', goalAccountId)
       .eq('household_id', householdId)
       .single();
@@ -52,6 +52,13 @@ export async function POST(request: Request) {
     if (!goalAccount || !GOAL_TYPE_SET.has(goalAccount.type)) {
       return NextResponse.json({ error: 'Invalid goal account' }, { status: 400 });
     }
+
+    // A blank description used to leave both peer rows unlabeled (the
+    // Timeline showed a bare "🪙 Entry", Goals' Upcoming showed "—") — default
+    // to the destination's own name so a transfer is never nameless. "(payment)"
+    // for a debt destination, matching the label the Timeline/Goals UI expects.
+    const resolvedDescription =
+      description?.trim() || (goalAccount.type === 'debt' ? `${goalAccount.name} (payment)` : goalAccount.name);
 
     // Resolve chequing account (400 — configuration error, fixable by user)
     const { data: chequing } = await supabase
@@ -73,7 +80,7 @@ export async function POST(request: Request) {
       p_goal_id:      goalAccountId,
       p_amount:       Number(amount),
       p_date:         date,
-      p_description:  description?.trim() ?? null,
+      p_description:  resolvedDescription,
     });
 
     if (rpcErr) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
+import { evaluateGoals, isDebtGoalName, computeDebtPayoff } from '@/lib/goalHelpers';
 import { logEvent, isFirstReturnToday } from '@/lib/eventLogger';
 
 export async function GET(request: Request) {
@@ -172,14 +173,47 @@ export async function GET(request: Request) {
     }
 
     const todayForGoalBalance = new Date().toISOString().slice(0, 10);
-    const goalAccounts = goalAccountList.map((a) => ({
-      id:             a.id,
-      name:           a.name,
-      type:           a.type,
-      balance:        computeGoalBalance(goalTxData, a.id, todayForGoalBalance),
-      goalTarget:     a.goal_target ? Number(a.goal_target) : null,
-      goalTargetDate: a.goal_target_date ?? null,
+
+    // Part B.6: the code-computed on-track/debt-payoff verdict for each goal
+    // renders on the dashboard adjacent to the AI review's prose (ReviewCard
+    // sits right next to GoalsCard on this same page) — a defense-in-depth
+    // measure alongside the reviewPrompt's hard "only restate the given
+    // verdict" rule (regenerate-plan/route.ts): if narration ever drifts
+    // from the real verdict despite that rule, the contradiction is visible
+    // to the founder immediately, on the same screen, not just in prose.
+    // Same evaluateGoals()/computeDebtPayoff() calls regenerate-plan uses.
+    const withTarget = goalAccountList.filter((a) => a.goal_target != null);
+    const rawGoalsForVerdict = withTarget.map((a) => ({
+      accountId: a.id,
+      name: a.name,
+      targetAmount: Number(a.goal_target),
+      savedSoFar: computeGoalBalance(goalTxData, a.id, todayForGoalBalance),
+      targetDate: a.goal_target_date ?? null,
+      isDebt: a.type === 'debt',
     }));
+    const explicitDebtAcct = rawGoalsForVerdict.find((g) => g.isDebt);
+    const debtLineAcct = explicitDebtAcct ?? rawGoalsForVerdict.find((g) => isDebtGoalName(g.name));
+    const nonDebtGoalsAcct = rawGoalsForVerdict.filter((g) => g !== debtLineAcct);
+    const verdicts = evaluateGoals(nonDebtGoalsAcct, summary.netCashFlow, todayForGoalBalance);
+    const verdictByAccountId = new Map(nonDebtGoalsAcct.map((g, i) => [g.accountId, verdicts[i]]));
+    const debtPayoffAcct = debtLineAcct ? computeDebtPayoff(debtLineAcct, todayForGoalBalance) : null;
+
+    const goalAccounts = goalAccountList.map((a) => {
+      const verdict = verdictByAccountId.get(a.id) ?? null;
+      return {
+        id:             a.id,
+        name:           a.name,
+        type:           a.type,
+        isDebt:         a.type === 'debt',
+        balance:        computeGoalBalance(goalTxData, a.id, todayForGoalBalance),
+        goalTarget:     a.goal_target != null ? Number(a.goal_target) : null,
+        goalTargetDate: a.goal_target_date ?? null,
+        onTrack:             verdict?.onTrack ?? null,
+        monthlyContribution: verdict?.monthlyContribution ?? null,
+        estimatedDate:       verdict?.estimatedDate ?? null,
+        debtPayoff:          debtLineAcct?.accountId === a.id ? debtPayoffAcct : null,
+      };
+    });
 
     type BudgetRow = { amount: number; category_id: string; categories: { name: string; type: string } | null };
     const budgetRows = (budgetResult.data as BudgetRow[] | null) ?? [];

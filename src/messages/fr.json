@@ -359,6 +359,8 @@
     "goals": "Vos objectifs",
     "noGoals": "Aucun objectif d'épargne",
     "createGoalCta": "Créez votre premier objectif d'épargne",
+    "onTrack": "Sur la bonne voie",
+    "behindTrack": "En retard",
     "review": "Votre dernière revue",
     "reviewDate": "Rédigée le {date}",
     "noPlan": "Vous n'avez pas encore de plan.",
@@ -485,7 +487,14 @@
       "empty": "Rien de prévu ce mois-ci.",
       "balancesBegin": "Les soldes commencent le {date} — la date de votre premier ancrage.",
       "noBalanceYet": "solde pas encore connu",
-      "untitled": "Entrée"
+      "untitled": "Entrée",
+      "endOfDay": "Fin de journée",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "cancel": "Annuler",
+      "confirmDelete": "Supprimer ce transfert?"
     },
     "nav": {
       "prev": "Précédent",

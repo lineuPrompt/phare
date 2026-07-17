@@ -42,6 +42,14 @@ export type GoalAccount = {
   balance: number;
   goalTarget: number | null;
   goalTargetDate: string | null;
+  // Code-computed verdict (evaluateGoals) — null for a debt (see debtPayoff
+  // instead) or a goal with no target date set (nothing to verify against).
+  // Rendered directly next to the AI review's prose (Part B.6) so a
+  // narration that ever drifted from this real verdict would be visibly
+  // contradicted on the same screen.
+  onTrack: boolean | null;
+  monthlyContribution: number | null;
+  estimatedDate: string | null; // YYYY-MM
   transfers: GoalTransfer[];
   // Materialized transfer rows dated after today (Phase 2 recurring
   // transfers materialize up to 12 months ahead) — real future entries,
