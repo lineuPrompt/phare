@@ -181,6 +181,24 @@ describe('evaluateGoals', () => {
     expect(g.estimatedDate).toBe('2031-07'); // ceil(6000/100)=60 months from July 2026
   });
 
+  it('Goal edit/delete feature (2026-07-21): editing the target date flips a Behind verdict to On track — no regenerate required, evaluateGoals just runs fresh on the new date', () => {
+    // Founder's real scenario: a goal reads "Behind" because its stated
+    // target date is too soon for current capacity. Editing the date via
+    // the Edit form (no ledger change, no AI call) must flip the verdict on
+    // the very next load — GET /api/goals recomputes evaluateGoals() fresh
+    // every time, so a date fix takes effect immediately.
+    const goal = { name: 'Disney', targetAmount: 6000, savedSoFar: 0, targetDate: '2028-01-01' };
+    const capacity = 100; // only supports ~$100/mo
+
+    const [beforeEdit] = evaluateGoals([goal], capacity, today);
+    expect(beforeEdit.onTrack).toBe(false); // Behind — Jan 2028 needs $333.33/mo
+
+    // Founder edits the target date out to something the same capacity supports.
+    const editedGoal = { ...goal, targetDate: '2031-07-01' };
+    const [afterEdit] = evaluateGoals([editedGoal], capacity, today);
+    expect(afterEdit.onTrack).toBe(true); // On track — same $100/mo, later date
+  });
+
   it('shares one capacity pool across multiple goals — both fit', () => {
     const results = evaluateGoals(
       [

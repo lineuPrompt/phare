@@ -8,6 +8,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import CreateGoalForm from '@/components/goals/CreateGoalForm';
 import TransferForm from '@/components/goals/TransferForm';
 import RecurringContributionForm from '@/components/goals/RecurringContributionForm';
+import GoalEditForm from '@/components/goals/GoalEditForm';
 import { formatCurrency, type GoalAccount, type GoalTransfer } from '@/components/dashboard/types';
 import { nextOccurrence } from '@/lib/dateHelpers';
 import { projectedContribution } from '@/lib/goalHelpers';
@@ -39,6 +40,12 @@ export default function GoalsPage() {
   const [confirmDelete, setConfirmDelete] = useState<GoalTransfer | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Goal edit/delete state
+  const [editingGoalFor, setEditingGoalFor] = useState<string | null>(null);
+  const [confirmDeleteGoal, setConfirmDeleteGoal] = useState<GoalAccount | null>(null);
+  const [deletingGoal, setDeletingGoal] = useState(false);
+  const [deleteGoalError, setDeleteGoalError] = useState('');
+
   const load = useCallback(() => {
     setLoading(true);
     fetch('/api/goals')
@@ -65,6 +72,26 @@ export default function GoalsPage() {
   function handleRecurringSaved() {
     setRecurringSetupFor(null);
     load();
+  }
+
+  function handleGoalEdited() {
+    setEditingGoalFor(null);
+    load();
+  }
+
+  async function doDeleteGoal(goal: GoalAccount) {
+    setDeletingGoal(true);
+    setDeleteGoalError('');
+    try {
+      const res = await fetch(`/api/accounts/${goal.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete');
+      setConfirmDeleteGoal(null);
+      load();
+    } catch (err) {
+      setDeleteGoalError(err instanceof Error ? err.message : 'Failed to delete');
+    } finally {
+      setDeletingGoal(false);
+    }
   }
 
   const cadenceShort = (cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly') => tGoalsRecurring(`cadenceShort.${cadence}`);
@@ -173,6 +200,7 @@ export default function GoalsPage() {
                     ? Math.min(100, Math.round((goal.balance / goal.goalTarget) * 100))
                     : null;
                   const isOpen = transferFor === goal.id;
+                  const isEditingGoal = editingGoalFor === goal.id;
 
                   return (
                     <div
@@ -180,6 +208,13 @@ export default function GoalsPage() {
                       className="rounded-2xl bg-white p-6 space-y-4"
                       style={{ border: '1px solid #E5E7EB' }}
                     >
+                      {isEditingGoal ? (
+                        <div>
+                          <h3 className="text-lg font-bold mb-3" style={{ color: '#0F2044' }}>{t('edit.title')}</h3>
+                          <GoalEditForm goal={goal} onSaved={handleGoalEdited} onCancel={() => setEditingGoalFor(null)} />
+                        </div>
+                      ) : (
+                      <>
                       {/* Goal header */}
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
@@ -194,6 +229,20 @@ export default function GoalsPage() {
                             >
                               {t(`type.${goal.type as 'savings' | 'tfsa' | 'rrsp' | 'debt'}`)}
                             </span>
+                            <button
+                              onClick={() => setEditingGoalFor(goal.id)}
+                              className="text-xs font-medium cursor-pointer"
+                              style={{ color: '#2ABFBF' }}
+                            >
+                              {t('edit.cta')}
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteGoal(goal)}
+                              className="text-xs font-medium cursor-pointer"
+                              style={{ color: '#DC2626' }}
+                            >
+                              {t('edit.deleteCta')}
+                            </button>
                           </div>
                           {goal.isDebt ? (
                             // Debt: current amount owed, honestly signed — never
@@ -534,6 +583,8 @@ export default function GoalsPage() {
                           </div>
                         </div>
                       )}
+                      </>
+                      )}
                     </div>
                   );
                 })}
@@ -569,6 +620,50 @@ export default function GoalsPage() {
           </div>
         </div>
       )}
+
+      {/* Delete GOAL confirmation — honest consequences enumerated from data
+          already loaded on this page, no extra fetch needed. */}
+      {confirmDeleteGoal && (() => {
+        const g = confirmDeleteGoal;
+        const pastCount = g.transfers.length;
+        const pastTotal = g.transfers.reduce((s, tr) => s + Math.abs(tr.amount), 0);
+        const upcomingCount = g.upcomingTransfers.length;
+        const hasRecurring = g.recurringContribution !== null;
+        return (
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(15,32,68,0.4)' }}>
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full" style={{ boxShadow: '0 8px 24px rgba(15,32,68,0.15)' }}>
+              <p className="font-semibold mb-2" style={{ color: '#0F2044' }}>{t('edit.confirmDeleteTitle', { name: g.name })}</p>
+              <p className="text-sm mb-2" style={{ color: '#6B7280' }}>{t('edit.confirmDeleteGoal')}</p>
+              {pastCount > 0 && (
+                <p className="text-sm mb-2" style={{ color: '#6B7280' }}>
+                  {t('edit.confirmDeleteHistory', { count: pastCount, total: formatCurrency(pastTotal, locale) })}
+                </p>
+              )}
+              {hasRecurring && (
+                <p className="text-sm mb-2" style={{ color: '#6B7280' }}>
+                  {upcomingCount > 0
+                    ? t('edit.confirmDeleteRecurringWithUpcoming', { count: upcomingCount })
+                    : t('edit.confirmDeleteRecurringOnly')}
+                </p>
+              )}
+              {deleteGoalError && <p className="text-sm mb-2" style={{ color: '#DC2626' }}>{deleteGoalError}</p>}
+              <div className="flex flex-col gap-2 mt-3">
+                <button
+                  onClick={() => doDeleteGoal(g)}
+                  disabled={deletingGoal}
+                  className="w-full py-2.5 rounded-full text-white text-sm font-medium cursor-pointer disabled:opacity-50"
+                  style={{ background: '#DC2626' }}
+                >{deletingGoal ? t('edit.deleting') : t('edit.confirmDeleteBtn')}</button>
+                <button
+                  onClick={() => { setConfirmDeleteGoal(null); setDeleteGoalError(''); }}
+                  className="w-full py-2.5 rounded-full text-sm font-medium cursor-pointer"
+                  style={{ color: '#6B7280' }}
+                >{t('cancelEdit')}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </main>
   );
 }

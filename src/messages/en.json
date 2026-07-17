@@ -633,6 +633,30 @@
         "weekly": "/wk"
       },
       "projection": "At {amount}: {total} contributed by {date}"
+    },
+    "edit": {
+      "cta": "Edit",
+      "deleteCta": "Delete",
+      "title": "Edit goal",
+      "name": "Name",
+      "amountOwed": "Amount currently owed",
+      "amountOwedHint": "Changing this adds a balance-correction entry — your history stays intact.",
+      "goalTarget": "Target amount",
+      "payoffTarget": "Payoff target",
+      "noTargetCheckbox": "No target",
+      "goalTargetDate": "Target date",
+      "payoffDate": "Payoff date",
+      "noDateCheckbox": "No date",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "confirmDeleteTitle": "Delete \"{name}\"?",
+      "confirmDeleteGoal": "This will remove the goal.",
+      "confirmDeleteHistory": "It has {count} contributions totaling {total} — this history will be kept on your chequing timeline as a plain record, but removed from this goal.",
+      "confirmDeleteRecurringWithUpcoming": "Its recurring contribution rule will be cancelled, along with {count} upcoming transfers.",
+      "confirmDeleteRecurringOnly": "Its recurring contribution rule will be cancelled.",
+      "confirmDeleteBtn": "Delete goal",
+      "deleting": "Deleting..."
     }
   },
   "recurring": {

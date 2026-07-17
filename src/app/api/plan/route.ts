@@ -91,8 +91,8 @@ export async function POST(request: NextRequest) {
       aiContext = `Household info: ${JSON.stringify(p.household)}
 Net cash flow: $${p.summary.netCashFlow}/month (income $${p.summary.monthlyIncome}, expenses $${p.summary.monthlyExpenses}, savings $0 at plan creation)
 Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts; none exist yet)
-Their goals — ALREADY evaluated in code, do not recompute or contradict these numbers, just narrate them naturally where relevant: ${JSON.stringify(computedGoals)}
-Their debt payoff — ALREADY evaluated in code (null means no debt evident or nothing computable), do not recompute or contradict: ${JSON.stringify(computedDebtPayoff)}
+Their goals — ALREADY verified, do not recompute or contradict these numbers, just narrate them naturally where relevant: ${JSON.stringify(computedGoals)}
+Their debt payoff — ALREADY verified (null means no debt evident or nothing computable), do not recompute or contradict: ${JSON.stringify(computedDebtPayoff)}
 Their sinking funds (already set up): ${JSON.stringify(p.sinkingFunds.lines)}
 Expense lines: ${JSON.stringify([...p.fixedExpenses.lines, ...p.variableExpenses.lines].map((l: { label: string }) => l.label))}`;
     } else if (body.source === 'calculated') {
@@ -128,7 +128,7 @@ This family entered ONLY these income and expense lines. They have NOT set any s
     const isTemplate = body.source === 'template';
     const categoryList = SEED_CATEGORIES.join(', ');
 
-    const prompt = `You are Phare, an AI financial coach for Canadian families. The numbers below are VERIFIED — computed in code from the family's data. Do not change or recalculate them.
+    const prompt = `You are Phare, an AI financial coach for Canadian families. The numbers below are VERIFIED — calculated from the family's data. Do not change or recalculate them.
 
 ${aiContext}
 
@@ -145,7 +145,8 @@ Rules:
   - "isFixed": true if it is a fixed recurring bill paid every month (mortgage, rent, loan payment, insurance, daycare, utilities, phone, subscriptions); false if it is variable day-to-day spending (groceries, restaurants, gas, shopping).
 - Classify income lines too: category "Income", isFixed true.
 - Do NOT output any sinking funds, goals, or debt payoff as structured data — there is no field for them in the JSON above. If you want to suggest one, put it in topRecommendation as a suggestion phrased as a suggestion ("Consider…"), never as a fund/goal/debt-plan they already have and never with a monthly amount presented as theirs.
-${isTemplate ? '- Their goals and debt payoff are already evaluated (contribution, on-track verdict, and dates are all real, code-computed numbers) — do not invent or restate any of those figures anywhere; if you reference one in topRecommendation, use the exact numbers given.' : ''}
+${isTemplate ? '- Their goals and debt payoff are already evaluated (contribution, on-track verdict, and dates are all real, verified numbers) — do not invent or restate any of those figures anywhere; if you reference one in topRecommendation, use the exact numbers given.' : ''}
+- Vocabulary: never write "code", "computed in code", or similar internal/technical phrasing — a reader must never see the word "code". An estimated date or figure reads as a plain estimate (e.g. "estimated: March 2027"), never "code-estimated". Never call a figure "budgeted" unless the family actually set that budget themselves — a computed or projected amount (including a card/bridge payment total) reads as "expected", not "budgeted".
 - Canadian context: RRSP reduces taxable income (flag Quebec resident + Ontario employer tax gap if household info shows it). RESP gives $500/yr CESG per child on $2,500 contributed. TFSA is ideal for sinking funds.
 - If net cash flow is negative, topRecommendation must address that first.
 - topRecommendation: one specific sentence with a dollar amount.`;

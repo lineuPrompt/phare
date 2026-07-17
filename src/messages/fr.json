@@ -633,6 +633,30 @@
         "weekly": "/sem"
       },
       "projection": "À {amount} : {total} contribué d'ici {date}"
+    },
+    "edit": {
+      "cta": "Modifier",
+      "deleteCta": "Supprimer",
+      "title": "Modifier l'objectif",
+      "name": "Nom",
+      "amountOwed": "Montant actuellement dû",
+      "amountOwedHint": "Modifier ce champ ajoute une entrée de correction de solde — votre historique reste intact.",
+      "goalTarget": "Montant cible",
+      "payoffTarget": "Cible de remboursement",
+      "noTargetCheckbox": "Aucune cible",
+      "goalTargetDate": "Date cible",
+      "payoffDate": "Date de remboursement",
+      "noDateCheckbox": "Aucune date",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "confirmDeleteTitle": "Supprimer « {name} » ?",
+      "confirmDeleteGoal": "Ceci supprimera l'objectif.",
+      "confirmDeleteHistory": "Il compte {count} cotisations totalisant {total} — cet historique sera conservé sur votre chronologie de compte-chèques comme registre simple, mais retiré de cet objectif.",
+      "confirmDeleteRecurringWithUpcoming": "Sa règle de contribution récurrente sera annulée, ainsi que {count} transferts à venir.",
+      "confirmDeleteRecurringOnly": "Sa règle de contribution récurrente sera annulée.",
+      "confirmDeleteBtn": "Supprimer l'objectif",
+      "deleting": "Suppression..."
     }
   },
   "recurring": {

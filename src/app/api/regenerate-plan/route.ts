@@ -269,8 +269,8 @@ export async function POST(request: Request) {
       `Income lines: ${JSON.stringify(incomeLines)}\n` +
       `Expense lines (chequing, avoids card double-count): ${JSON.stringify(expenseLines)}\n` +
       `Their sinking funds (already set up, or none): ${JSON.stringify(sinkingFunds)}\n` +
-      `Their goals — ALREADY evaluated in code, do not recompute or contradict these numbers, just narrate them naturally where relevant: ${JSON.stringify(computedGoals)}\n` +
-      `Their debt payoff — ALREADY evaluated in code (null means no debt evident or nothing computable), do not recompute or contradict: ${JSON.stringify(computedDebtPayoff)}\n` +
+      `Their goals — ALREADY verified, do not recompute or contradict these numbers, just narrate them naturally where relevant: ${JSON.stringify(computedGoals)}\n` +
+      `Their debt payoff — ALREADY verified (null means no debt evident or nothing computable), do not recompute or contradict: ${JSON.stringify(computedDebtPayoff)}\n` +
       `Their recurring contributions and debt payments (or none) — these are already deducted inside the ` +
       `savings figure and net cash flow above, NOT extra discretionary room: ${JSON.stringify(committedTransfers)}\n` +
       `Windfalls this month (or none) — a recurring item that landed MORE times than its usual cadence this ` +
@@ -288,7 +288,7 @@ export async function POST(request: Request) {
     const categoryList = SEED_CATEGORIES.join(', ');
     const planPrompt =
       `You are Phare, an AI financial coach for Canadian families. The numbers below are VERIFIED — ` +
-      `computed in code from the family's ledger. Do not change or recalculate them.\n\n` +
+      `calculated from the family's ledger. Do not change or recalculate them.\n\n` +
       `${aiContext}\n\n` +
       `Write ALL text in ${lang}.\n\n` +
       `Return ONLY valid JSON:\n` +
@@ -301,8 +301,9 @@ export async function POST(request: Request) {
       `  - "isFixed": true if it is a fixed recurring bill paid every month; false if variable day-to-day spending.\n` +
       `- Classify income lines too: category "Income", isFixed true.\n` +
       `- Do NOT output any sinking funds, goals, or debt payoff as structured data — there is no field for them in the JSON above. If you want to suggest one, put it in topRecommendation as a suggestion phrased as a suggestion ("Consider…"), never as a fund/goal/debt-plan they already have and never with a monthly amount presented as theirs.\n` +
-      `- Their goals and debt payoff (if any) are already evaluated (contribution, on-track verdict, and dates are all real, code-computed numbers) — do not invent or restate any of those figures anywhere; if you reference one in topRecommendation, use the exact numbers given.\n` +
+      `- Their goals and debt payoff (if any) are already evaluated (contribution, on-track verdict, and dates are all real, verified numbers) — do not invent or restate any of those figures anywhere; if you reference one in topRecommendation, use the exact numbers given.\n` +
       `- Their recurring contributions and debt payments (if any) are already subtracted from the net cash flow figure above — if you mention one, say it's already accounted for (e.g. "your $500/mo RRSP contribution is already counted"), never present it as new discretionary room and never double-count it against a separate suggestion.\n` +
+      `- Vocabulary: never write "code", "computed in code", or similar internal/technical phrasing — a reader must never see the word "code" at all. An estimated date or figure should read as a plain estimate (e.g. "estimated: March 2027"), never "code-estimated". Never call a figure "budgeted" unless the family actually set that budget themselves — a computed or projected amount (including a card/bridge payment total) should read as "expected", not "budgeted".\n` +
       `- Canadian context: RRSP, RESP, TFSA, CESG.\n` +
       `- If net cash flow is negative, topRecommendation must address that first.\n` +
       `- topRecommendation: one specific sentence with a dollar amount.`;
@@ -388,7 +389,12 @@ export async function POST(request: Request) {
       `- WINDFALLS: if "windfalls" is non-empty, you MUST explicitly acknowledge each one by name and amount, ` +
       `framed as a one-time timing event that will NOT repeat next month (e.g. "${reviewMonthName} included a ` +
       `third biweekly paycheque — $X extra that won't repeat next month") — never described as a new normal ` +
-      `income/expense level going forward.`;
+      `income/expense level going forward.\n` +
+      `- VOCABULARY: never write "code", "computed in code", or similar internal/technical phrasing anywhere — ` +
+      `the reader must never see the word "code". An estimated date or figure reads as a plain estimate (e.g. ` +
+      `"estimated: March 2027"), never "code-estimated" or "code-computed". A projected or computed amount ` +
+      `(including a card/bridge payment total) reads as "expected", never "budgeted" — reserve "budgeted" only ` +
+      `for a figure the family actually set as a budget themselves.`;
 
     const reviewMessage = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
