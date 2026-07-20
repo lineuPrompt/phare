@@ -60,6 +60,10 @@ vi.mock('@/lib/supabase-server', () => ({
   createClient: vi.fn(),
 }));
 
+vi.mock('@/lib/bridgeHelpers', () => ({
+  ensureBridgesForWindow: vi.fn(),
+}));
+
 describe('GET /api/dashboard — plan existence gate', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -83,6 +87,7 @@ describe('GET /api/dashboard — plan existence gate', () => {
         },
       ],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+      account_balance_anchors: [{ data: { anchor_date: '2026-01-01' }, error: null }], // earliestAnchorMonth lookup
       sinking_funds: [{ data: [], error: null }],
       conversations: [{ data: null, error: null }],
       recurring_items: [
@@ -119,5 +124,115 @@ describe('GET /api/dashboard — plan existence gate', () => {
 
     expect(res.status).toBe(200);
     expect(json).toEqual({ hasPlan: false });
+  });
+});
+
+// Dashboard full-reload fix (2026-07-22): switching the snapshot's month
+// used to re-fetch/re-render the WHOLE dashboard. The fix is
+// snapshotOnly=1 on this same route, which skips the budgets/sinking_funds/
+// conversations queries entirely and returns only the snapshot's own
+// fields. This test proves that mode never touches those tables at all
+// (they're deliberately left unscripted here — any query against them would
+// throw "No scripted response", failing the test) and that non-snapshot
+// fields (goalAccounts, review, etc.) are simply absent from the response.
+describe('GET /api/dashboard?snapshotOnly=1 — month-switch fetch never touches unrelated sections', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('returns only snapshot fields, without ever querying budgets/sinking_funds/conversations', async () => {
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh4', full_name: 'Someone' }, error: null }],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null, payment_day: null, statement_close_day: null }], error: null }],
+      account_balance_anchors: [{ data: { anchor_date: '2026-01-01' }, error: null }],
+      transactions: [{
+        data: [
+          { amount: 3000, type: 'income', account_id: 'chq-1' },
+          { amount: 1200, type: 'expense', account_id: 'chq-1' },
+        ],
+        error: null,
+      }],
+      recurring_items: [
+        { count: 0, error: null },
+        { count: 0, error: null },
+      ],
+      // budgets / sinking_funds / conversations deliberately NOT scripted —
+      // snapshotOnly must never reach them.
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('http://localhost/api/dashboard?month=2026-08&snapshotOnly=1'));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json).toEqual({
+      hasPlan: true,
+      month: '2026-08-01',
+      summary: { totalIncome: 3000, totalExpenses: 1200, totalSavings: 0, netCashFlow: 1800 },
+      unanchoredIncomeCount: 0,
+      unanchoredExpenseCount: 0,
+      earliestAnchorMonth: '2026-01',
+    });
+    // Explicitly absent — proves the goals/review/etc. code path never ran.
+    expect(json.goalAccounts).toBeUndefined();
+    expect(json.review).toBeUndefined();
+    expect(json.sinkingFunds).toBeUndefined();
+    expect(json.categories).toBeUndefined();
+  });
+});
+
+// Follow-up to the mobile-nav/snapshot-navigation handoff (2026-07-20) and
+// the Tier 2 bridge hardening (2026-07-22): the dashboard route calls
+// ensureBridgesForWindow on every read (added so a never-visited future
+// month still shows its card bridge). Once ensureBridgesForWindow was made
+// to throw on any read/write error instead of silently under-syncing, this
+// proves that failure actually reaches the client as a real error — not a
+// dashboard that quietly renders an understated snapshot. ensureBridgesForWindow
+// itself is mocked here (its own read/write failure modes are covered by
+// bridgeReconciliationInvariant.test.ts) — this test is only about whether
+// dashboard/route.ts lets a thrown error from it escape as a 500.
+describe('GET /api/dashboard — a bridge-sync failure surfaces, never a silently understated snapshot', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('ensureBridgesForWindow throwing produces a 500, not a 200 with incomplete figures', async () => {
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh3', full_name: 'Someone' }, error: null }],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      budgets: [
+        { data: null, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [{
+        data: [
+          { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null, payment_day: null, statement_close_day: null },
+          { id: 'card-1', name: 'Visa', type: 'credit_card', goal_target: null, goal_target_date: null, payment_day: 5, statement_close_day: 15 },
+        ],
+        error: null,
+      }],
+      account_balance_anchors: [{ data: { anchor_date: '2026-01-01' }, error: null }],
+      household_members: [{ data: { id: 'member-1' }, error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { ensureBridgesForWindow } = await import('@/lib/bridgeHelpers');
+    (ensureBridgesForWindow as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('ensureBridgesForWindow: failed to read card transactions — simulated')
+    );
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('http://localhost/api/dashboard'));
+    const json = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(json.hasPlan).toBeUndefined(); // never got far enough to build a (partial) success payload
+    expect(json.error).toBeTruthy();
   });
 });

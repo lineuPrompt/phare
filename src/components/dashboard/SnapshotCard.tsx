@@ -1,4 +1,5 @@
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
 import { DashboardSummary, formatCurrency } from './types';
 
@@ -9,6 +10,8 @@ export default function SnapshotCard({
   onPrevMonth,
   onNextMonth,
   isMaxMonth,
+  isMinMonth,
+  loading,
   unanchoredIncomeCount,
   unanchoredExpenseCount,
 }: {
@@ -21,6 +24,14 @@ export default function SnapshotCard({
   // (the same 12-month rolling window Timeline uses) — disables forward nav
   // rather than letting it silently do nothing.
   isMaxMonth: boolean;
+  // True when `month` is the earliest month with a real chequing balance
+  // anchor (matches Timeline's own lower bound) — disables Prev past it
+  // rather than showing a misleading empty/partial month.
+  isMinMonth: boolean;
+  // True only while an in-place month-switch fetch is running — the initial
+  // page load has its own separate loading state (dashboard/page.tsx) and
+  // never reaches this component while true.
+  loading?: boolean;
   unanchoredIncomeCount?: number;
   unanchoredExpenseCount?: number;
 }) {
@@ -35,7 +46,7 @@ export default function SnapshotCard({
   );
 
   return (
-    <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
+    <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB', opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s' }}>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold" style={{ color: '#0F2044' }}>
           {t('snapshot')}
@@ -43,19 +54,22 @@ export default function SnapshotCard({
         <div className="flex items-center gap-1">
           <button
             onClick={onPrevMonth}
-            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors cursor-pointer text-lg leading-none"
+            disabled={isMinMonth}
+            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default text-lg leading-none"
             style={{ color: '#6B7280' }}
-            aria-label={tNav('prev')}
-            title={tNav('prev')}
+            aria-label={isMinMonth ? tNav('outOfRange') : tNav('prev')}
+            title={isMinMonth ? tNav('outOfRange') : tNav('prev')}
           >
             ‹
           </button>
-          <span
-            className="text-sm font-medium capitalize"
+          <Link
+            href={`/${locale}/timeline?month=${month}`}
+            className="text-sm font-medium capitalize hover:underline"
             style={{ color: '#374151', minWidth: '112px', textAlign: 'center' }}
+            title={tNav('viewInTimeline')}
           >
             {monthLabel}
-          </span>
+          </Link>
           <button
             onClick={onNextMonth}
             disabled={isMaxMonth}

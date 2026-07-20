@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import TimelineHeader from '@/components/timeline/TimelineHeader';
@@ -62,13 +62,20 @@ export default function TimelinePage() {
   const t = useTranslations('timeline');
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
   const today = new Date().toISOString().slice(0, 10);
+
+  // The dashboard snapshot links here with ?month=YYYY-MM so the two views
+  // of "this month" stay the same month — read once on mount, same as any
+  // deep link. Falls back to the current month if missing/malformed.
+  const monthParam = searchParams.get('month');
+  const initialMonth = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : currentMonthKey();
 
   const [chequingId, setChequingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<TimelineResponse | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth);
   const [showReAnchor, setShowReAnchor] = useState(false);
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);

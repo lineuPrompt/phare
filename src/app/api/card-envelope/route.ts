@@ -240,11 +240,19 @@ export async function POST(request: Request) {
       }
     }
 
-    // 3. Update account statement days (only the fields provided)
+    // 3. Update account statement days (only the fields provided). The goal
+    // and category rows above are already committed at this point, so a
+    // failure here is genuinely partial — not returning a plain
+    // `{saved: true}` here matters: a hidden failure would mean bridge
+    // computation keeps using the OLD statement_close_day/payment_day next
+    // time ensureBridgesForWindow runs, silently misdating the card's
+    // payment. `daysUpdateFailed` forces the client to surface this rather
+    // than read `saved: true` as "everything I submitted was saved."
     const accountUpdates: Record<string, number | null> = {};
     if (statementCloseDay !== undefined) accountUpdates.statement_close_day = statementCloseDay;
     if (paymentDay         !== undefined) accountUpdates.payment_day         = paymentDay;
 
+    let daysUpdateFailed = false;
     if (Object.keys(accountUpdates).length > 0) {
       const { error: acctErr } = await supabase
         .from('accounts')
@@ -253,11 +261,11 @@ export async function POST(request: Request) {
         .eq('household_id', householdId);
       if (acctErr) {
         console.error('Account days update error:', acctErr);
-        // Non-fatal: envelope saved, just the days didn't update
+        daysUpdateFailed = true;
       }
     }
 
-    return NextResponse.json({ saved: true });
+    return NextResponse.json({ saved: true, daysUpdateFailed });
   } catch (error) {
     console.error('POST /api/card-envelope error:', error);
     return NextResponse.json({ error: 'Failed to save envelope' }, { status: 500 });

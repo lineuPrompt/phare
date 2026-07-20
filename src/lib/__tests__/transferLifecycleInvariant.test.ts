@@ -94,9 +94,48 @@ function makeFakeSupabase(seed: { users: Row[]; household_members: Row[]; accoun
     },
     // Implements create_transfer's real behavior: two inserts + one update,
     // atomically (synchronously, from the test's perspective) against the
-    // in-memory transactions store — mirroring the actual plpgsql function.
+    // in-memory transactions store — mirroring the actual plpgsql function,
+    // INCLUDING the tenant-integrity checks added in
+    // 20260722000000_harden_create_transfer_tenant_checks.sql (RAISE
+    // EXCEPTION in SQL → { data: null, error } here, same as the real
+    // Supabase client surfaces a failed RPC call).
     rpc(name: string, params: Record<string, unknown>) {
       if (name !== 'create_transfer') throw new Error(`fake supabase: unexpected rpc "${name}"`);
+
+      const fail = (message: string) => Promise.resolve({ data: null, error: { message } });
+
+      if (!params.p_household_id) return fail('create_transfer: p_household_id is required');
+      if (!params.p_member_id) return fail('create_transfer: p_member_id is required');
+      if (!params.p_chequing_id || !params.p_goal_id) {
+        return fail('create_transfer: p_chequing_id and p_goal_id are required');
+      }
+      if (params.p_chequing_id === params.p_goal_id) {
+        return fail('create_transfer: p_chequing_id and p_goal_id must differ');
+      }
+      if (!(Number(params.p_amount) > 0)) return fail('create_transfer: p_amount must be positive');
+      if (!params.p_date) return fail('create_transfer: p_date is required');
+
+      const member = store.household_members.find((m) => m.id === params.p_member_id);
+      if (!member || member.household_id !== params.p_household_id) {
+        return fail(`create_transfer: member ${params.p_member_id} does not belong to household ${params.p_household_id}`);
+      }
+
+      const chq = store.accounts.find((a) => a.id === params.p_chequing_id);
+      if (!chq || chq.household_id !== params.p_household_id) {
+        return fail(`create_transfer: chequing account ${params.p_chequing_id} does not belong to household ${params.p_household_id}`);
+      }
+      if (chq.type !== 'chequing') {
+        return fail(`create_transfer: account ${params.p_chequing_id} is not a chequing account (type=${chq.type})`);
+      }
+
+      const goal = store.accounts.find((a) => a.id === params.p_goal_id);
+      if (!goal || goal.household_id !== params.p_household_id) {
+        return fail(`create_transfer: goal account ${params.p_goal_id} does not belong to household ${params.p_household_id}`);
+      }
+      if (!['savings', 'tfsa', 'rrsp', 'debt'].includes(goal.type as string)) {
+        return fail(`create_transfer: account ${params.p_goal_id} is not a goal account (type=${goal.type})`);
+      }
+
       const goalRow: Row = {
         id: `tx-${idCounter++}`,
         household_id: params.p_household_id,
@@ -273,5 +312,127 @@ describe('Part A invariant — one-off transfer create → delete leaves the led
     // movement, with the audit reporting a clean bill of health.
     const goalBalance = result.accounts.find((a) => a.accountId === GOAL)?.monthBalance;
     expect(goalBalance).toBe(300);
+  });
+});
+
+describe('Tier 1 invariant (2026-07-22, Codex adversarial review) — create_transfer RPC enforces tenant integrity itself', () => {
+  // Calls supabase.rpc(...) directly, bypassing /api/transfers entirely, to
+  // prove the RPC rejects a cross-household reference on its own — not
+  // merely because the route happens to validate first. A malicious or
+  // buggy caller that skipped the route's own checks (or called the RPC
+  // directly, before EXECUTE was revoked from anon) must still be stopped.
+  const FOREIGN_HOUSEHOLD = 'hh-2';
+  const FOREIGN_CHEQUING = 'acc-foreign-chq';
+  const FOREIGN_GOAL = 'acc-foreign-goal';
+
+  function seedWithForeignHousehold() {
+    return makeFakeSupabase({
+      users: [{ id: 'user-1', household_id: HOUSEHOLD }],
+      household_members: [
+        { id: 'member-1', household_id: HOUSEHOLD, user_id: 'user-1' },
+        { id: 'member-foreign', household_id: FOREIGN_HOUSEHOLD, user_id: 'user-2' },
+      ],
+      accounts: [
+        { id: CHEQUING, household_id: HOUSEHOLD, type: 'chequing', name: 'Chequing' },
+        { id: GOAL, household_id: HOUSEHOLD, type: 'savings', name: 'Emergency Fund' },
+        { id: FOREIGN_CHEQUING, household_id: FOREIGN_HOUSEHOLD, type: 'chequing', name: 'Their Chequing' },
+        { id: FOREIGN_GOAL, household_id: FOREIGN_HOUSEHOLD, type: 'savings', name: 'Their Savings' },
+      ],
+      transactions: [],
+    });
+  }
+
+  it('rejects a goal account belonging to a different household, even with a legitimate p_household_id/p_member_id', async () => {
+    const supabase = seedWithForeignHousehold();
+    const { error } = await supabase.rpc('create_transfer', {
+      p_household_id: HOUSEHOLD,
+      p_member_id: 'member-1',
+      p_chequing_id: CHEQUING,
+      p_goal_id: FOREIGN_GOAL, // belongs to hh-2
+      p_amount: 300,
+      p_date: '2026-07-05',
+      p_description: 'Attempted cross-tenant transfer',
+    });
+    expect(error).toBeTruthy();
+    expect(error!.message).toMatch(/does not belong to household/);
+    expect(supabase.currentTransactions()).toHaveLength(0); // nothing written
+  });
+
+  it('rejects a chequing account belonging to a different household', async () => {
+    const supabase = seedWithForeignHousehold();
+    const { error } = await supabase.rpc('create_transfer', {
+      p_household_id: HOUSEHOLD,
+      p_member_id: 'member-1',
+      p_chequing_id: FOREIGN_CHEQUING, // belongs to hh-2
+      p_goal_id: GOAL,
+      p_amount: 300,
+      p_date: '2026-07-05',
+      p_description: 'Attempted cross-tenant transfer',
+    });
+    expect(error).toBeTruthy();
+    expect(error!.message).toMatch(/does not belong to household/);
+    expect(supabase.currentTransactions()).toHaveLength(0);
+  });
+
+  it('rejects a member belonging to a different household', async () => {
+    const supabase = seedWithForeignHousehold();
+    const { error } = await supabase.rpc('create_transfer', {
+      p_household_id: HOUSEHOLD,
+      p_member_id: 'member-foreign',
+      p_chequing_id: CHEQUING,
+      p_goal_id: GOAL,
+      p_amount: 300,
+      p_date: '2026-07-05',
+      p_description: 'Attempted cross-tenant transfer',
+    });
+    expect(error).toBeTruthy();
+    expect(error!.message).toMatch(/does not belong to household/);
+    expect(supabase.currentTransactions()).toHaveLength(0);
+  });
+
+  it('rejects a chequing→chequing pair (destination must be a goal type)', async () => {
+    const supabase = seedSupabase([]);
+    const { error } = await supabase.rpc('create_transfer', {
+      p_household_id: HOUSEHOLD,
+      p_member_id: 'member-1',
+      p_chequing_id: CHEQUING,
+      p_goal_id: CHEQUING, // same account both sides
+      p_amount: 300,
+      p_date: '2026-07-05',
+      p_description: 'Self-transfer',
+    });
+    expect(error).toBeTruthy();
+    expect(error!.message).toMatch(/must differ/);
+  });
+
+  it('rejects a non-positive amount', async () => {
+    const supabase = seedSupabase([]);
+    const { error } = await supabase.rpc('create_transfer', {
+      p_household_id: HOUSEHOLD,
+      p_member_id: 'member-1',
+      p_chequing_id: CHEQUING,
+      p_goal_id: GOAL,
+      p_amount: 0,
+      p_date: '2026-07-05',
+      p_description: 'Zero transfer',
+    });
+    expect(error).toBeTruthy();
+    expect(error!.message).toMatch(/must be positive/);
+  });
+
+  it('a legitimate same-household transfer still succeeds after hardening', async () => {
+    const supabase = seedSupabase([]);
+    const { data, error } = await supabase.rpc('create_transfer', {
+      p_household_id: HOUSEHOLD,
+      p_member_id: 'member-1',
+      p_chequing_id: CHEQUING,
+      p_goal_id: GOAL,
+      p_amount: 300,
+      p_date: '2026-07-05',
+      p_description: 'Emergency fund',
+    });
+    expect(error).toBeNull();
+    expect(data).toBeTruthy();
+    expect(supabase.currentTransactions()).toHaveLength(2);
   });
 });

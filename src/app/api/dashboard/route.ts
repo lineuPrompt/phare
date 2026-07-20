@@ -65,6 +65,14 @@ export async function GET(request: Request) {
     // advances automatically as the calendar rolls over.
     const url = new URL(request.url);
     const monthParam = url.searchParams.get('month');
+    // Snapshot month-switching (dashboard/page.tsx) hits this same route
+    // with snapshotOnly=1 so it can update just the SnapshotCard's figures
+    // without re-fetching or re-rendering goals/sinking funds/the AI review —
+    // sections that don't depend on which month the snapshot is viewing.
+    // One route, one set of month-scoped helpers (computeMonthTotals,
+    // ensureBridgesForWindow) — snapshotOnly only skips queries whose
+    // results this response wouldn't use, never a parallel computation.
+    const snapshotOnly = url.searchParams.get('snapshotOnly') === '1';
     let actualsMonth: string;
     if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
       actualsMonth = `${monthParam}-01`;
@@ -83,15 +91,19 @@ export async function GET(request: Request) {
     // exists — used only for budget-vs-actual comparison. A household with
     // no variable-expense categories has no budget rows at all (honest:
     // there is nothing to compare), so this falls back to the actuals
-    // month rather than gating plan existence on it.
-    const { data: latestBudget } = await supabase
-      .from('budgets')
-      .select('month')
-      .eq('household_id', householdId)
-      .order('month', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const planMonth = (latestBudget?.month as string | undefined) ?? actualsMonth;
+    // month rather than gating plan existence on it. Not needed at all for
+    // snapshotOnly — skipped there, same as the other non-snapshot queries.
+    let planMonth = actualsMonth;
+    if (!snapshotOnly) {
+      const { data: latestBudget } = await supabase
+        .from('budgets')
+        .select('month')
+        .eq('household_id', householdId)
+        .order('month', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      planMonth = (latestBudget?.month as string | undefined) ?? actualsMonth;
+    }
 
     // Accounts are fetched up front (not inside the Promise.all below) because
     // a viewed month's credit-card bridge payment must be ensured in the
@@ -108,6 +120,25 @@ export async function GET(request: Request) {
 
     const chequingAccount = allAccounts.find((a) => a.type === 'chequing');
     const cardAccounts = allAccounts.filter((a) => a.type === 'credit_card');
+
+    // Snapshot's lower navigation bound: the same "no data before the
+    // earliest known real balance" boundary Timeline already enforces
+    // (selectAnchorsForTimeline). Without this, paging the snapshot back
+    // past that point shows a misleadingly empty/partial month that predates
+    // any real anchor — one extra cheap query, reusing the chequing account
+    // already resolved above; no parallel anchor-selection logic.
+    let earliestAnchorMonth: string | null = null;
+    if (chequingAccount) {
+      const { data: earliestAnchor } = await supabase
+        .from('account_balance_anchors')
+        .select('anchor_date')
+        .eq('household_id', householdId)
+        .eq('account_id', chequingAccount.id)
+        .order('anchor_date', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      earliestAnchorMonth = earliestAnchor ? (earliestAnchor.anchor_date as string).slice(0, 7) : null;
+    }
 
     if (chequingAccount && cardAccounts.length > 0) {
       const { data: memberRow } = await supabase
@@ -150,26 +181,33 @@ export async function GET(request: Request) {
           .gte('date', actualsMonth)
           .lt('date', actualsMonthEnd),
 
-        // Budget comparison always references the plan month
-        supabase
-          .from('budgets')
-          .select('amount, category_id, categories(name, type)')
-          .eq('household_id', householdId)
-          .eq('month', planMonth),
+        // Budget comparison always references the plan month. Skipped
+        // entirely for snapshotOnly — nothing in that response reads it.
+        snapshotOnly
+          ? Promise.resolve({ data: null, error: null })
+          : supabase
+              .from('budgets')
+              .select('amount, category_id, categories(name, type)')
+              .eq('household_id', householdId)
+              .eq('month', planMonth),
 
-        supabase
-          .from('sinking_funds')
-          .select('name, annual_amount, monthly_provision, due_month, current_balance')
-          .eq('household_id', householdId),
+        snapshotOnly
+          ? Promise.resolve({ data: null, error: null })
+          : supabase
+              .from('sinking_funds')
+              .select('name, annual_amount, monthly_provision, due_month, current_balance')
+              .eq('household_id', householdId),
 
-        supabase
-          .from('conversations')
-          .select('messages, created_at')
-          .eq('household_id', householdId)
-          .in('type', ['onboarding', 'monthly_review'])
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
+        snapshotOnly
+          ? Promise.resolve({ data: null, error: null })
+          : supabase
+              .from('conversations')
+              .select('messages, created_at')
+              .eq('household_id', householdId)
+              .in('type', ['onboarding', 'monthly_review'])
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle(),
 
         // Income and expense recurring items with no known pay date yet —
         // real cadence and amount are saved, but nothing is materialized for
@@ -195,6 +233,17 @@ export async function GET(request: Request) {
 
     // Headline totals from the actual ledger for the displayed month.
     const summary = computeMonthTotals(txResult.data ?? [], allAccounts);
+
+    if (snapshotOnly) {
+      return NextResponse.json({
+        hasPlan: true,
+        month: actualsMonth,
+        summary,
+        unanchoredIncomeCount: unanchoredIncomeResult.count ?? 0,
+        unanchoredExpenseCount: unanchoredExpenseResult.count ?? 0,
+        earliestAnchorMonth,
+      });
+    }
 
     // Fetch FULL (all-time) transaction history for goal accounts so that
     // computeGoalBalance sees every deposit, not just the active month.
@@ -283,6 +332,7 @@ export async function GET(request: Request) {
       reviewDate:        convResult.data?.created_at ?? null,
       unanchoredIncomeCount: unanchoredIncomeResult.count ?? 0,
       unanchoredExpenseCount: unanchoredExpenseResult.count ?? 0,
+      earliestAnchorMonth,
     });
   } catch (error) {
     console.error('Dashboard error:', error);

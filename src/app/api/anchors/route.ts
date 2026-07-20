@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { formatLocalDate } from '@/lib/dateHelpers';
 
 async function resolveContext(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -66,7 +67,15 @@ export async function POST(request: Request) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) {
       return NextResponse.json({ error: 'Invalid anchorDate format (expected YYYY-MM-DD)' }, { status: 400 });
     }
-    const today = new Date().toISOString().slice(0, 10);
+    // formatLocalDate (not `.toISOString()`, which is always UTC) is the
+    // canonical "today" reference across Phare — recurring materialization's
+    // date-walking already uses it. Mixing UTC here and local calendar dates
+    // there let this check drift from what "today" means everywhere else:
+    // for a household in a timezone behind UTC (e.g. Montréal, UTC-4/-5),
+    // `.toISOString()` rolls over to the next calendar day several hours
+    // before local midnight, so in the evening this check would have
+    // wrongly ALLOWED an anchor dated the user's actual local tomorrow.
+    const today = formatLocalDate(new Date());
     if (anchorDate > today) {
       return NextResponse.json({ error: 'anchorDate must not be in the future' }, { status: 400 });
     }
@@ -128,15 +137,26 @@ export async function DELETE(request: Request) {
     const ctx = await resolveContext(supabase);
     if (!ctx) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    const { error: deleteError } = await supabase
+    // .select() after .delete() returns the rows actually deleted — a
+    // DELETE matching zero rows (already deleted, wrong id, or someone
+    // else's household) is NOT a Postgres/PostgREST error, so without this
+    // the old code returned {deleted: true} unconditionally, including when
+    // nothing was touched (a lost race between two tabs deleting the same
+    // anchor, or a stale client retrying an already-completed delete).
+    const { data: deletedRows, error: deleteError } = await supabase
       .from('account_balance_anchors')
       .delete()
       .eq('id', anchorId)
-      .eq('household_id', ctx.householdId);
+      .eq('household_id', ctx.householdId)
+      .select('id');
 
     if (deleteError) {
       console.error('Anchor delete error:', deleteError);
       return NextResponse.json({ error: 'Failed to delete anchor' }, { status: 500 });
+    }
+
+    if (!deletedRows || deletedRows.length === 0) {
+      return NextResponse.json({ error: 'Anchor not found' }, { status: 404 });
     }
 
     return NextResponse.json({ deleted: true });

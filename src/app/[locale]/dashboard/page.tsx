@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter, usePathname } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const [displayMonth, setDisplayMonth] = useState<string>(calendarMonth);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState('');
 
@@ -53,11 +54,54 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [router, locale]);
 
+  // Full load: once on mount, and again after a plan regenerate (the AI
+  // review/top recommendation genuinely need refreshing there). NOT run
+  // again just because displayMonth changes — see the snapshot-only effect
+  // below for that — otherwise every month click blanked the entire page
+  // (goals, sinking funds, the AI review, all unmounted and refetched) to
+  // update three numbers.
   useEffect(() => {
-    loadDashboard(displayMonth);
-  }, [loadDashboard, displayMonth]);
+    loadDashboard(calendarMonth());
+  }, [loadDashboard]);
+
+  // Snapshot-only month switching: /api/dashboard?snapshotOnly=1 recomputes
+  // just the snapshot's figures (still via computeMonthTotals/
+  // ensureBridgesForWindow — same helpers, no parallel math) and this patches
+  // only those fields into `data`. goalAccounts/sinkingFunds/review are
+  // untouched, so GoalsCard/SinkingFundsCard/ReviewCard never re-render and
+  // the page never blanks — instant, in-place, no full reload.
+  const skippedInitialSnapshotFetch = useRef(false);
+  useEffect(() => {
+    if (!skippedInitialSnapshotFetch.current) {
+      skippedInitialSnapshotFetch.current = true; // the full load above already covers the starting month
+      return;
+    }
+    setSnapshotLoading(true);
+    fetch(`/api/dashboard?month=${displayMonth}&snapshotOnly=1`)
+      .then(async (res) => {
+        if (res.status === 401) {
+          router.push(`/${locale}/signin`);
+          return null;
+        }
+        return res.json();
+      })
+      .then((d) => {
+        if (!d || !d.hasPlan) return;
+        setData((prev) => (prev ? {
+          ...prev,
+          month: d.month,
+          summary: d.summary,
+          unanchoredIncomeCount: d.unanchoredIncomeCount,
+          unanchoredExpenseCount: d.unanchoredExpenseCount,
+          earliestAnchorMonth: d.earliestAnchorMonth,
+        } : prev));
+      })
+      .finally(() => setSnapshotLoading(false));
+  }, [displayMonth, router, locale]);
 
   const handlePrevMonth = () => {
+    const earliestAnchorMonth = data?.earliestAnchorMonth;
+    if (earliestAnchorMonth && displayMonth <= earliestAnchorMonth) return;
     const [y, m] = displayMonth.split('-').map(Number);
     setDisplayMonth(m === 1
       ? `${y - 1}-12`
@@ -118,6 +162,7 @@ export default function DashboardPage() {
   }
 
   const isMaxMonth = displayMonth === maxNavigableMonth();
+  const isMinMonth = data.earliestAnchorMonth ? displayMonth <= data.earliestAnchorMonth : false;
 
   return (
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
@@ -142,6 +187,8 @@ export default function DashboardPage() {
                   onPrevMonth={handlePrevMonth}
                   onNextMonth={handleNextMonth}
                   isMaxMonth={isMaxMonth}
+                  isMinMonth={isMinMonth}
+                  loading={snapshotLoading}
                   unanchoredIncomeCount={data.unanchoredIncomeCount}
                   unanchoredExpenseCount={data.unanchoredExpenseCount}
                 />

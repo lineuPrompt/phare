@@ -62,15 +62,26 @@ export async function PATCH(
       return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
     }
 
-    const { error } = await supabase
+    // .select() makes the update conditional and reports what it actually
+    // touched — loadEditableTransaction's earlier read only proves the row
+    // existed AT THAT MOMENT; a concurrent delete (another tab, or the same
+    // entry's own bridge-recompute path) between that read and this write
+    // would otherwise still return {saved: true} for a write that touched
+    // nothing (transactions.update with no matching row is not a Postgres
+    // error — it's an empty, silently "successful" no-op).
+    const { data: updatedRows, error } = await supabase
       .from('transactions')
       .update(updates)
       .eq('id', id)
-      .eq('household_id', householdId);
+      .eq('household_id', householdId)
+      .select('id');
 
     if (error) {
       console.error('Transaction PATCH error:', error);
       return NextResponse.json({ error: 'Failed to save entry' }, { status: 500 });
+    }
+    if (!updatedRows || updatedRows.length === 0) {
+      return NextResponse.json({ error: 'Entry no longer exists' }, { status: 409 });
     }
 
     return NextResponse.json({ saved: true });
@@ -95,15 +106,22 @@ export async function DELETE(
     const found = await loadEditableTransaction(supabase, id, householdId);
     if ('error' in found) return NextResponse.json({ error: found.error }, { status: found.status });
 
-    const { error } = await supabase
+    // See PATCH above: .select() makes this conditional so a lost race
+    // (already deleted between loadEditableTransaction's read and here)
+    // reports honestly instead of a bare, indistinguishable {deleted: true}.
+    const { data: deletedRows, error } = await supabase
       .from('transactions')
       .delete()
       .eq('id', id)
-      .eq('household_id', householdId);
+      .eq('household_id', householdId)
+      .select('id');
 
     if (error) {
       console.error('Transaction DELETE error:', error);
       return NextResponse.json({ error: 'Failed to delete entry' }, { status: 500 });
+    }
+    if (!deletedRows || deletedRows.length === 0) {
+      return NextResponse.json({ error: 'Entry no longer exists' }, { status: 409 });
     }
 
     return NextResponse.json({ deleted: true });

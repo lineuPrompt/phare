@@ -100,6 +100,16 @@ export default function CardEnvelopeEditor({
     });
     setSaving(false);
     if (res.ok) {
+      const d = await res.json().catch(() => ({}));
+      if (d.daysUpdateFailed) {
+        // Goal + categories DID save — only the statement/payment day write
+        // failed. Surface that explicitly rather than closing the editor as
+        // if everything the user submitted was saved: a stale
+        // statement_close_day/payment_day silently misdates the next bridge
+        // payment computed for this card.
+        setError(t('editor.daysUpdateFailed'));
+        return;
+      }
       onSaved();
     } else {
       const d = await res.json().catch(() => ({}));

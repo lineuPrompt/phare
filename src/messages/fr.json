@@ -372,7 +372,8 @@
     "snapshotNav": {
       "prev": "Mois précédent",
       "next": "Mois suivant",
-      "outOfRange": "Hors de la période suivie par Phare — les chiffres ne sont pas encore calculés aussi loin"
+      "outOfRange": "Hors de la période suivie par Phare",
+      "viewInTimeline": "Voir ce mois dans la Chronologie"
     },
     "nav": {
       "overview": "Aperçu",
@@ -440,7 +441,8 @@
       "copyFromPrevious": "Copier le mois précédent",
       "copying": "Copie en cours...",
       "copyNothingToCopy": "Aucune enveloppe enregistrée pour le mois précédent.",
-      "copyFailed": "Impossible de charger le mois précédent."
+      "copyFailed": "Impossible de charger le mois précédent.",
+      "daysUpdateFailed": "Votre objectif de dépenses et vos catégories ont été enregistrés, mais le jour de relevé/paiement n'a pas pu être enregistré. Veuillez réessayer."
     },
     "grid": {
       "title": "Plan sur 12 mois",

@@ -372,7 +372,8 @@
     "snapshotNav": {
       "prev": "Previous month",
       "next": "Next month",
-      "outOfRange": "Outside the range Phare tracks — figures aren't materialized this far ahead yet"
+      "outOfRange": "Outside the range Phare tracks",
+      "viewInTimeline": "View this month in Timeline"
     },
     "nav": {
       "overview": "Overview",
@@ -440,7 +441,8 @@
       "copyFromPrevious": "Copy from previous month",
       "copying": "Copying...",
       "copyNothingToCopy": "No envelope was saved for the previous month.",
-      "copyFailed": "Couldn't load the previous month."
+      "copyFailed": "Couldn't load the previous month.",
+      "daysUpdateFailed": "Your spending goal and categories saved, but the statement/payment day couldn't be saved. Please try again."
     },
     "grid": {
       "title": "12-month plan",

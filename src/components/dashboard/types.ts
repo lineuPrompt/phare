@@ -76,6 +76,9 @@ export type DashboardData = {
   // lower than the plan's until a pay date is set on the Recurring page.
   unanchoredIncomeCount?: number;
   unanchoredExpenseCount?: number;
+  // YYYY-MM of the chequing account's earliest balance anchor, or null if
+  // none exists — the snapshot's lower navigation bound, matching Timeline's.
+  earliestAnchorMonth?: string | null;
 };
 
 export function formatCurrency(amount: number, locale: string) {

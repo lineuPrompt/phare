@@ -43,6 +43,28 @@
  * The DB unique index on (household_id, bridge_source_account,
  * bridge_source_month) WHERE is_bridge still guards against duplicate
  * inserts if this ever races.
+ *
+ * FAIL-CLOSED (2026-07-22, Codex adversarial review Tier 2)
+ * -----------------------------------------------------------
+ * Every read and write below throws on error instead of discarding it.
+ * Before this fix, a failed read silently produced an empty result (`data`
+ * undefined, `error` dropped), which computeBridgeSync would then read as
+ * "this card has zero spend this cycle" — deleting a perfectly valid
+ * existing bridge row over a transient read error, not a real zero. A
+ * failed write returned success just as silently, so a caller (Timeline,
+ * the dashboard) would proceed to read transactions believing the bridge
+ * was synced when nothing had actually been written. Both are now thrown
+ * errors that callers must let propagate (a 500, not a silently understated
+ * or wrongly-deleted figure) — silent failure is worse than visible failure.
+ *
+ * NOT a single DB transaction: ensureBridgesForWindow still makes several
+ * round trips (2 reads, up to 3 writes), so a failure partway through the
+ * writes can still leave a partially-synced set of bridge rows for this
+ * call. What changed is that such a failure now always throws — it can
+ * never present as success. A fully atomic version would need to become a
+ * plpgsql RPC (the same pattern create_transfer uses) so all inserts/
+ * updates/deletes commit or roll back together; that's a larger rewrite
+ * left for later if partial-write states are ever actually observed live.
  */
 
 import { bridgePaymentDate, statementCycleWindow } from './dateHelpers';
@@ -219,7 +241,7 @@ export async function ensureBridgesForWindow(params: {
 
   // One query for every card's expense AND income (refund) rows across the
   // whole span — netting needs both sides of the ledger, not just spend.
-  const { data: spendTxns } = await supabase
+  const { data: spendTxns, error: spendErr } = await supabase
     .from('transactions')
     .select('account_id, amount, date, type')
     .eq('household_id', householdId)
@@ -227,6 +249,10 @@ export async function ensureBridgesForWindow(params: {
     .in('type', ['expense', 'income'])
     .gte('date', minStart as string)
     .lte('date', maxEnd as string);
+
+  if (spendErr) {
+    throw new Error(`ensureBridgesForWindow: failed to read card transactions — ${spendErr.message ?? spendErr}`);
+  }
 
   const txnsByCard = new Map<string, { amount: number; date: string; type: string }[]>();
   for (const t of (spendTxns ?? []) as { account_id: string | null; amount: number; date: string; type: string }[]) {
@@ -237,13 +263,17 @@ export async function ensureBridgesForWindow(params: {
   }
 
   // One query for every existing bridge row across all cycle months.
-  const { data: existingRows } = await supabase
+  const { data: existingRows, error: existingErr } = await supabase
     .from('transactions')
     .select('id, bridge_source_account, bridge_source_month, amount')
     .eq('household_id', householdId)
     .eq('is_bridge', true)
     .in('bridge_source_month', spendMonths)
     .in('bridge_source_account', cardIds);
+
+  if (existingErr) {
+    throw new Error(`ensureBridgesForWindow: failed to read existing bridge rows — ${existingErr.message ?? existingErr}`);
+  }
 
   const existingByMonth = new Map<string, ExistingBridgeRow[]>();
   for (const r of (existingRows ?? []) as { id: string; bridge_source_account: string | null; bridge_source_month: string; amount: number }[]) {
@@ -277,14 +307,18 @@ export async function ensureBridgesForWindow(params: {
   }
 
   if (allInserts.length > 0) {
-    await supabase.from('transactions').insert(allInserts);
+    const { error } = await supabase.from('transactions').insert(allInserts);
+    if (error) throw new Error(`ensureBridgesForWindow: failed to insert bridge rows — ${error.message ?? error}`);
   }
   if (allUpdates.length > 0) {
-    await Promise.all(
+    const results = await Promise.all(
       allUpdates.map((u) => supabase.from('transactions').update({ amount: u.amount }).eq('id', u.id))
     );
+    const failed = results.find((r) => r.error);
+    if (failed) throw new Error(`ensureBridgesForWindow: failed to update a bridge row — ${failed.error.message ?? failed.error}`);
   }
   if (allDeletes.length > 0) {
-    await supabase.from('transactions').delete().in('id', allDeletes);
+    const { error } = await supabase.from('transactions').delete().in('id', allDeletes);
+    if (error) throw new Error(`ensureBridgesForWindow: failed to delete stale bridge rows — ${error.message ?? error}`);
   }
 }
