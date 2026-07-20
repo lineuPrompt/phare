@@ -147,7 +147,7 @@ export default function HouseholdPage() {
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
       <Navbar />
 
-      <div className="flex">
+      <div className="flex flex-col md:flex-row">
         <Sidebar locale={locale} role="owner" />
 
         <div className="flex-1 min-w-0">

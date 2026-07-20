@@ -12,10 +12,18 @@ import ReviewCard from '@/components/dashboard/ReviewCard';
 import EmptyState from '@/components/dashboard/EmptyState';
 import { DashboardData } from '@/components/dashboard/types';
 import Sidebar from '@/components/dashboard/Sidebar';
+import { addMonthsToMonth } from '@/lib/goalHelpers';
 
 function calendarMonth(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Same 12-month rolling window (current month + 11) that Timeline's
+// materialization and bridge-ensuring cover — reusing addMonthsToMonth
+// rather than a parallel month computation keeps this one source of truth.
+function maxNavigableMonth(): string {
+  return addMonthsToMonth(calendarMonth(), 11);
 }
 
 export default function DashboardPage() {
@@ -58,6 +66,7 @@ export default function DashboardPage() {
   };
 
   const handleNextMonth = () => {
+    if (displayMonth === maxNavigableMonth()) return;
     const [y, m] = displayMonth.split('-').map(Number);
     setDisplayMonth(m === 12
       ? `${y + 1}-01`
@@ -108,13 +117,13 @@ export default function DashboardPage() {
     );
   }
 
-  const isCurrentMonth = displayMonth === calendarMonth();
+  const isMaxMonth = displayMonth === maxNavigableMonth();
 
   return (
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
       <Navbar />
 
-      <div className="flex">
+      <div className="flex flex-col md:flex-row">
         <Sidebar locale={locale} />
 
         <div className="flex-1 min-w-0">
@@ -132,7 +141,7 @@ export default function DashboardPage() {
                   month={displayMonth}
                   onPrevMonth={handlePrevMonth}
                   onNextMonth={handleNextMonth}
-                  isCurrentMonth={isCurrentMonth}
+                  isMaxMonth={isMaxMonth}
                   unanchoredIncomeCount={data.unanchoredIncomeCount}
                   unanchoredExpenseCount={data.unanchoredExpenseCount}
                 />

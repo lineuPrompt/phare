@@ -369,6 +369,11 @@
     "loading": "Loading your plan...",
     "regeneratePlan": "Regenerate plan from current data",
     "regenerating": "Regenerating…",
+    "snapshotNav": {
+      "prev": "Previous month",
+      "next": "Next month",
+      "outOfRange": "Outside the range Phare tracks — figures aren't materialized this far ahead yet"
+    },
     "nav": {
       "overview": "Overview",
       "timeline": "Timeline",
@@ -378,7 +383,10 @@
       "reconcile": "Audit",
       "goals": "Goals",
       "household": "Household",
-      "cards": "Cards"
+      "cards": "Cards",
+      "menu": "Menu",
+      "openMenu": "Open menu",
+      "closeMenu": "Close menu"
     }
   },
   "cards": {

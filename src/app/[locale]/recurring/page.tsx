@@ -43,7 +43,7 @@ export default function RecurringPage() {
   return (
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
       <Navbar />
-      <div className="flex">
+      <div className="flex flex-col md:flex-row">
         <Sidebar locale={locale} />
         <div className="flex-1 min-w-0">
           <div className="max-w-3xl mx-auto px-6 py-10 space-y-6">

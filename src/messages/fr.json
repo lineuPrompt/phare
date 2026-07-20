@@ -369,6 +369,11 @@
     "loading": "Chargement de votre plan...",
     "regeneratePlan": "Régénérer le plan à partir des données actuelles",
     "regenerating": "Régénération…",
+    "snapshotNav": {
+      "prev": "Mois précédent",
+      "next": "Mois suivant",
+      "outOfRange": "Hors de la période suivie par Phare — les chiffres ne sont pas encore calculés aussi loin"
+    },
     "nav": {
       "overview": "Aperçu",
       "timeline": "Chronologie",
@@ -378,7 +383,10 @@
       "reconcile": "Audit",
       "goals": "Objectifs",
       "household": "Foyer",
-      "cards": "Cartes"
+      "cards": "Cartes",
+      "menu": "Menu",
+      "openMenu": "Ouvrir le menu",
+      "closeMenu": "Fermer le menu"
     }
   },
   "cards": {

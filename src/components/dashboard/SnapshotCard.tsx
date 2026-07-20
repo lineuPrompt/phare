@@ -8,7 +8,7 @@ export default function SnapshotCard({
   month,
   onPrevMonth,
   onNextMonth,
-  isCurrentMonth,
+  isMaxMonth,
   unanchoredIncomeCount,
   unanchoredExpenseCount,
 }: {
@@ -17,11 +17,15 @@ export default function SnapshotCard({
   month: string;          // YYYY-MM (not YYYY-MM-01)
   onPrevMonth: () => void;
   onNextMonth: () => void;
-  isCurrentMonth: boolean;
+  // True when `month` is the furthest month Phare has materialized data for
+  // (the same 12-month rolling window Timeline uses) — disables forward nav
+  // rather than letting it silently do nothing.
+  isMaxMonth: boolean;
   unanchoredIncomeCount?: number;
   unanchoredExpenseCount?: number;
 }) {
   const t = useTranslations('dashboard');
+  const tNav = useTranslations('dashboard.snapshotNav');
   const surplus = summary.netCashFlow >= 0;
 
   const [y, m] = month.split('-').map(Number);
@@ -41,7 +45,8 @@ export default function SnapshotCard({
             onClick={onPrevMonth}
             className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors cursor-pointer text-lg leading-none"
             style={{ color: '#6B7280' }}
-            aria-label="Previous month"
+            aria-label={tNav('prev')}
+            title={tNav('prev')}
           >
             ‹
           </button>
@@ -53,10 +58,11 @@ export default function SnapshotCard({
           </span>
           <button
             onClick={onNextMonth}
-            disabled={isCurrentMonth}
+            disabled={isMaxMonth}
             className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default text-lg leading-none"
             style={{ color: '#6B7280' }}
-            aria-label="Next month"
+            aria-label={isMaxMonth ? tNav('outOfRange') : tNav('next')}
+            title={isMaxMonth ? tNav('outOfRange') : tNav('next')}
           >
             ›
           </button>

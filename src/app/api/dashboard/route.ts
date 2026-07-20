@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
-import { evaluateGoals, isDebtGoalName, computeDebtPayoff } from '@/lib/goalHelpers';
+import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth } from '@/lib/goalHelpers';
+import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
 import { logEvent, isFirstReturnToday } from '@/lib/eventLogger';
 
 export async function GET(request: Request) {
@@ -92,7 +93,54 @@ export async function GET(request: Request) {
       .maybeSingle();
     const planMonth = (latestBudget?.month as string | undefined) ?? actualsMonth;
 
-    const [txResult, acctResult, budgetResult, sfResult, convResult, unanchoredIncomeResult, unanchoredExpenseResult] =
+    // Accounts are fetched up front (not inside the Promise.all below) because
+    // a viewed month's credit-card bridge payment must be ensured in the
+    // ledger BEFORE the transactions query for that month runs — the same
+    // ordering constraint timeline/route.ts already follows. Without this,
+    // navigating the snapshot to a future month whose bridge was never
+    // materialized (e.g. the user never opened Timeline for that range)
+    // would silently understate that month's expenses.
+    const { data: rawAccounts } = await supabase
+      .from('accounts')
+      .select('id, name, type, goal_target, goal_target_date, payment_day, statement_close_day')
+      .eq('household_id', householdId);
+    const allAccounts = rawAccounts ?? [];
+
+    const chequingAccount = allAccounts.find((a) => a.type === 'chequing');
+    const cardAccounts = allAccounts.filter((a) => a.type === 'credit_card');
+
+    if (chequingAccount && cardAccounts.length > 0) {
+      const { data: memberRow } = await supabase
+        .from('household_members')
+        .select('id')
+        .eq('household_id', householdId)
+        .eq('user_id', user.id)
+        .single();
+      const memberId = (memberRow?.id ?? null) as string | null;
+
+      const cards = cardAccounts.map((a) => ({
+        id: a.id as string,
+        name: a.name as string,
+        payment_day: (a.payment_day ?? null) as number | null,
+        statement_close_day: (a.statement_close_day ?? null) as number | null,
+      }));
+
+      // A bridge payment for spend month M appears in the chequing ledger in
+      // month M+1 (bridgeHelpers.ts), so the spend month whose bridge lands
+      // in the viewed actualsMonth is one month earlier.
+      const spendMonth = addMonthsToMonth(actualsMonth.slice(0, 7), -1);
+
+      await ensureBridgesForWindow({
+        supabase,
+        householdId,
+        chequingId: chequingAccount.id as string,
+        memberId,
+        cards,
+        spendMonths: [spendMonth],
+      });
+    }
+
+    const [txResult, budgetResult, sfResult, convResult, unanchoredIncomeResult, unanchoredExpenseResult] =
       await Promise.all([
         // Transactions for the ACTUALS month (not the plan month)
         supabase
@@ -101,11 +149,6 @@ export async function GET(request: Request) {
           .eq('household_id', householdId)
           .gte('date', actualsMonth)
           .lt('date', actualsMonthEnd),
-
-        supabase
-          .from('accounts')
-          .select('id, name, type, goal_target, goal_target_date')
-          .eq('household_id', householdId),
 
         // Budget comparison always references the plan month
         supabase
@@ -149,8 +192,6 @@ export async function GET(request: Request) {
           .eq('active', true)
           .is('anchor_date', null),
       ]);
-
-    const allAccounts = acctResult.data ?? [];
 
     // Headline totals from the actual ledger for the displayed month.
     const summary = computeMonthTotals(txResult.data ?? [], allAccounts);
