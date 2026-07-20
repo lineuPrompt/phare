@@ -132,8 +132,8 @@ export default function CardsPage() {
       <div className="flex flex-col md:flex-row">
         <Sidebar locale={locale} />
         <div className="flex-1 min-w-0">
-          <div className="max-w-5xl mx-auto px-6 py-10 space-y-6">
-            <h1 className="text-3xl font-bold" style={{ color: '#0F2044' }}>{t('title')}</h1>
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-6">
+            <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: '#0F2044' }}>{t('title')}</h1>
 
             {/* No credit cards state */}
             {cards.length === 0 && (

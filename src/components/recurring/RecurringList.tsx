@@ -256,12 +256,12 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, onChan
           </p>
         </div>
         <span
-          className="font-bold shrink-0 w-24 text-right"
+          className="font-bold shrink-0 w-20 sm:w-24 text-right text-sm sm:text-base"
           style={{ color: formatSignedAmount(Number(item.amount), item.type, locale).color }}
         >
           {formatSignedAmount(Number(item.amount), item.type, locale).text}
         </span>
-        <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-1 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           <button
             onClick={startEdit}
             className="px-2 py-1 rounded text-xs cursor-pointer"

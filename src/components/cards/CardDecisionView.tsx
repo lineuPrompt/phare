@@ -182,37 +182,37 @@ export default function CardDecisionView({
   return (
     <div className="space-y-4">
       {/* Three-question header strip */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="rounded-2xl bg-white p-5" style={{ border: '1px solid #E5E7EB' }}>
-          <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: '#6B7280' }}>
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="rounded-2xl bg-white p-3 sm:p-5 min-w-0" style={{ border: '1px solid #E5E7EB' }}>
+          <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wide mb-1 truncate" style={{ color: '#6B7280' }}>
             {t('decision.totalGoal')}
           </p>
-          <p className="text-2xl font-bold" style={{ color: '#0F2044' }}>
+          <p className="text-base sm:text-2xl font-bold truncate" style={{ color: '#0F2044' }}>
             {totalGoal !== null ? formatCurrency(totalGoal, locale) : <span style={{ color: '#9CA3AF' }}>{t('decision.noGoal')}</span>}
           </p>
         </div>
 
-        <div className="rounded-2xl bg-white p-5" style={{ border: '1px solid #E5E7EB' }}>
-          <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: '#6B7280' }}>
+        <div className="rounded-2xl bg-white p-3 sm:p-5 min-w-0" style={{ border: '1px solid #E5E7EB' }}>
+          <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wide mb-1 truncate" style={{ color: '#6B7280' }}>
             {t('decision.spent')}
           </p>
-          <p className="text-2xl font-bold" style={{ color: overGoal ? '#DC2626' : '#0F2044' }}>
+          <p className="text-base sm:text-2xl font-bold truncate" style={{ color: overGoal ? '#DC2626' : '#0F2044' }}>
             {formatCurrency(totalSpent, locale)}
           </p>
         </div>
 
-        <div className="rounded-2xl p-5" style={{
+        <div className="rounded-2xl p-3 sm:p-5 min-w-0" style={{
           border: overGoal ? '2px solid #DC2626' : '1px solid #E5E7EB',
           background: overGoal ? '#FEF2F2' : 'white',
         }}>
-          <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: '#6B7280' }}>
+          <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wide mb-1 truncate" style={{ color: '#6B7280' }}>
             {t('decision.remaining')}
           </p>
-          <p className="text-2xl font-bold" style={{ color: remaining === null ? '#9CA3AF' : overGoal ? '#DC2626' : '#16A34A' }}>
+          <p className="text-base sm:text-2xl font-bold truncate" style={{ color: remaining === null ? '#9CA3AF' : overGoal ? '#DC2626' : '#16A34A' }}>
             {remaining !== null ? formatCurrency(remaining, locale) : '—'}
           </p>
           {overGoal && (
-            <p className="text-xs font-semibold mt-1" style={{ color: '#DC2626' }}>
+            <p className="text-[10px] sm:text-xs font-semibold mt-1 truncate" style={{ color: '#DC2626' }}>
               {t('decision.overGoal')}
             </p>
           )}
@@ -220,7 +220,7 @@ export default function CardDecisionView({
       </div>
 
       {/* Per-category decision table */}
-      <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>
+      <div className="rounded-2xl bg-white p-3 sm:p-6" style={{ border: '1px solid #E5E7EB' }}>
         {!hasEnvelope ? (
           <div className="text-center py-6">
             <p className="text-sm mb-3" style={{ color: '#6B7280' }}>{t('decision.noEnvelope')}</p>
@@ -247,7 +247,8 @@ export default function CardDecisionView({
               </button>
             </div>
 
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[520px]">
               <thead>
                 <tr style={{ borderBottom: '2px solid #E5E7EB' }}>
                   <th className="text-left py-2 font-semibold" style={{ color: '#0F2044' }}>{t('decision.category')}</th>
@@ -371,6 +372,7 @@ export default function CardDecisionView({
                 </tr>
               </tfoot>
             </table>
+            </div>
 
             {/* Goal comparison lives on its own line — a separate truth from the
                 column sums above. Warn, never block, same rule the editor uses. */}
