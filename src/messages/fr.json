@@ -504,7 +504,13 @@
       "save": "Enregistrer",
       "saving": "Enregistrement...",
       "cancel": "Annuler",
-      "confirmDelete": "Supprimer ce transfert?"
+      "confirmDelete": "Supprimer ce transfert?",
+      "confirmDeleteEntry": "Supprimer cette entrée?",
+      "confirmDeleteOccurrence": "Supprimer seulement cette occurrence? La règle récurrente reste inchangée — les prochaines occurrences garderont leur montant habituel.",
+      "detachHint": "Cette entrée fait partie d'une règle récurrente. Enregistrer ne modifie que cette occurrence — la règle elle-même reste inchangée.",
+      "moneyOut": "Sortie d'argent",
+      "moneyIn": "Entrée d'argent",
+      "categoryUnchanged": "Catégorie..."
     },
     "nav": {
       "prev": "Précédent",

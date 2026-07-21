@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { businessToday, materializeFromMonthStart } from '@/lib/dateHelpers';
 
 // ---------------------------------------------------------------------------
 // Verifies the existing PATCH memberId path — already generic across income
@@ -95,6 +96,9 @@ describe('PATCH /api/recurring/[id] — member reassignment works for expenses',
         { error: null }, // delete this-month-onward rows
         { error: null }, // insert re-materialized rows
       ],
+      recurring_skipped_dates: [
+        { data: [], error: null }, // no detached occurrences for this rule
+      ],
     });
 
     const { createClient } = await import('@/lib/supabase-server');
@@ -126,5 +130,106 @@ describe('PATCH /api/recurring/[id] — member reassignment works for expenses',
     const rows = txnInserts[0].args[0] as { member_id: string }[];
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.member_id === 'mem-julia')).toBe(true);
+  });
+});
+
+describe('PATCH /api/recurring/[id] — Part A3 re-materialization respects detached-occurrence tombstones', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('does not regenerate a date the household already detached from this rule (no revert, no duplicate)', async () => {
+    // Mirrors the route's own computation exactly, so this test stays
+    // correct regardless of what "today" is when it runs.
+    const todayStr = businessToday('America/Toronto');
+    const anchorDate = '2020-01-01';
+    const rawDates = materializeFromMonthStart({ cadence: 'monthly', anchorDate, secondDay: null }, todayStr, 12);
+    const tombstonedDate = rawDates[0];
+    const remainingDates = rawDates.slice(1);
+    expect(remainingDates.length).toBeGreaterThan(0); // sanity: the fixture actually exercises the filter
+
+    const { client, calls } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      recurring_items: [
+        {
+          data: {
+            id: 'ri-phone', household_id: 'hh1', member_id: null, description: 'Phone bill', amount: 60,
+            type: 'expense', cadence: 'monthly', anchor_date: anchorDate, second_day: null,
+            category_id: 'cat-utilities', account_id: 'chq-1',
+          },
+          error: null,
+        },
+        { data: { id: 'ri-phone', member_id: null, type: 'expense' }, error: null },
+      ],
+      accounts: [{ data: { id: 'chq-1' }, error: null }],
+      transactions: [
+        { error: null }, // delete this-month-onward rows
+        { error: null }, // insert re-materialized rows
+      ],
+      recurring_skipped_dates: [
+        // The household edited/deleted the occurrence originally scheduled
+        // for rawDates[0] — this rule must never regenerate it.
+        { data: [{ date: tombstonedDate }], error: null },
+      ],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { PATCH } = await import('../route');
+    const res = await PATCH(
+      new Request('http://localhost/api/recurring/ri-phone', { method: 'PATCH', body: JSON.stringify({}) }),
+      { params: Promise.resolve({ id: 'ri-phone' }) }
+    );
+    expect(res.status).toBe(200);
+
+    const txnInserts = calls.filter((c) => c.table === 'transactions' && c.method === 'insert');
+    expect(txnInserts).toHaveLength(1);
+    const insertedDates = (txnInserts[0].args[0] as { date: string }[]).map((r) => r.date);
+
+    // The tombstoned date never comes back...
+    expect(insertedDates).not.toContain(tombstonedDate);
+    // ...and every other real occurrence still materializes, exactly once —
+    // this is the "no revert, no duplicate" guarantee.
+    expect(insertedDates).toEqual(remainingDates);
+  });
+
+  it('a rule with no detached occurrences materializes every date, unaffected', async () => {
+    const todayStr = businessToday('America/Toronto');
+    const anchorDate = '2020-01-01';
+    const rawDates = materializeFromMonthStart({ cadence: 'monthly', anchorDate, secondDay: null }, todayStr, 12);
+
+    const { client, calls } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      recurring_items: [
+        {
+          data: {
+            id: 'ri-rent', household_id: 'hh1', member_id: null, description: 'Rent', amount: 2000,
+            type: 'expense', cadence: 'monthly', anchor_date: anchorDate, second_day: null,
+            category_id: 'cat-housing', account_id: 'chq-1',
+          },
+          error: null,
+        },
+        { data: { id: 'ri-rent', member_id: null, type: 'expense' }, error: null },
+      ],
+      accounts: [{ data: { id: 'chq-1' }, error: null }],
+      transactions: [{ error: null }, { error: null }],
+      recurring_skipped_dates: [{ data: [], error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { PATCH } = await import('../route');
+    await PATCH(
+      new Request('http://localhost/api/recurring/ri-rent', { method: 'PATCH', body: JSON.stringify({}) }),
+      { params: Promise.resolve({ id: 'ri-rent' }) }
+    );
+
+    const txnInserts = calls.filter((c) => c.table === 'transactions' && c.method === 'insert');
+    const insertedDates = (txnInserts[0].args[0] as { date: string }[]).map((r) => r.date);
+    expect(insertedDates).toEqual(rawDates);
   });
 });

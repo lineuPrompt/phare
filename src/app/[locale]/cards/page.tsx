@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import CardDecisionView, { EnvelopeItem } from '@/components/cards/CardDecisionView';
@@ -31,14 +31,26 @@ export default function CardsPage() {
   const t = useTranslations('cards');
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
 
   const { month: currentMonth } = useBusinessToday();
   const [cy0, cm0] = currentMonth.split('-').map(Number);
 
-  // Build 12-month list from current month forward (same as expenses page)
+  // A Timeline bridge row deep-links here with ?card=<id>&month=<YYYY-MM> —
+  // read once on mount, same pattern as the Timeline page's own ?month=
+  // deep link from the dashboard.
+  const cardParam = searchParams.get('card');
+  const monthParamRaw = searchParams.get('month');
+  const monthParam = monthParamRaw && /^\d{4}-\d{2}$/.test(monthParamRaw) ? monthParamRaw : null;
+
+  // Build the month list starting ONE month before the current month, not
+  // just forward: a bridge row's spend month (bridge_source_month) is always
+  // payment-month − 1, and the payment can land as early as the current
+  // month — so the spend month it deep-links to can be one month before
+  // "today," which a forward-only list would never contain a tab for.
   const months: { value: string; label: string }[] = [];
-  for (let i = 0; i < 12; i++) {
+  for (let i = -1; i < 12; i++) {
     const d = new Date(cy0, cm0 - 1 + i, 1);
     months.push({
       value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
@@ -48,7 +60,7 @@ export default function CardsPage() {
 
   const [cards, setCards]               = useState<Account[]>([]);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
-  const [selectedMonth, setSelectedMonth]   = useState(currentMonth);
+  const [selectedMonth, setSelectedMonth]   = useState(monthParam ?? currentMonth);
   const [envelopeData, setEnvelopeData]     = useState<EnvelopeData | null>(null);
   const [gridData, setGridData]             = useState<GridData | null>(null);
   const [overview, setOverview]             = useState<CardOverviewRow[]>([]);
@@ -65,7 +77,8 @@ export default function CardsPage() {
         const creditCards = d.accounts.filter((a) => a.type === 'credit_card');
         setCards(creditCards);
         if (creditCards.length > 0 && !selectedCardId) {
-          setSelectedCardId(creditCards[0].id);
+          const deepLinked = cardParam && creditCards.some((c) => c.id === cardParam) ? cardParam : null;
+          setSelectedCardId(deepLinked ?? creditCards[0].id);
         }
       })
       .catch(() => {});

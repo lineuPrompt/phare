@@ -254,7 +254,16 @@ export default function TimelinePage() {
         </button>
       </div>
 
-      {monthView && <DayLedger monthView={monthView} today={today} locale={locale} todayRef={todayRef} onChanged={load} />}
+      {monthView && (
+        <DayLedger
+          monthView={monthView}
+          today={today}
+          locale={locale}
+          categories={categories}
+          todayRef={todayRef}
+          onChanged={load}
+        />
+      )}
 
       {monthView && (
         <RemainingCashStrip

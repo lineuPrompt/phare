@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { businessToday, materializeFromMonthStart } from '@/lib/dateHelpers';
+import { businessToday, materializeFromMonthStart, excludeSkippedDates } from '@/lib/dateHelpers';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
@@ -182,13 +182,27 @@ export async function PATCH(
     // 3. Re-materialize — only when there's a known anchor date. No anchor
     // yet means no dated instances, not a fabricated guess.
     const canMaterialize = !!newAnchorDate;
-    const dates = canMaterialize
+    const rawDates = canMaterialize
       ? materializeFromMonthStart(
           { cadence: newCadence as 'monthly' | 'biweekly' | 'semimonthly' | 'weekly', anchorDate: newAnchorDate, secondDay: newSecondDay },
           todayStr,
           12
         )
       : [];
+
+    // Never regenerate a date the household already detached from this rule
+    // (Part A3: edited or deleted a single occurrence) — without this, this
+    // very re-materialization step is exactly what would silently revert
+    // that edit or resurrect that deletion.
+    const { data: skippedRows } = rawDates.length
+      ? await supabase
+          .from('recurring_skipped_dates')
+          .select('date')
+          .eq('household_id', householdId)
+          .eq('recurring_item_id', id)
+      : { data: [] as { date: string }[] | null };
+    const skippedDates = new Set((skippedRows ?? []).map((r) => r.date as string));
+    const dates = excludeSkippedDates(rawDates, skippedDates);
 
     if (isTransfer) {
       let materialized = 0;

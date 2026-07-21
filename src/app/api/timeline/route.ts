@@ -12,7 +12,7 @@ import { businessToday } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 const TRANSACTION_COLUMNS =
-  'id, date, description, amount, type, recurring_item_id, recurrence_id, installment_label, transfer_peer_id, is_bridge, bridge_source_account';
+  'id, date, description, amount, type, recurring_item_id, recurrence_id, installment_label, transfer_peer_id, is_bridge, bridge_source_account, bridge_source_month';
 const VALID_TX_TYPES = new Set(['income', 'expense', 'transfer']);
 
 function toTimelineTxs(rows: Record<string, unknown>[]): TimelineTx[] {
@@ -30,6 +30,7 @@ function toTimelineTxs(rows: Record<string, unknown>[]): TimelineTx[] {
       transferPeerId: (t.transfer_peer_id ?? null) as string | null,
       isBridge: Boolean(t.is_bridge),
       bridgeSourceAccount: (t.bridge_source_account ?? null) as string | null,
+      bridgeSourceMonth: (t.bridge_source_month ?? null) as string | null,
     }));
 }
 

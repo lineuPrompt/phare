@@ -11,6 +11,7 @@ import {
   statementCycleWindow,
   businessToday,
   businessMonth,
+  excludeSkippedDates,
 } from '../dateHelpers';
 
 describe('monthNameToNumber', () => {
@@ -348,6 +349,36 @@ describe('materializeFromMonthStart', () => {
       '2026-06-18',
       '2026-07-18',
     ]);
+  });
+});
+
+describe('excludeSkippedDates', () => {
+  // The exact mechanism preventing "editing the rule silently reverts my
+  // detached $70 phone bill back to $60" / "resurrects a deleted occurrence."
+
+  it('drops a single detached/deleted date from a freshly-materialized list', () => {
+    const dates = ['2026-10-01', '2026-11-01', '2026-12-01'];
+    expect(excludeSkippedDates(dates, ['2026-11-01'])).toEqual(['2026-10-01', '2026-12-01']);
+  });
+
+  it('is a no-op when nothing has ever been detached (e.g. a brand-new rule)', () => {
+    const dates = ['2026-10-01', '2026-11-01'];
+    expect(excludeSkippedDates(dates, [])).toEqual(dates);
+  });
+
+  it('drops every matching date, not just the first', () => {
+    const dates = ['2026-01-01', '2026-02-01', '2026-03-01'];
+    expect(excludeSkippedDates(dates, ['2026-01-01', '2026-03-01'])).toEqual(['2026-02-01']);
+  });
+
+  it('accepts a Set directly, not just an array', () => {
+    const dates = ['2026-01-01', '2026-02-01'];
+    expect(excludeSkippedDates(dates, new Set(['2026-01-01']))).toEqual(['2026-02-01']);
+  });
+
+  it('a tombstone for a date outside the current batch has no effect', () => {
+    const dates = ['2026-01-01', '2026-02-01'];
+    expect(excludeSkippedDates(dates, ['2025-12-01'])).toEqual(dates);
   });
 });
 

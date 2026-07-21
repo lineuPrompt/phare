@@ -504,7 +504,13 @@
       "save": "Save",
       "saving": "Saving...",
       "cancel": "Cancel",
-      "confirmDelete": "Delete this transfer?"
+      "confirmDelete": "Delete this transfer?",
+      "confirmDeleteEntry": "Delete this entry?",
+      "confirmDeleteOccurrence": "Delete just this occurrence? The recurring rule is unchanged — future occurrences keep their usual amount.",
+      "detachHint": "This is part of a recurring rule. Saving edits only this occurrence — the rule itself is unchanged.",
+      "moneyOut": "Money out",
+      "moneyIn": "Money in",
+      "categoryUnchanged": "Category..."
     },
     "nav": {
       "prev": "Previous",

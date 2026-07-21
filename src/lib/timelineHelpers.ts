@@ -87,6 +87,7 @@ export type TimelineTx = {
   transferPeerId: string | null;
   isBridge: boolean;
   bridgeSourceAccount: string | null;
+  bridgeSourceMonth: string | null; // YYYY-MM — the card's spend month this bridge pays for
 };
 
 export type TimelineEntry = TimelineTx & {

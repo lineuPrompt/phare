@@ -236,6 +236,20 @@ export function materializeFromMonthStart(
 }
 
 /**
+ * Filters a rule's freshly-computed occurrence dates down to the ones that
+ * should actually be (re)inserted — dropping any date the household has
+ * already detached from this rule (edited a single occurrence, or deleted
+ * one). Used by both POST /api/recurring (always a no-op — a brand-new rule
+ * id has no tombstones yet) and PATCH /api/recurring/[id]'s re-materialization
+ * step, where it's the only thing standing between "editing the rule" and
+ * silently reverting an edited occurrence or resurrecting a deleted one.
+ */
+export function excludeSkippedDates(dates: string[], skipped: Iterable<string>): string[] {
+  const skip = skipped instanceof Set ? skipped : new Set(skipped);
+  return dates.filter((d) => !skip.has(d));
+}
+
+/**
  * The chequing payment for a card statement falls in the month AFTER the
  * spending month. Given a spending month (YYYY-MM) and a payment day-of-month,
  * returns the payment date (YYYY-MM-DD) in the following month, clamped to

@@ -20,13 +20,38 @@ async function loadEditableTransaction(
 ) {
   const { data: tx } = await supabase
     .from('transactions')
-    .select('id, is_bridge')
+    .select('id, is_bridge, recurring_item_id, date')
     .eq('id', id)
     .eq('household_id', householdId)
     .single();
   if (!tx) return { error: 'Not found' as const, status: 404 as const };
   if (tx.is_bridge) return { error: 'Bridge payments are computed automatically and cannot be edited directly.' as const, status: 400 as const };
-  return { tx };
+  return { tx: tx as { id: string; is_bridge: boolean; recurring_item_id: string | null; date: string } };
+}
+
+// Editing or deleting a single materialized recurring occurrence detaches it
+// from its rule: a tombstone records "rule X must never regenerate an
+// occurrence dated Y again" (recurring_skipped_dates), keyed to the
+// occurrence's ORIGINAL date — even if the edit itself also moves the date —
+// since that original date is the slot the rule's own cadence would still
+// try to fill on a future rule edit. The row's recurring_item_id is cleared
+// by the caller as part of the same update; for a delete there's no row left
+// afterward, so the tombstone is the only trace that date was ever handled.
+// Best-effort: a failed tombstone write must not block the user's edit/delete
+// from succeeding — the visible cost of a lost tombstone is a possible future
+// re-materialization collision, not data loss right now.
+async function tombstoneOccurrence(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  householdId: string,
+  recurringItemId: string,
+  date: string
+) {
+  const { error } = await supabase
+    .from('recurring_skipped_dates')
+    .insert({ household_id: householdId, recurring_item_id: recurringItemId, date });
+  if (error) {
+    console.error('tombstoneOccurrence insert error (non-fatal):', error);
+  }
 }
 
 // PATCH: edit a manual entry's date/description/amount/category.
@@ -57,9 +82,30 @@ export async function PATCH(
       updates.amount = amt;
     }
     if (body.categoryId !== undefined) updates.category_id = body.categoryId || null;
+    // Money in/out toggle. Categories in this app are expense-only, so
+    // flipping to income clears any category unless the caller sent one
+    // explicitly in the same request.
+    if (body.type !== undefined) {
+      if (!['income', 'expense'].includes(body.type)) {
+        return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
+      }
+      updates.type = body.type;
+      if (body.type === 'income' && body.categoryId === undefined) {
+        updates.category_id = null;
+      }
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+    }
+
+    // Detach-on-edit (Part A3): this row is a live materialized recurring
+    // occurrence. Tombstone its original date so a later edit to the RULE
+    // never regenerates it, then clear recurring_item_id in the same update
+    // — it becomes a standalone one-off from here on, exactly like A1.
+    if (found.tx.recurring_item_id) {
+      await tombstoneOccurrence(supabase, householdId, found.tx.recurring_item_id, found.tx.date);
+      updates.recurring_item_id = null;
     }
 
     // .select() makes the update conditional and reports what it actually
@@ -105,6 +151,14 @@ export async function DELETE(
 
     const found = await loadEditableTransaction(supabase, id, householdId);
     if ('error' in found) return NextResponse.json({ error: found.error }, { status: found.status });
+
+    // Detach-on-delete (Part A3): deleting a materialized recurring
+    // occurrence must not let a later rule edit resurrect it. Tombstone
+    // BEFORE the row disappears — it's the only trace this date was ever
+    // handled once the row itself is gone.
+    if (found.tx.recurring_item_id) {
+      await tombstoneOccurrence(supabase, householdId, found.tx.recurring_item_id, found.tx.date);
+    }
 
     // See PATCH above: .select() makes this conditional so a lost race
     // (already deleted between loadEditableTransaction's read and here)

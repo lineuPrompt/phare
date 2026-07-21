@@ -25,18 +25,18 @@ async function resolvePair(
   supabase: Awaited<ReturnType<typeof createClient>>,
   id: string,
   householdId: string
-): Promise<{ ids: string[]; type: string | null }> {
+): Promise<{ ids: string[]; type: string | null; recurringItemId: string | null; date: string | null }> {
   const [direct, reverse] = await Promise.all([
     supabase
       .from('transactions')
-      .select('id, type, transfer_peer_id')
+      .select('id, type, transfer_peer_id, recurring_item_id, date')
       .eq('id', id)
       .eq('household_id', householdId)
       .maybeSingle(),
 
     supabase
       .from('transactions')
-      .select('id')
+      .select('id, recurring_item_id, date')
       .eq('transfer_peer_id', id)
       .eq('household_id', householdId),
   ]);
@@ -53,7 +53,30 @@ async function resolvePair(
     ids.add(row.id);
   }
 
-  return { ids: [...ids], type };
+  // create_transfer tags recurring_item_id on both sides of a materialized
+  // pair — read it off whichever side the query found it on.
+  const recurringItemId = target?.recurring_item_id ?? reverse.data?.[0]?.recurring_item_id ?? null;
+  const date = target?.date ?? reverse.data?.[0]?.date ?? null;
+
+  return { ids: [...ids], type, recurringItemId, date };
+}
+
+// See src/app/api/expenses/[id]/route.ts's identical helper for the full
+// rationale — same detach-on-edit/delete tombstone mechanism, applied here
+// to a recurring TRANSFER occurrence's paired rows instead of a single
+// income/expense row.
+async function tombstoneOccurrence(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  householdId: string,
+  recurringItemId: string,
+  date: string
+) {
+  const { error } = await supabase
+    .from('recurring_skipped_dates')
+    .insert({ household_id: householdId, recurring_item_id: recurringItemId, date });
+  if (error) {
+    console.error('tombstoneOccurrence insert error (non-fatal):', error);
+  }
 }
 
 // PATCH: update a transfer's amount, date, and/or description on BOTH sides of the pair.
@@ -81,7 +104,7 @@ export async function PATCH(
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    const { ids, type } = await resolvePair(supabase, id, householdId);
+    const { ids, type, recurringItemId, date: originalDate } = await resolvePair(supabase, id, householdId);
 
     if (ids.length === 0 || type !== 'transfer') {
       return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
@@ -90,6 +113,15 @@ export async function PATCH(
     const patch: Record<string, unknown> = { amount: Number(amount) };
     if (date) patch.date = date;
     if (description !== undefined) patch.description = description?.trim() ?? null;
+
+    // Detach-on-edit (Part A3, transfer flavor): editing a single
+    // materialized recurring contribution/debt-payment occurrence tombstones
+    // its original date so a later rule edit can't regenerate it, then
+    // clears recurring_item_id on BOTH pair rows in the same update.
+    if (recurringItemId && originalDate) {
+      await tombstoneOccurrence(supabase, householdId, recurringItemId, originalDate);
+      patch.recurring_item_id = null;
+    }
 
     const { error } = await supabase
       .from('transactions')
@@ -122,10 +154,16 @@ export async function DELETE(
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    const { ids, type } = await resolvePair(supabase, id, householdId);
+    const { ids, type, recurringItemId, date: originalDate } = await resolvePair(supabase, id, householdId);
 
     if (ids.length === 0 || type !== 'transfer') {
       return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
+    }
+
+    // Detach-on-delete (Part A3, transfer flavor): tombstone before the pair
+    // disappears, same rationale as the PATCH branch above.
+    if (recurringItemId && originalDate) {
+      await tombstoneOccurrence(supabase, householdId, recurringItemId, originalDate);
     }
 
     const { error } = await supabase

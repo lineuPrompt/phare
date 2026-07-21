@@ -16,6 +16,7 @@ function tx(
     transferPeerId: null,
     isBridge: false,
     bridgeSourceAccount: null,
+    bridgeSourceMonth: null,
     ...overrides,
   };
 }
