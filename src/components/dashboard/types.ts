@@ -6,11 +6,21 @@ export type DashboardSummary = {
 };
 
 export type SinkingFund = {
+  id: string;
   name: string;
   annual_amount: number;
   monthly_provision: number;
   due_month: number | null;
+  // Real balance derived from the linked account's ledger — 0 when the
+  // fund has never been started (Build 4 Part 2, 2026-07-21).
   current_balance: number;
+  // Mirrors the goals' real-vs-planned signal: true only once real money
+  // has actually accumulated (current_balance > 0), not just "has an
+  // account" — a fund whose first contribution hasn't posted yet still
+  // reads as planned, not active.
+  fundedAlready: boolean;
+  // null = still a dead provision, never started.
+  linkedAccountId: string | null;
 };
 
 export type GoalTransfer = {

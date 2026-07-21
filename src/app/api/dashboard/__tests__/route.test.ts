@@ -136,6 +136,113 @@ describe('GET /api/dashboard — plan existence gate', () => {
 // (they're deliberately left unscripted here — any query against them would
 // throw "No scripted response", failing the test) and that non-snapshot
 // fields (goalAccounts, review, etc.) are simply absent from the response.
+// Sinking funds become fundable (Build 4 Part 2, 2026-07-21): a fund's real
+// balance is derived from its linked account's own ledger, never a stored
+// current_balance column, and a fund account must never double-render as a
+// generic goal on the same dashboard.
+describe('GET /api/dashboard — sinking fund real balance', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('a linked fund shows its real ledger balance and fundedAlready, and never appears in goalAccounts', async () => {
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1', full_name: 'Lineu Prompt' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      budgets: [
+        { data: null, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [{
+        data: [
+          { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null, payment_day: null, statement_close_day: null },
+          { id: 'fund-1', name: 'Property tax fund', type: 'savings', goal_target: null, goal_target_date: null, payment_day: null, statement_close_day: null, is_sinking_fund: true },
+        ],
+        error: null,
+      }],
+      account_balance_anchors: [{ data: null, error: null }],
+      transactions: [
+        { data: [], error: null }, // actuals-month headline figures
+        { // all-time goal/fund tx fetch
+          data: [
+            { amount: 300, type: 'transfer', account_id: 'fund-1', date: '2020-01-01' },
+            { amount: 100, type: 'expense',  account_id: 'fund-1', date: '2020-02-01' },
+          ],
+          error: null,
+        },
+      ],
+      sinking_funds: [{
+        data: [{ id: 'sf-1', name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, linked_account_id: 'fund-1' }],
+        error: null,
+      }],
+      conversations: [{ data: null, error: null }],
+      recurring_items: [
+        { count: 0, error: null },
+        { count: 0, error: null },
+      ],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('http://localhost/api/dashboard'));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.sinkingFunds).toEqual([{
+      id: 'sf-1',
+      name: 'Property tax',
+      annual_amount: 3600,
+      monthly_provision: 300,
+      due_month: 3,
+      current_balance: 200, // 300 contributed − 100 paid out
+      fundedAlready: true,
+      linkedAccountId: 'fund-1',
+    }]);
+    // The fund account is type='savings' and would otherwise qualify as a
+    // goal — it must never also render on the Goals section.
+    expect(json.goalAccounts).toEqual([]);
+  });
+
+  it('an unlinked (not-yet-started) fund reads balance 0 and fundedAlready:false', async () => {
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1', full_name: 'Lineu Prompt' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      budgets: [
+        { data: null, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null, payment_day: null, statement_close_day: null }], error: null }],
+      account_balance_anchors: [{ data: null, error: null }],
+      transactions: [{ data: [], error: null }],
+      sinking_funds: [{
+        data: [{ id: 'sf-2', name: 'Christmas', annual_amount: 1200, monthly_provision: 100, due_month: 12, linked_account_id: null }],
+        error: null,
+      }],
+      conversations: [{ data: null, error: null }],
+      recurring_items: [
+        { count: 0, error: null },
+        { count: 0, error: null },
+      ],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('http://localhost/api/dashboard'));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.sinkingFunds[0].current_balance).toBe(0);
+    expect(json.sinkingFunds[0].fundedAlready).toBe(false);
+    expect(json.sinkingFunds[0].linkedAccountId).toBeNull();
+  });
+});
+
 describe('GET /api/dashboard?snapshotOnly=1 — month-switch fetch never touches unrelated sections', () => {
   beforeEach(() => {
     vi.resetModules();

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server';
 import { businessToday, materializeFromMonthStart } from '@/lib/dateHelpers';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
+import { materializeTransferOccurrences } from '@/lib/recurringTransferHelpers';
 
 type Cadence = 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
 
@@ -204,26 +205,22 @@ export async function POST(request: Request) {
       // date, exactly the atomic mechanism one-off transfers use. Each call
       // is independently atomic (both sides or neither); a mid-loop failure
       // stops materialization but never leaves a half-written pair.
-      let materialized = 0;
-      for (const date of dates) {
-        const { error: rpcErr } = await supabase.rpc('create_transfer', {
-          p_household_id: ctx.householdId,
-          p_member_id: ctx.memberId,
-          p_chequing_id: resolvedAccountId,
-          p_goal_id: resolvedDestinationId,
-          p_amount: amount,
-          p_date: date,
-          p_description: description.trim(),
-          p_recurring_item_id: item.id,
-        });
-        if (rpcErr) {
-          console.error('Recurring transfer materialization RPC error:', rpcErr);
-          return NextResponse.json(
-            { error: rpcErr.message || 'Item created but materialization failed partway through', created: true, id: item.id, materialized },
-            { status: 500 }
-          );
-        }
-        materialized += 1;
+      const { materialized, error: materializeErr } = await materializeTransferOccurrences(supabase, {
+        householdId: ctx.householdId,
+        memberId: ctx.memberId,
+        chequingId: resolvedAccountId,
+        destinationId: resolvedDestinationId!,
+        amount,
+        description: description.trim(),
+        recurringItemId: item.id,
+        dates,
+      });
+      if (materializeErr) {
+        console.error('Recurring transfer materialization RPC error:', materializeErr);
+        return NextResponse.json(
+          { error: `Item created but ${materializeErr}`, created: true, id: item.id, materialized },
+          { status: 500 }
+        );
       }
       return NextResponse.json({ created: true, id: item.id, materialized });
     }

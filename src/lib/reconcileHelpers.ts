@@ -69,11 +69,16 @@ function r2(n: number): number {
 }
 
 /**
- * Path 2 — chequing net derived directly from the ledger.
+ * Path 2 — real household cash net, derived directly from the ledger.
  *
  * Signs: income = inflow (+), expense = outflow (−), transfer on chequing = outflow (−).
- * Only chequing-account rows are considered.  This function never calls
- * computeMonthTotals so the two paths are genuinely independent.
+ * Chequing rows are always considered. A sinking-fund account's expense rows
+ * are ALSO considered (Build 4 Part 2, 2026-07-21) — a bill paid straight
+ * from the fund is real money leaving the household for good, unlike a card
+ * expense, which always bridges back through chequing next month and so is
+ * correctly left out here. This function never calls computeMonthTotals so
+ * the two paths are genuinely independent — both had to learn this same new
+ * fact for a fund-paid bill to keep the two paths agreeing.
  */
 export function chequingLedgerNet(
   transactions: ReconcileTxRow[],
@@ -82,16 +87,25 @@ export function chequingLedgerNet(
   const chequingIds = new Set(
     accounts.filter((a) => a.type === 'chequing').map((a) => a.id)
   );
+  const sinkingFundIds = new Set(
+    accounts.filter((a) => a.is_sinking_fund).map((a) => a.id)
+  );
 
   let inflows = 0;
   let outflows = 0;
 
   for (const tx of transactions) {
-    if (tx.account_id === null || !chequingIds.has(tx.account_id)) continue;
+    if (tx.account_id === null) continue;
+    const onChequing = chequingIds.has(tx.account_id);
+    const onSinkingFund = sinkingFundIds.has(tx.account_id);
+    if (!onChequing && !onSinkingFund) continue;
+
     const amt = Number(tx.amount);
-    if (tx.type === 'income') {
+    if (tx.type === 'income' && onChequing) {
       inflows += amt;
-    } else if (tx.type === 'expense' || tx.type === 'transfer') {
+    } else if (tx.type === 'expense' && (onChequing || onSinkingFund)) {
+      outflows += amt;
+    } else if (tx.type === 'transfer' && onChequing) {
       outflows += amt;
     }
   }
@@ -154,9 +168,13 @@ export function reconcileMonth(
         if (tx.type === 'expense') monthBalance += Number(tx.amount);
       }
     } else {
-      // Goal accounts: inflows from transfer rows on that account
+      // Goal accounts: inflows from transfer rows on that account, minus any
+      // expense rows on it (a sinking fund's bill paid straight from the
+      // fund, Build 4 Part 2) — a real goal/debt account never carries
+      // expense rows, so this is additive for them.
       for (const tx of acctTxns) {
         if (tx.type === 'transfer') monthBalance += Number(tx.amount);
+        else if (tx.type === 'expense') monthBalance -= Number(tx.amount);
       }
     }
 

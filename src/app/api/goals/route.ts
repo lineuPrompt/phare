@@ -18,12 +18,16 @@ export async function GET() {
 
     const { data: accounts } = await supabase
       .from('accounts')
-      .select('id, name, type, goal_target, goal_target_date')
+      .select('id, name, type, goal_target, goal_target_date, is_sinking_fund')
       .eq('household_id', householdId)
       .in('type', [...GOAL_ACCOUNT_TYPES])
       .order('name', { ascending: true });
 
-    const goalAccounts = accounts ?? [];
+    // A sinking fund is not a goal (it cycles — fills and drains — a goal
+    // only receives) and is surfaced through the dashboard's sinkingFunds
+    // section instead, so it must never also appear here (Build 4 Part 2,
+    // 2026-07-21).
+    const goalAccounts = (accounts ?? []).filter((a) => !a.is_sinking_fund);
     const goalIds = goalAccounts.map((a) => a.id);
 
     // Fetch FULL (all-time) transaction history for goal accounts.

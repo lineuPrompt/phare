@@ -107,12 +107,12 @@ export async function POST(request: Request) {
 
       supabase
         .from('accounts')
-        .select('id, name, type, goal_target, goal_target_date')
+        .select('id, name, type, goal_target, goal_target_date, is_sinking_fund')
         .eq('household_id', householdId),
 
       supabase
         .from('sinking_funds')
-        .select('name, annual_amount, monthly_provision, due_month')
+        .select('name, annual_amount, monthly_provision, due_month, linked_account_id')
         .eq('household_id', householdId),
     ]);
 
@@ -143,9 +143,14 @@ export async function POST(request: Request) {
     // account, not just this month's window, so computeGoalBalance sees the
     // real running balance (same fetch dashboard/route.ts uses). ──────────
     const goalAccountList = accounts.filter(
-      (a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type) && a.goal_target != null
+      (a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type) && a.goal_target != null && !a.is_sinking_fund
     );
-    const goalIds = goalAccountList.map((a) => a.id);
+    // Sinking-fund accounts are fetched into the same tx pull too (Build 4
+    // Part 2, 2026-07-21) — they never carry a goal_target, so goalAccountList
+    // naturally excludes them, but their own balance still needs computing
+    // for the sinkingFunds section below.
+    const fundAccountIds = accounts.filter((a) => a.is_sinking_fund).map((a) => a.id);
+    const goalIds = [...goalAccountList.map((a) => a.id), ...fundAccountIds];
     let goalTxData: { amount: number | string; type: string; account_id: string | null; date?: string }[] = [];
     if (goalIds.length > 0) {
       const { data } = await supabase
@@ -321,14 +326,26 @@ export async function POST(request: Request) {
     const aiPart = JSON.parse(planText.replace(/```json|```/g, '').trim());
 
     // Sinking funds are DB-derived (real rows) or empty — never AI-invented.
-    // aiPart is not consulted for them.
+    // aiPart is not consulted for them. fundedAlready reflects the fund's
+    // REAL ledger balance (Build 4 Part 2, 2026-07-21) — computed from its
+    // linked_account_id via the same computeGoalBalance every goal uses, not
+    // a stored column. A fund with no linked account yet is always false;
+    // once linked, it's true only after real money has actually accumulated
+    // (balance > 0), matching the same real-vs-planned signal goals use —
+    // a fund whose first contribution hasn't posted yet still reads planned.
     const finalSinkingFunds = sinkingFunds.length > 0
-      ? sinkingFunds.map((sf) => ({
-          name: sf.name,
-          annualAmount: Number(sf.annual_amount),
-          monthlyProvision: Number(sf.monthly_provision),
-          dueMonth: sf.due_month ?? '',
-        }))
+      ? sinkingFunds.map((sf) => {
+          const balance = sf.linked_account_id
+            ? computeGoalBalance(goalTxData, sf.linked_account_id, today)
+            : 0;
+          return {
+            name: sf.name,
+            annualAmount: Number(sf.annual_amount),
+            monthlyProvision: Number(sf.monthly_provision),
+            dueMonth: sf.due_month ?? '',
+            fundedAlready: balance > 0,
+          };
+        })
       : [];
 
     const classMap = new Map<string, { category: string; isFixed: boolean }>();
@@ -389,6 +406,15 @@ export async function POST(request: Request) {
       `"debtPayoff" already say (onTrack, fundedAlready, pastDue, monthlyContribution, estimatedDate) — never ` +
       `assert or imply "on track", "behind", or "funded" beyond exactly what those fields already say for that ` +
       `specific goal.\n` +
+      `- ZERO-BALANCE GOALS: for any goal whose "savedSoFar" is 0 and "fundedAlready" is false, write about it as ` +
+      `forward-looking — e.g. "once your $X/month contribution begins" — never as if saving is already underway, ` +
+      `even when "onTrack" is true (onTrack only means the required contribution fits their capacity, not that ` +
+      `any money has moved yet).\n` +
+      `- SINKING FUNDS: each entry in "sinkingFunds" (if any) carries a "fundedAlready" boolean. When it is false ` +
+      `— meaning no account or transfer backs it yet — describe it as a plan or recommendation only: "your plan ` +
+      `sets aside $X/month for {name}" or "recommended: $X/month toward {name} so the {month} bill doesn't catch ` +
+      `you off guard." NEVER say "you're setting aside $X/month" or "you're saving $X/month" for that fund unless ` +
+      `fundedAlready is true.\n` +
       `- WINDFALLS: if "windfalls" is non-empty, you MUST explicitly acknowledge each one by name and amount, ` +
       `framed as a one-time timing event that will NOT repeat next month (e.g. "${reviewMonthName} included a ` +
       `third biweekly paycheque — $X extra that won't repeat next month") — never described as a new normal ` +

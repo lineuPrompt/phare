@@ -215,6 +215,62 @@ describe('computeMonthTotals — transfers and savings bucket', () => {
 });
 
 // ---------------------------------------------------------------------------
+// computeMonthTotals — sinking fund expenses (Build 4 Part 2, 2026-07-21)
+//
+// A bill paid straight from a sinking fund is the one non-chequing expense
+// that never bridges through chequing next month (unlike a card purchase) —
+// real money leaves the household right there, on the fund account.
+// ---------------------------------------------------------------------------
+
+const FUND_ID = 'fund-1';
+const fundAccounts: AccountRow[] = [
+  ...accounts,
+  { id: FUND_ID, type: 'savings', is_sinking_fund: true },
+];
+
+describe('computeMonthTotals — sinking fund expenses', () => {
+  it('counts an expense on a flagged fund account as a real household expense', () => {
+    const txns: TxRow[] = [
+      { type: 'expense', account_id: FUND_ID, amount: 3600 }, // property tax paid from the fund
+    ];
+    const result = computeMonthTotals(txns, fundAccounts);
+    expect(result.totalExpenses).toBe(3600);
+    expect(result.netCashFlow).toBe(-3600);
+  });
+
+  it('a plain savings account (not flagged) is unaffected — expense on it stays uncounted', () => {
+    const txns: TxRow[] = [
+      { type: 'expense', account_id: SAVINGS_ID, amount: 999 }, // should not happen, but guard
+    ];
+    expect(computeMonthTotals(txns, fundAccounts).totalExpenses).toBe(0);
+  });
+
+  it('chequing→fund contribution still counts as savings, not expense (net cash unchanged by the contribution itself)', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: CHEQUING_ID, amount: 300 }, // contribution, chequing side
+      { type: 'transfer', account_id: FUND_ID,     amount: 300 }, // fund side — ignored
+    ];
+    const result = computeMonthTotals(txns, fundAccounts);
+    expect(result.totalSavings).toBe(300);
+    expect(result.totalExpenses).toBe(0);
+  });
+
+  it('a contribution month and a bill-payment month both stay honest: contribution nets to zero, the bill payment is a real expense', () => {
+    const contributionMonth: TxRow[] = [
+      { type: 'income',    account_id: CHEQUING_ID, amount: 5000 },
+      { type: 'transfer',  account_id: CHEQUING_ID, amount: 300  },
+      { type: 'transfer',  account_id: FUND_ID,     amount: 300  },
+    ];
+    const billMonth: TxRow[] = [
+      { type: 'income',  account_id: CHEQUING_ID, amount: 5000 },
+      { type: 'expense', account_id: FUND_ID,      amount: 3600 }, // property tax, paid from the fund
+    ];
+    expect(computeMonthTotals(contributionMonth, fundAccounts).netCashFlow).toBe(4700); // 5000 − 300 savings
+    expect(computeMonthTotals(billMonth, fundAccounts).netCashFlow).toBe(1400); // 5000 − 3600 real expense
+  });
+});
+
+// ---------------------------------------------------------------------------
 // computeMonthTotals — full reconciliation invariant
 // income − expenses − savings = net; every bucket logically consistent
 // ---------------------------------------------------------------------------
@@ -293,13 +349,13 @@ describe('computeGoalBalance', () => {
     expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(500);
   });
 
-  it('only counts type=transfer rows (ignores other types)', () => {
+  it('ignores type=income rows on a goal account (never a legitimate row shape) but subtracts type=expense (a sinking fund\'s bill payment — Build 4 Part 2)', () => {
     const txns: TxRow[] = [
       { type: 'transfer', account_id: SAVINGS_ID, amount: 400, date: PAST1 },
-      { type: 'income',   account_id: SAVINGS_ID, amount: 999, date: PAST1 }, // should not happen, but guard
-      { type: 'expense',  account_id: SAVINGS_ID, amount: 50,  date: PAST1 }, // should not happen, but guard
+      { type: 'income',   account_id: SAVINGS_ID, amount: 999, date: PAST1 }, // should not happen, still ignored
+      { type: 'expense',  account_id: SAVINGS_ID, amount: 50,  date: PAST1 }, // real for a fund — see the dedicated block below
     ];
-    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(400);
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(350); // 400 − 50
   });
 
   it('does not mix balances across different goal accounts', () => {
@@ -423,6 +479,44 @@ describe('computeGoalBalance', () => {
       { type: 'transfer', account_id: SAVINGS_ID, amount: 200,  date: FUTURE1 }, // not yet
     ];
     expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(-300); // -500 + 200
+  });
+
+  // -------------------------------------------------------------------
+  // Sinking fund expense outflows (Build 4 Part 2, 2026-07-21) — a bill
+  // paid from the fund is a real type='expense' row on the fund account
+  // and must drain the balance, same cutoff rule as everywhere else.
+  // -------------------------------------------------------------------
+  it('a bill paid from the fund (expense row) reduces its balance', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 3600, date: PAST1 }, // contributions
+      { type: 'expense',  account_id: SAVINGS_ID, amount: 3600, date: PAST2 }, // bill paid from the fund
+    ];
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(0);
+  });
+
+  it('a fund-paid bill dated in the future does not yet drain the balance', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 3600, date: PAST1 },
+      { type: 'expense',  account_id: SAVINGS_ID, amount: 3600, date: FUTURE1 }, // not yet paid
+    ];
+    expect(computeGoalBalance(txns, SAVINGS_ID, TODAY)).toBe(3600);
+  });
+
+  it('a real goal/debt account is unaffected by the new expense clause — it never carries expense rows', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: TFSA_ID, amount: 500, date: PAST1 },
+    ];
+    expect(computeGoalBalance(txns, TFSA_ID, TODAY)).toBe(500);
+  });
+
+  it('the fund refills after a bill payment drains it — cyclical, no reset logic needed', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 300, date: '2026-01-01' }, // Jan contribution
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 300, date: '2026-02-01' }, // Feb contribution
+      { type: 'expense',  account_id: SAVINGS_ID, amount: 600, date: '2026-03-01' }, // March bill — drains it
+      { type: 'transfer', account_id: SAVINGS_ID, amount: 300, date: '2026-04-01' }, // refilling again
+    ];
+    expect(computeGoalBalance(txns, SAVINGS_ID, '2026-04-01')).toBe(300);
   });
 });
 

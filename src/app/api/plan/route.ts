@@ -82,13 +82,17 @@ export async function POST(request: NextRequest) {
         ],
       };
 
-      // Sinking funds come straight from the template. Exact.
+      // Sinking funds come straight from the template. Exact. fundedAlready
+      // is always false here — onboarding has no account/balance concept yet,
+      // there is nothing a fund could be funded from at this stage — so the
+      // review must narrate these as a plan, never as money already moving.
       sinkingFundsFromData = p.sinkingFunds.lines.map(
         (l: { label: string; annualAmount: number; monthlyProvision: number; dueMonth: string }) => ({
           name: l.label,
           annualAmount: l.annualAmount,
           monthlyProvision: l.monthlyProvision,
           dueMonth: l.dueMonth,
+          fundedAlready: false,
         })
       );
 

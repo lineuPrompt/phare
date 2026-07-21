@@ -114,7 +114,7 @@ export async function GET(request: Request) {
     // would silently understate that month's expenses.
     const { data: rawAccounts } = await supabase
       .from('accounts')
-      .select('id, name, type, goal_target, goal_target_date, payment_day, statement_close_day')
+      .select('id, name, type, goal_target, goal_target_date, payment_day, statement_close_day, is_sinking_fund')
       .eq('household_id', householdId);
     const allAccounts = rawAccounts ?? [];
 
@@ -195,7 +195,7 @@ export async function GET(request: Request) {
           ? Promise.resolve({ data: null, error: null })
           : supabase
               .from('sinking_funds')
-              .select('name, annual_amount, monthly_provision, due_month, current_balance')
+              .select('id, name, annual_amount, monthly_provision, due_month, linked_account_id')
               .eq('household_id', householdId),
 
         snapshotOnly
@@ -247,10 +247,17 @@ export async function GET(request: Request) {
 
     // Fetch FULL (all-time) transaction history for goal accounts so that
     // computeGoalBalance sees every deposit, not just the active month.
-    const goalAccountList = allAccounts.filter(
+    // goalTypeAccounts includes sinking-fund accounts (Build 4 Part 2,
+    // 2026-07-21) — they're type='savings' too — so their balance can be
+    // computed from the same fetch below; goalAccountList (used for the
+    // Goals-card verdict/output) excludes them — a fund is not a goal, it
+    // cycles, and it's surfaced through the sinkingFunds array instead so it
+    // never renders twice.
+    const goalTypeAccounts = allAccounts.filter(
       (a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type)
     );
-    const goalIds = goalAccountList.map((a) => a.id);
+    const goalAccountList = goalTypeAccounts.filter((a) => !a.is_sinking_fund);
+    const goalIds = goalTypeAccounts.map((a) => a.id);
 
     let goalTxData: { amount: number | string; type: string; account_id: string | null; date?: string }[] = [];
     if (goalIds.length > 0) {
@@ -318,6 +325,34 @@ export async function GET(request: Request) {
     const review            = messages.find((msg) => msg.type === 'monthly_review')?.content ?? null;
     const topRecommendation = messages.find((msg) => msg.type === 'top_recommendation')?.content ?? null;
 
+    // Sinking funds: real balance is derived from the linked account's own
+    // transaction ledger (Build 4 Part 2, 2026-07-21) — never a stored
+    // current_balance column. linked_account_id null means the provision is
+    // still dead (never started); fundedAlready mirrors the same real-vs-
+    // planned signal goals already use (balance > 0), not just "has an
+    // account", so the review's forward-looking framing stays consistent
+    // for a fund whose first contribution hasn't posted yet either.
+    type SinkingFundRow = {
+      id: string; name: string; annual_amount: number; monthly_provision: number;
+      due_month: number | null; linked_account_id: string | null;
+    };
+    const sinkingFundRows = (sfResult.data as SinkingFundRow[] | null) ?? [];
+    const sinkingFunds = sinkingFundRows.map((sf) => {
+      const balance = sf.linked_account_id
+        ? computeGoalBalance(goalTxData, sf.linked_account_id, todayForGoalBalance)
+        : 0;
+      return {
+        id: sf.id,
+        name: sf.name,
+        annual_amount: Number(sf.annual_amount),
+        monthly_provision: Number(sf.monthly_provision),
+        due_month: sf.due_month,
+        current_balance: balance,
+        fundedAlready: balance > 0,
+        linkedAccountId: sf.linked_account_id,
+      };
+    });
+
     return NextResponse.json({
       hasPlan: true,
       firstName:         (userRow.full_name || '').split(' ')[0],
@@ -325,7 +360,7 @@ export async function GET(request: Request) {
       planMonth,
       summary,
       categories,
-      sinkingFunds:  sfResult.data ?? [],
+      sinkingFunds,
       goalAccounts,
       review,
       topRecommendation,

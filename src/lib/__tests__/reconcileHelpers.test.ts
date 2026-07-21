@@ -262,3 +262,90 @@ describe('chequingLedgerNet', () => {
     expect(chequingLedgerNet([], accounts)).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 6. Sinking fund reconciliation invariant (Build 4 Part 2, 2026-07-21)
+//
+// A bill paid straight from a sinking fund is the one expense that never
+// bridges through chequing — money leaves the household right on the fund
+// account. Both independent paths (computeMonthTotals via reconcileMonth,
+// and chequingLedgerNet) had to learn this fact identically, or reconciled
+// would flip permanently false the first time any bill was ever paid this
+// way. This is the exact regression this section guards.
+// ---------------------------------------------------------------------------
+
+const FUND = 'fund-1';
+const accountsWithFund: ReconcileAccountRow[] = [
+  ...accounts,
+  { id: FUND, type: 'savings', name: 'Property tax fund', is_sinking_fund: true },
+];
+
+describe('reconcileMonth — sinking fund contribution and bill payment stay reconciled', () => {
+  it('a chequing→fund contribution reconciles (relocation, not a household expense)', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ type: 'income',   account_id: CHQ,  amount: 5000 }),
+      tx({ type: 'transfer', account_id: CHQ,  amount: 300  }),
+      tx({ type: 'transfer', account_id: FUND, amount: 300  }),
+    ];
+    const result = reconcileMonth(transactions, accountsWithFund);
+    expect(result.totalExpenses).toBe(0);
+    expect(result.totalSavings).toBe(300);
+    expect(result.netFromBuckets).toBe(4700);
+    expect(result.netFromChequing).toBe(4700);
+    expect(result.reconciled).toBe(true);
+  });
+
+  it('a bill paid from the fund reconciles — a real household expense on a non-chequing account', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ type: 'income',  account_id: CHQ,  amount: 5000 }),
+      tx({ type: 'expense', account_id: FUND, amount: 3600 }), // property tax, paid from the fund
+    ];
+    const result = reconcileMonth(transactions, accountsWithFund);
+    expect(result.totalExpenses).toBe(3600);
+    expect(result.netFromBuckets).toBe(1400);
+    expect(result.netFromChequing).toBe(1400);
+    expect(result.reconciled).toBe(true);
+  });
+
+  it('the fund\'s own account audit balance rises with contributions and drops with the bill payment', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ type: 'transfer', account_id: CHQ,  amount: 300, date: '2026-01-15' }),
+      tx({ type: 'transfer', account_id: FUND, amount: 300, date: '2026-01-15' }),
+      tx({ type: 'expense',  account_id: FUND, amount: 200, date: '2026-01-20' }),
+    ];
+    const result = reconcileMonth(transactions, accountsWithFund);
+    const fund = result.accounts.find((a) => a.accountId === FUND)!;
+    expect(fund.monthBalance).toBe(100); // 300 in − 200 out
+  });
+
+  it('full-cycle invariant: a year of contributions then the bill payment stays reconciled at every step', () => {
+    // Jan–Feb contributions, March bill payment, April contribution again —
+    // the "reset" is just the real expense row, no special logic needed.
+    const months: ReconcileTxRow[][] = [
+      [ // January — contribution
+        tx({ type: 'income',   account_id: CHQ,  amount: 5000, date: '2026-01-15' }),
+        tx({ type: 'transfer', account_id: CHQ,  amount: 300,  date: '2026-01-15' }),
+        tx({ type: 'transfer', account_id: FUND, amount: 300,  date: '2026-01-15' }),
+      ],
+      [ // February — contribution
+        tx({ type: 'income',   account_id: CHQ,  amount: 5000, date: '2026-02-15' }),
+        tx({ type: 'transfer', account_id: CHQ,  amount: 300,  date: '2026-02-15' }),
+        tx({ type: 'transfer', account_id: FUND, amount: 300,  date: '2026-02-15' }),
+      ],
+      [ // March — the bill lands, paid from the fund
+        tx({ type: 'income',  account_id: CHQ,  amount: 5000, date: '2026-03-15' }),
+        tx({ type: 'expense', account_id: FUND, amount: 600,  date: '2026-03-01' }),
+      ],
+      [ // April — refilling again
+        tx({ type: 'income',   account_id: CHQ,  amount: 5000, date: '2026-04-15' }),
+        tx({ type: 'transfer', account_id: CHQ,  amount: 300,  date: '2026-04-15' }),
+        tx({ type: 'transfer', account_id: FUND, amount: 300,  date: '2026-04-15' }),
+      ],
+    ];
+    for (const monthTxns of months) {
+      const result = reconcileMonth(monthTxns, accountsWithFund);
+      expect(result.reconciled).toBe(true);
+      expect(result.netDifference).toBe(0);
+    }
+  });
+});

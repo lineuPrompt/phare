@@ -429,4 +429,78 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
       vi.useRealTimers();
     }
   });
+
+  it('sinking fund review truth: a fund with no real balance flows into the review as fundedAlready:false, and the planned-not-active hard rule is present', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [{ data: [], error: null }],
+      accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+      // No linked_account_id for this fund — the real, live shape today (no
+      // fund has ever been backed by an account/transfer).
+      sinking_funds: [{ data: [{ name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, linked_account_id: null }], error: null }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    expect(res.status).toBe(200);
+
+    const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
+    expect(reviewPromptSent).toContain('"fundedAlready":false');
+    expect(reviewPromptSent).toContain('SINKING FUNDS');
+    expect(reviewPromptSent).toContain('ZERO-BALANCE GOALS');
+  });
+
+  it('sinking fund review truth: a fund with a real positive balance flows into the review as fundedAlready:true', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [
+        { data: [], error: null }, // month-scoped headline figures
+        { // all-time fetch for the fund's own balance (linked account)
+          data: [{ amount: 900, type: 'transfer', account_id: 'fund-1', date: '2020-01-01' }],
+          error: null,
+        },
+      ],
+      accounts: [{
+        data: [
+          { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null },
+          { id: 'fund-1', name: 'Property tax fund', type: 'savings', goal_target: null, goal_target_date: null, is_sinking_fund: true },
+        ],
+        error: null,
+      }],
+      sinking_funds: [{ data: [{ name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, linked_account_id: 'fund-1' }], error: null }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    expect(res.status).toBe(200);
+
+    const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
+    expect(reviewPromptSent).toContain('"fundedAlready":true');
+  });
 });

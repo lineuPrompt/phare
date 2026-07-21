@@ -26,6 +26,10 @@ ${isManual ? '\nThis family entered ONLY their income and expenses. They have NO
 Good tone: "June was a solid month overall. You stayed within budget in four of five categories..."
 Bad tone: "Based on a comprehensive analysis of your financial data..."
 
+Hard rules:
+- SINKING FUNDS: each entry in "sinkingFunds" (if any) carries a "fundedAlready" boolean. When fundedAlready is false — the case at this stage, since no account or transfer exists yet — describe it as a plan or recommendation only: "your plan sets aside $X/month for {name}" or "recommended: $X/month toward {name} so the {month} bill doesn't catch you off guard." NEVER say "you're setting aside $X/month" or "you're saving $X/month" for that fund unless fundedAlready is true.
+- ZERO-BALANCE GOALS: for any goal whose "savedSoFar" is 0 and "fundedAlready" is false, write about it as forward-looking — e.g. "once your $X/month contribution begins" — never as if saving is already underway, even if "onTrack" is true (onTrack only means the required contribution fits their capacity, not that any money has moved yet).
+
 Start with what is going well, then what to watch, then the one thing to do this month. Write ONLY the review text, no preamble, no headings.`;
 
   const stream = await anthropic.messages.create({

@@ -62,6 +62,14 @@ export type TxRow = {
 export type AccountRow = {
   id: string;
   type: string;
+  // Sinking-fund cash buffer flagged on a 'savings'-type account (Build 4
+  // Part 2, 2026-07-21). Undefined/false everywhere else — a real savings
+  // goal never sets this. A fund's expense rows (paying its annual bill
+  // straight from the fund) are the one case where money leaves the
+  // household from a NON-chequing account for good, unlike a card expense
+  // which always bridges back through chequing next month — so both the
+  // expense bucket below and computeGoalBalance need to know about it.
+  is_sinking_fund?: boolean;
 };
 
 export type MonthTotals = {
@@ -78,6 +86,15 @@ export function computeMonthTotals(
   const chequingIds = new Set(
     accounts.filter((a) => a.type === 'chequing').map((a) => a.id)
   );
+  // A sinking-fund bill payment is the one expense that never bridges
+  // through chequing — it's recorded straight on the fund account and the
+  // money leaves the household for good right there. Every other
+  // non-chequing expense (a card purchase) instead becomes a chequing
+  // bridge line next month, which is why chequing-only scoping is correct
+  // for those and would silently drop a fund-paid bill if left unchanged.
+  const sinkingFundIds = new Set(
+    accounts.filter((a) => a.is_sinking_fund).map((a) => a.id)
+  );
 
   let income = 0;
   let expenses = 0;
@@ -86,10 +103,11 @@ export function computeMonthTotals(
   for (const tx of transactions) {
     const amt = Number(tx.amount);
     const onChequing = tx.account_id !== null && chequingIds.has(tx.account_id);
+    const onSinkingFund = tx.account_id !== null && sinkingFundIds.has(tx.account_id);
 
     if (tx.type === 'income' && onChequing) {
       income += amt;
-    } else if (tx.type === 'expense' && onChequing) {
+    } else if (tx.type === 'expense' && (onChequing || onSinkingFund)) {
       expenses += amt;
     } else if (tx.type === 'transfer' && onChequing) {
       // Chequing-side outflow of a chequing→goal pair. Counted as savings.
@@ -128,13 +146,28 @@ export function computeMonthTotals(
  * actually lands. A row with no date at all is excluded, never assumed to
  * be in the past.
  */
+/**
+ * EXPENSE OUTFLOWS (Build 4 Part 2, 2026-07-21): a sinking fund is a cash
+ * buffer that fills AND drains — a bill paid straight from the fund is a
+ * real `type='expense'` row on the fund account, and must reduce its
+ * balance the same way a transfer inflow increases it. A goal/debt account
+ * never carries expense rows today, so adding this subtraction is additive
+ * and does not change any existing goal/debt balance.
+ */
 export function computeGoalBalance(
   transactions: TxRow[],
   goalAccountId: string,
   today: string
 ): number {
   const total = transactions
-    .filter((tx) => tx.account_id === goalAccountId && tx.type === 'transfer' && tx.date !== undefined && tx.date <= today)
-    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+    .filter((tx) =>
+      tx.account_id === goalAccountId &&
+      (tx.type === 'transfer' || tx.type === 'expense') &&
+      tx.date !== undefined && tx.date <= today
+    )
+    .reduce((sum, tx) => {
+      const amt = Number(tx.amount);
+      return sum + (tx.type === 'expense' ? -amt : amt);
+    }, 0);
   return Math.round(total * 100) / 100;
 }
