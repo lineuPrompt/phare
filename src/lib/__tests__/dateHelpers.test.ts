@@ -12,6 +12,7 @@ import {
   businessToday,
   businessMonth,
   excludeSkippedDates,
+  firstOfNextMonth,
 } from '../dateHelpers';
 
 describe('monthNameToNumber', () => {
@@ -379,6 +380,20 @@ describe('excludeSkippedDates', () => {
   it('a tombstone for a date outside the current batch has no effect', () => {
     const dates = ['2026-01-01', '2026-02-01'];
     expect(excludeSkippedDates(dates, ['2025-12-01'])).toEqual(dates);
+  });
+});
+
+describe('firstOfNextMonth', () => {
+  it('rolls to the 1st of next month within a year', () => {
+    expect(firstOfNextMonth('2026-07-21')).toBe('2026-08-01');
+  });
+
+  it('rolls December over into January of the next year', () => {
+    expect(firstOfNextMonth('2026-12-15')).toBe('2027-01-01');
+  });
+
+  it('is stable on the 1st of the month already', () => {
+    expect(firstOfNextMonth('2026-08-01')).toBe('2026-09-01');
   });
 });
 

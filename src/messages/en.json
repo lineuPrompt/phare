@@ -710,6 +710,8 @@
       "confirmBody": "Future entries will be removed. Past entries stay as history.",
       "confirmDelete": "Delete",
       "cancel": "Cancel",
+      "effectiveFrom": "Effective from",
+      "effectiveFromHint": "Only applies if you change the amount, cadence, or pay date — everything before this date keeps its old value.",
       "cadence": {
         "monthly": "Monthly",
         "biweekly": "Every 2 weeks",

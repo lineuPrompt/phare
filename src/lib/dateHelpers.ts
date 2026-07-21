@@ -195,6 +195,19 @@ export function businessMonth(timezone: string, at: Date = new Date()): string {
   return businessToday(timezone, at).slice(0, 7);
 }
 
+/**
+ * The default "effective from" date offered when a recurring rule's
+ * amount/cadence edit splits the rule (Timeline Part B): the 1st of the
+ * month AFTER `today`. Pure string math, no Date object DST pitfalls —
+ * `today` is already a resolved YYYY-MM-DD business date.
+ */
+export function firstOfNextMonth(today: string): string {
+  const [y, m] = today.slice(0, 7).split('-').map(Number);
+  const nextMonth = m === 12 ? 1 : m + 1;
+  const nextYear = m === 12 ? y + 1 : y;
+  return `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+}
+
 export function formatLocalDate(date: Date): string {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');

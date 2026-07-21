@@ -710,6 +710,8 @@
       "confirmBody": "Les entrées futures seront retirées. Les entrées passées restent comme historique.",
       "confirmDelete": "Supprimer",
       "cancel": "Annuler",
+      "effectiveFrom": "En vigueur à partir de",
+      "effectiveFromHint": "S'applique seulement si vous changez le montant, la fréquence ou la date de paie — tout ce qui précède cette date garde son ancienne valeur.",
       "cadence": {
         "monthly": "Mensuel",
         "biweekly": "Aux 2 semaines",

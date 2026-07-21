@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { RecurringItem, RecurringAccount, RecurringCategory, RecurringGoalAccount, formatCurrency } from './types';
 import { formatSignedAmount } from '@/components/expenses/types';
 import { monthlyEquivalent } from '@/lib/incomeHelpers';
-import { nextOccurrence } from '@/lib/dateHelpers';
+import { nextOccurrence, firstOfNextMonth } from '@/lib/dateHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 
 // ── RecurringRow ───────────────────────────────────────────────────────────
@@ -26,10 +26,11 @@ type RecurringRowProps = {
   categories: RecurringCategory[];
   goalAccounts: RecurringGoalAccount[];
   locale: string;
+  today: string;
   onChanged: () => void;
 };
 
-function RecurringRow({ item, accounts, categories, goalAccounts, locale, onChanged }: RecurringRowProps) {
+function RecurringRow({ item, accounts, categories, goalAccounts, locale, today, onChanged }: RecurringRowProps) {
   const t = useTranslations('recurring.list');
   const isTransfer = item.type === 'transfer';
 
@@ -46,6 +47,10 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, onChan
   const [editCategoryId, setEditCategoryId] = useState('');
   const [editAccountId, setEditAccountId] = useState('');
   const [editDestinationId, setEditDestinationId] = useState('');
+  // Only consulted server-side when amount/cadence/anchor/secondDay actually
+  // change — that's when an edit splits the rule instead of mutating it in
+  // place (Timeline Part B). Defaults to the 1st of next month; adjustable.
+  const [editEffectiveFrom, setEditEffectiveFrom] = useState('');
 
   const inputStyle = { border: '1px solid #D1D5DB', color: '#0F2044' };
 
@@ -58,6 +63,7 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, onChan
     setEditCategoryId(item.category_id ?? '');
     setEditAccountId(item.account_id);
     setEditDestinationId(item.destination_account_id ?? '');
+    setEditEffectiveFrom(firstOfNextMonth(today));
     setIsEditing(true);
   };
 
@@ -78,6 +84,7 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, onChan
           categoryId: editCategoryId || null,
           accountId: editAccountId,
           destinationAccountId: editDestinationId || null,
+          effectiveFrom: editEffectiveFrom || undefined,
         }),
       });
       if (!res.ok) {
@@ -156,6 +163,22 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, onChan
               title={t('secondDay')}
             />
           )}
+          {/* Only takes effect if amount/cadence/anchor actually change — a
+              plain description/category/member correction never splits the
+              rule, so this date is inert (but still shown, since knowing
+              whether an edit WILL split is otherwise invisible). */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{ color: '#6B7280' }}>{t('effectiveFrom')}</span>
+            <input
+              type="date"
+              value={editEffectiveFrom}
+              min={today}
+              onChange={(e) => setEditEffectiveFrom(e.target.value)}
+              className="px-2 py-1.5 rounded text-sm outline-none"
+              style={inputStyle}
+              title={t('effectiveFromHint')}
+            />
+          </div>
         </div>
         {/* Row 3: transfer → destination goal; income/expense → account + category */}
         <div className="flex flex-wrap gap-2">
@@ -373,6 +396,7 @@ export default function RecurringList({
               categories={categories}
               goalAccounts={goalAccounts}
               locale={locale}
+              today={today}
               onChanged={onChanged}
             />
           ))}
@@ -392,6 +416,7 @@ export default function RecurringList({
               categories={categories}
               goalAccounts={goalAccounts}
               locale={locale}
+              today={today}
               onChanged={onChanged}
             />
           ))}
@@ -411,6 +436,7 @@ export default function RecurringList({
               categories={categories}
               goalAccounts={goalAccounts}
               locale={locale}
+              today={today}
               onChanged={onChanged}
             />
           ))}

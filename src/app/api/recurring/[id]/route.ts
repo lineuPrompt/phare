@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { businessToday, materializeFromMonthStart, excludeSkippedDates } from '@/lib/dateHelpers';
+import { businessToday, materializeFromMonthStart, excludeSkippedDates, firstOfNextMonth } from '@/lib/dateHelpers';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
@@ -12,29 +12,47 @@ async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) 
   return userRow?.household_id ?? null;
 }
 
+type Cadence = 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
+
 /**
  * PATCH: full edit of a recurring rule.
  *
  * Accepts all editable fields: description, amount, cadence, anchorDate,
- * secondDay, categoryId, accountId, destinationAccountId (transfer only).
- * Any omitted field defaults to its current value (loaded from DB before
- * the update). A rule's `type` itself is never editable — the source/goal
- * shape differs enough (category vs. destination account) that changing
- * type would need to reconstruct half the row; delete and recreate instead.
+ * secondDay, categoryId, accountId, destinationAccountId (transfer only),
+ * memberId, and effectiveFrom (only consulted on the split path below). A
+ * rule's `type` itself is never editable — the source/goal shape differs
+ * enough (category vs. destination account) that changing type would need
+ * to reconstruct half the row; delete and recreate instead.
  *
- * Re-materialization strategy (idempotent, no-duplicate):
- *   1. Delete all this-month-onward linked rows (WHERE recurring_item_id = id
- *      AND date >= start of the current month). Keyed by recurring_item_id —
- *      for a transfer rule this removes BOTH sides of every future pair in
- *      one statement, since create_transfer tags recurring_item_id on both.
- *   2. materializeFromMonthStart with the NEW cadence params — the current
- *      month is regenerated in full under the new rule, not just its
- *      not-yet-occurred remainder.
- *   3. Insert fresh rows (income/expense) or call create_transfer once per
- *      date (transfer) with new description/amount/category/account values.
+ * Two distinct update paths, chosen by what actually changed (Timeline Part
+ * B, split-into-two-rules model, founder-approved 2026-07-21):
  *
- * Rows before the current month (date < start of this month) are untouched
- * as history.
+ *  METADATA PATH (description/category/account/member only — amount,
+ *  cadence, anchorDate, secondDay all unchanged): mutates the rule row in
+ *  place, exactly as before. Re-materializes this-month-onward rows so the
+ *  corrected description/category/member flows into already-materialized
+ *  current+future occurrences (a name/category fix isn't a "value with an
+ *  effective date" the way an amount or cadence is — see the file's "Out of
+ *  scope" note in the Part B spec).
+ *
+ *  SPLIT PATH (amount, cadence, anchorDate, or secondDay changed, AND the
+ *  rule has a real anchor already — i.e. it has actually been materializing):
+ *  the current row is frozen (active=false, a pre-existing flag dashboard/
+ *  goals queries already filter on) and every one of ITS transaction rows
+ *  dated >= effectiveFrom is deleted (superseded — either not yet
+ *  materialized past the boundary, or materialized under the old value and
+ *  about to be replaced). A NEW recurring_items row takes over from
+ *  effectiveFrom forward, carrying the new amount/cadence/anchor/secondDay
+ *  plus whatever else was in this same request. Rows dated < effectiveFrom
+ *  are never touched by either step — real history, regardless of whether
+ *  they're in a past month or still earlier this month. This is what fixes
+ *  the pre-existing bug where editing a rule mid-month silently rewrote
+ *  already-happened days in the current month too (the old code's boundary
+ *  was "start of this month," not "the date the household actually chose").
+ *
+ *  A rule with no anchor yet (needsPayDate) always takes the metadata path
+ *  even if amount/cadence change — nothing has materialized yet, so there's
+ *  no history to preserve; splitting would just be bookkeeping overhead.
  */
 export async function PATCH(
   request: Request,
@@ -51,13 +69,16 @@ export async function PATCH(
     // Load current rule (needed to fall back to existing values for omitted fields)
     const { data: current, error: loadErr } = await supabase
       .from('recurring_items')
-      .select('id, household_id, member_id, description, amount, type, cadence, anchor_date, second_day, category_id, account_id, destination_account_id')
+      .select('id, household_id, member_id, description, amount, type, cadence, anchor_date, second_day, category_id, account_id, destination_account_id, active')
       .eq('id', id)
       .eq('household_id', householdId)
       .single();
 
     if (loadErr || !current) {
       return NextResponse.json({ error: 'Recurring item not found' }, { status: 404 });
+    }
+    if (current.active === false) {
+      return NextResponse.json({ error: 'This rule has been superseded by a later change and is frozen as history — it can no longer be edited.' }, { status: 400 });
     }
 
     const isTransfer = current.type === 'transfer';
@@ -134,7 +155,26 @@ export async function PATCH(
       }
     }
 
-    // 1. Update the rule
+    const timezone = await getHouseholdTimezone(supabase, householdId);
+    const todayStr = businessToday(timezone);
+
+    const valueChanged =
+      Number(newAmount) !== Number(current.amount) ||
+      newCadence !== current.cadence ||
+      newAnchorDate !== current.anchor_date ||
+      (newSecondDay ?? null) !== (current.second_day ?? null);
+
+    if (valueChanged && current.anchor_date !== null) {
+      return await splitRule({
+        supabase, householdId, oldRuleId: id, todayStr, body,
+        newDescription, newAmount, newCadence: newCadence as Cadence, newAnchorDate, newSecondDay,
+        newCategoryId, newAccountId, newDestinationId, newMemberId,
+        type: current.type as 'income' | 'expense' | 'transfer',
+      });
+    }
+
+    // ── METADATA PATH — in-place edit, unchanged from before ─────────────────
+
     const { data: updatedItem, error: ruleErr } = await supabase
       .from('recurring_items')
       .update({
@@ -158,15 +198,14 @@ export async function PATCH(
       return NextResponse.json({ error: ruleErr?.message ?? 'Update failed' }, { status: 500 });
     }
 
-    const timezone = await getHouseholdTimezone(supabase, householdId);
-    const todayStr = businessToday(timezone);
     const monthStartStr = `${todayStr.slice(0, 7)}-01`;
 
-    // 2. Delete all this-month-onward linked rows (keyed by recurring_item_id
-    // — no orphan risk; for a transfer this removes both sides of every
-    // future pair in one statement). Month start, not today: the whole
-    // current month is regenerated under the new rule, not just its
-    // not-yet-occurred remainder.
+    // Delete all this-month-onward linked rows (keyed by recurring_item_id —
+    // no orphan risk; for a transfer this removes both sides of every future
+    // pair in one statement). Month start, not today: the whole current
+    // month is regenerated under the (metadata-only) new values, not just
+    // its not-yet-occurred remainder — safe here because amount/cadence
+    // never move on this path.
     const { error: deleteErr } = await supabase
       .from('transactions')
       .delete()
@@ -179,12 +218,12 @@ export async function PATCH(
       return NextResponse.json({ error: deleteErr.message }, { status: 500 });
     }
 
-    // 3. Re-materialize — only when there's a known anchor date. No anchor
-    // yet means no dated instances, not a fabricated guess.
+    // Re-materialize — only when there's a known anchor date. No anchor yet
+    // means no dated instances, not a fabricated guess.
     const canMaterialize = !!newAnchorDate;
     const rawDates = canMaterialize
       ? materializeFromMonthStart(
-          { cadence: newCadence as 'monthly' | 'biweekly' | 'semimonthly' | 'weekly', anchorDate: newAnchorDate, secondDay: newSecondDay },
+          { cadence: newCadence as Cadence, anchorDate: newAnchorDate, secondDay: newSecondDay },
           todayStr,
           12
         )
@@ -226,7 +265,6 @@ export async function PATCH(
       return NextResponse.json({ updated: true, materialized });
     }
 
-    // 4. Insert fresh rows with new field values
     if (dates.length) {
       const rows = dates.map((date) => ({
         household_id:      householdId,
@@ -253,6 +291,186 @@ export async function PATCH(
     console.error('Recurring PATCH threw:', error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
+}
+
+/**
+ * SPLIT PATH — see the PATCH docstring above for the full model. Isolated
+ * into its own function purely for readability; not reused elsewhere.
+ */
+async function splitRule(args: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  householdId: string;
+  oldRuleId: string;
+  todayStr: string;
+  body: Record<string, unknown>;
+  newDescription: string;
+  newAmount: number;
+  newCadence: Cadence;
+  newAnchorDate: string;
+  newSecondDay: number | null;
+  newCategoryId: string | null;
+  newAccountId: string;
+  newDestinationId: string | null;
+  newMemberId: string | null;
+  type: 'income' | 'expense' | 'transfer';
+}) {
+  const {
+    supabase, householdId, oldRuleId, todayStr, body,
+    newDescription, newAmount, newCadence, newAnchorDate, newSecondDay,
+    newCategoryId, newAccountId, newDestinationId, newMemberId, type,
+  } = args;
+  const isTransfer = type === 'transfer';
+
+  const requestedEffectiveFrom = typeof body.effectiveFrom === 'string' ? body.effectiveFrom : null;
+  const effectiveFrom = requestedEffectiveFrom || firstOfNextMonth(todayStr);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
+    return NextResponse.json({ error: 'Invalid effective date' }, { status: 400 });
+  }
+  if (effectiveFrom < todayStr) {
+    return NextResponse.json({ error: "Effective date can't be in the past — past occurrences keep their real value." }, { status: 400 });
+  }
+
+  // 1. Freeze the current rule as history — no further edits, no further
+  // materialization from it. Its rows dated < effectiveFrom are left exactly
+  // as they are (real history, whatever month they're in).
+  const { error: freezeErr } = await supabase
+    .from('recurring_items')
+    .update({ active: false })
+    .eq('id', oldRuleId)
+    .eq('household_id', householdId);
+  if (freezeErr) {
+    console.error('Recurring PATCH (split) freeze error:', freezeErr);
+    return NextResponse.json({ error: freezeErr.message }, { status: 500 });
+  }
+
+  // 2. Remove the old rule's rows from the boundary forward — they're
+  // superseded by the new rule's materialization below (for a transfer this
+  // removes both sides of every affected pair in one statement, same as the
+  // metadata path).
+  const { error: deleteErr } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('household_id', householdId)
+    .eq('recurring_item_id', oldRuleId)
+    .gte('date', effectiveFrom);
+  if (deleteErr) {
+    console.error('Recurring PATCH (split) txn cleanup error:', deleteErr);
+    return NextResponse.json({ error: deleteErr.message }, { status: 500 });
+  }
+
+  // 3. Create the new rule, effective from the boundary forward.
+  const { data: newRule, error: newRuleErr } = await supabase
+    .from('recurring_items')
+    .insert({
+      household_id: householdId,
+      member_id: newMemberId,
+      category_id: isTransfer ? null : newCategoryId,
+      account_id: newAccountId,
+      destination_account_id: isTransfer ? newDestinationId : null,
+      description: newDescription,
+      amount: newAmount,
+      type,
+      cadence: newCadence,
+      anchor_date: newAnchorDate,
+      second_day: newSecondDay,
+      active: true,
+      effective_from: effectiveFrom,
+      predecessor_id: oldRuleId,
+    })
+    .select('id')
+    .single();
+  if (newRuleErr || !newRule) {
+    console.error('Recurring PATCH (split) new-rule insert error:', newRuleErr);
+    return NextResponse.json({ error: newRuleErr?.message ?? 'Failed to create the new rule' }, { status: 500 });
+  }
+
+  // 4. Carry forward any tombstones dated on/after the boundary. Without
+  // this, a household member who detached a single occurrence BEFORE the
+  // split (Part A3) would see it silently duplicated the moment the new
+  // rule's materialization below fills that same date back in — the exact
+  // "detach and an effective-dated change must not conflict" case.
+  const { data: carryRows } = await supabase
+    .from('recurring_skipped_dates')
+    .select('date')
+    .eq('household_id', householdId)
+    .eq('recurring_item_id', oldRuleId)
+    .gte('date', effectiveFrom);
+  if (carryRows && carryRows.length) {
+    const { error: carryErr } = await supabase
+      .from('recurring_skipped_dates')
+      .insert(carryRows.map((r) => ({ household_id: householdId, recurring_item_id: newRule.id, date: r.date as string })));
+    if (carryErr) {
+      console.error('Recurring PATCH (split) tombstone carry-forward error (non-fatal):', carryErr);
+    }
+  }
+
+  // 5. Materialize the new rule from the effective date forward. Filtering
+  // to `>= effectiveFrom` handles a mid-cadence boundary sanely: cadence
+  // math can produce a date earlier in the same month than the chosen
+  // boundary (e.g. a biweekly anchor on the 1st with an effective date of
+  // the 15th) — that earlier date belongs to the OLD rule's history, not
+  // this new row, so it's dropped rather than duplicated.
+  const rawDates = materializeFromMonthStart(
+    { cadence: newCadence, anchorDate: newAnchorDate, secondDay: newSecondDay },
+    effectiveFrom,
+    12
+  ).filter((d) => d >= effectiveFrom);
+
+  const { data: skippedRows } = rawDates.length
+    ? await supabase
+        .from('recurring_skipped_dates')
+        .select('date')
+        .eq('household_id', householdId)
+        .eq('recurring_item_id', newRule.id)
+    : { data: [] as { date: string }[] | null };
+  const dates = excludeSkippedDates(rawDates, new Set((skippedRows ?? []).map((r) => r.date as string)));
+
+  if (isTransfer) {
+    let materialized = 0;
+    for (const date of dates) {
+      const { error: rpcErr } = await supabase.rpc('create_transfer', {
+        p_household_id: householdId,
+        p_member_id: newMemberId,
+        p_chequing_id: newAccountId,
+        p_goal_id: newDestinationId,
+        p_amount: newAmount,
+        p_date: date,
+        p_description: newDescription,
+        p_recurring_item_id: newRule.id,
+      });
+      if (rpcErr) {
+        console.error('Recurring PATCH (split) transfer materialization RPC error:', rpcErr);
+        return NextResponse.json(
+          { error: rpcErr.message || 'Rule split but new-rule materialization failed partway through', updated: true, split: true, oldRuleId, newRuleId: newRule.id, effectiveFrom, materialized },
+          { status: 500 }
+        );
+      }
+      materialized += 1;
+    }
+    return NextResponse.json({ updated: true, split: true, oldRuleId, newRuleId: newRule.id, effectiveFrom, materialized });
+  }
+
+  if (dates.length) {
+    const rows = dates.map((date) => ({
+      household_id:      householdId,
+      member_id:         newMemberId,
+      category_id:       newCategoryId,
+      account_id:        newAccountId,
+      amount:            newAmount,
+      description:       newDescription,
+      date,
+      type,
+      source:            'manual',
+      recurring_item_id: newRule.id,
+    }));
+    const { error: insertErr } = await supabase.from('transactions').insert(rows);
+    if (insertErr) {
+      console.error('Recurring PATCH (split) txn insert error:', insertErr);
+      return NextResponse.json({ error: insertErr.message }, { status: 500 });
+    }
+  }
+
+  return NextResponse.json({ updated: true, split: true, oldRuleId, newRuleId: newRule.id, effectiveFrom, materialized: dates.length });
 }
 
 // DELETE: remove a recurring rule + its future materialized rows (past kept

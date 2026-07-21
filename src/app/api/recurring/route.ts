@@ -25,6 +25,12 @@ export async function GET() {
     const ctx = await getContext(supabase);
     if (!ctx) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
+    // active=false rules are ones an effective-dated edit has superseded
+    // (Timeline Part B, split-into-two-rules) — they're frozen history, not
+    // something to act on, so the list only ever shows the live row. This is
+    // what keeps a split invisible in the UI: the old row disappears and the
+    // new one appears in its place at the same list position, reading as a
+    // normal in-place edit even though two rule rows now exist underneath.
     const { data: items } = await supabase
       .from('recurring_items')
       .select(
@@ -33,6 +39,7 @@ export async function GET() {
         'destination_accounts:accounts!recurring_items_destination_account_id_fkey(name), household_members(name)'
       )
       .eq('household_id', ctx.householdId)
+      .eq('active', true)
       .order('type', { ascending: true })
       .order('description', { ascending: true });
 
