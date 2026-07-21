@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { Account, ExpenseCategory } from './types';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 export default function ExpenseForm({
   categories,
@@ -18,7 +19,7 @@ export default function ExpenseForm({
   accountId: string | null;
 }) {
   const t = useTranslations('cards.addEntry');
-  const today = new Date().toISOString().slice(0, 10);
+  const { today } = useBusinessToday();
   const [entryType, setEntryType] = useState<'expense' | 'income'>('expense');
   const [date, setDate] = useState(defaultDate ?? today);
   const [description, setDescription] = useState('');

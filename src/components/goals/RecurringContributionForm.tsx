@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 // Creates a recurring transfer targeting ONE fixed goal — the "Set up
 // recurring contribution" flow on the Goals page. Destination is locked to
@@ -21,7 +22,7 @@ export default function RecurringContributionForm({
   onCancel: () => void;
 }) {
   const t = useTranslations('goals.recurring');
-  const today = new Date().toISOString().slice(0, 10);
+  const { today } = useBusinessToday();
 
   const [amount, setAmount] = useState('');
   const [cadence, setCadence] = useState<'monthly' | 'biweekly' | 'semimonthly' | 'weekly'>('monthly');

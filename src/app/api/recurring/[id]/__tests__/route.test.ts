@@ -68,6 +68,7 @@ describe('PATCH /api/recurring/[id] — member reassignment works for expenses',
   it('assigns a specific household member to an expense item, and the new member_id flows into re-materialized transactions', async () => {
     const { client, calls } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       recurring_items: [
         {
           // current row — household-level expense (member_id null), monthly, already anchored

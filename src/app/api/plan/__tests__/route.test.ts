@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { NextRequest } from 'next/server';
 import { computeDebtPayoff } from '@/lib/goalHelpers';
-import { formatLocalDate } from '@/lib/dateHelpers';
+import { businessToday, DEFAULT_HOUSEHOLD_TIMEZONE } from '@/lib/dateHelpers';
 
 // The AI must never instantiate structured objects (sinking-fund rows, goal
 // cards, debt-payoff cards) for the manual-form (calculated) source. These
@@ -142,7 +142,7 @@ describe('POST /api/plan — debtPayoff is code-computed (template source)', () 
     aiReturns(ROGUE_DEBT_AI);
     const plan = await postPlan(TEMPLATE_BODY);
 
-    const today = formatLocalDate(new Date());
+    const today = businessToday(DEFAULT_HOUSEHOLD_TIMEZONE);
     const expected = computeDebtPayoff(
       { name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 0, targetDate: '2026-09-01' },
       today

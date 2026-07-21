@@ -42,7 +42,8 @@ import { assembleCalculatedBudget, dedupeSinkingFunds } from '@/lib/planHelpers'
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff, GoalResult, DebtPayoffResult } from '@/lib/goalHelpers';
 import { detectWindfalls } from '@/lib/reviewContextHelpers';
-import { formatLocalDate } from '@/lib/dateHelpers';
+import { businessToday, businessMonth } from '@/lib/dateHelpers';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 const SEED_CATEGORIES = [
   'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
@@ -83,10 +84,12 @@ export async function POST(request: Request) {
     }
     const householdId = userRow.household_id;
 
-    // ── Current calendar month boundaries ────────────────────────────────────
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth(); // 0-indexed
+    // ── Current calendar month boundaries (household timezone, not the
+    // server's UTC clock) ────────────────────────────────────────────────────
+    const timezone = await getHouseholdTimezone(supabase, householdId);
+    const [ty, tmo] = businessMonth(timezone).split('-').map(Number);
+    const year = ty;
+    const month = tmo - 1; // 0-indexed, matching firstOfMonth's contract
     const monthStart = firstOfMonth(year, month);
     const monthEnd = firstOfMonth(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1);
 
@@ -152,7 +155,7 @@ export async function POST(request: Request) {
         .in('account_id', goalIds);
       goalTxData = data ?? [];
     }
-    const today = formatLocalDate(new Date());
+    const today = businessToday(timezone);
     const rawGoals = goalAccountList.map((a) => ({
       name: a.name,
       targetAmount: Number(a.goal_target),

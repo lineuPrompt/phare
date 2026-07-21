@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { anthropic } from '@/lib/anthropic';
 import { dedupeSinkingFunds, assembleCalculatedBudget } from '@/lib/planHelpers';
 import { evaluateGoals, GoalResult, isDebtGoalName, computeDebtPayoff, DebtPayoffResult } from '@/lib/goalHelpers';
-import { formatLocalDate } from '@/lib/dateHelpers';
+import { businessToday, DEFAULT_HOUSEHOLD_TIMEZONE } from '@/lib/dateHelpers';
 
 const SEED_CATEGORIES = [
   'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
@@ -49,7 +49,11 @@ export async function POST(request: NextRequest) {
 
     if (body.source === 'template') {
       const p = body.parsed;
-      const today = formatLocalDate(new Date());
+      // No household row exists yet at this pre-signup preview stage (see
+      // upload/page.tsx) — nothing to read a timezone from, so this uses
+      // the same default every fresh household gets. Once saved (save-plan),
+      // downstream routes resolve the real per-household timezone.
+      const today = businessToday(DEFAULT_HOUSEHOLD_TIMEZONE);
       const rawGoals: { name: string; targetAmount: number; savedSoFar: number; targetDate: string | null }[] = p.goals ?? [];
       // The debt-payoff line (if any) gets its own card, not a duplicate goal
       // card — pulled out before the rest go through evaluateGoals().

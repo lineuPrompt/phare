@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RecurringAccount, RecurringCategory, RecurringGoalAccount } from './types';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 export default function RecurringForm({
   accounts,
@@ -16,7 +17,7 @@ export default function RecurringForm({
   onSaved: () => void;
 }) {
   const t = useTranslations('recurring.form');
-  const today = new Date().toISOString().slice(0, 10);
+  const { today } = useBusinessToday();
 
   const [type, setType] = useState<'income' | 'expense' | 'transfer'>('expense');
   const [description, setDescription] = useState('');

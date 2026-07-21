@@ -7,6 +7,7 @@ import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import { formatCurrency, formatSignedAmount } from '@/components/expenses/types';
 import type { ReconciliationResult, AccountAudit } from '@/lib/reconcileHelpers';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 type ReconcileData = ReconciliationResult & { month: string };
 
@@ -237,8 +238,8 @@ export default function ReconcilePage() {
   const pathname = usePathname();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
 
-  const now = new Date();
-  const [selectedMonth, setSelectedMonth] = useState(now.toISOString().slice(0, 7));
+  const { month: currentMonth } = useBusinessToday();
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [data, setData] = useState<ReconcileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { formatLocalDate } from '@/lib/dateHelpers';
+import { businessToday } from '@/lib/dateHelpers';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 async function resolveContext(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -67,18 +68,6 @@ export async function POST(request: Request) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) {
       return NextResponse.json({ error: 'Invalid anchorDate format (expected YYYY-MM-DD)' }, { status: 400 });
     }
-    // formatLocalDate (not `.toISOString()`, which is always UTC) is the
-    // canonical "today" reference across Phare — recurring materialization's
-    // date-walking already uses it. Mixing UTC here and local calendar dates
-    // there let this check drift from what "today" means everywhere else:
-    // for a household in a timezone behind UTC (e.g. Montréal, UTC-4/-5),
-    // `.toISOString()` rolls over to the next calendar day several hours
-    // before local midnight, so in the evening this check would have
-    // wrongly ALLOWED an anchor dated the user's actual local tomorrow.
-    const today = formatLocalDate(new Date());
-    if (anchorDate > today) {
-      return NextResponse.json({ error: 'anchorDate must not be in the future' }, { status: 400 });
-    }
     const numBalance = Number(balance);
     if (!isFinite(numBalance)) {
       return NextResponse.json({ error: 'balance must be a finite number' }, { status: 400 });
@@ -87,6 +76,19 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const ctx = await resolveContext(supabase);
     if (!ctx) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
+    // businessToday (not `.toISOString()`, which is always UTC, and not the
+    // server process's local clock, which is also UTC in production) is the
+    // canonical "today" reference across Phare — resolved in the household's
+    // own timezone. For a household behind UTC (e.g. Montréal, UTC-4/-5),
+    // anything else rolls over to the next calendar day several hours before
+    // local midnight, so in the evening this check would have wrongly
+    // ALLOWED an anchor dated the user's actual local tomorrow.
+    const timezone = await getHouseholdTimezone(supabase, ctx.householdId);
+    const today = businessToday(timezone);
+    if (anchorDate > today) {
+      return NextResponse.json({ error: 'anchorDate must not be in the future' }, { status: 400 });
+    }
 
     const { data: account } = await supabase
       .from('accounts')

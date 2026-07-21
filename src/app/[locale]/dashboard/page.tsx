@@ -13,24 +13,18 @@ import EmptyState from '@/components/dashboard/EmptyState';
 import { DashboardData } from '@/components/dashboard/types';
 import Sidebar from '@/components/dashboard/Sidebar';
 import { addMonthsToMonth } from '@/lib/goalHelpers';
-
-function calendarMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-}
-
-// Same 12-month rolling window (current month + 11) that Timeline's
-// materialization and bridge-ensuring cover — reusing addMonthsToMonth
-// rather than a parallel month computation keeps this one source of truth.
-function maxNavigableMonth(): string {
-  return addMonthsToMonth(calendarMonth(), 11);
-}
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 export default function DashboardPage() {
   const t = useTranslations('dashboard');
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
+  const { month: calendarMonth } = useBusinessToday();
+  // Same 12-month rolling window (current month + 11) that Timeline's
+  // materialization and bridge-ensuring cover — reusing addMonthsToMonth
+  // rather than a parallel month computation keeps this one source of truth.
+  const maxNavigableMonth = addMonthsToMonth(calendarMonth, 11);
 
   const [displayMonth, setDisplayMonth] = useState<string>(calendarMonth);
   const [data, setData] = useState<DashboardData | null>(null);
@@ -61,7 +55,8 @@ export default function DashboardPage() {
   // (goals, sinking funds, the AI review, all unmounted and refetched) to
   // update three numbers.
   useEffect(() => {
-    loadDashboard(calendarMonth());
+    loadDashboard(calendarMonth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadDashboard]);
 
   // Snapshot-only month switching: /api/dashboard?snapshotOnly=1 recomputes
@@ -110,7 +105,7 @@ export default function DashboardPage() {
   };
 
   const handleNextMonth = () => {
-    if (displayMonth === maxNavigableMonth()) return;
+    if (displayMonth === maxNavigableMonth) return;
     const [y, m] = displayMonth.split('-').map(Number);
     setDisplayMonth(m === 12
       ? `${y + 1}-01`
@@ -161,7 +156,7 @@ export default function DashboardPage() {
     );
   }
 
-  const isMaxMonth = displayMonth === maxNavigableMonth();
+  const isMaxMonth = displayMonth === maxNavigableMonth;
   const isMinMonth = data.earliestAnchorMonth ? displayMonth <= data.earliestAnchorMonth : false;
 
   return (

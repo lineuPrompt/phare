@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 export default function AnchorForm({
   accountId,
@@ -18,7 +19,7 @@ export default function AnchorForm({
 }) {
   const t = useTranslations('timeline.anchorForm');
 
-  const today = new Date().toISOString().slice(0, 10);
+  const { today } = useBusinessToday();
   const [date, setDate] = useState(defaultDate ?? today);
   const [balance, setBalance] = useState(defaultBalance !== undefined ? String(defaultBalance) : '');
   const [saving, setSaving] = useState(false);

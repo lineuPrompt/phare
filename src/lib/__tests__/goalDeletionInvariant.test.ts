@@ -26,13 +26,14 @@ import { reconcileMonth, type ReconcileTxRow, type ReconcileAccountRow } from '.
 type Row = Record<string, unknown> & { id: string };
 
 function makeFakeSupabase(seed: {
-  users: Row[]; accounts: Row[]; transactions: Row[]; recurring_items: Row[];
+  users: Row[]; accounts: Row[]; transactions: Row[]; recurring_items: Row[]; households?: Row[];
 }) {
   const store: Record<string, Row[]> = {
     users: [...seed.users],
     accounts: [...seed.accounts],
     transactions: [...seed.transactions],
     recurring_items: [...seed.recurring_items],
+    households: [...(seed.households ?? [])],
   };
 
   function selectChain(rows: Row[]) {
@@ -169,6 +170,7 @@ describe('Goal deletion — honest consequences, atomicity, reconciliation invar
   function seedScenario() {
     return makeFakeSupabase({
       users: [{ id: 'user-1', household_id: HOUSEHOLD }],
+      households: [{ id: HOUSEHOLD, timezone: 'America/Toronto' }],
       accounts: [
         { id: CHEQUING, household_id: HOUSEHOLD, type: 'chequing', name: 'Chequing' },
         { id: GOAL, household_id: HOUSEHOLD, type: 'savings', name: 'Disney Trip' },

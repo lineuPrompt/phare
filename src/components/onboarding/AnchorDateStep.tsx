@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatCAD } from './types';
 import { validateNextPayDate, validateSemimonthlyDays, buildSemimonthlyAnchor, evaluateSkipConfirmation, selectBatchSaveable, summarizeBatchResult, type SkipConfirmation } from '@/lib/anchorDateHelpers';
-import { formatLocalDate, formatLocalMonth } from '@/lib/dateHelpers';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 type Translator = (key: string, values?: Record<string, string | number>) => string;
 
@@ -54,8 +54,7 @@ export default function AnchorDateStep({
   onDone: (resolvedIds: string[]) => void;
 }) {
   const t = useTranslations('upload.plan.anchorStep');
-  const today = formatLocalDate(new Date());
-  const currentMonth = formatLocalMonth(new Date());
+  const { today, month: currentMonth } = useBusinessToday();
 
   const [state, setState] = useState<Record<string, ItemState>>(() =>
     Object.fromEntries(items.map((i) => [

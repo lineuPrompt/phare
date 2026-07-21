@@ -84,6 +84,7 @@ describe('GET /api/timeline — windowStart param and unbalancedDays', () => {
   it('default window (no windowStart) returns unbalancedDays: [] alongside the existing shape', async () => {
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' } }],
+      households: [{ data: { timezone: 'America/Toronto' } }],
       accounts: [
         { data: { id: 'acc-1', type: 'chequing' } }, // target account lookup
         { data: [] },                                 // card accounts (none)
@@ -108,6 +109,7 @@ describe('GET /api/timeline — windowStart param and unbalancedDays', () => {
   it('windowStart earlier than the first anchor surfaces pre-anchor entries as unbalancedDays, scoped to that range', async () => {
     const { client, calls } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' } }],
+      households: [{ data: { timezone: 'America/Toronto' } }],
       accounts: [
         { data: { id: 'acc-1', type: 'chequing' } },
         { data: [] },
@@ -149,6 +151,7 @@ describe('GET /api/timeline — windowStart param and unbalancedDays', () => {
   it('a windowStart later than the default is ignored (never extends the window forward)', async () => {
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' } }],
+      households: [{ data: { timezone: 'America/Toronto' } }],
       accounts: [
         { data: { id: 'acc-1', type: 'chequing' } },
         { data: [] },

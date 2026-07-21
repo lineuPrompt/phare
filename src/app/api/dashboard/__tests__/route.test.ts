@@ -72,6 +72,7 @@ describe('GET /api/dashboard — plan existence gate', () => {
   it('a household with zero budget rows but a completed onboarding (file_imports) still has a plan', async () => {
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', full_name: 'Lineu Prompt' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       file_imports: [{ data: { id: 'imp-1' }, error: null }], // the plan-existence check
       budgets: [
         { data: null, error: null }, // planMonth lookup — none exist, falls back to actuals month
@@ -143,6 +144,7 @@ describe('GET /api/dashboard?snapshotOnly=1 — month-switch fetch never touches
   it('returns only snapshot fields, without ever querying budgets/sinking_funds/conversations', async () => {
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh4', full_name: 'Someone' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       file_imports: [{ data: { id: 'imp-1' }, error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null, payment_day: null, statement_close_day: null }], error: null }],
       account_balance_anchors: [{ data: { anchor_date: '2026-01-01' }, error: null }],
@@ -203,6 +205,7 @@ describe('GET /api/dashboard — a bridge-sync failure surfaces, never a silentl
   it('ensureBridgesForWindow throwing produces a 500, not a 200 with incomplete figures', async () => {
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh3', full_name: 'Someone' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       file_imports: [{ data: { id: 'imp-1' }, error: null }],
       budgets: [
         { data: null, error: null },

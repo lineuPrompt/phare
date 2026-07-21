@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { formatLocalMonth } from '@/lib/dateHelpers';
+import { businessMonth } from '@/lib/dateHelpers';
+
+// getHouseholdTimezone's fallback (and every test household's scripted
+// `households` row below) is 'America/Toronto' — matching it here keeps
+// these tests decoupled from the test-runner's own local timezone.
+const TEST_TIMEZONE = 'America/Toronto';
 
 // ---------------------------------------------------------------------------
 // Regression test for the reset-then-onboard defect: a household with ZERO
@@ -81,7 +86,7 @@ describe('POST /api/save-plan — reset-then-onboard regression', () => {
   });
 
   it('a household with zero accounts saves successfully; chequing is created exactly once and used on every materialized transaction', async () => {
-    const currentMonth = formatLocalMonth(new Date());
+    const currentMonth = businessMonth(TEST_TIMEZONE);
     const anchorDate = `${currentMonth}-01`;
 
     const { client, calls } = makeSupabaseMock({
@@ -115,6 +120,7 @@ describe('POST /api/save-plan — reset-then-onboard regression', () => {
         { count: 0, error: null },
         { error: null }, // unconditional delete
       ],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       file_imports: [{ data: { id: 'imp-1' }, error: null }],
       categories: [
         { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null }, // already seeded (reset preserves categories)
@@ -211,6 +217,7 @@ describe('POST /api/save-plan — manual entry produces the same shape as a temp
         { count: 0, error: null },
         { error: null },
       ],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       file_imports: [{ data: { id: 'imp-1' }, error: null }],
       categories: [
         { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },
@@ -278,7 +285,7 @@ describe('POST /api/save-plan — expense member attribution', () => {
   });
 
   it('an imported expense with no member column defaults to household-level (member_id null) and never counts as unmatched, while an unresolved income name still warns', async () => {
-    const currentMonth = formatLocalMonth(new Date());
+    const currentMonth = businessMonth(TEST_TIMEZONE);
     const anchorDate = `${currentMonth}-01`;
 
     const { client, calls } = makeSupabaseMock({
@@ -315,6 +322,7 @@ describe('POST /api/save-plan — expense member attribution', () => {
         { count: 0, error: null },
         { error: null },
       ],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       file_imports: [{ data: { id: 'imp-1' }, error: null }],
       categories: [
         { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },
@@ -384,7 +392,7 @@ describe('POST /api/save-plan — no-fabrication contract: a manual plan with em
   });
 
   it('a two-line manual plan (goals: [], sinkingFunds: []) creates no goal accounts and inserts no sinking funds', async () => {
-    const currentMonth = formatLocalMonth(new Date());
+    const currentMonth = businessMonth(TEST_TIMEZONE);
     const anchorDate = `${currentMonth}-01`;
 
     const { client, calls } = makeSupabaseMock({
@@ -416,6 +424,7 @@ describe('POST /api/save-plan — no-fabrication contract: a manual plan with em
         { count: 0, error: null },
         { error: null }, // unconditional delete — but NO insert must follow
       ],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       file_imports: [{ data: { id: 'imp-1' }, error: null }],
       categories: [
         { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },
@@ -485,7 +494,7 @@ describe('POST /api/save-plan — calculated-source end-to-end persistence (manu
   // (plan artifact) all persist for the "calculated" source exactly as they
   // do for "template" — the same save path, indistinguishable ledgers.
   it('a realistic calculated-source plan persists recurring items, materialized transactions, budgets, and the review conversation', async () => {
-    const currentMonth = formatLocalMonth(new Date());
+    const currentMonth = businessMonth(TEST_TIMEZONE);
     const anchorDate = `${currentMonth}-01`;
 
     const { client, calls } = makeSupabaseMock({
@@ -523,6 +532,7 @@ describe('POST /api/save-plan — calculated-source end-to-end persistence (manu
         { count: 0, error: null },
         { error: null },
       ],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       file_imports: [{ data: { id: 'imp-1' }, error: null }],
       categories: [
         { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },
@@ -605,7 +615,7 @@ describe('POST /api/save-plan — goal accounts (Bug 2: target date persistence 
   });
 
   it('persists goal_target_date and seeds exactly one "Starting balance" transfer transaction for savedSoFar', async () => {
-    const currentMonth = formatLocalMonth(new Date());
+    const currentMonth = businessMonth(TEST_TIMEZONE);
     const monthDate = `${currentMonth}-01`;
 
     const { client, calls } = makeSupabaseMock({
@@ -630,6 +640,7 @@ describe('POST /api/save-plan — goal accounts (Bug 2: target date persistence 
         { count: 0, error: null },
         { error: null },
       ],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       file_imports: [{ data: { id: 'imp-1' }, error: null }],
       categories: [
         { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },
@@ -717,6 +728,7 @@ describe('POST /api/save-plan — goal accounts (Bug 2: target date persistence 
         { count: 0, error: null },
         { error: null },
       ],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       file_imports: [{ data: { id: 'imp-1' }, error: null }],
       categories: [
         { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },

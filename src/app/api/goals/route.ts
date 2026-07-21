@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { GOAL_ACCOUNT_TYPES, computeGoalBalance } from '@/lib/dashboardHelpers';
 import { computeDebtPayoff } from '@/lib/goalHelpers';
-import { formatLocalDate } from '@/lib/dateHelpers';
+import { businessToday } from '@/lib/dateHelpers';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 export async function GET() {
   try {
@@ -62,7 +63,8 @@ export async function GET() {
       );
     }
 
-    const today = formatLocalDate(new Date());
+    const timezone = await getHouseholdTimezone(supabase, householdId);
+    const today = businessToday(timezone);
 
     const goals = goalAccounts.map((a) => {
       // Goal-side transfer rows: account_id = this goal, type = 'transfer'.

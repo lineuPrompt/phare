@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { formatLocalDate, materializeFromMonthStart } from '@/lib/dateHelpers';
+import { businessToday, materializeFromMonthStart } from '@/lib/dateHelpers';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 type Cadence = 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
 
@@ -184,7 +185,8 @@ export async function POST(request: Request) {
     // occurrence recorded; months are real, not just their remainder. No
     // anchor yet (needs-a-date) means no dated instances, not a fabricated
     // guess.
-    const today = formatLocalDate(new Date());
+    const timezone = await getHouseholdTimezone(supabase, ctx.householdId);
+    const today = businessToday(timezone);
     const monthStart = `${today.slice(0, 7)}-01`;
     const dates = anchorDate
       ? materializeFromMonthStart({ cadence, anchorDate, secondDay: secondDay ?? null }, today, 12)

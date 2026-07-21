@@ -84,6 +84,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client, calls } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [
         { data: [{ amount: 5000, type: 'income', description: 'Salary', account_id: 'chq-1' }], error: null },
       ],
@@ -121,6 +122,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [
         // Month-scoped fetch (headline figures)
         { data: [{ amount: 5000, type: 'income', description: 'Salary', account_id: 'chq-1' }], error: null },
@@ -168,6 +170,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [{ data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
@@ -198,6 +201,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [
         { data: [], error: null }, // month-scoped headline figures
         // All-time fetch for the debt account's balance: opened at -5000, one $200 payment.
@@ -258,6 +262,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [
         { data: [], error: null }, // month-scoped headline figures
         { data: futureContributions, error: null }, // all-time fetch for the goal's balance — all future
@@ -304,6 +309,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [{ data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
@@ -340,6 +346,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [
         {
           data: [
@@ -390,6 +397,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [{ data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],

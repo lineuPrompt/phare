@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { businessMonth } from '@/lib/dateHelpers';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 // GET /api/reconcile/months
 //
@@ -30,7 +32,8 @@ export async function GET() {
       monthsWithData.add(t.date.slice(0, 7));
     }
 
-    const currentMonth = new Date().toISOString().slice(0, 7);
+    const timezone = await getHouseholdTimezone(supabase, householdId);
+    const currentMonth = businessMonth(timezone);
     monthsWithData.add(currentMonth);
 
     const months = Array.from(monthsWithData).sort();

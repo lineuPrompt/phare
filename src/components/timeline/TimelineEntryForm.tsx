@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { ExpenseCategory } from '@/components/expenses/types';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 type Cadence = 'monthly' | 'biweekly' | 'semimonthly';
 type GoalAccountOption = { id: string; name: string; isDebt: boolean };
@@ -21,7 +22,7 @@ export default function TimelineEntryForm({
   onCancel?: () => void;
 }) {
   const t = useTranslations('timeline.addEntry');
-  const today = new Date().toISOString().slice(0, 10);
+  const { today } = useBusinessToday();
 
   const [entryType, setEntryType] = useState<'expense' | 'income' | 'transfer'>('expense');
   const [date, setDate] = useState(today);

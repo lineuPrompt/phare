@@ -13,6 +13,7 @@ import { buildMonthView, availableMonths, type UnbalancedDay } from '@/lib/timel
 import type { TimelineDay, DipInfo } from '@/lib/timelineHelpers';
 import type { Account, ExpenseCategory } from '@/components/expenses/types';
 import { formatCurrency } from '@/components/expenses/types';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 // Closing position for the viewed month — read directly off the already-
 // computed monthView.closesAt (buildMonthView, Phase 3). No new math: this
@@ -53,24 +54,19 @@ type TimelineResponse =
 
 type AnchorRow = { id: string; anchor_date: string; balance: number };
 
-function currentMonthKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-}
-
 export default function TimelinePage() {
   const t = useTranslations('timeline');
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
-  const today = new Date().toISOString().slice(0, 10);
+  const { today, month: currentMonth } = useBusinessToday();
 
   // The dashboard snapshot links here with ?month=YYYY-MM so the two views
   // of "this month" stay the same month — read once on mount, same as any
   // deep link. Falls back to the current month if missing/malformed.
   const monthParam = searchParams.get('month');
-  const initialMonth = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : currentMonthKey();
+  const initialMonth = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : currentMonth;
 
   const [chequingId, setChequingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -125,7 +121,7 @@ export default function TimelinePage() {
         let windowStartParam = '';
         if (anchors.length > 0) {
           const earliestMonth = anchors[0].anchor_date.slice(0, 7);
-          const defaultMonth = currentMonthKey();
+          const defaultMonth = currentMonth;
           if (earliestMonth < defaultMonth) {
             windowStartParam = `&windowStart=${earliestMonth}-01`;
           }
@@ -136,16 +132,16 @@ export default function TimelinePage() {
       })
       .then((d: TimelineResponse | null) => { if (d) setData(d); })
       .finally(() => setLoading(false));
-  }, [chequingId, locale, router]);
+  }, [chequingId, locale, router, currentMonth]);
 
   useEffect(() => { load(); }, [load]);
 
   // Auto-scroll today's row into view whenever the current month is shown.
   useEffect(() => {
-    if (selectedMonth === currentMonthKey() && todayRef.current) {
+    if (selectedMonth === currentMonth && todayRef.current) {
       todayRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
-  }, [selectedMonth, data]);
+  }, [selectedMonth, data, currentMonth]);
 
   const onAnchorSaved = () => {
     setShowReAnchor(false);
@@ -197,7 +193,7 @@ export default function TimelinePage() {
 
   const goPrev = () => { if (monthIdx > 0) setSelectedMonth(months[monthIdx - 1]); };
   const goNext = () => { if (monthIdx >= 0 && monthIdx < months.length - 1) setSelectedMonth(months[monthIdx + 1]); };
-  const goToday = () => setSelectedMonth(currentMonthKey());
+  const goToday = () => setSelectedMonth(currentMonth);
 
   const monthLabel = new Date(selectedMonth + '-01T00:00:00').toLocaleDateString(
     locale === 'fr' ? 'fr-CA' : 'en-CA', { month: 'long', year: 'numeric' }
@@ -241,7 +237,7 @@ export default function TimelinePage() {
         </button>
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold" style={{ color: '#0F2044' }}>{monthLabel}</span>
-          {selectedMonth !== currentMonthKey() && (
+          {selectedMonth !== currentMonth && (
             <button onClick={goToday} className="text-xs px-2 py-1 rounded-full cursor-pointer" style={{ background: '#F0FDFD', color: '#2ABFBF' }}>
               {t('nav.today')}
             </button>
@@ -280,7 +276,7 @@ export default function TimelinePage() {
         </button>
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold" style={{ color: '#0F2044' }}>{monthLabel}</span>
-          {selectedMonth !== currentMonthKey() && (
+          {selectedMonth !== currentMonth && (
             <button onClick={goToday} className="text-xs px-2 py-1 rounded-full cursor-pointer" style={{ background: '#F0FDFD', color: '#2ABFBF' }}>
               {t('nav.today')}
             </button>

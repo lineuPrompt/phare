@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { formatLocalDate, materializeFromMonthStart } from '@/lib/dateHelpers';
+import { businessToday, materializeFromMonthStart } from '@/lib/dateHelpers';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -157,7 +158,8 @@ export async function PATCH(
       return NextResponse.json({ error: ruleErr?.message ?? 'Update failed' }, { status: 500 });
     }
 
-    const todayStr = formatLocalDate(new Date());
+    const timezone = await getHouseholdTimezone(supabase, householdId);
+    const todayStr = businessToday(timezone);
     const monthStartStr = `${todayStr.slice(0, 7)}-01`;
 
     // 2. Delete all this-month-onward linked rows (keyed by recurring_item_id
@@ -253,7 +255,8 @@ export async function DELETE(
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    const todayStr = formatLocalDate(new Date());
+    const timezone = await getHouseholdTimezone(supabase, householdId);
+    const todayStr = businessToday(timezone);
 
     await supabase
       .from('transactions')

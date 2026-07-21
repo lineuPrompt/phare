@@ -8,6 +8,8 @@ import {
 } from '@/lib/timelineHelpers';
 import { groupUnbalancedTransactions } from '@/lib/timelineDisplayHelpers';
 import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
+import { businessToday } from '@/lib/dateHelpers';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 const TRANSACTION_COLUMNS =
   'id, date, description, amount, type, recurring_item_id, recurrence_id, installment_label, transfer_peer_id, is_bridge, bridge_source_account';
@@ -91,7 +93,8 @@ export async function GET(request: Request) {
 
     // ── 12-month window ────────────────────────────────────────────────────────
 
-    const today = new Date().toISOString().slice(0, 10);
+    const timezone = await getHouseholdTimezone(supabase, householdId);
+    const today = businessToday(timezone);
     const [ty, tm] = today.split('-').map(Number);
 
     // defaultWindowStart: first day of today's month

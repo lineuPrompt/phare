@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { GoalAccount } from '@/components/dashboard/types';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 interface Props {
   goals: GoalAccount[];
@@ -13,10 +14,11 @@ interface Props {
 
 export default function TransferForm({ goals, defaultGoalId, onSaved, onCancel }: Props) {
   const t = useTranslations('goals');
+  const { today } = useBusinessToday();
 
   const [goalId, setGoalId] = useState(defaultGoalId ?? goals[0]?.id ?? '');
   const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(today);
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

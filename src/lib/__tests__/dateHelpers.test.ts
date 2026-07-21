@@ -9,6 +9,8 @@ import {
   bridgePaymentDate,
   nextOccurrence,
   statementCycleWindow,
+  businessToday,
+  businessMonth,
 } from '../dateHelpers';
 
 describe('monthNameToNumber', () => {
@@ -467,5 +469,74 @@ describe('nextOccurrence', () => {
   it('clamps a monthly anchor day past the end of a shorter month', () => {
     // Anchor on the 31st; June only has 30 days.
     expect(nextOccurrence({ cadence: 'monthly', anchorDate: '2026-01-31' }, '2026-06-15')).toBe('2026-06-30');
+  });
+});
+
+describe('businessToday / businessMonth — the household-timezone date spine', () => {
+  const TZ = 'America/Toronto';
+
+  // The exact bug that started this: a household in Eastern time is still
+  // "today" for several hours after UTC has already rolled over to
+  // tomorrow. Anything that derives "today" from the server's UTC clock
+  // (new Date().toISOString().slice(0,10), or new Date() on a UTC-tz
+  // server process) gets this wrong; businessToday must not.
+  it('8pm EST (past UTC midnight) is still treated as that Eastern day, not the next UTC day', () => {
+    // 2026-01-20 20:00 EST == 2026-01-21 01:00 UTC.
+    const at = new Date('2026-01-21T01:00:00Z');
+    expect(businessToday(TZ, at)).toBe('2026-01-20');
+    // What the old UTC-based code would have wrongly produced.
+    expect(at.toISOString().slice(0, 10)).toBe('2026-01-21');
+  });
+
+  it('month rollover: 8pm EDT on the last day of the month does not roll to next month', () => {
+    // 2026-07-31 20:30 EDT == 2026-08-01 00:30 UTC.
+    const at = new Date('2026-08-01T00:30:00Z');
+    expect(businessMonth(TZ, at)).toBe('2026-07');
+    expect(businessToday(TZ, at)).toBe('2026-07-31');
+    // What the old UTC-based code would have wrongly produced.
+    expect(at.toISOString().slice(0, 7)).toBe('2026-08');
+  });
+
+  // Montreal/Toronto DST edges — real IANA tz data (via Intl), not a fixed
+  // UTC offset, so the shortened (spring-forward) and lengthened
+  // (fall-back) local days still land on the correct calendar date at the
+  // local-midnight boundary.
+  it('spring-forward (2026-03-08, EST→EDT at 2am local): local midnight boundary still resolves correctly', () => {
+    expect(businessToday(TZ, new Date('2026-03-08T04:59:00Z'))).toBe('2026-03-07');
+    expect(businessToday(TZ, new Date('2026-03-08T05:01:00Z'))).toBe('2026-03-08');
+    // The next midnight is an hour earlier in UTC terms (day is EDT now).
+    expect(businessToday(TZ, new Date('2026-03-09T03:59:00Z'))).toBe('2026-03-08');
+    expect(businessToday(TZ, new Date('2026-03-09T04:01:00Z'))).toBe('2026-03-09');
+  });
+
+  it('fall-back (2026-11-01, EDT→EST at 2am EDT): local midnight boundary still resolves correctly', () => {
+    expect(businessToday(TZ, new Date('2026-11-01T03:59:00Z'))).toBe('2026-10-31');
+    expect(businessToday(TZ, new Date('2026-11-01T04:01:00Z'))).toBe('2026-11-01');
+    // The next midnight is an hour later in UTC terms (day is EST now).
+    expect(businessToday(TZ, new Date('2026-11-02T04:59:00Z'))).toBe('2026-11-01');
+    expect(businessToday(TZ, new Date('2026-11-02T05:01:00Z'))).toBe('2026-11-02');
+  });
+
+  it('defaults to the real current instant when no reference date is given', () => {
+    const expected = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
+    // en-CA formats as YYYY-MM-DD, matching businessToday's own output shape.
+    expect(businessToday(TZ)).toBe(expected);
+  });
+});
+
+// A semi-monthly rule anchored on day 30/31 must still clamp correctly in
+// February even when "today" is resolved via the household timezone rather
+// than the server's UTC clock — the clamping logic itself is unchanged
+// (occurrencesInMonth), but this proves the two paths compose correctly.
+describe('semi-monthly day-30 clamp composes correctly with businessMonth', () => {
+  it('a semimonthly rule anchored on day 30 lands on Feb 28 in a non-leap year, computed from a businessMonth start', () => {
+    const at = new Date('2026-02-15T20:00:00-05:00'); // 8pm EST, Feb 15 2026 (not near any boundary)
+    const month = businessMonth('America/Toronto', at);
+    expect(month).toBe('2026-02');
+    const dates = occurrencesInMonth(
+      { cadence: 'semimonthly', anchorDate: '2026-01-30', secondDay: 30 },
+      month
+    );
+    expect(dates).toEqual(['2026-02-28']);
   });
 });

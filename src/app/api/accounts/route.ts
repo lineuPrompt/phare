@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { logEvent, isFirstEvent } from '@/lib/eventLogger';
+import { businessToday } from '@/lib/dateHelpers';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -92,13 +94,14 @@ export async function POST(request: Request) {
     // money the household already owed/had before Phare, not a transfer
     // happening today.
     if (openingBalance != null && Number(openingBalance) !== 0) {
+      const timezone = await getHouseholdTimezone(supabase, householdId);
       const { error: openingErr } = await supabase.from('transactions').insert({
         household_id: householdId,
         member_id: null,
         category_id: null,
         description: 'Starting balance / Solde initial',
         amount: Number(openingBalance),
-        date: new Date().toISOString().slice(0, 10),
+        date: businessToday(timezone),
         type: 'transfer',
         source: 'manual',
         account_id: account.id,

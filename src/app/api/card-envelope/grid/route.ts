@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { buildGrid, EnvTx, EnvelopeSnapshotItem } from '@/lib/envelopeHelpers';
 import { categoryDisplayName } from '@/lib/categoryTranslations';
+import { businessMonth } from '@/lib/dateHelpers';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 // GET /api/card-envelope/grid?cardId=<uuid>&locale=en|fr
 // Forward-looking grid for one card: current month + next 11. The current
@@ -34,11 +36,12 @@ export async function GET(request: Request) {
     if (!card) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
 
     // Current month + next 11
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const timezone = await getHouseholdTimezone(supabase, householdId);
+    const currentMonth = businessMonth(timezone);
+    const [cy0, cm0] = currentMonth.split('-').map(Number);
     const months: string[] = [];
     for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const d = new Date(cy0, cm0 - 1 + i, 1);
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
 

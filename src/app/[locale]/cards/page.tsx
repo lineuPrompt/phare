@@ -12,6 +12,7 @@ import CrossCardView, { CardOverviewRow } from '@/components/cards/CrossCardView
 import ExpenseForm from '@/components/expenses/ExpenseForm';
 import { GridData, CategoryEntryLine } from '@/lib/envelopeHelpers';
 import { Account } from '@/components/expenses/types';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 type Category = { id: string; name: string };
 
@@ -32,13 +33,13 @@ export default function CardsPage() {
   const pathname = usePathname();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
 
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const { month: currentMonth } = useBusinessToday();
+  const [cy0, cm0] = currentMonth.split('-').map(Number);
 
   // Build 12-month list from current month forward (same as expenses page)
   const months: { value: string; label: string }[] = [];
   for (let i = 0; i < 12; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const d = new Date(cy0, cm0 - 1 + i, 1);
     months.push({
       value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
       label: d.toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', { month: 'short', year: 'numeric' }),

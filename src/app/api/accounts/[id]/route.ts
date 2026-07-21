@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
+import { businessToday } from '@/lib/dateHelpers';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -38,6 +40,8 @@ export async function PATCH(
       .eq('household_id', householdId)
       .single();
     if (!current) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+
+    const timezone = await getHouseholdTimezone(supabase, householdId);
 
     // Validate day values when provided
     const toDay = (v: unknown) => {
@@ -86,7 +90,7 @@ export async function PATCH(
       if (!Number.isFinite(desiredOwed) || desiredOwed < 0) {
         return NextResponse.json({ error: 'Amount owed must be a non-negative number' }, { status: 400 });
       }
-      const today = new Date().toISOString().slice(0, 10);
+      const today = businessToday(timezone);
       const { data: allTxns } = await supabase
         .from('transactions')
         .select('amount, type, account_id, date')
@@ -117,7 +121,7 @@ export async function PATCH(
         category_id: null,
         description: 'Balance correction',
         amount: correctionAmount,
-        date: new Date().toISOString().slice(0, 10),
+        date: businessToday(timezone),
         type: 'transfer',
         source: 'manual',
         account_id: id,
@@ -181,7 +185,8 @@ export async function DELETE(
     }
 
     if ((GOAL_ACCOUNT_TYPES as readonly string[]).includes(account.type)) {
-      const today = new Date().toISOString().slice(0, 10);
+      const timezone = await getHouseholdTimezone(supabase, householdId);
+      const today = businessToday(timezone);
       const { data: result, error: rpcErr } = await supabase.rpc('delete_goal_account', {
         p_household_id: householdId,
         p_goal_id: id,

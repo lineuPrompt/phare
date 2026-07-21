@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { formatLocalMonth, materializeRule, monthNameToNumber } from '@/lib/dateHelpers';
+import { businessMonth, materializeRule, monthNameToNumber } from '@/lib/dateHelpers';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { logEvent } from '@/lib/eventLogger';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import {
@@ -182,8 +183,8 @@ export async function POST(request: Request) {
       });
     }
 
-    const now = new Date();
-    const currentMonth = formatLocalMonth(now);
+    const timezone = await getHouseholdTimezone(supabase, householdId);
+    const currentMonth = businessMonth(timezone);
     const monthDate = `${currentMonth}-01`;
     const anchorDate = `${currentMonth}-01`;
 

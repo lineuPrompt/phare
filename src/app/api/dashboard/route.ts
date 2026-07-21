@@ -4,6 +4,8 @@ import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/li
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth } from '@/lib/goalHelpers';
 import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
 import { logEvent, isFirstReturnToday } from '@/lib/eventLogger';
+import { businessToday, businessMonth } from '@/lib/dateHelpers';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 export async function GET(request: Request) {
   try {
@@ -73,14 +75,12 @@ export async function GET(request: Request) {
     // ensureBridgesForWindow) — snapshotOnly only skips queries whose
     // results this response wouldn't use, never a parallel computation.
     const snapshotOnly = url.searchParams.get('snapshotOnly') === '1';
+    const timezone = await getHouseholdTimezone(supabase, householdId);
     let actualsMonth: string;
     if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
       actualsMonth = `${monthParam}-01`;
     } else {
-      const now = new Date();
-      const y = now.getFullYear();
-      const mo = now.getMonth() + 1;
-      actualsMonth = `${y}-${String(mo).padStart(2, '0')}-01`;
+      actualsMonth = `${businessMonth(timezone)}-01`;
     }
     const [ay, am] = actualsMonth.slice(0, 7).split('-').map(Number);
     const actualsMonthEnd = am === 12
@@ -262,7 +262,7 @@ export async function GET(request: Request) {
       goalTxData = data ?? [];
     }
 
-    const todayForGoalBalance = new Date().toISOString().slice(0, 10);
+    const todayForGoalBalance = businessToday(timezone);
 
     // Part B.6: the code-computed on-track/debt-payoff verdict for each goal
     // renders on the dashboard adjacent to the AI review's prose (ReviewCard

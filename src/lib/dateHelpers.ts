@@ -163,6 +163,38 @@ export function nextOccurrence(
   return upcoming.length > 0 ? upcoming[0] : null;
 }
 
+// Fallback used only where no household row exists yet to read a timezone
+// from (e.g. the onboarding plan-preview endpoint, before signup/save) or as
+// a defensive default if a household row is ever missing the column.
+export const DEFAULT_HOUSEHOLD_TIMEZONE = 'America/Toronto';
+
+/**
+ * The canonical "what day is it for this household" — resolves the given
+ * instant (real "now" by default) in the household's IANA timezone, not the
+ * server process's local clock (UTC in production) and not the browser's
+ * guess. Built on Intl.DateTimeFormat's real tz database rather than manual
+ * UTC-offset math, so DST transitions (e.g. Montreal's spring-forward/
+ * fall-back) are handled correctly automatically.
+ *
+ * `at` is exposed only so tests can pin the instant; every production caller
+ * omits it and gets the real current time.
+ */
+export function businessToday(timezone: string, at: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(at);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+/** The household's current calendar month (YYYY-MM) — see businessToday(). */
+export function businessMonth(timezone: string, at: Date = new Date()): string {
+  return businessToday(timezone, at).slice(0, 7);
+}
+
 export function formatLocalDate(date: Date): string {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');

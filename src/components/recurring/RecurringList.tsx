@@ -6,6 +6,7 @@ import { RecurringItem, RecurringAccount, RecurringCategory, RecurringGoalAccoun
 import { formatSignedAmount } from '@/components/expenses/types';
 import { monthlyEquivalent } from '@/lib/incomeHelpers';
 import { nextOccurrence } from '@/lib/dateHelpers';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 // ── RecurringRow ───────────────────────────────────────────────────────────
 //
@@ -331,6 +332,7 @@ export default function RecurringList({
   onChanged: () => void;
 }) {
   const t = useTranslations('recurring.list');
+  const { today } = useBusinessToday();
 
   if (!items.length) {
     return (
@@ -343,7 +345,6 @@ export default function RecurringList({
   // Soonest-first within each group; items with no known pay date yet
   // (needsPayDate) have no computable next occurrence and sort last rather
   // than being fabricated a fake date.
-  const today = new Date().toISOString().slice(0, 10);
   const byNextOccurrence = (a: RecurringItem, b: RecurringItem) => {
     const na = nextOccurrence({ cadence: a.cadence, anchorDate: a.anchor_date, secondDay: a.second_day }, today);
     const nb = nextOccurrence({ cadence: b.cadence, anchorDate: b.anchor_date, secondDay: b.second_day }, today);

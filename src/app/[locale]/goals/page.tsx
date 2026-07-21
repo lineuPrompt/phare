@@ -12,6 +12,7 @@ import GoalEditForm from '@/components/goals/GoalEditForm';
 import { formatCurrency, type GoalAccount, type GoalTransfer } from '@/components/dashboard/types';
 import { nextOccurrence } from '@/lib/dateHelpers';
 import { projectedContribution } from '@/lib/goalHelpers';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 // Inline edit state for a single transfer row
 type TransferEdit = {
@@ -28,6 +29,7 @@ export default function GoalsPage() {
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
+  const { today: businessTodayDate } = useBusinessToday();
 
   const [goals, setGoals] = useState<GoalAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -315,7 +317,7 @@ export default function GoalsPage() {
                           {goal.goalTargetDate && (
                             <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
                               {tDash('nav.goals')}:{' '}
-                              {new Date(goal.goalTargetDate).toLocaleDateString(
+                              {new Date(goal.goalTargetDate + 'T00:00:00').toLocaleDateString(
                                 locale === 'fr' ? 'fr-CA' : 'en-CA',
                                 { month: 'long', year: 'numeric' }
                               )}
@@ -329,7 +331,7 @@ export default function GoalsPage() {
                         {goal.recurringContribution ? (
                           (() => {
                             const rc = goal.recurringContribution!;
-                            const today = new Date().toISOString().slice(0, 10);
+                            const today = businessTodayDate;
                             const next = nextOccurrence(
                               { cadence: rc.cadence, anchorDate: rc.anchorDate, secondDay: rc.secondDay },
                               today
@@ -353,7 +355,7 @@ export default function GoalsPage() {
                                     {tGoalsRecurring('projection', {
                                       amount: formatCurrency(rc.amount, locale) + cadenceShort(rc.cadence),
                                       total: formatCurrency(projection, locale),
-                                      date: new Date(goal.goalTargetDate).toLocaleDateString(
+                                      date: new Date(goal.goalTargetDate + 'T00:00:00').toLocaleDateString(
                                         locale === 'fr' ? 'fr-CA' : 'en-CA', { month: 'long', year: 'numeric' }
                                       ),
                                     })}
