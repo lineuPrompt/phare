@@ -358,6 +358,8 @@
     "savings": "Saved this month",
     "surplus": "Monthly surplus",
     "deficit": "Monthly deficit",
+    "monthOnlyNote": "This reflects this month's cash flow only, not your running balance.",
+    "viewRealBalance": "View your real balance in Timeline",
     "topPriority": "Your #1 priority",
     "sinkingFunds": "Sinking funds",
     "perMonth": "/month",

@@ -127,6 +127,17 @@ export default function SnapshotCard({
           </p>
         </div>
       </div>
+
+      {/* This figure is this month's cash flow only — it never carries
+          forward a prior month's leftover balance. The real running balance
+          (which does) lives on Timeline; this note points there so the two
+          numbers are never mistaken for the same thing. */}
+      <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>
+        {t('monthOnlyNote')}{' '}
+        <Link href={`/${locale}/timeline`} className="underline hover:no-underline">
+          {t('viewRealBalance')}
+        </Link>
+      </p>
     </div>
   );
 }

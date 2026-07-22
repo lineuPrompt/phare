@@ -358,6 +358,8 @@
     "savings": "Épargne ce mois-ci",
     "surplus": "Surplus mensuel",
     "deficit": "Déficit mensuel",
+    "monthOnlyNote": "Ceci reflète uniquement le flux de trésorerie de ce mois, pas votre solde réel.",
+    "viewRealBalance": "Voir votre solde réel dans la Chronologie",
     "topPriority": "Votre priorité #1",
     "sinkingFunds": "Fonds de prévoyance",
     "perMonth": "/mois",
