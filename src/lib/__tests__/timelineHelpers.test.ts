@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCashTimeline, selectAnchorsForTimeline, TimelineAnchor, TimelineTx } from '../timelineHelpers';
+import { buildCashTimeline, selectAnchorsForTimeline, classifyDip, DIP_AMBER_THRESHOLD, TimelineAnchor, TimelineTx } from '../timelineHelpers';
 
 // ── Factories ─────────────────────────────────────────────────────────────────
 
@@ -518,6 +518,93 @@ describe('buildCashTimeline — dip detection', () => {
     // End of July 10 = 500 + 3000 - 3100 = 400 ← dip
     expect(result.dip!.balance).toBe(400);
     expect(result.dip!.date).toBe('2026-07-10');
+  });
+});
+
+// ── 12b. classifyDip — shared by Timeline's header AND the dashboard's
+// "lowest point before your next paycheque" tile (Build 3 Phase 4). These
+// tests drive the SAME buildCashTimeline pipeline every other test in this
+// file uses, then classify its real output — proving the dashboard tile and
+// the Timeline page necessarily agree, since both read this one function
+// applied to this one computed value. ─────────────────────────────────────
+
+describe('classifyDip', () => {
+  it('a comfortably positive dip (>= threshold) classifies as healthy', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-07-01', 1000)],
+      transactions: [
+        tx({ date: '2026-07-12', amount: 100, type: 'expense' }), // 900 ← dip
+        tx({ date: '2026-07-15', amount: 3000, type: 'income' }),
+      ],
+      windowStart: '2026-07-01',
+      windowEnd:   '2026-07-31',
+      today: '2026-07-03',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dip!.balance).toBeGreaterThanOrEqual(DIP_AMBER_THRESHOLD);
+    expect(classifyDip(result.dip)).toBe('healthy');
+  });
+
+  it('a positive dip below the amber threshold classifies as amber, not healthy', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-07-01', 1000)],
+      transactions: [
+        tx({ date: '2026-07-12', amount: 900, type: 'expense' }), // 100 ← dip, < threshold
+        tx({ date: '2026-07-15', amount: 3000, type: 'income' }),
+      ],
+      windowStart: '2026-07-01',
+      windowEnd:   '2026-07-31',
+      today: '2026-07-03',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dip!.balance).toBeLessThan(DIP_AMBER_THRESHOLD);
+    expect(result.dip!.balance).toBeGreaterThanOrEqual(0);
+    expect(classifyDip(result.dip)).toBe('amber');
+  });
+
+  it('a negative dip classifies as red regardless of magnitude', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-07-01', 1000)],
+      transactions: [
+        tx({ date: '2026-07-12', amount: 1050, type: 'expense' }), // −50 ← dip
+        tx({ date: '2026-07-15', amount: 3000, type: 'income' }),
+      ],
+      windowStart: '2026-07-01',
+      windowEnd:   '2026-07-31',
+      today: '2026-07-03',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dip!.balance).toBeLessThan(0);
+    expect(classifyDip(result.dip)).toBe('red');
+  });
+
+  it('a null dip (no income ahead in the window) classifies as none — never blank', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-07-01', 1000)],
+      transactions: [
+        tx({ date: '2026-07-10', amount: 200, type: 'expense' }),
+      ],
+      windowStart: '2026-07-01',
+      windowEnd:   '2026-07-31',
+      today: '2026-07-03',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dip).toBeNull();
+    expect(classifyDip(result.dip)).toBe('none');
+  });
+
+  it('the boundary itself: a dip exactly at the amber threshold is healthy, not amber', () => {
+    expect(classifyDip({ date: '2026-07-12', balance: DIP_AMBER_THRESHOLD })).toBe('healthy');
+    expect(classifyDip({ date: '2026-07-12', balance: DIP_AMBER_THRESHOLD - 0.01 })).toBe('amber');
+  });
+
+  it('the boundary itself: a dip exactly at zero is amber, not red', () => {
+    expect(classifyDip({ date: '2026-07-12', balance: 0 })).toBe('amber');
+    expect(classifyDip({ date: '2026-07-12', balance: -0.01 })).toBe('red');
   });
 });
 

@@ -6,7 +6,6 @@ DELETE FROM budgets;
 DELETE FROM monthly_goals;
 DELETE FROM recurring_items;
 DELETE FROM sinking_funds;
-DELETE FROM goals;
 DELETE FROM categories;
 DELETE FROM accounts;
 DELETE FROM conversations;

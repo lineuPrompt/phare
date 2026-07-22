@@ -17,17 +17,20 @@
 --
 -- WHAT THIS DELETES
 --   Every row in every table in this project: transactions, recurring_items,
---   monthly_goals, card_envelope_items, budgets, sinking_funds, goals,
+--   monthly_goals, card_envelope_items, budgets, sinking_funds,
 --   account_balance_anchors, budget_alerts, file_imports, events,
 --   conversations, accounts, categories, household_members, users (public),
 --   households, AND auth.users (Supabase Auth — this signs everyone out
 --   permanently and deletes their login credentials; nothing short of a
 --   fresh signup can undo it).
+--   (The legacy `goals` table — superseded by goal-typed accounts, see
+--   20260619000000_goals_and_transfers.sql — was dropped entirely in
+--   20260728000000_drop_legacy_goals_table.sql, so it no longer appears here.)
 --
 -- WHY ONE DELETE STATEMENT WOULD ALSO WORK, AND WHY THIS DOESN'T DO THAT
---   Every one of the 16 public tables below has household_id ON DELETE
+--   Every one of the 15 public tables below has household_id ON DELETE
 --   CASCADE back to households — so `DELETE FROM households;` alone would
---   transitively wipe all 16 of them in one statement. This script deletes
+--   transitively wipe all 15 of them in one statement. This script deletes
 --   each one explicitly anyway, in FK-safe leaf-to-root order, for an
 --   honest, auditable per-table count and so nothing relies silently on a
 --   cascade being exactly right. auth.users is deleted as its own final
@@ -82,42 +85,39 @@ DELETE FROM budgets;
 -- STEP 6 — sinking_funds (annual-expense monthly provisions)
 DELETE FROM sinking_funds;
 
--- STEP 7 — goals (legacy savings-goals table; active goal tracking is via accounts)
-DELETE FROM goals;
-
--- STEP 8 — account_balance_anchors (opening-balance anchors for the Cash Timeline)
+-- STEP 7 — account_balance_anchors (opening-balance anchors for the Cash Timeline)
 DELETE FROM account_balance_anchors;
 
--- STEP 9 — budget_alerts (80%/100% category threshold alerts)
+-- STEP 8 — budget_alerts (80%/100% category threshold alerts)
 DELETE FROM budget_alerts;
 
--- STEP 10 — file_imports (upload/onboarding provenance rows)
+-- STEP 9 — file_imports (upload/onboarding provenance rows)
 DELETE FROM file_imports;
 
--- STEP 11 — events (lifecycle diary)
+-- STEP 10 — events (lifecycle diary)
 DELETE FROM events;
 
--- STEP 12 — conversations (AI onboarding summaries, monthly reviews, chat)
+-- STEP 11 — conversations (AI onboarding summaries, monthly reviews, chat)
 DELETE FROM conversations;
 
--- STEP 13 — accounts (now safe: nothing with ON DELETE RESTRICT references it anymore)
+-- STEP 12 — accounts (now safe: nothing with ON DELETE RESTRICT references it anymore)
 DELETE FROM accounts;
 
--- STEP 14 — categories (now safe: nothing referencing it — transactions,
+-- STEP 13 — categories (now safe: nothing referencing it — transactions,
 -- recurring_items, card_envelope_items, budgets, budget_alerts — remains)
 DELETE FROM categories;
 
--- STEP 15 — household_members (now safe: nothing referencing it — transactions,
+-- STEP 14 — household_members (now safe: nothing referencing it — transactions,
 -- recurring_items, budgets, budget_alerts — remains)
 DELETE FROM household_members;
 
--- STEP 16 — users (public.users — the app-level profile row, not the login)
+-- STEP 15 — users (public.users — the app-level profile row, not the login)
 DELETE FROM users;
 
--- STEP 17 — households (root of every household_id ON DELETE CASCADE chain above)
+-- STEP 16 — households (root of every household_id ON DELETE CASCADE chain above)
 DELETE FROM households;
 
--- STEP 18 — auth.users (Supabase Auth logins). The one table not reachable
+-- STEP 17 — auth.users (Supabase Auth logins). The one table not reachable
 -- from households by cascade — the FK points the other way (public.users
 -- references auth.users, not the reverse). Deleting here cascades through
 -- Supabase's own auth.identities / auth.sessions / auth.refresh_tokens.
@@ -134,7 +134,6 @@ UNION ALL SELECT 'monthly_goals',           count(*) FROM monthly_goals
 UNION ALL SELECT 'card_envelope_items',     count(*) FROM card_envelope_items
 UNION ALL SELECT 'budgets',                 count(*) FROM budgets
 UNION ALL SELECT 'sinking_funds',           count(*) FROM sinking_funds
-UNION ALL SELECT 'goals',                   count(*) FROM goals
 UNION ALL SELECT 'account_balance_anchors', count(*) FROM account_balance_anchors
 UNION ALL SELECT 'budget_alerts',           count(*) FROM budget_alerts
 UNION ALL SELECT 'file_imports',            count(*) FROM file_imports

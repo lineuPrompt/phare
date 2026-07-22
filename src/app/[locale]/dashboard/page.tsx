@@ -10,10 +10,16 @@ import SinkingFundsCard from '@/components/dashboard/SinkingFundsCard';
 import GoalsCard from '@/components/dashboard/GoalsCard';
 import ReviewCard from '@/components/dashboard/ReviewCard';
 import EmptyState from '@/components/dashboard/EmptyState';
+import DipTile from '@/components/dashboard/DipTile';
 import { DashboardData } from '@/components/dashboard/types';
 import Sidebar from '@/components/dashboard/Sidebar';
 import { addMonthsToMonth } from '@/lib/goalHelpers';
+import type { DipInfo } from '@/lib/timelineHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
+
+type TimelineDipResponse =
+  | { ok: true; dip: DipInfo | null; balancesStartDate: string; days: { date: string }[] }
+  | { ok: false; reason: 'no_anchor' };
 
 export default function DashboardPage() {
   const t = useTranslations('dashboard');
@@ -32,6 +38,30 @@ export default function DashboardPage() {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState('');
+
+  // Dip tile — reads the SAME /api/timeline response (and therefore the
+  // same buildCashTimeline-computed `dip`) the Timeline page itself renders.
+  // No parallel calculation: this is a second call site for one source of
+  // truth, not a second implementation of it.
+  const [dip, setDip] = useState<DipInfo | null>(null);
+  const [dipWindowEnd, setDipWindowEnd] = useState<string | null>(null);
+  const [hasAnchor, setHasAnchor] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/accounts')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { accounts: { id: string; type: string }[] } | null) => {
+        const chequing = d?.accounts.find((a) => a.type === 'chequing');
+        if (!chequing) return null;
+        return fetch(`/api/timeline?account=${chequing.id}`).then((r) => (r.ok ? r.json() : null));
+      })
+      .then((d: TimelineDipResponse | null) => {
+        if (!d || !d.ok) { setHasAnchor(false); return; }
+        setDip(d.dip);
+        setDipWindowEnd(d.days.length > 0 ? d.days[d.days.length - 1].date : d.balancesStartDate);
+      })
+      .catch(() => {});
+  }, []);
 
   const loadDashboard = useCallback((month: string) => {
     setLoading(true);
@@ -171,6 +201,8 @@ export default function DashboardPage() {
             <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: '#0F2044' }}>
               {t('welcome', { name: data.firstName || '' })}
             </h1>
+
+            {dipWindowEnd && <DipTile dip={dip} windowEndDate={dipWindowEnd} locale={locale} />}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {data.topRecommendation && <TopPriorityCard text={data.topRecommendation} />}

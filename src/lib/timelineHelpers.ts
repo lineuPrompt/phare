@@ -319,3 +319,27 @@ export function buildCashTimeline(params: {
     nextIncomeDate,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Dip classification — shared by the Timeline header AND the dashboard's
+// "lowest point" tile (Build 3 Phase 4). Both render the SAME `dip` value
+// buildCashTimeline computes above; this is the one place the three-way
+// healthy/amber/red read is decided, so the two surfaces can never disagree
+// about which color a given dip should be.
+// ---------------------------------------------------------------------------
+
+export type DipStatus = 'healthy' | 'amber' | 'red' | 'none';
+
+// A positive dip below this dollar amount reads as "low" (amber) rather than
+// "healthy" (green). Judgment call, not derived from any other figure in the
+// app — there's no existing household-scale-relative signal available at
+// this cutoff to derive it from instead. Tune here if it doesn't feel right
+// in practice; every consumer of classifyDip picks it up automatically.
+export const DIP_AMBER_THRESHOLD = 200;
+
+export function classifyDip(dip: DipInfo | null): DipStatus {
+  if (dip === null) return 'none';
+  if (dip.balance < 0) return 'red';
+  if (dip.balance < DIP_AMBER_THRESHOLD) return 'amber';
+  return 'healthy';
+}

@@ -346,6 +346,12 @@
   },
   "dashboard": {
     "welcome": "Welcome back, {name}",
+    "dipTile": {
+      "title": "Lowest point before your next paycheque",
+      "amountOn": "{amount} on {date}",
+      "dipsBelow": "You dip to {amount} on {date}",
+      "noDip": "No paycheque scheduled ahead in this view — balance shown through {date}."
+    },
     "snapshot": "Your financial snapshot",
     "income": "Monthly income",
     "expenses": "Monthly expenses",

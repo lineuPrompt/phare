@@ -14,9 +14,11 @@
 --
 -- WHAT THIS DELETES (all scoped to the one household_id below)
 --   transactions, recurring_items, monthly_goals, card_envelope_items,
---   budgets, sinking_funds, goals, account_balance_anchors, budget_alerts,
+--   budgets, sinking_funds, account_balance_anchors, budget_alerts,
 --   file_imports, events, conversations, and every NON-chequing account
 --   (credit cards, lines of credit, goal accounts).
+--   (The legacy `goals` table — superseded by goal-typed accounts — was
+--   dropped entirely in 20260728000000_drop_legacy_goals_table.sql.)
 --
 -- WHAT THIS PRESERVES
 --   households, users, household_members, categories (the 10 seed
@@ -100,25 +102,22 @@ DELETE FROM budgets WHERE household_id = (SELECT household_id FROM _reset_target
 -- STEP 6 — sinking_funds (annual-expense monthly provisions)
 DELETE FROM sinking_funds WHERE household_id = (SELECT household_id FROM _reset_target);
 
--- STEP 7 — goals (legacy savings-goals table; active goal tracking is via accounts)
-DELETE FROM goals WHERE household_id = (SELECT household_id FROM _reset_target);
-
--- STEP 8 — account_balance_anchors (opening-balance anchors for the Cash Timeline)
+-- STEP 7 — account_balance_anchors (opening-balance anchors for the Cash Timeline)
 DELETE FROM account_balance_anchors WHERE household_id = (SELECT household_id FROM _reset_target);
 
--- STEP 9 — budget_alerts (80%/100% category threshold alerts)
+-- STEP 8 — budget_alerts (80%/100% category threshold alerts)
 DELETE FROM budget_alerts WHERE household_id = (SELECT household_id FROM _reset_target);
 
--- STEP 10 — file_imports (upload/onboarding provenance rows)
+-- STEP 9 — file_imports (upload/onboarding provenance rows)
 DELETE FROM file_imports WHERE household_id = (SELECT household_id FROM _reset_target);
 
--- STEP 11 — events (lifecycle diary — cleared so a fresh trial starts at day 1)
+-- STEP 10 — events (lifecycle diary — cleared so a fresh trial starts at day 1)
 DELETE FROM events WHERE household_id = (SELECT household_id FROM _reset_target);
 
--- STEP 12 — conversations (AI onboarding summaries, monthly reviews, chat)
+-- STEP 11 — conversations (AI onboarding summaries, monthly reviews, chat)
 DELETE FROM conversations WHERE household_id = (SELECT household_id FROM _reset_target);
 
--- STEP 13 — accounts, EXCEPT chequing (preserved — see header)
+-- STEP 12 — accounts, EXCEPT chequing (preserved — see header)
 DELETE FROM accounts
 WHERE household_id = (SELECT household_id FROM _reset_target)
   AND type != 'chequing';
@@ -134,7 +133,6 @@ UNION ALL SELECT 'monthly_goals',          count(*) FROM monthly_goals          
 UNION ALL SELECT 'card_envelope_items',    count(*) FROM card_envelope_items    WHERE household_id = (SELECT household_id FROM _reset_target)
 UNION ALL SELECT 'budgets',                count(*) FROM budgets               WHERE household_id = (SELECT household_id FROM _reset_target)
 UNION ALL SELECT 'sinking_funds',          count(*) FROM sinking_funds         WHERE household_id = (SELECT household_id FROM _reset_target)
-UNION ALL SELECT 'goals',                  count(*) FROM goals                 WHERE household_id = (SELECT household_id FROM _reset_target)
 UNION ALL SELECT 'account_balance_anchors',count(*) FROM account_balance_anchors WHERE household_id = (SELECT household_id FROM _reset_target)
 UNION ALL SELECT 'budget_alerts',          count(*) FROM budget_alerts         WHERE household_id = (SELECT household_id FROM _reset_target)
 UNION ALL SELECT 'file_imports',           count(*) FROM file_imports          WHERE household_id = (SELECT household_id FROM _reset_target)

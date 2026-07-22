@@ -95,27 +95,19 @@ BEGIN
   DELETE FROM sinking_funds WHERE household_id = _hid;
 
   -- ─────────────────────────────────────────────────────────────────────────
-  -- STEP 7 — goals (legacy goals table)
-  -- NOTE: Active goal tracking uses accounts (type IN ('savings','tfsa','rrsp')).
-  -- This table exists in the schema but is not the primary goal storage.
-  -- Wipe it anyway to leave no orphaned rows.
-  -- ─────────────────────────────────────────────────────────────────────────
-  DELETE FROM goals WHERE household_id = _hid;
-
-  -- ─────────────────────────────────────────────────────────────────────────
-  -- STEP 8 — conversations
+  -- STEP 7 — conversations
   -- AI-generated onboarding summaries and monthly reviews.
   -- ─────────────────────────────────────────────────────────────────────────
   DELETE FROM conversations WHERE household_id = _hid;
 
   -- ─────────────────────────────────────────────────────────────────────────
-  -- STEP 9 — file_imports
+  -- STEP 8 — file_imports
   -- Spreadsheet / bank-statement upload records.
   -- ─────────────────────────────────────────────────────────────────────────
   DELETE FROM file_imports WHERE household_id = _hid;
 
   -- ─────────────────────────────────────────────────────────────────────────
-  -- STEP 10 — events  [DELIBERATE CHOICE — read before keeping/removing]
+  -- STEP 9 — events  [DELIBERATE CHOICE — read before keeping/removing]
   -- Deleting events so the 30-day trial retention baseline starts clean at
   -- day 1 (the "signup" event stays as a reference point in the auth schema,
   -- not here). If you want to keep the event history for continuity,
@@ -124,7 +116,7 @@ BEGIN
   DELETE FROM events WHERE household_id = _hid;
 
   -- ─────────────────────────────────────────────────────────────────────────
-  -- STEP 11 — categories
+  -- STEP 10 — categories
   -- Safe now: all referencing rows (transactions, budgets, budget_alerts,
   -- recurring_items) are gone. The 10 seeded categories are wiped here;
   -- they will be re-seeded on the next onboarding plan-save.
@@ -132,7 +124,7 @@ BEGIN
   DELETE FROM categories WHERE household_id = _hid;
 
   -- ─────────────────────────────────────────────────────────────────────────
-  -- STEP 12 — accounts (non-chequing only)
+  -- STEP 11 — accounts (non-chequing only)
   -- Credit cards, line-of-credit, and goal accounts (savings/tfsa/rrsp) are
   -- deleted. The chequing account IS PRESERVED: the signup trigger that
   -- created it will not re-run, and there is no app UX path to re-create it.
@@ -170,7 +162,6 @@ BEGIN
   RAISE NOTICE 'monthly_goals:   %', (SELECT COUNT(*) FROM monthly_goals   WHERE household_id = _hid);
   RAISE NOTICE 'recurring_items: %', (SELECT COUNT(*) FROM recurring_items WHERE household_id = _hid);
   RAISE NOTICE 'sinking_funds:   %', (SELECT COUNT(*) FROM sinking_funds   WHERE household_id = _hid);
-  RAISE NOTICE 'goals (legacy):  %', (SELECT COUNT(*) FROM goals           WHERE household_id = _hid);
   RAISE NOTICE 'conversations:   %', (SELECT COUNT(*) FROM conversations   WHERE household_id = _hid);
   RAISE NOTICE 'file_imports:    %', (SELECT COUNT(*) FROM file_imports    WHERE household_id = _hid);
   RAISE NOTICE 'events:          %', (SELECT COUNT(*) FROM events          WHERE household_id = _hid);

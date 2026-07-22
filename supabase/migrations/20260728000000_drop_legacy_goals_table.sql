@@ -1,0 +1,39 @@
+-- =============================================================================
+-- Phare — drop the legacy `goals` table
+-- Housekeeping, 2026-07-22.
+--
+-- PENDING APPLICATION — do not apply to production without founder sign-off.
+--
+-- The `goals` table (name, target_amount, current_amount, target_date,
+-- status) was the original savings-goal design from the initial schema.
+-- 20260619000000_goals_and_transfers.sql superseded it same-day with
+-- "goals are first-class accounts" — real goal/debt tracking has lived on
+-- accounts (type IN ('savings','tfsa','rrsp','debt')) plus the transactions
+-- ledger ever since (see GOAL_ACCOUNT_TYPES, dashboardHelpers.ts). The
+-- `goals` table itself was never touched again by any application code.
+--
+-- EVIDENCE (grepped before writing this migration):
+--   - `grep -rn "\.from('goals')" src/` — zero matches anywhere in the app
+--     (every real goal read/write path uses `.from('accounts')` +
+--     `.from('transactions')` instead).
+--   - `grep -rniE "\bgoals\b" supabase/migrations/*.sql` (excluding
+--     monthly_goals/sinking_funds/goal_target/goal_account, all unrelated
+--     tables/columns) — the only hits are this table's own original
+--     CREATE TABLE/index/trigger/RLS-policy definitions, plus comments in
+--     later migrations already calling it out as superseded.
+--   - No Postgres function (RPC) body anywhere references it.
+--   - The only other references anywhere in the repo are four manual
+--     dev-tool wipe/reset scripts (scripts/full-db-wipe.sql,
+--     scripts/reset-household.sql, scripts/wipe_household.sql,
+--     supabase/migrations/db_wipe.sql), which already labelled it "(legacy)"
+--     in their own comments — all four updated in this same change to stop
+--     referencing it.
+--
+-- DROP TABLE alone is sufficient here (no CASCADE needed): its own index,
+-- updated_at trigger, and RLS policy are all owned by the table and go with
+-- it automatically. Nothing else in the schema has a foreign key pointing
+-- at `goals` (confirmed by the grep above), so there is nothing to cascade
+-- into.
+-- =============================================================================
+
+DROP TABLE IF EXISTS goals;

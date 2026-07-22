@@ -346,6 +346,12 @@
   },
   "dashboard": {
     "welcome": "Bon retour, {name}",
+    "dipTile": {
+      "title": "Point le plus bas avant votre prochaine paie",
+      "amountOn": "{amount} le {date}",
+      "dipsBelow": "Vous descendez à {amount} le {date}",
+      "noDip": "Aucune paie prévue dans cette période — solde affiché jusqu'au {date}."
+    },
     "snapshot": "Votre portrait financier",
     "income": "Revenu mensuel",
     "expenses": "Dépenses mensuelles",
