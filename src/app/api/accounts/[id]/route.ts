@@ -174,7 +174,7 @@ export async function DELETE(
 
     const { data: account } = await supabase
       .from('accounts')
-      .select('type')
+      .select('type, is_sinking_fund')
       .eq('id', id)
       .eq('household_id', householdId)
       .single();
@@ -182,6 +182,25 @@ export async function DELETE(
     if (!account) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     if (account.type === 'chequing') {
       return NextResponse.json({ error: 'Cannot delete the chequing account' }, { status: 400 });
+    }
+
+    // A sinking-fund buffer is a 'savings' account too, so this check MUST
+    // come before the generic goal-account branch below — it carries expense
+    // rows (bill payments) that delete_goal_account's blanket delete would
+    // silently erase with no trace. See 20260727000000_delete_sinking_fund_buffer.sql.
+    if (account.is_sinking_fund) {
+      const timezone = await getHouseholdTimezone(supabase, householdId);
+      const today = businessToday(timezone);
+      const { data: result, error: rpcErr } = await supabase.rpc('delete_sinking_fund_buffer', {
+        p_household_id: householdId,
+        p_account_id: id,
+        p_today: today,
+      });
+      if (rpcErr) {
+        console.error('delete_sinking_fund_buffer RPC error:', rpcErr);
+        return NextResponse.json({ error: rpcErr.message || 'Failed to delete sinking fund' }, { status: 500 });
+      }
+      return NextResponse.json({ deleted: true, ...result });
     }
 
     if ((GOAL_ACCOUNT_TYPES as readonly string[]).includes(account.type)) {

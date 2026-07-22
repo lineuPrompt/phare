@@ -49,6 +49,7 @@ export default function Sidebar({ locale, role: roleProp }: { locale: string; ro
     { href: `/${locale}/timeline`,  label: t('timeline'),  icon: '📈' },
     { href: `/${locale}/cards`,     label: t('cards'),     icon: '💳' },
     { href: `/${locale}/goals`,     label: t('goals'),     icon: '🎯' },
+    { href: `/${locale}/sinking-funds`, label: t('sinkingFunds'), icon: '🏦' },
     { href: `/${locale}/recurring`, label: t('recurring'), icon: '🔁' },
     { href: `/${locale}/reconcile`, label: t('reconcile'), icon: '🔍' },
     ...(role === 'owner'

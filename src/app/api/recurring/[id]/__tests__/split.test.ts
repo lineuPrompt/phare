@@ -128,9 +128,28 @@ function makeFakeSupabase(seed: Store) {
   return {
     auth: { getUser: async () => ({ data: { user: { id: 'user-1' } }, error: null }) },
     from: table,
+    // Faithful reimplementation of create_transfer's atomic pair-insert —
+    // needed for the type='transfer' split-path test below (a sinking fund's
+    // recurring contribution). Every OTHER test in this file uses type=
+    // 'income'/'expense', which never calls this at all.
     rpc(name: string, params: Record<string, unknown>) {
       if (name !== 'create_transfer') throw new Error(`fake supabase: unexpected rpc "${name}"`);
-      return Promise.resolve({ data: null, error: { message: 'not exercised in these tests' } });
+      const fundId = `transactions-${idCounter++}`;
+      const chqId = `transactions-${idCounter++}`;
+      const fundRow: Row = {
+        id: fundId, household_id: params.p_household_id, member_id: params.p_member_id,
+        account_id: params.p_goal_id, amount: params.p_amount, description: params.p_description,
+        date: params.p_date, type: 'transfer', source: 'manual',
+        recurring_item_id: params.p_recurring_item_id ?? null, transfer_peer_id: chqId,
+      };
+      const chqRow: Row = {
+        id: chqId, household_id: params.p_household_id, member_id: params.p_member_id,
+        account_id: params.p_chequing_id, amount: params.p_amount, description: params.p_description,
+        date: params.p_date, type: 'transfer', source: 'manual',
+        recurring_item_id: params.p_recurring_item_id ?? null, transfer_peer_id: fundId,
+      };
+      store.transactions = [...(store.transactions ?? []), fundRow, chqRow];
+      return Promise.resolve({ data: { chequing_row_id: chqId, goal_row_id: fundId }, error: null });
     },
     rows(name: string): Row[] { return store[name] ?? []; },
   };
@@ -401,5 +420,79 @@ describe('PATCH /api/recurring/[id] — Part B split-into-two-rules', () => {
     expect(rule.active).toBe(true);
     expect(rule.category_id).toBe('cat-new');
     expect(rule.amount).toBe(200);
+  });
+
+  // ---------------------------------------------------------------------
+  // Build 4 Part A lifecycle (2026-07-21) — editing the sinking-fund
+  // buffer's contribution amount is just this same generic split path,
+  // applied to its type='transfer' recurring rule. No new backend code:
+  // this proves the existing machinery already does the right thing for a
+  // fund destination specifically (past contribution untouched, new amount
+  // effective only forward).
+  // ---------------------------------------------------------------------
+  it('raising the sinking-fund buffer contribution: past contribution keeps its real amount, the new amount applies from next month forward', async () => {
+    const todayStr = businessToday('America/Toronto');
+    const effectiveFrom = firstOfNextMonth(todayStr);
+    const FUND = 'fund-1';
+
+    const supabase = makeFakeSupabase({
+      ...baseSeed(),
+      accounts: [...baseSeed().accounts, { id: FUND, household_id: HOUSEHOLD, type: 'savings', is_sinking_fund: true } as unknown as Row],
+      household_members: [{ id: 'mem-1', household_id: HOUSEHOLD } as unknown as Row],
+      recurring_items: [
+        {
+          id: 'ri-fund', household_id: HOUSEHOLD, member_id: 'mem-1', description: 'Sinking funds', amount: 708,
+          type: 'transfer', cadence: 'monthly', anchor_date: '2020-01-01', second_day: null,
+          category_id: null, account_id: CHEQUING, destination_account_id: FUND, active: true,
+        } as unknown as Row,
+      ],
+      transactions: [
+        // A real past contribution, already happened at the old amount.
+        { id: 'tx-past-fund', household_id: HOUSEHOLD, account_id: FUND, member_id: 'mem-1', category_id: null,
+          amount: 708, description: 'Sinking funds', date: '2026-06-01', type: 'transfer', source: 'manual',
+          recurring_item_id: 'ri-fund', transfer_peer_id: 'tx-past-chq' } as unknown as Row,
+        { id: 'tx-past-chq', household_id: HOUSEHOLD, account_id: CHEQUING, member_id: 'mem-1', category_id: null,
+          amount: 708, description: 'Sinking funds', date: '2026-06-01', type: 'transfer', source: 'manual',
+          recurring_item_id: 'ri-fund', transfer_peer_id: 'tx-past-fund' } as unknown as Row,
+      ],
+      recurring_skipped_dates: [],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
+
+    const { PATCH } = await import('../route');
+    const res = await PATCH(
+      new Request('http://localhost/api/recurring/ri-fund', { method: 'PATCH', body: JSON.stringify({ amount: 850 }) }),
+      { params: Promise.resolve({ id: 'ri-fund' }) }
+    );
+    const json = await res.json();
+    expect(res.status).toBe(200);
+    expect(json).toMatchObject({ updated: true, split: true, oldRuleId: 'ri-fund', effectiveFrom });
+
+    // Old rule frozen at the old amount — never mutated.
+    const oldRule = supabase.rows('recurring_items').find((r) => r.id === 'ri-fund')!;
+    expect(oldRule.active).toBe(false);
+    expect(oldRule.amount).toBe(708);
+
+    // New rule carries the raise, effective next month, same destination.
+    const newRule = supabase.rows('recurring_items').find((r) => r.id === json.newRuleId)!;
+    expect(newRule).toMatchObject({ amount: 850, active: true, destination_account_id: FUND, account_id: CHEQUING });
+
+    // The real past contribution keeps its real amount — untouched.
+    const pastFund = supabase.rows('transactions').find((r) => r.id === 'tx-past-fund')!;
+    const pastChq = supabase.rows('transactions').find((r) => r.id === 'tx-past-chq')!;
+    expect(pastFund.amount).toBe(708);
+    expect(pastChq.amount).toBe(708);
+
+    // Every newly materialized pair is at the new amount, on/after the boundary.
+    const newFundRows = supabase.rows('transactions').filter(
+      (r) => r.recurring_item_id === json.newRuleId && r.account_id === FUND
+    );
+    expect(newFundRows.length).toBeGreaterThan(0);
+    for (const row of newFundRows) {
+      expect(row.amount).toBe(850);
+      expect((row.date as string) >= effectiveFrom).toBe(true);
+    }
   });
 });

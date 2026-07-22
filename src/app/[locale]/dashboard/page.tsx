@@ -196,7 +196,6 @@ export default function DashboardPage() {
                   funds={data.sinkingFunds}
                   buffer={data.sinkingFundBuffer}
                   locale={locale}
-                  onFunded={() => loadDashboard(calendarMonth)}
                 />
               )}
             </div>
