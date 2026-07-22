@@ -7,8 +7,12 @@ import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import { formatCurrency, monthName, SinkingFund, SinkingFundBuffer } from '@/components/dashboard/types';
 
+type Cadence = 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
+
 type BufferData = SinkingFundBuffer & {
   contributionAmount: number | null;
+  cadence: Cadence | null;
+  secondDay: number | null;
   recurringItemId: string | null;
   nextContributionDate: string | null;
   contributions: { id: string; date: string; description: string | null; amount: number }[];
@@ -32,6 +36,8 @@ export default function SinkingFundsPage() {
 
   const [editingContribution, setEditingContribution] = useState(false);
   const [newAmount, setNewAmount] = useState('');
+  const [newCadence, setNewCadence] = useState<Cadence>('monthly');
+  const [newSecondDay, setNewSecondDay] = useState('30');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -72,6 +78,8 @@ export default function SinkingFundsPage() {
 
   function openEditContribution() {
     setNewAmount(String(buffer?.contributionAmount ?? buffer?.totalMonthlyProvision ?? ''));
+    setNewCadence(buffer?.cadence ?? 'monthly');
+    setNewSecondDay(String(buffer?.secondDay ?? '30'));
     setEditError('');
     setEditingContribution(true);
   }
@@ -89,7 +97,11 @@ export default function SinkingFundsPage() {
       const res = await fetch(`/api/recurring/${buffer.recurringItemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: parsed }),
+        body: JSON.stringify({
+          amount: parsed,
+          cadence: newCadence,
+          secondDay: newCadence === 'semimonthly' ? parseInt(newSecondDay, 10) : null,
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to update');
       setEditingContribution(false);
@@ -183,6 +195,31 @@ export default function SinkingFundsPage() {
                             className="w-32 px-2 py-1.5 rounded text-sm outline-none"
                             style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
                           />
+                          <select
+                            value={newCadence}
+                            onChange={(e) => setNewCadence(e.target.value as Cadence)}
+                            className="px-2 py-1.5 rounded text-sm outline-none bg-white"
+                            style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
+                          >
+                            <option value="monthly">{t('cadenceMonthly')}</option>
+                            <option value="biweekly">{t('cadenceBiweekly')}</option>
+                            <option value="semimonthly">{t('cadenceSemimonthly')}</option>
+                            <option value="weekly">{t('cadenceWeekly')}</option>
+                          </select>
+                          {newCadence === 'semimonthly' && (
+                            <span className="flex items-center gap-1.5">
+                              <label className="text-xs" style={{ color: '#6B7280' }}>{t('secondDay')}</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="31"
+                                value={newSecondDay}
+                                onChange={(e) => setNewSecondDay(e.target.value)}
+                                className="w-16 px-2 py-1.5 rounded text-sm outline-none"
+                                style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
+                              />
+                            </span>
+                          )}
                           <button
                             onClick={saveContribution}
                             disabled={editSaving}
@@ -204,7 +241,8 @@ export default function SinkingFundsPage() {
                       ) : (
                         <div className="flex items-center justify-between flex-wrap gap-2">
                           <p className="text-sm font-medium" style={{ color: '#0F2044' }}>
-                            {formatCurrency(buffer.contributionAmount ?? buffer.totalMonthlyProvision, locale)}{tDash('perMonth')}
+                            {formatCurrency(buffer.contributionAmount ?? buffer.totalMonthlyProvision, locale)}
+                            {t(`cadenceShort.${buffer.cadence ?? 'monthly'}`)}
                             {buffer.nextContributionDate && ` · ${t('nextContribution', { date: fmtDate(buffer.nextContributionDate) })}`}
                           </p>
                           <div className="flex gap-3">

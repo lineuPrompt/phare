@@ -70,7 +70,7 @@ describe('GET /api/sinking-funds', () => {
     expect(json.funds).toHaveLength(2);
     expect(json.buffer).toEqual({
       linkedAccountId: null, balance: 0, fundedAlready: false, totalMonthlyProvision: 558,
-      contributionAmount: null, recurringItemId: null, nextContributionDate: null, contributions: [], upcomingContributions: [], billsPaid: [],
+      contributionAmount: null, cadence: null, secondDay: null, recurringItemId: null, nextContributionDate: null, contributions: [], upcomingContributions: [], billsPaid: [],
     });
   });
 
@@ -110,6 +110,8 @@ describe('GET /api/sinking-funds', () => {
       expect(json.buffer.fundedAlready).toBe(true);
       expect(json.buffer.recurringItemId).toBe('ri-1');
       expect(json.buffer.contributionAmount).toBe(708);
+      expect(json.buffer.cadence).toBe('monthly');
+      expect(json.buffer.secondDay).toBe(null);
       expect(json.buffer.nextContributionDate).toBe('2026-08-01');
       expect(json.buffer.contributions).toEqual([{ id: 't1', date: '2026-06-01', description: 'Sinking funds', amount: 708 }]);
       expect(json.buffer.upcomingContributions).toEqual([{ id: 't3', date: '2026-08-01', description: 'Sinking funds', amount: 708 }]);

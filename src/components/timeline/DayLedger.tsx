@@ -126,10 +126,10 @@ function TransferControls({ entry, locale, onChanged }: { entry: TimelineTx; loc
 
   if (confirmDelete) {
     return (
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="text-xs" style={{ color: '#DC2626' }}>
+      <div className="w-full flex flex-wrap items-center gap-2 py-1.5 px-2 rounded-lg" style={{ background: '#FEF2F2' }}>
+        <p className="w-full text-xs" style={{ color: '#DC2626' }}>
           {isRecurringOccurrence ? t('confirmDeleteOccurrence') : t('confirmDelete')}
-        </span>
+        </p>
         <button onClick={remove} disabled={saving} className="text-xs font-semibold cursor-pointer disabled:opacity-50" style={{ color: '#DC2626' }}>{t('delete')}</button>
         <button onClick={() => setConfirmDelete(false)} className="text-xs cursor-pointer" style={{ color: '#6B7280' }}>{t('cancel')}</button>
       </div>
@@ -252,10 +252,10 @@ function EntryControls({
 
   if (confirmDelete) {
     return (
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="text-xs" style={{ color: '#DC2626' }}>
+      <div className="w-full flex flex-wrap items-center gap-2 py-1.5 px-2 rounded-lg" style={{ background: '#FEF2F2' }}>
+        <p className="w-full text-xs" style={{ color: '#DC2626' }}>
           {isRecurringOccurrence ? t('confirmDeleteOccurrence') : t('confirmDeleteEntry')}
-        </span>
+        </p>
         <button onClick={remove} disabled={saving} className="text-xs font-semibold cursor-pointer disabled:opacity-50" style={{ color: '#DC2626' }}>{t('delete')}</button>
         <button onClick={() => setConfirmDelete(false)} className="text-xs cursor-pointer" style={{ color: '#6B7280' }}>{t('cancel')}</button>
       </div>

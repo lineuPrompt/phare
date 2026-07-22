@@ -712,6 +712,17 @@
     "editAmountInvalid": "Enter an amount greater than zero.",
     "editError": "Couldn't update the contribution — try again.",
     "editEffectiveNote": "This applies starting next month — contributions already made keep their real amount.",
+    "cadenceMonthly": "Monthly",
+    "cadenceBiweekly": "Every 2 weeks",
+    "cadenceSemimonthly": "Twice a month",
+    "cadenceWeekly": "Weekly",
+    "secondDay": "Second day of month",
+    "cadenceShort": {
+      "monthly": "/mo",
+      "biweekly": "/2wk",
+      "semimonthly": "/2xmo",
+      "weekly": "/wk"
+    },
     "nextContribution": "next: {date}",
     "whatItCovers": "What this buffer covers",
     "contributionHistory": "Contribution history",

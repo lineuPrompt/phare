@@ -16,13 +16,14 @@
 -- =============================================================================
 --
 -- WHAT THIS DELETES
---   Every row in every table in this project: transactions, recurring_items,
---   monthly_goals, card_envelope_items, budgets, sinking_funds,
---   account_balance_anchors, budget_alerts, file_imports, events,
---   conversations, accounts, categories, household_members, users (public),
---   households, AND auth.users (Supabase Auth — this signs everyone out
---   permanently and deletes their login credentials; nothing short of a
---   fresh signup can undo it).
+--   Every row in every table in this project: transactions,
+--   recurring_skipped_dates, recurring_items, monthly_goals,
+--   card_envelope_items, budgets, sinking_funds, account_balance_anchors,
+--   budget_alerts, file_imports, events, conversations, accounts,
+--   categories, household_members, users (public), households, AND
+--   auth.users (Supabase Auth — this signs everyone out permanently and
+--   deletes their login credentials; nothing short of a fresh signup can
+--   undo it).
 --   (The legacy `goals` table — superseded by goal-typed accounts, see
 --   20260619000000_goals_and_transfers.sql — was dropped entirely in
 --   20260728000000_drop_legacy_goals_table.sql, so it no longer appears here.)
@@ -70,54 +71,57 @@ BEGIN;
 -- STEP 1 — transactions (must precede accounts/recurring_items: their account_id / this table's own FKs)
 DELETE FROM transactions;
 
--- STEP 2 — recurring_items (must precede accounts: account_id is ON DELETE RESTRICT)
+-- STEP 2 — recurring_skipped_dates (detached-occurrence tombstones; explicit for an auditable count, though it would cascade from step 3 regardless)
+DELETE FROM recurring_skipped_dates;
+
+-- STEP 3 — recurring_items (must precede accounts: account_id is ON DELETE RESTRICT)
 DELETE FROM recurring_items;
 
--- STEP 3 — monthly_goals (per-card monthly spending targets)
+-- STEP 4 — monthly_goals (per-card monthly spending targets)
 DELETE FROM monthly_goals;
 
--- STEP 4 — card_envelope_items (per-card category sub-budgets)
+-- STEP 5 — card_envelope_items (per-card category sub-budgets)
 DELETE FROM card_envelope_items;
 
--- STEP 5 — budgets (planned variable-expense amounts per category/month)
+-- STEP 6 — budgets (planned variable-expense amounts per category/month)
 DELETE FROM budgets;
 
--- STEP 6 — sinking_funds (annual-expense monthly provisions)
+-- STEP 7 — sinking_funds (annual-expense monthly provisions)
 DELETE FROM sinking_funds;
 
--- STEP 7 — account_balance_anchors (opening-balance anchors for the Cash Timeline)
+-- STEP 8 — account_balance_anchors (opening-balance anchors for the Cash Timeline)
 DELETE FROM account_balance_anchors;
 
--- STEP 8 — budget_alerts (80%/100% category threshold alerts)
+-- STEP 9 — budget_alerts (80%/100% category threshold alerts)
 DELETE FROM budget_alerts;
 
--- STEP 9 — file_imports (upload/onboarding provenance rows)
+-- STEP 10 — file_imports (upload/onboarding provenance rows)
 DELETE FROM file_imports;
 
--- STEP 10 — events (lifecycle diary)
+-- STEP 11 — events (lifecycle diary)
 DELETE FROM events;
 
--- STEP 11 — conversations (AI onboarding summaries, monthly reviews, chat)
+-- STEP 12 — conversations (AI onboarding summaries, monthly reviews, chat)
 DELETE FROM conversations;
 
--- STEP 12 — accounts (now safe: nothing with ON DELETE RESTRICT references it anymore)
+-- STEP 13 — accounts (now safe: nothing with ON DELETE RESTRICT references it anymore)
 DELETE FROM accounts;
 
--- STEP 13 — categories (now safe: nothing referencing it — transactions,
+-- STEP 14 — categories (now safe: nothing referencing it — transactions,
 -- recurring_items, card_envelope_items, budgets, budget_alerts — remains)
 DELETE FROM categories;
 
--- STEP 14 — household_members (now safe: nothing referencing it — transactions,
+-- STEP 15 — household_members (now safe: nothing referencing it — transactions,
 -- recurring_items, budgets, budget_alerts — remains)
 DELETE FROM household_members;
 
--- STEP 15 — users (public.users — the app-level profile row, not the login)
+-- STEP 16 — users (public.users — the app-level profile row, not the login)
 DELETE FROM users;
 
--- STEP 16 — households (root of every household_id ON DELETE CASCADE chain above)
+-- STEP 17 — households (root of every household_id ON DELETE CASCADE chain above)
 DELETE FROM households;
 
--- STEP 17 — auth.users (Supabase Auth logins). The one table not reachable
+-- STEP 18 — auth.users (Supabase Auth logins). The one table not reachable
 -- from households by cascade — the FK points the other way (public.users
 -- references auth.users, not the reverse). Deleting here cascades through
 -- Supabase's own auth.identities / auth.sessions / auth.refresh_tokens.
@@ -126,22 +130,25 @@ DELETE FROM auth.users;
 COMMIT;
 
 -- =============================================================================
--- VERIFICATION — every row here must be 0.
+-- VERIFICATION — every row here must be 0. Every branch aliases its own
+-- columns explicitly (not just the first) — commenting out or reordering
+-- any one line must never silently change the result grid's headers.
 -- =============================================================================
-SELECT 'transactions' AS table_name, count(*) AS remaining_rows FROM transactions
-UNION ALL SELECT 'recurring_items',         count(*) FROM recurring_items
-UNION ALL SELECT 'monthly_goals',           count(*) FROM monthly_goals
-UNION ALL SELECT 'card_envelope_items',     count(*) FROM card_envelope_items
-UNION ALL SELECT 'budgets',                 count(*) FROM budgets
-UNION ALL SELECT 'sinking_funds',           count(*) FROM sinking_funds
-UNION ALL SELECT 'account_balance_anchors', count(*) FROM account_balance_anchors
-UNION ALL SELECT 'budget_alerts',           count(*) FROM budget_alerts
-UNION ALL SELECT 'file_imports',            count(*) FROM file_imports
-UNION ALL SELECT 'events',                  count(*) FROM events
-UNION ALL SELECT 'conversations',           count(*) FROM conversations
-UNION ALL SELECT 'accounts',                count(*) FROM accounts
-UNION ALL SELECT 'categories',              count(*) FROM categories
-UNION ALL SELECT 'household_members',       count(*) FROM household_members
-UNION ALL SELECT 'users (public)',          count(*) FROM users
-UNION ALL SELECT 'households',              count(*) FROM households
-UNION ALL SELECT 'auth.users',              count(*) FROM auth.users;
+SELECT 'transactions'             AS table_name, count(*) AS remaining_rows FROM transactions
+UNION ALL SELECT 'recurring_skipped_dates' AS table_name, count(*) AS remaining_rows FROM recurring_skipped_dates
+UNION ALL SELECT 'recurring_items'         AS table_name, count(*) AS remaining_rows FROM recurring_items
+UNION ALL SELECT 'monthly_goals'           AS table_name, count(*) AS remaining_rows FROM monthly_goals
+UNION ALL SELECT 'card_envelope_items'     AS table_name, count(*) AS remaining_rows FROM card_envelope_items
+UNION ALL SELECT 'budgets'                 AS table_name, count(*) AS remaining_rows FROM budgets
+UNION ALL SELECT 'sinking_funds'           AS table_name, count(*) AS remaining_rows FROM sinking_funds
+UNION ALL SELECT 'account_balance_anchors' AS table_name, count(*) AS remaining_rows FROM account_balance_anchors
+UNION ALL SELECT 'budget_alerts'           AS table_name, count(*) AS remaining_rows FROM budget_alerts
+UNION ALL SELECT 'file_imports'            AS table_name, count(*) AS remaining_rows FROM file_imports
+UNION ALL SELECT 'events'                  AS table_name, count(*) AS remaining_rows FROM events
+UNION ALL SELECT 'conversations'           AS table_name, count(*) AS remaining_rows FROM conversations
+UNION ALL SELECT 'accounts'                AS table_name, count(*) AS remaining_rows FROM accounts
+UNION ALL SELECT 'categories'              AS table_name, count(*) AS remaining_rows FROM categories
+UNION ALL SELECT 'household_members'       AS table_name, count(*) AS remaining_rows FROM household_members
+UNION ALL SELECT 'users (public)'          AS table_name, count(*) AS remaining_rows FROM users
+UNION ALL SELECT 'households'              AS table_name, count(*) AS remaining_rows FROM households
+UNION ALL SELECT 'auth.users'              AS table_name, count(*) AS remaining_rows FROM auth.users;

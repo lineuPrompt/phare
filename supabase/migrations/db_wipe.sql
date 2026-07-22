@@ -1,26 +1,27 @@
--- Children / leaf tables first
-DELETE FROM budget_alerts;
-DELETE FROM file_imports;
-DELETE FROM transactions;
-DELETE FROM budgets;
-DELETE FROM monthly_goals;
-DELETE FROM recurring_items;
-DELETE FROM sinking_funds;
-DELETE FROM categories;
-DELETE FROM accounts;
-DELETE FROM conversations;
-DELETE FROM events;
--- Then membership, then users, then households last
-DELETE FROM household_members;
-DELETE FROM users;
-DELETE FROM households;
+-- =============================================================================
+-- DEPRECATED — superseded by scripts/full-db-wipe.sql.
+--
+-- This file has no household_id scoping at all — it deletes every row in
+-- every table it lists unconditionally, including households/users/
+-- household_members — so it's a duplicate of scripts/full-db-wipe.sql's
+-- purpose (a full project wipe), not of the household-scoped reset
+-- (scripts/reset-household.sql). It also predates several tables that now
+-- exist (card_envelope_items, account_balance_anchors,
+-- recurring_skipped_dates) and has no safety guard, no transaction wrapper,
+-- and no auth.users cleanup — scripts/full-db-wipe.sql has all three.
+--
+-- It also never belonged in supabase/migrations/ — this directory is
+-- schema history applied in order, not a home for one-off destructive data
+-- scripts; per this project's own convention (see 20260728000000's own
+-- comment) migrations are additive schema changes, and Supabase will try to
+-- apply this file's raw DELETEs as if it were a real migration on any
+-- environment that runs `supabase db push` against this folder, which is
+-- exactly the kind of foot-gun a wipe script should never be.
+--
+-- Use scripts/full-db-wipe.sql for a full project wipe, or
+-- scripts/reset-household.sql for one household. This file is kept only so
+-- old links/notes that reference it by name still resolve to an explanation
+-- instead of a 404. Do not run it — the queries below are commented out.
+-- =============================================================================
 
---verify is zero
-SELECT
-  (SELECT count(*) FROM households) AS households,
-  (SELECT count(*) FROM users) AS users,
-  (SELECT count(*) FROM transactions) AS transactions,
-  (SELECT count(*) FROM accounts) AS accounts,
-  (SELECT count(*) FROM budget_alerts) AS budget_alerts,
-  (SELECT count(*) FROM file_imports) AS file_imports,
-  (SELECT count(*) FROM events) AS events;
+-- (original body intentionally removed — see scripts/full-db-wipe.sql)

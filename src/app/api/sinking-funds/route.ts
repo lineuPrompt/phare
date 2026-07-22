@@ -52,6 +52,8 @@ export async function GET() {
           fundedAlready: false,
           totalMonthlyProvision,
           contributionAmount: null,
+          cadence: null,
+          secondDay: null,
           recurringItemId: null,
           nextContributionDate: null,
           contributions: [],
@@ -97,6 +99,8 @@ export async function GET() {
 
     const recurringItemId = recurringRow?.id ?? null;
     const contributionAmount = recurringRow ? Number(recurringRow.amount) : null;
+    const cadence = recurringRow?.cadence ?? null;
+    const secondDay = recurringRow?.second_day ?? null;
     const nextContributionDate = recurringRow
       ? nextOccurrence(
           { cadence: recurringRow.cadence, anchorDate: recurringRow.anchor_date, secondDay: recurringRow.second_day },
@@ -112,6 +116,8 @@ export async function GET() {
         fundedAlready: balance > 0,
         totalMonthlyProvision,
         contributionAmount,
+        cadence,
+        secondDay,
         recurringItemId,
         nextContributionDate,
         contributions,

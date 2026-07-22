@@ -712,6 +712,17 @@
     "editAmountInvalid": "Entrez un montant supérieur à zéro.",
     "editError": "Impossible de mettre à jour la contribution — réessayez.",
     "editEffectiveNote": "Ceci s'applique à partir du mois prochain — les contributions déjà faites conservent leur montant réel.",
+    "cadenceMonthly": "Mensuelle",
+    "cadenceBiweekly": "Toutes les 2 semaines",
+    "cadenceSemimonthly": "Deux fois par mois",
+    "cadenceWeekly": "Hebdomadaire",
+    "secondDay": "Deuxième jour du mois",
+    "cadenceShort": {
+      "monthly": "/mois",
+      "biweekly": "/2sem",
+      "semimonthly": "/2xmois",
+      "weekly": "/sem"
+    },
     "nextContribution": "prochaine : {date}",
     "whatItCovers": "Ce que ce fonds couvre",
     "contributionHistory": "Historique des contributions",
