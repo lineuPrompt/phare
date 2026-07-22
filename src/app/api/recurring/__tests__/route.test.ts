@@ -108,3 +108,81 @@ describe('POST /api/recurring — materialization month-start uses the household
     expect(rows.every((r) => r.date >= '2026-07-31')).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Member attribution — expenses are household-level, never the creator
+// ---------------------------------------------------------------------------
+//
+// Founder-reported bug: adding a recurring EXPENSE via the Recurring page
+// stamped the creating user's own member_id on the row, which RecurringList
+// then rendered as "Canadian Tire — Lineu Prompt Graeff" — expenses have no
+// per-expense member concept (same rule save-plan's onboarding path already
+// follows for fixed expenses: member_id null). Income keeps the creator's
+// own member attribution, unchanged.
+describe('POST /api/recurring — member attribution', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a manually-added recurring EXPENSE gets member_id: null, never the creating user', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-10T12:00:00'));
+
+    const { client, calls } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      household_members: [{ data: { id: 'mem-creator' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      accounts: [{ data: { id: 'chq-1' }, error: null }],
+      recurring_items: [{ data: { id: 'ri-1' }, error: null }],
+      transactions: [{ error: null }, { error: null }],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/recurring', {
+      method: 'POST',
+      body: JSON.stringify({
+        description: 'Canadian Tire', amount: 89, type: 'expense', cadence: 'monthly',
+        anchorDate: '2026-08-01', categoryId: 'cat-shopping', accountId: 'chq-1',
+      }),
+    }));
+    expect(res.status).toBe(200);
+
+    const insert = calls.find((c) => c.table === 'recurring_items' && c.method === 'insert');
+    expect((insert!.args[0] as { member_id: unknown }).member_id).toBeNull();
+  });
+
+  it('a manually-added recurring INCOME still carries the creating user\'s member_id, unchanged', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-10T12:00:00'));
+
+    const { client, calls } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      household_members: [{ data: { id: 'mem-creator' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      accounts: [{ data: { id: 'chq-1' }, error: null }],
+      recurring_items: [{ data: { id: 'ri-2' }, error: null }],
+      transactions: [{ error: null }, { error: null }],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/recurring', {
+      method: 'POST',
+      body: JSON.stringify({
+        description: 'Paycheque', amount: 2000, type: 'income', cadence: 'monthly',
+        anchorDate: '2026-08-01', accountId: 'chq-1',
+      }),
+    }));
+    expect(res.status).toBe(200);
+
+    const insert = calls.find((c) => c.table === 'recurring_items' && c.method === 'insert');
+    expect((insert!.args[0] as { member_id: unknown }).member_id).toBe('mem-creator');
+  });
+});

@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
     type Row = {
       household_id: string;
-      member_id: string;
+      member_id: string | null;
       category_id: string;
       amount: number;
       description: string;
@@ -72,11 +72,16 @@ export async function POST(request: Request) {
 
     const rows: Row[] = [];
 
+    // Expenses are household-level, not personal — same rule save-plan's
+    // onboarding path already follows for fixed expenses (member_id null).
+    // Income keeps the creator's own member attribution, unchanged.
+    const resolvedMemberId = type === 'expense' ? null : member.id;
+
     if (repeat === 'monthly') {
       const recurrenceId = crypto.randomUUID();
       recurrenceDates(date, 12).forEach((d) => {
         rows.push({
-          household_id: householdId, member_id: member.id, category_id: categoryId || null,
+          household_id: householdId, member_id: resolvedMemberId, category_id: categoryId || null,
           amount, description, date: d, type, source: 'manual',
           recurrence_id: recurrenceId, installment_label: null, account_id: resolvedAccountId,
         });
@@ -85,14 +90,14 @@ export async function POST(request: Request) {
       const recurrenceId = crypto.randomUUID();
       recurrenceDates(date, installments).forEach((d, i) => {
         rows.push({
-          household_id: householdId, member_id: member.id, category_id: categoryId || null,
+          household_id: householdId, member_id: resolvedMemberId, category_id: categoryId || null,
           amount, description, date: d, type, source: 'manual',
           recurrence_id: recurrenceId, installment_label: `${i + 1}/${installments}`, account_id: resolvedAccountId,
         });
       });
     } else {
       rows.push({
-        household_id: householdId, member_id: member.id, category_id: categoryId || null,
+        household_id: householdId, member_id: resolvedMemberId, category_id: categoryId || null,
         amount, description, date, type, source: 'manual',
         recurrence_id: null, installment_label: null, account_id: resolvedAccountId,
       });

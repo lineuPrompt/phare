@@ -164,11 +164,16 @@ export async function POST(request: Request) {
     }
 
     // 1. Create the rule
+    // Expenses are household-level, not personal — same rule save-plan's
+    // onboarding path already follows for fixed expenses (member_id null,
+    // see importProvenance-adjacent logic in save-plan/route.ts). Income
+    // (and a transfer's initiating member) keep the creator's own member_id,
+    // unchanged from before.
     const { data: item, error: itemError } = await supabase
       .from('recurring_items')
       .insert({
         household_id: ctx.householdId,
-        member_id: ctx.memberId,
+        member_id: type === 'expense' ? null : ctx.memberId,
         category_id: resolvedCategoryId,
         account_id: resolvedAccountId,
         destination_account_id: resolvedDestinationId,
