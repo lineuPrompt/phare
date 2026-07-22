@@ -196,7 +196,8 @@ export async function GET(request: Request) {
           : supabase
               .from('sinking_funds')
               .select('id, name, annual_amount, monthly_provision, due_month, linked_account_id')
-              .eq('household_id', householdId),
+              .eq('household_id', householdId)
+              .eq('active', true),
 
         snapshotOnly
           ? Promise.resolve({ data: null, error: null })
@@ -344,6 +345,8 @@ export async function GET(request: Request) {
       annual_amount: Number(sf.annual_amount),
       monthly_provision: Number(sf.monthly_provision),
       due_month: sf.due_month,
+      // This route only ever fetches active=true rows — see the query above.
+      active: true,
     }));
     const bufferAccountId = sinkingFundRows.find((sf) => sf.linked_account_id)?.linked_account_id ?? null;
     const bufferBalance = bufferAccountId

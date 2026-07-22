@@ -6,6 +6,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import { formatCurrency, monthName, SinkingFund, SinkingFundBuffer } from '@/components/dashboard/types';
+import { firstOfNextMonth } from '@/lib/dateHelpers';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 type Cadence = 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
 
@@ -44,6 +46,24 @@ export default function SinkingFundsPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+
+  const { today } = useBusinessToday();
+
+  // Per-allocation edit (amount) and exclude/include — Build 4 Part A
+  // follow-up (2026-07-22). Only one row editable at a time, same pattern
+  // as RecurringList's row-level edit.
+  const [editingFundId, setEditingFundId] = useState<string | null>(null);
+  const [editFundAnnual, setEditFundAnnual] = useState('');
+  const [editFundMonthly, setEditFundMonthly] = useState('');
+  const [fundSaving, setFundSaving] = useState(false);
+  const [fundError, setFundError] = useState('');
+
+  // Contribution-follows-the-sum banner: shown whenever the recalculated
+  // total (from active allocations) differs from what the recurring rule
+  // is actually contributing today.
+  const [contributionEffectiveFrom, setContributionEffectiveFrom] = useState('');
+  const [updatingContribution, setUpdatingContribution] = useState(false);
+  const [contributionUpdateError, setContributionUpdateError] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -126,6 +146,81 @@ export default function SinkingFundsPage() {
       setDeleteError(err instanceof Error ? err.message : t('deleteError'));
     } finally {
       setDeleting(false);
+    }
+  }
+
+  function startEditFund(fund: SinkingFund) {
+    setEditingFundId(fund.id);
+    setEditFundAnnual(String(fund.annual_amount));
+    setEditFundMonthly(String(fund.monthly_provision));
+    setFundError('');
+  }
+
+  function cancelEditFund() {
+    setEditingFundId(null);
+    setFundError('');
+  }
+
+  async function saveEditFund(id: string) {
+    const annual = parseFloat(editFundAnnual);
+    const monthly = parseFloat(editFundMonthly);
+    if (!annual || annual <= 0 || !monthly || monthly <= 0) {
+      setFundError(t('itemAmountInvalid'));
+      return;
+    }
+    setFundSaving(true);
+    setFundError('');
+    try {
+      const res = await fetch(`/api/sinking-funds/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ annualAmount: annual, monthlyProvision: monthly }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed to update');
+      setEditingFundId(null);
+      load();
+    } catch (err) {
+      setFundError(err instanceof Error ? err.message : t('itemSaveError'));
+    } finally {
+      setFundSaving(false);
+    }
+  }
+
+  async function toggleFundActive(fund: SinkingFund) {
+    setFundError('');
+    try {
+      const res = await fetch(`/api/sinking-funds/${fund.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !fund.active }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed to update');
+      load();
+    } catch (err) {
+      setFundError(err instanceof Error ? err.message : t('itemToggleError'));
+    }
+  }
+
+  async function updateContributionToMatch() {
+    if (!buffer?.recurringItemId) return;
+    setUpdatingContribution(true);
+    setContributionUpdateError('');
+    try {
+      const res = await fetch(`/api/recurring/${buffer.recurringItemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: buffer.totalMonthlyProvision,
+          effectiveFrom: contributionEffectiveFrom || firstOfNextMonth(today),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed to update');
+      setContributionEffectiveFrom('');
+      load();
+    } catch (err) {
+      setContributionUpdateError(err instanceof Error ? err.message : t('contributionUpdateError'));
+    } finally {
+      setUpdatingContribution(false);
     }
   }
 
@@ -259,27 +354,129 @@ export default function SinkingFundsPage() {
                   )}
                 </div>
 
-                {/* Per-fund informational list */}
+                {/* Per-fund editable allocation list */}
                 <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>
                   <h2 className="text-sm font-semibold mb-3 uppercase tracking-wide" style={{ color: '#9CA3AF' }}>
                     {t('whatItCovers')}
                   </h2>
                   <div className="space-y-2">
                     {funds.map((fund) => (
-                      <div key={fund.id} className="flex items-center justify-between py-1.5">
-                        <div>
-                          <p className="text-sm font-medium" style={{ color: '#0F2044' }}>{fund.name}</p>
-                          <p className="text-xs" style={{ color: '#6B7280' }}>
-                            {monthName(fund.due_month, locale)}{fund.due_month ? ' · ' : ''}{formatCurrency(fund.annual_amount, locale)}{tDash('perYear')}
-                          </p>
-                        </div>
-                        <p className="text-sm font-semibold" style={{ color: '#2ABFBF' }}>
-                          {formatCurrency(fund.monthly_provision, locale)}{tDash('perMonth')}
-                        </p>
+                      <div key={fund.id} className="py-1.5" style={{ opacity: fund.active ? 1 : 0.55 }}>
+                        {editingFundId === fund.id ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium flex-1 min-w-[100px]" style={{ color: '#0F2044' }}>
+                              {fund.name}
+                            </span>
+                            <label className="flex items-center gap-1 text-xs" style={{ color: '#6B7280' }}>
+                              {t('itemAnnualLabel')}
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={editFundAnnual}
+                                onChange={(e) => setEditFundAnnual(e.target.value)}
+                                className="w-24 px-2 py-1 rounded text-sm outline-none"
+                                style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
+                              />
+                            </label>
+                            <label className="flex items-center gap-1 text-xs" style={{ color: '#6B7280' }}>
+                              {t('itemMonthlyLabel')}
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={editFundMonthly}
+                                onChange={(e) => setEditFundMonthly(e.target.value)}
+                                className="w-24 px-2 py-1 rounded text-sm outline-none"
+                                style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
+                              />
+                            </label>
+                            <button
+                              onClick={() => saveEditFund(fund.id)}
+                              disabled={fundSaving}
+                              className="px-3 py-1.5 rounded text-sm font-medium text-white disabled:opacity-50"
+                              style={{ background: '#2ABFBF' }}
+                            >
+                              {fundSaving ? t('savingItem') : t('saveItem')}
+                            </button>
+                            <button onClick={cancelEditFund} className="px-3 py-1.5 rounded text-sm" style={{ color: '#6B7280' }}>
+                              {t('cancelEdit')}
+                            </button>
+                            {fundError && <p className="w-full text-sm" style={{ color: '#DC2626' }}>{fundError}</p>}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div>
+                              <p className="text-sm font-medium" style={{ color: '#0F2044' }}>
+                                {fund.name}
+                                {!fund.active && (
+                                  <span className="ml-2 text-xs font-semibold" style={{ color: '#9CA3AF' }}>
+                                    {t('excludedBadge')}
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-xs" style={{ color: '#6B7280' }}>
+                                {monthName(fund.due_month, locale)}{fund.due_month ? ' · ' : ''}{formatCurrency(fund.annual_amount, locale)}{tDash('perYear')}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <p className="text-sm font-semibold" style={{ color: fund.active ? '#2ABFBF' : '#9CA3AF' }}>
+                                {formatCurrency(fund.monthly_provision, locale)}{tDash('perMonth')}
+                              </p>
+                              <button onClick={() => startEditFund(fund)} className="text-xs font-semibold" style={{ color: '#2ABFBF' }}>
+                                {t('editItemCta')}
+                              </button>
+                              <button
+                                onClick={() => toggleFundActive(fund)}
+                                className="text-xs font-semibold"
+                                style={{ color: fund.active ? '#DC2626' : '#16A34A' }}
+                              >
+                                {fund.active ? t('excludeCta') : t('includeCta')}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
                 </div>
+
+                {/* Contribution follows the sum — shown only when the recalculated
+                    total (from active allocations, above) has drifted from what the
+                    recurring rule actually contributes today. Honesty banner: the
+                    family sees the effect before committing it. */}
+                {buffer.linkedAccountId && buffer.recurringItemId && buffer.contributionAmount !== null &&
+                  buffer.totalMonthlyProvision !== buffer.contributionAmount && (
+                  <div className="rounded-2xl p-6 space-y-3" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+                    <p className="text-sm font-semibold" style={{ color: '#92400E' }}>
+                      {t('contributionChangeBanner', {
+                        from: formatCurrency(buffer.contributionAmount, locale),
+                        to: formatCurrency(buffer.totalMonthlyProvision, locale),
+                      })}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex items-center gap-1.5 text-xs" style={{ color: '#78350F' }}>
+                        {t('effectiveFrom')}
+                        <input
+                          type="date"
+                          value={contributionEffectiveFrom || firstOfNextMonth(today)}
+                          min={today}
+                          onChange={(e) => setContributionEffectiveFrom(e.target.value)}
+                          className="px-2 py-1.5 rounded text-sm outline-none bg-white"
+                          style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
+                        />
+                      </label>
+                      <button
+                        onClick={updateContributionToMatch}
+                        disabled={updatingContribution}
+                        className="px-3 py-1.5 rounded text-sm font-medium text-white disabled:opacity-50"
+                        style={{ background: '#0F2044' }}
+                      >
+                        {updatingContribution ? t('updatingContribution') : t('updateContributionCta')}
+                      </button>
+                    </div>
+                    <p className="text-xs" style={{ color: '#92400E' }}>{t('contributionUpdateNote')}</p>
+                    {contributionUpdateError && <p className="text-sm" style={{ color: '#DC2626' }}>{contributionUpdateError}</p>}
+                  </div>
+                )}
 
                 {buffer.linkedAccountId && (
                   <>

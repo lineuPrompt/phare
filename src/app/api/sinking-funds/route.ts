@@ -28,7 +28,7 @@ export async function GET() {
 
     const { data: fundRows } = await supabase
       .from('sinking_funds')
-      .select('id, name, annual_amount, monthly_provision, due_month, linked_account_id')
+      .select('id, name, annual_amount, monthly_provision, due_month, linked_account_id, active')
       .eq('household_id', householdId);
     const funds = (fundRows ?? []).map((sf) => ({
       id: sf.id,
@@ -36,11 +36,16 @@ export async function GET() {
       annual_amount: Number(sf.annual_amount),
       monthly_provision: Number(sf.monthly_provision),
       due_month: sf.due_month,
+      active: sf.active !== false,
     }));
 
     const linkedAccountId = (fundRows ?? []).find((sf) => sf.linked_account_id)?.linked_account_id ?? null;
+    // Contribution follows the sum of ACTIVE allocations only — excluded
+    // lines are display-only and never count toward what the buffer funds.
     const totalMonthlyProvision = Math.round(
-      (fundRows ?? []).reduce((sum, sf) => sum + Number(sf.monthly_provision ?? 0), 0) * 100
+      (fundRows ?? [])
+        .filter((sf) => sf.active !== false)
+        .reduce((sum, sf) => sum + Number(sf.monthly_provision ?? 0), 0) * 100
     ) / 100;
 
     if (!linkedAccountId) {

@@ -34,7 +34,7 @@ type PlanCategory = {
 export async function POST(request: Request) {
   try {
     const { plan, reviewText, locale, cardNames, fileMeta, confirmReplace } = await request.json() as {
-      plan: { monthlyBudget: { categories: PlanCategory[] }; seedCategories?: string[]; sinkingFunds?: { name: string; annualAmount: number; dueMonth: string }[]; goals?: { name: string; targetAmount: number; targetDate?: string | null; savedSoFar?: number }[]; topRecommendation: string };
+      plan: { monthlyBudget: { categories: PlanCategory[] }; seedCategories?: string[]; sinkingFunds?: { name: string; annualAmount: number; monthlyProvision: number; dueMonth: string }[]; goals?: { name: string; targetAmount: number; targetDate?: string | null; savedSoFar?: number }[]; topRecommendation: string };
       reviewText: string;
       locale: string;
       cardNames: string[];
@@ -600,10 +600,11 @@ export async function POST(request: Request) {
     // ----- Sinking funds -----
     if (plan.sinkingFunds?.length) {
       await supabase.from('sinking_funds').insert(
-        plan.sinkingFunds.map((f: { name: string; annualAmount: number; dueMonth: string }) => ({
+        plan.sinkingFunds.map((f: { name: string; annualAmount: number; monthlyProvision: number; dueMonth: string }) => ({
           household_id: householdId,
           name: f.name,
           annual_amount: f.annualAmount,
+          monthly_provision: f.monthlyProvision,
           due_month: monthNameToNumber(f.dueMonth),
           file_import_id: fileImportId,
         }))

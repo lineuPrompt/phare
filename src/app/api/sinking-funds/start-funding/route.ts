@@ -40,7 +40,7 @@ export async function POST() {
 
     const { data: funds } = await supabase
       .from('sinking_funds')
-      .select('id, monthly_provision, linked_account_id')
+      .select('id, monthly_provision, linked_account_id, active')
       .eq('household_id', householdId);
     if (!funds || funds.length === 0) {
       return NextResponse.json({ error: 'No sinking funds to fund' }, { status: 400 });
@@ -49,7 +49,9 @@ export async function POST() {
       return NextResponse.json({ error: 'Your sinking fund is already being funded' }, { status: 400 });
     }
 
-    const totalMonthlyProvision = funds.reduce(
+    // Excluded allocations (active=false) never count toward what gets funded.
+    const activeFunds = funds.filter((f) => f.active !== false);
+    const totalMonthlyProvision = activeFunds.reduce(
       (sum, f) => sum + (f.monthly_provision != null ? Number(f.monthly_provision) : 0), 0
     );
     if (!(totalMonthlyProvision > 0)) {

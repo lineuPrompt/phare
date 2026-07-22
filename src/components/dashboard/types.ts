@@ -15,6 +15,11 @@ export type SinkingFund = {
   annual_amount: number;
   monthly_provision: number;
   due_month: number | null;
+  // Soft exclude flag (2026-07-22) — false means this line is skipped from
+  // the buffer's contribution sum but kept on record, re-includable later.
+  // Always true on the dashboard's card (that route only ever fetches
+  // active rows); only the management page ever sees false.
+  active: boolean;
 };
 
 // The ONE real cash buffer funding every sinking fund (Build 4 Part A,

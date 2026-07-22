@@ -198,9 +198,9 @@ describe('GET /api/dashboard — sinking fund buffer', () => {
     expect(res.status).toBe(200);
     // Per-fund rows: informational only, no balance/fundedAlready fields.
     expect(json.sinkingFunds).toEqual([
-      { id: 'sf-1', name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3 },
-      { id: 'sf-2', name: 'Christmas', annual_amount: 3096, monthly_provision: 258, due_month: 12 },
-      { id: 'sf-3', name: 'Car registration', annual_amount: 1800, monthly_provision: 150, due_month: 6 },
+      { id: 'sf-1', name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, active: true },
+      { id: 'sf-2', name: 'Christmas', annual_amount: 3096, monthly_provision: 258, due_month: 12, active: true },
+      { id: 'sf-3', name: 'Car registration', annual_amount: 1800, monthly_provision: 150, due_month: 6, active: true },
     ]);
     // One real balance, computed once, shared by all three funds.
     expect(json.sinkingFundBuffer).toEqual({
@@ -246,7 +246,7 @@ describe('GET /api/dashboard — sinking fund buffer', () => {
 
     expect(res.status).toBe(200);
     expect(json.sinkingFunds).toEqual([
-      { id: 'sf-2', name: 'Christmas', annual_amount: 1200, monthly_provision: 100, due_month: 12 },
+      { id: 'sf-2', name: 'Christmas', annual_amount: 1200, monthly_provision: 100, due_month: 12, active: true },
     ]);
     expect(json.sinkingFundBuffer).toEqual({
       linkedAccountId: null,

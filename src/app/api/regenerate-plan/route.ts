@@ -113,7 +113,8 @@ export async function POST(request: Request) {
       supabase
         .from('sinking_funds')
         .select('name, annual_amount, monthly_provision, due_month, linked_account_id')
-        .eq('household_id', householdId),
+        .eq('household_id', householdId)
+        .eq('active', true),
     ]);
 
     const allTxns = allTxResult.data ?? [];

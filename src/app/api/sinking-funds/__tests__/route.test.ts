@@ -120,4 +120,31 @@ describe('GET /api/sinking-funds', () => {
       vi.useRealTimers();
     }
   });
+
+  it('an excluded allocation is still listed but drops out of totalMonthlyProvision', async () => {
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      sinking_funds: [{
+        data: [
+          { id: 'sf-1', name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, linked_account_id: null, active: true },
+          { id: 'sf-2', name: 'Christmas', annual_amount: 3096, monthly_provision: 258, due_month: 12, linked_account_id: null, active: false },
+        ],
+        error: null,
+      }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { GET } = await import('../route');
+    const res = await GET();
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.funds).toEqual([
+      { id: 'sf-1', name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, active: true },
+      { id: 'sf-2', name: 'Christmas', annual_amount: 3096, monthly_provision: 258, due_month: 12, active: false },
+    ]);
+    expect(json.buffer.totalMonthlyProvision).toBe(300);
+  });
 });
