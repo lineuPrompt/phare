@@ -357,7 +357,7 @@
     "perMonth": "/month",
     "perYear": "/year",
     "fundBalance": "Balance",
-    "startFunding": "Start funding this",
+    "startFunding": "Start your sinking fund — {amount}/month",
     "startingFunding": "Starting…",
     "startFundingError": "Couldn't start funding this — try again.",
     "payFromFund": "Pay this bill",

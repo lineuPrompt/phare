@@ -430,7 +430,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
     }
   });
 
-  it('sinking fund review truth: a fund with no real balance flows into the review as fundedAlready:false, and the planned-not-active hard rule is present', async () => {
+  it('sinking fund review truth: unlinked funds flow into the review as one shared sinkingFundBuffer.fundedAlready:false, and the planned-not-active hard rule is present', async () => {
     createMock
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
@@ -440,9 +440,15 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [{ data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
-      // No linked_account_id for this fund — the real, live shape today (no
-      // fund has ever been backed by an account/transfer).
-      sinking_funds: [{ data: [{ name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, linked_account_id: null }], error: null }],
+      // No linked_account_id for either fund — the real, live shape today
+      // (the shared buffer has never been started).
+      sinking_funds: [{
+        data: [
+          { name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, linked_account_id: null },
+          { name: 'Christmas', annual_amount: 3096, monthly_provision: 258, due_month: 12, linked_account_id: null },
+        ],
+        error: null,
+      }],
       recurring_items: [{ data: [], error: null }, { data: [], error: null }],
       conversations: [{ error: null }],
     });
@@ -459,11 +465,12 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
     expect(reviewPromptSent).toContain('"fundedAlready":false');
+    expect(reviewPromptSent).toContain('"totalMonthlyProvision":558'); // 300 + 258, summed once, never by the AI
     expect(reviewPromptSent).toContain('SINKING FUNDS');
     expect(reviewPromptSent).toContain('ZERO-BALANCE GOALS');
   });
 
-  it('sinking fund review truth: a fund with a real positive balance flows into the review as fundedAlready:true', async () => {
+  it('sinking fund review truth: every fund sharing a linked account with a real positive balance flows as ONE sinkingFundBuffer.fundedAlready:true', async () => {
     createMock
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
@@ -473,19 +480,25 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [
         { data: [], error: null }, // month-scoped headline figures
-        { // all-time fetch for the fund's own balance (linked account)
-          data: [{ amount: 900, type: 'transfer', account_id: 'fund-1', date: '2020-01-01' }],
+        { // all-time fetch for the shared buffer's balance
+          data: [{ amount: 900, type: 'transfer', account_id: 'buffer-1', date: '2020-01-01' }],
           error: null,
         },
       ],
       accounts: [{
         data: [
           { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null },
-          { id: 'fund-1', name: 'Property tax fund', type: 'savings', goal_target: null, goal_target_date: null, is_sinking_fund: true },
+          { id: 'buffer-1', name: 'Sinking funds', type: 'savings', goal_target: null, goal_target_date: null, is_sinking_fund: true },
         ],
         error: null,
       }],
-      sinking_funds: [{ data: [{ name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, linked_account_id: 'fund-1' }], error: null }],
+      sinking_funds: [{
+        data: [
+          { name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, linked_account_id: 'buffer-1' },
+          { name: 'Christmas', annual_amount: 3096, monthly_provision: 258, due_month: 12, linked_account_id: 'buffer-1' },
+        ],
+        error: null,
+      }],
       recurring_items: [{ data: [], error: null }, { data: [], error: null }],
       conversations: [{ error: null }],
     });
@@ -502,5 +515,8 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
     expect(reviewPromptSent).toContain('"fundedAlready":true');
+    // Neither individual fund entry carries its own fundedAlready any more —
+    // it is a single shared signal, not a per-fund one.
+    expect(reviewPromptSent).not.toMatch(/"dueMonth":3,"fundedAlready"/);
   });
 });

@@ -53,7 +53,7 @@ vi.mock('@/lib/supabase-server', () => ({
   createClient: vi.fn(),
 }));
 
-describe('POST /api/sinking-funds/[id]/start-funding', () => {
+describe('POST /api/sinking-funds/start-funding — collapses every provision into ONE buffer', () => {
   beforeEach(() => {
     vi.resetModules();
   });
@@ -62,7 +62,7 @@ describe('POST /api/sinking-funds/[id]/start-funding', () => {
     vi.useRealTimers();
   });
 
-  it('creates a flagged fund account, links the provision row, and materializes 12 months of transfers', async () => {
+  it('sums every fund\'s monthly_provision into one account + one recurring rule, and links every row to it', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-10T12:00:00'));
 
@@ -70,13 +70,20 @@ describe('POST /api/sinking-funds/[id]/start-funding', () => {
       users: [{ data: { household_id: 'hh1' }, error: null }],
       household_members: [{ data: { id: 'mem-1' }, error: null }],
       sinking_funds: [
-        { data: { id: 'sf-1', name: 'Property tax', monthly_provision: 300, linked_account_id: null }, error: null }, // lookup
+        {
+          data: [
+            { id: 'sf-1', monthly_provision: 300, linked_account_id: null }, // property tax
+            { id: 'sf-2', monthly_provision: 258, linked_account_id: null }, // Christmas
+            { id: 'sf-3', monthly_provision: 150, linked_account_id: null }, // car registration
+          ],
+          error: null,
+        },
         { error: null }, // link update
       ],
       accounts: [
-        { data: { id: 'chq-1' }, error: null }, // chequing lookup
-        { data: [{ sort_order: 2 }], error: null }, // existing accounts for sort_order
-        { data: { id: 'fund-acct-1', name: 'Property tax', type: 'savings' }, error: null }, // new account insert
+        { data: { id: 'chq-1' }, error: null },      // chequing lookup
+        { data: [{ sort_order: 2 }], error: null },  // existing accounts for sort_order
+        { data: { id: 'buffer-1' }, error: null },   // new account insert
       ],
       recurring_items: [{ data: { id: 'ri-1' }, error: null }],
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
@@ -86,97 +93,84 @@ describe('POST /api/sinking-funds/[id]/start-funding', () => {
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
     const { POST } = await import('../route');
-    const res = await POST(
-      new Request('http://localhost/api/sinking-funds/sf-1/start-funding', { method: 'POST' }),
-      { params: Promise.resolve({ id: 'sf-1' }) }
-    );
+    const res = await POST();
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(json).toEqual({ created: true, accountId: 'fund-acct-1', recurringItemId: 'ri-1', materialized: 12 });
+    expect(json).toEqual({
+      created: true, accountId: 'buffer-1', recurringItemId: 'ri-1', materialized: 12, totalMonthlyProvision: 708,
+    });
 
     const accountInsert = calls.find((c) => c.table === 'accounts' && c.method === 'insert');
     expect(accountInsert!.args[0]).toMatchObject({
-      household_id: 'hh1', name: 'Property tax', type: 'savings', is_sinking_fund: true, sort_order: 3,
+      household_id: 'hh1', name: 'Sinking funds', type: 'savings', is_sinking_fund: true, sort_order: 3,
     });
 
+    // Every row gets the SAME account — no per-fund .eq('id', ...) filter,
+    // update targets the whole household's sinking_funds set at once.
     const linkUpdate = calls.find((c) => c.table === 'sinking_funds' && c.method === 'update');
-    expect(linkUpdate!.args[0]).toEqual({ linked_account_id: 'fund-acct-1' });
+    expect(linkUpdate!.args[0]).toEqual({ linked_account_id: 'buffer-1' });
 
     const recurringInsert = calls.find((c) => c.table === 'recurring_items' && c.method === 'insert');
     expect(recurringInsert!.args[0]).toMatchObject({
-      destination_account_id: 'fund-acct-1', account_id: 'chq-1', amount: 300, type: 'transfer', cadence: 'monthly',
+      destination_account_id: 'buffer-1', account_id: 'chq-1', amount: 708, type: 'transfer', cadence: 'monthly',
     });
 
     expect(rpcCalls).toHaveLength(12);
-    expect(rpcCalls[0][1]).toMatchObject({ p_chequing_id: 'chq-1', p_goal_id: 'fund-acct-1', p_amount: 300 });
+    expect(rpcCalls[0][1]).toMatchObject({ p_chequing_id: 'chq-1', p_goal_id: 'buffer-1', p_amount: 708 });
   });
 
-  it('rejects a fund that is already linked (already being funded)', async () => {
+  it('rejects when the buffer is already started (any row already linked)', async () => {
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
       household_members: [{ data: { id: 'mem-1' }, error: null }],
-      sinking_funds: [
-        { data: { id: 'sf-1', name: 'Property tax', monthly_provision: 300, linked_account_id: 'already-linked' }, error: null },
-      ],
+      sinking_funds: [{
+        data: [
+          { id: 'sf-1', monthly_provision: 300, linked_account_id: 'buffer-1' },
+          { id: 'sf-2', monthly_provision: 258, linked_account_id: 'buffer-1' },
+        ],
+        error: null,
+      }],
     });
 
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
     const { POST } = await import('../route');
-    const res = await POST(
-      new Request('http://localhost/api/sinking-funds/sf-1/start-funding', { method: 'POST' }),
-      { params: Promise.resolve({ id: 'sf-1' }) }
-    );
+    const res = await POST();
     expect(res.status).toBe(400);
   });
 
-  it('404s for a fund that does not belong to the caller\'s household', async () => {
+  it('rejects when there are no sinking funds at all', async () => {
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
       household_members: [{ data: { id: 'mem-1' }, error: null }],
-      sinking_funds: [{ data: null, error: null }],
+      sinking_funds: [{ data: [], error: null }],
     });
 
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
     const { POST } = await import('../route');
-    const res = await POST(
-      new Request('http://localhost/api/sinking-funds/sf-1/start-funding', { method: 'POST' }),
-      { params: Promise.resolve({ id: 'sf-1' }) }
-    );
-    expect(res.status).toBe(404);
+    const res = await POST();
+    expect(res.status).toBe(400);
   });
 
-  it('a fund with no stated monthly provision still creates + links the account, with no recurring rule', async () => {
-    const { client, calls } = makeSupabaseMock({
+  it('rejects when every fund has a zero/null provision (nothing to sum)', async () => {
+    const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
       household_members: [{ data: { id: 'mem-1' }, error: null }],
-      sinking_funds: [
-        { data: { id: 'sf-1', name: 'Christmas', monthly_provision: null, linked_account_id: null }, error: null },
-        { error: null },
-      ],
-      accounts: [
-        { data: { id: 'chq-1' }, error: null },
-        { data: [], error: null },
-        { data: { id: 'fund-acct-1', name: 'Christmas', type: 'savings' }, error: null },
-      ],
+      sinking_funds: [{
+        data: [{ id: 'sf-1', monthly_provision: null, linked_account_id: null }],
+        error: null,
+      }],
     });
 
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
     const { POST } = await import('../route');
-    const res = await POST(
-      new Request('http://localhost/api/sinking-funds/sf-1/start-funding', { method: 'POST' }),
-      { params: Promise.resolve({ id: 'sf-1' }) }
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json).toEqual({ created: true, accountId: 'fund-acct-1', recurringItemId: null, materialized: 0 });
-    expect(calls.find((c) => c.table === 'recurring_items')).toBeUndefined();
+    const res = await POST();
+    expect(res.status).toBe(400);
   });
 });

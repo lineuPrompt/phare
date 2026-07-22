@@ -325,33 +325,38 @@ export async function GET(request: Request) {
     const review            = messages.find((msg) => msg.type === 'monthly_review')?.content ?? null;
     const topRecommendation = messages.find((msg) => msg.type === 'top_recommendation')?.content ?? null;
 
-    // Sinking funds: real balance is derived from the linked account's own
-    // transaction ledger (Build 4 Part 2, 2026-07-21) — never a stored
-    // current_balance column. linked_account_id null means the provision is
-    // still dead (never started); fundedAlready mirrors the same real-vs-
-    // planned signal goals already use (balance > 0), not just "has an
-    // account", so the review's forward-looking framing stays consistent
-    // for a fund whose first contribution hasn't posted yet either.
+    // Sinking funds now share ONE cash buffer (Build 4 Part A, 2026-07-21
+    // revision) — no family runs seven separate sinking accounts. Every
+    // sinking_funds row's linked_account_id points at the SAME account once
+    // started, so the per-fund rows stay display-only (name/annual amount/
+    // monthly provision — "what this slice of the buffer is for") while the
+    // one real balance lives on sinkingFundBuffer, computed once from
+    // whichever account any row is linked to (they're all the same account,
+    // by construction of POST /api/sinking-funds/start-funding).
     type SinkingFundRow = {
       id: string; name: string; annual_amount: number; monthly_provision: number;
       due_month: number | null; linked_account_id: string | null;
     };
     const sinkingFundRows = (sfResult.data as SinkingFundRow[] | null) ?? [];
-    const sinkingFunds = sinkingFundRows.map((sf) => {
-      const balance = sf.linked_account_id
-        ? computeGoalBalance(goalTxData, sf.linked_account_id, todayForGoalBalance)
-        : 0;
-      return {
-        id: sf.id,
-        name: sf.name,
-        annual_amount: Number(sf.annual_amount),
-        monthly_provision: Number(sf.monthly_provision),
-        due_month: sf.due_month,
-        current_balance: balance,
-        fundedAlready: balance > 0,
-        linkedAccountId: sf.linked_account_id,
-      };
-    });
+    const sinkingFunds = sinkingFundRows.map((sf) => ({
+      id: sf.id,
+      name: sf.name,
+      annual_amount: Number(sf.annual_amount),
+      monthly_provision: Number(sf.monthly_provision),
+      due_month: sf.due_month,
+    }));
+    const bufferAccountId = sinkingFundRows.find((sf) => sf.linked_account_id)?.linked_account_id ?? null;
+    const bufferBalance = bufferAccountId
+      ? computeGoalBalance(goalTxData, bufferAccountId, todayForGoalBalance)
+      : 0;
+    const sinkingFundBuffer = {
+      linkedAccountId: bufferAccountId,
+      balance: bufferBalance,
+      fundedAlready: bufferBalance > 0,
+      totalMonthlyProvision: Math.round(
+        sinkingFundRows.reduce((sum, sf) => sum + Number(sf.monthly_provision ?? 0), 0) * 100
+      ) / 100,
+    };
 
     return NextResponse.json({
       hasPlan: true,
@@ -361,6 +366,7 @@ export async function GET(request: Request) {
       summary,
       categories,
       sinkingFunds,
+      sinkingFundBuffer,
       goalAccounts,
       review,
       topRecommendation,

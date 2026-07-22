@@ -5,22 +5,33 @@ export type DashboardSummary = {
   netCashFlow: number;
 };
 
+// Informational only (Build 4 Part A, 2026-07-21 revision) — one shared
+// buffer funds every sinking fund now, so a per-fund balance/fundedAlready
+// would just repeat the SAME shared number on every row. See SinkingFundBuffer
+// for the one real balance.
 export type SinkingFund = {
   id: string;
   name: string;
   annual_amount: number;
   monthly_provision: number;
   due_month: number | null;
-  // Real balance derived from the linked account's ledger — 0 when the
-  // fund has never been started (Build 4 Part 2, 2026-07-21).
-  current_balance: number;
-  // Mirrors the goals' real-vs-planned signal: true only once real money
-  // has actually accumulated (current_balance > 0), not just "has an
-  // account" — a fund whose first contribution hasn't posted yet still
-  // reads as planned, not active.
-  fundedAlready: boolean;
-  // null = still a dead provision, never started.
+};
+
+// The ONE real cash buffer funding every sinking fund (Build 4 Part A,
+// 2026-07-21). No family runs seven separate sinking accounts — every
+// sinking_funds row shares this same account once started.
+export type SinkingFundBuffer = {
+  // null = not started yet — no account/recurring contribution exists.
   linkedAccountId: string | null;
+  // Real balance derived from the linked account's ledger — 0 until started.
+  balance: number;
+  // Mirrors the goals' real-vs-planned signal: true only once real money has
+  // actually accumulated (balance > 0), not just "has an account" — a buffer
+  // whose first contribution hasn't posted yet still reads as planned.
+  fundedAlready: boolean;
+  // Sum of every sinking fund's monthly_provision — what "Start your sinking
+  // fund" would contribute (or already does) per month.
+  totalMonthlyProvision: number;
 };
 
 export type GoalTransfer = {
@@ -77,6 +88,7 @@ export type DashboardData = {
   summary?: DashboardSummary;
   categories?: { name: string; type: string; amount: number }[];
   sinkingFunds?: SinkingFund[];
+  sinkingFundBuffer?: SinkingFundBuffer;
   goalAccounts?: GoalAccount[];
   review?: string | null;
   topRecommendation?: string | null;

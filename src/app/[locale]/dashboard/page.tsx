@@ -191,9 +191,10 @@ export default function DashboardPage() {
               {data.goalAccounts !== undefined && (
                 <GoalsCard goals={data.goalAccounts} locale={locale} />
               )}
-              {data.sinkingFunds && (
+              {data.sinkingFunds && data.sinkingFundBuffer && (
                 <SinkingFundsCard
                   funds={data.sinkingFunds}
+                  buffer={data.sinkingFundBuffer}
                   locale={locale}
                   onFunded={() => loadDashboard(calendarMonth)}
                 />

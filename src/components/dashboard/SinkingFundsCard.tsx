@@ -2,28 +2,31 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { SinkingFund, formatCurrency, monthName } from './types';
+import { SinkingFund, SinkingFundBuffer, formatCurrency, monthName } from './types';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 
 type Category = { id: string; name: string };
 
 export default function SinkingFundsCard({
   funds,
+  buffer,
   locale,
   onFunded,
 }: {
   funds: SinkingFund[];
+  buffer: SinkingFundBuffer;
   locale: string;
-  // Called after a successful "Start funding this" or "Pay this bill" so the
-  // parent can reload the dashboard and pick up the fund's real balance.
+  // Called after a successful "Start your sinking fund" or "Pay this bill"
+  // so the parent can reload the dashboard and pick up the real balance.
   onFunded: () => void;
 }) {
   const t = useTranslations('dashboard');
   const { today } = useBusinessToday();
-  const [startingId, setStartingId] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // "Pay this bill" mini-form state — one fund open at a time.
+  // "Pay this bill" mini-form state — one fund open at a time. Money always
+  // comes from the ONE shared buffer account, never a per-fund account.
   const [payingId, setPayingId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState('');
   const [payDate, setPayDate] = useState('');
@@ -34,17 +37,17 @@ export default function SinkingFundsCard({
 
   if (!funds.length) return null;
 
-  const handleStartFunding = async (id: string) => {
-    setStartingId(id);
+  const handleStartFunding = async () => {
+    setStarting(true);
     setError(null);
     try {
-      const res = await fetch(`/api/sinking-funds/${id}/start-funding`, { method: 'POST' });
+      const res = await fetch('/api/sinking-funds/start-funding', { method: 'POST' });
       if (!res.ok) throw new Error('failed');
       onFunded();
     } catch {
       setError(t('startFundingError'));
     } finally {
-      setStartingId(null);
+      setStarting(false);
     }
   };
 
@@ -71,7 +74,7 @@ export default function SinkingFundsCard({
   };
 
   const submitPay = async (fund: SinkingFund) => {
-    if (!fund.linkedAccountId) return;
+    if (!buffer.linkedAccountId) return;
     if (!payAmount || !payDate || !payCategoryId) {
       setPayError(t('payFromFundMissingFields'));
       return;
@@ -87,7 +90,7 @@ export default function SinkingFundsCard({
           description: fund.name,
           categoryId: payCategoryId,
           amount: Number(payAmount),
-          accountId: fund.linkedAccountId,
+          accountId: buffer.linkedAccountId,
           type: 'expense',
         }),
       });
@@ -103,9 +106,25 @@ export default function SinkingFundsCard({
 
   return (
     <div className="rounded-2xl bg-white p-8" style={{ border: '1px solid #E5E7EB' }}>
-      <h2 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>
-        {t('sinkingFunds')}
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold" style={{ color: '#0F2044' }}>
+          {t('sinkingFunds')}
+        </h2>
+        {buffer.linkedAccountId ? (
+          <p className="text-sm font-semibold" style={{ color: buffer.fundedAlready ? '#16A34A' : '#6B7280' }}>
+            {t('fundBalance')}: {formatCurrency(buffer.balance, locale)}
+          </p>
+        ) : (
+          <button
+            onClick={handleStartFunding}
+            disabled={starting}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60"
+            style={{ background: '#F0FDFD', color: '#2ABFBF' }}
+          >
+            {starting ? t('startingFunding') : t('startFunding', { amount: formatCurrency(buffer.totalMonthlyProvision, locale) })}
+          </button>
+        )}
+      </div>
       {error && (
         <p className="text-sm mb-3" style={{ color: '#DC2626' }}>{error}</p>
       )}
@@ -118,27 +137,12 @@ export default function SinkingFundsCard({
                 <p className="text-sm" style={{ color: '#6B7280' }}>
                   {monthName(fund.due_month, locale)}{fund.due_month ? ' · ' : ''}{formatCurrency(fund.annual_amount, locale)}{t('perYear')}
                 </p>
-                {fund.linkedAccountId && (
-                  <p className="text-sm font-medium mt-1" style={{ color: fund.fundedAlready ? '#16A34A' : '#6B7280' }}>
-                    {t('fundBalance')}: {formatCurrency(fund.current_balance, locale)}
-                  </p>
-                )}
               </div>
               <div className="text-right shrink-0 ml-4">
                 <p className="font-bold" style={{ color: '#2ABFBF' }}>
                   {formatCurrency(fund.monthly_provision, locale)}{t('perMonth')}
                 </p>
-                {!fund.linkedAccountId && (
-                  <button
-                    onClick={() => handleStartFunding(fund.id)}
-                    disabled={startingId === fund.id}
-                    className="mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60"
-                    style={{ background: '#F0FDFD', color: '#2ABFBF' }}
-                  >
-                    {startingId === fund.id ? t('startingFunding') : t('startFunding')}
-                  </button>
-                )}
-                {fund.linkedAccountId && payingId !== fund.id && (
+                {buffer.linkedAccountId && payingId !== fund.id && (
                   <button
                     onClick={() => openPayForm(fund)}
                     className="mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg"
@@ -150,7 +154,7 @@ export default function SinkingFundsCard({
               </div>
             </div>
 
-            {fund.linkedAccountId && payingId === fund.id && (
+            {buffer.linkedAccountId && payingId === fund.id && (
               <div className="mt-3 p-3 rounded-xl grid grid-cols-1 sm:grid-cols-4 gap-2" style={{ background: '#F9FAFB' }}>
                 <input
                   type="date"

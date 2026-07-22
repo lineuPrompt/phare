@@ -357,7 +357,7 @@
     "perMonth": "/mois",
     "perYear": "/an",
     "fundBalance": "Solde",
-    "startFunding": "Commencer à alimenter ce fonds",
+    "startFunding": "Démarrer votre fonds de prévoyance — {amount}/mois",
     "startingFunding": "Démarrage…",
     "startFundingError": "Impossible de démarrer ce fonds — réessayez.",
     "payFromFund": "Payer cette facture",

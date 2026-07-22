@@ -5,23 +5,25 @@ import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { materializeTransferOccurrences } from '@/lib/recurringTransferHelpers';
 
 /**
- * POST /api/sinking-funds/[id]/start-funding
+ * POST /api/sinking-funds/start-funding
  *
- * Turns a dead sinking-fund provision into a real cash buffer (Build 4
- * Part 2, 2026-07-21): creates a 'savings' account flagged is_sinking_fund
- * (reusing GOAL_ACCOUNT_TYPES machinery — a fund is a transfer destination
- * exactly like a real savings goal, no new account-type/RPC change needed),
- * links the sinking_funds row to it, and sets up a recurring monthly
- * transfer at the fund's own provision amount via the SAME materialization
- * mechanism recurring contributions already use (create_transfer RPC, one
- * call per occurrence). Nothing here is a parallel store — the fund's
- * balance going forward is just computeGoalBalance() on this account's own
- * ledger, same as every goal/debt.
+ * Turns EVERY dead sinking-fund provision into ONE real cash buffer (Build 4
+ * Part A, 2026-07-21 revision). No family runs seven separate sinking
+ * accounts — this sums every provision's monthly_provision into a single
+ * recurring contribution, into a single 'savings' account flagged
+ * is_sinking_fund, and links every sinking_funds row to that SAME account
+ * (linked_account_id is shared across rows on purpose — the per-fund rows
+ * stay informational display only: "$258/mo of the $708 total", never a
+ * second account or a second contribution). "Pay this bill" (existing
+ * per-fund flow, unchanged) still draws from whichever fund's row the family
+ * clicks, using this one shared account as the source.
+ *
+ * Reuses the exact same account-creation and create_transfer materialization
+ * machinery the (now-removed) per-fund version used — only the amount fed
+ * into it changes, from one fund's own provision to the summed total.
  */
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST() {
   try {
-    const { id: fundId } = await params;
-
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -36,15 +38,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .eq('household_id', householdId).eq('user_id', user.id).single();
     if (!member) return NextResponse.json({ error: 'No member record' }, { status: 400 });
 
-    const { data: fund } = await supabase
+    const { data: funds } = await supabase
       .from('sinking_funds')
-      .select('id, name, monthly_provision, linked_account_id')
-      .eq('id', fundId)
-      .eq('household_id', householdId)
-      .single();
-    if (!fund) return NextResponse.json({ error: 'Sinking fund not found' }, { status: 404 });
-    if (fund.linked_account_id) {
-      return NextResponse.json({ error: 'This fund is already being funded' }, { status: 400 });
+      .select('id, monthly_provision, linked_account_id')
+      .eq('household_id', householdId);
+    if (!funds || funds.length === 0) {
+      return NextResponse.json({ error: 'No sinking funds to fund' }, { status: 400 });
+    }
+    if (funds.some((f) => f.linked_account_id)) {
+      return NextResponse.json({ error: 'Your sinking fund is already being funded' }, { status: 400 });
+    }
+
+    const totalMonthlyProvision = funds.reduce(
+      (sum, f) => sum + (f.monthly_provision != null ? Number(f.monthly_provision) : 0), 0
+    );
+    if (!(totalMonthlyProvision > 0)) {
+      return NextResponse.json({ error: 'No provision amount to fund' }, { status: 400 });
     }
 
     const { data: chequing } = await supabase
@@ -67,39 +76,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .from('accounts')
       .insert({
         household_id: householdId,
-        name: fund.name,
+        name: 'Sinking funds',
         type: 'savings',
         is_sinking_fund: true,
         sort_order: nextSortOrder,
       })
-      .select('id, name, type')
+      .select('id')
       .single();
     if (acctError || !account) {
       console.error('Sinking fund account create error:', acctError);
       return NextResponse.json({ error: acctError?.message || 'Failed to create fund account' }, { status: 500 });
     }
 
+    // Every sinking_funds row shares this one account — the whole point of
+    // the collapse (one balance, not one per fund).
     const { error: linkError } = await supabase
       .from('sinking_funds')
       .update({ linked_account_id: account.id })
-      .eq('id', fundId)
       .eq('household_id', householdId);
     if (linkError) {
       console.error('Sinking fund link error:', linkError);
       return NextResponse.json({ error: linkError.message || 'Fund account created but linking failed' }, { status: 500 });
     }
 
-    const provision = fund.monthly_provision != null ? Number(fund.monthly_provision) : 0;
-    if (!(provision > 0)) {
-      // No recurring contribution to set up (a fund with no stated monthly
-      // provision) — the account exists and is linked; contributions can
-      // still be made manually from Goals/Timeline like any goal account.
-      return NextResponse.json({ created: true, accountId: account.id, recurringItemId: null, materialized: 0 });
-    }
-
     const timezone = await getHouseholdTimezone(supabase, householdId);
     const today = businessToday(timezone);
-    const monthStart = `${today.slice(0, 7)}-01`;
 
     const { data: item, error: itemError } = await supabase
       .from('recurring_items')
@@ -109,8 +110,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         category_id: null,
         account_id: chequing.id,
         destination_account_id: account.id,
-        description: fund.name,
-        amount: provision,
+        description: 'Sinking funds',
+        amount: totalMonthlyProvision,
         type: 'transfer',
         cadence: 'monthly',
         anchor_date: today,
@@ -132,8 +133,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       memberId: member.id,
       chequingId: chequing.id,
       destinationId: account.id,
-      amount: provision,
-      description: fund.name,
+      amount: totalMonthlyProvision,
+      description: 'Sinking funds',
       recurringItemId: item.id,
       dates,
     });
@@ -145,9 +146,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       );
     }
 
-    return NextResponse.json({ created: true, accountId: account.id, recurringItemId: item.id, materialized });
+    return NextResponse.json({ created: true, accountId: account.id, recurringItemId: item.id, materialized, totalMonthlyProvision });
   } catch (error) {
     console.error('Start-funding POST error:', error);
-    return NextResponse.json({ error: 'Failed to start funding this sinking fund' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to start funding your sinking fund' }, { status: 500 });
   }
 }

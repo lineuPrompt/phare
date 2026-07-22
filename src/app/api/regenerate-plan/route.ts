@@ -326,27 +326,28 @@ export async function POST(request: Request) {
     const aiPart = JSON.parse(planText.replace(/```json|```/g, '').trim());
 
     // Sinking funds are DB-derived (real rows) or empty — never AI-invented.
-    // aiPart is not consulted for them. fundedAlready reflects the fund's
-    // REAL ledger balance (Build 4 Part 2, 2026-07-21) — computed from its
-    // linked_account_id via the same computeGoalBalance every goal uses, not
-    // a stored column. A fund with no linked account yet is always false;
-    // once linked, it's true only after real money has actually accumulated
-    // (balance > 0), matching the same real-vs-planned signal goals use —
-    // a fund whose first contribution hasn't posted yet still reads planned.
-    const finalSinkingFunds = sinkingFunds.length > 0
-      ? sinkingFunds.map((sf) => {
-          const balance = sf.linked_account_id
-            ? computeGoalBalance(goalTxData, sf.linked_account_id, today)
-            : 0;
-          return {
-            name: sf.name,
-            annualAmount: Number(sf.annual_amount),
-            monthlyProvision: Number(sf.monthly_provision),
-            dueMonth: sf.due_month ?? '',
-            fundedAlready: balance > 0,
-          };
-        })
-      : [];
+    // aiPart is not consulted for them. Every row now shares ONE cash buffer
+    // (Build 4 Part A, 2026-07-21 revision) — no family runs seven separate
+    // sinking accounts — so the per-fund entries stay display-only
+    // (name/amounts/due month) and the one real fundedAlready signal lives
+    // on sinkingFundBuffer below, computed once from whichever account any
+    // row is linked to (they're all the same account, by construction).
+    const finalSinkingFunds = sinkingFunds.map((sf) => ({
+      name: sf.name,
+      annualAmount: Number(sf.annual_amount),
+      monthlyProvision: Number(sf.monthly_provision),
+      dueMonth: sf.due_month ?? '',
+    }));
+    const bufferAccountId = sinkingFunds.find((sf) => sf.linked_account_id)?.linked_account_id ?? null;
+    const bufferBalance = bufferAccountId
+      ? computeGoalBalance(goalTxData, bufferAccountId, today)
+      : 0;
+    const sinkingFundBuffer = {
+      fundedAlready: bufferBalance > 0,
+      totalMonthlyProvision: Math.round(
+        sinkingFunds.reduce((sum, sf) => sum + Number(sf.monthly_provision ?? 0), 0) * 100
+      ) / 100,
+    };
 
     const classMap = new Map<string, { category: string; isFixed: boolean }>();
     for (const lc of (aiPart.lineClassifications ?? [])) {
@@ -373,6 +374,7 @@ export async function POST(request: Request) {
       monthlyBudget: { ...monthlyBudget, categories: classifiedCategories },
       seedCategories: SEED_CATEGORIES,
       sinkingFunds: finalSinkingFunds,
+      sinkingFundBuffer,
       // Code-computed from real goal accounts — never AI-emitted.
       debtPayoff: computedDebtPayoff,
       goals: computedGoals,
@@ -410,11 +412,14 @@ export async function POST(request: Request) {
       `forward-looking — e.g. "once your $X/month contribution begins" — never as if saving is already underway, ` +
       `even when "onTrack" is true (onTrack only means the required contribution fits their capacity, not that ` +
       `any money has moved yet).\n` +
-      `- SINKING FUNDS: each entry in "sinkingFunds" (if any) carries a "fundedAlready" boolean. When it is false ` +
-      `— meaning no account or transfer backs it yet — describe it as a plan or recommendation only: "your plan ` +
-      `sets aside $X/month for {name}" or "recommended: $X/month toward {name} so the {month} bill doesn't catch ` +
-      `you off guard." NEVER say "you're setting aside $X/month" or "you're saving $X/month" for that fund unless ` +
-      `fundedAlready is true.\n` +
+      `- SINKING FUNDS: every entry in "sinkingFunds" shares ONE cash buffer — "sinkingFundBuffer.fundedAlready" is ` +
+      `the single real signal for ALL of them (never treat one fund as funded and another as not; there is only one ` +
+      `account). When fundedAlready is false — meaning the buffer hasn't been started yet — describe each fund as a ` +
+      `plan or recommendation only: "your plan sets aside $X/month for {name}" or "recommended: $X/month toward ` +
+      `{name} so the {month} bill doesn't catch you off guard." NEVER say "you're setting aside $X/month" or ` +
+      `"you're saving $X/month" for any fund unless sinkingFundBuffer.fundedAlready is true. You may mention ` +
+      `"sinkingFundBuffer.totalMonthlyProvision" as the combined monthly amount across every fund, but never sum ` +
+      `the individual funds yourself — that figure is already given.\n` +
       `- WINDFALLS: if "windfalls" is non-empty, you MUST explicitly acknowledge each one by name and amount, ` +
       `framed as a one-time timing event that will NOT repeat next month (e.g. "${reviewMonthName} included a ` +
       `third biweekly paycheque — $X extra that won't repeat next month") — never described as a new normal ` +
