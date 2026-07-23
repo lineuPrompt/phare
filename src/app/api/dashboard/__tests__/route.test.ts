@@ -68,6 +68,20 @@ vi.mock('@/lib/bridgeHelpers', async (importOriginal) => {
   };
 });
 
+// businessToday defaults to the REAL implementation (wrapped in vi.fn so
+// individual tests can pin it via mockReturnValue) — needed because the
+// "already-closed cycle" tests below must control what "today" is relative
+// to a fixed cycle window, and the real wall-clock date would make those
+// assertions flaky. Every other test in this file is unaffected: they never
+// override it, so businessToday behaves exactly as it always did.
+vi.mock('@/lib/dateHelpers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/dateHelpers')>();
+  return {
+    ...actual,
+    businessToday: vi.fn(actual.businessToday),
+  };
+});
+
 describe('GET /api/dashboard — plan existence gate', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -370,6 +384,9 @@ describe('GET /api/dashboard — card envelope remainders for the projected mont
 
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const { businessToday } = await import('@/lib/dateHelpers');
+    // Before the cycle's close date (2026-07-15) — still in progress.
+    (businessToday as ReturnType<typeof vi.fn>).mockReturnValue('2026-07-10');
 
     const { GET } = await import('../route');
     const res = await GET(new Request('http://localhost/api/dashboard?month=2026-08'));
@@ -377,7 +394,56 @@ describe('GET /api/dashboard — card envelope remainders for the projected mont
 
     expect(res.status).toBe(200);
     expect(json.cardEnvelopeRemainders).toEqual([
-      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 200, remaining: 300, unbudgeted: false },
+      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 200, remaining: 300, unbudgeted: false, closed: false },
+    ]);
+  });
+
+  it('an already-closed cycle contributes zero remaining even though it finished under budget', async () => {
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh5b', full_name: 'Someone' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      budgets: [
+        { data: null, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [{
+        data: [
+          { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null, payment_day: null, statement_close_day: null },
+          { id: 'card-1', name: 'Visa', type: 'credit_card', goal_target: null, goal_target_date: null, payment_day: 5, statement_close_day: 15 },
+        ],
+        error: null,
+      }],
+      account_balance_anchors: [{ data: null, error: null }],
+      household_members: [{ data: { id: 'member-1' }, error: null }],
+      monthly_goals: [{ data: [{ account_id: 'card-1', card_goal: 500, month: '2026-05-01' }], error: null }],
+      transactions: [
+        // card-1's June cycle (close day 15 → 2026-05-16..2026-06-15) — real, final spend.
+        { data: [{ account_id: 'card-1', date: '2026-06-10', type: 'expense', amount: 100 }], error: null },
+        { data: [], error: null }, // actuals-month headline figures (viewed month: 2026-07)
+      ],
+      sinking_funds: [{ data: [], error: null }],
+      conversations: [{ data: null, error: null }],
+      recurring_items: [
+        { count: 0, error: null },
+        { count: 0, error: null },
+      ],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const { businessToday } = await import('@/lib/dateHelpers');
+    // Well after the June cycle's 2026-06-15 close date — nothing more can land in it.
+    (businessToday as ReturnType<typeof vi.fn>).mockReturnValue('2026-07-20');
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('http://localhost/api/dashboard?month=2026-07'));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.cardEnvelopeRemainders).toEqual([
+      // budget(500) - actual(100) would be 400 if still open — closed forces it to 0.
+      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 100, remaining: 0, unbudgeted: false, closed: true },
     ]);
   });
 
@@ -414,6 +480,8 @@ describe('GET /api/dashboard — card envelope remainders for the projected mont
 
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const { businessToday } = await import('@/lib/dateHelpers');
+    (businessToday as ReturnType<typeof vi.fn>).mockReturnValue('2026-07-10');
 
     const { GET } = await import('../route');
     const res = await GET(new Request('http://localhost/api/dashboard?month=2026-08'));
@@ -421,7 +489,7 @@ describe('GET /api/dashboard — card envelope remainders for the projected mont
 
     expect(res.status).toBe(200);
     expect(json.cardEnvelopeRemainders).toEqual([
-      { cardId: 'card-1', cardName: 'Visa', budget: null, actual: 75, remaining: 0, unbudgeted: true },
+      { cardId: 'card-1', cardName: 'Visa', budget: null, actual: 75, remaining: 0, unbudgeted: true, closed: false },
     ]);
   });
 });

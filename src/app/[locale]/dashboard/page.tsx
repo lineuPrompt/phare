@@ -241,30 +241,31 @@ export default function DashboardPage() {
 
             {dipWindowEnd && <DipTile dip={dip} windowEndDate={dipWindowEnd} locale={locale} />}
 
-            {projectedMonthEnd !== null && data?.cardEnvelopeRemainders && (
-              <ProjectedBalanceTile
-                projectedMonthEnd={projectedMonthEnd}
-                remainders={data.cardEnvelopeRemainders}
-                locale={locale}
-              />
-            )}
-
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {data.topRecommendation && <TopPriorityCard text={data.topRecommendation} />}
-              {data.summary && (
-                <SnapshotCard
-                  summary={data.summary}
-                  locale={locale}
-                  month={displayMonth}
-                  onPrevMonth={handlePrevMonth}
-                  onNextMonth={handleNextMonth}
-                  isMaxMonth={isMaxMonth}
-                  isMinMonth={isMinMonth}
-                  loading={snapshotLoading}
-                  unanchoredIncomeCount={data.unanchoredIncomeCount}
-                  unanchoredExpenseCount={data.unanchoredExpenseCount}
-                />
-              )}
+              <div className="space-y-6">
+                {data.summary && (
+                  <SnapshotCard
+                    summary={data.summary}
+                    locale={locale}
+                    month={displayMonth}
+                    onPrevMonth={handlePrevMonth}
+                    onNextMonth={handleNextMonth}
+                    isMaxMonth={isMaxMonth}
+                    isMinMonth={isMinMonth}
+                    loading={snapshotLoading}
+                    unanchoredIncomeCount={data.unanchoredIncomeCount}
+                    unanchoredExpenseCount={data.unanchoredExpenseCount}
+                  />
+                )}
+                {projectedMonthEnd !== null && data?.cardEnvelopeRemainders && (
+                  <ProjectedBalanceTile
+                    projectedMonthEnd={projectedMonthEnd}
+                    remainders={data.cardEnvelopeRemainders}
+                    locale={locale}
+                  />
+                )}
+              </div>
               {data.goalAccounts !== undefined && (
                 <GoalsCard goals={data.goalAccounts} locale={locale} />
               )}

@@ -77,6 +77,7 @@ export async function GET(request: Request) {
     // results this response wouldn't use, never a parallel computation.
     const snapshotOnly = url.searchParams.get('snapshotOnly') === '1';
     const timezone = await getHouseholdTimezone(supabase, householdId);
+    const today = businessToday(timezone);
     let actualsMonth: string;
     if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
       actualsMonth = `${monthParam}-01`;
@@ -217,6 +218,7 @@ export async function GET(request: Request) {
         cardBudgets,
         transactions: (cycleTxns ?? []) as { account_id: string; date: string; type: string; amount: number }[],
         cycleMonth: spendMonth,
+        today,
       });
     }
 
@@ -320,7 +322,7 @@ export async function GET(request: Request) {
       goalTxData = data ?? [];
     }
 
-    const todayForGoalBalance = businessToday(timezone);
+    const todayForGoalBalance = today;
 
     // Part B.6: the code-computed on-track/debt-payoff verdict for each goal
     // renders on the dashboard adjacent to the AI review's prose (ReviewCard

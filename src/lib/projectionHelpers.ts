@@ -32,6 +32,16 @@
  * that recorded spend twice. Only the UNSPENT remainder — money that could
  * still be charged before the cycle closes but isn't in the ledger yet — is
  * subtracted here.
+ *
+ * ALREADY-CLOSED CYCLES
+ * ----------------------
+ * If the statement cycle's window has already ended as of today
+ * (window.end < today), no further spend can ever land in it — the actual
+ * figure recorded is final, not a snapshot of an in-progress cycle. Treating
+ * "under budget" as still-spendable headroom there would be projecting money
+ * that can no longer be spent. Remaining is forced to 0 for a closed cycle
+ * regardless of budget vs. actual (this is on top of, not instead of, the
+ * existing over-budget-→-0 rule).
  */
 
 import { statementCycleWindow } from './dateHelpers';
@@ -49,31 +59,40 @@ export type CardCycleRemainder = {
   budget: number | null;
   // Net spend (expense minus refund) already recorded in the cycle window.
   actual: number;
-  // max(0, budget − actual) — 0 when unbudgeted or already over budget.
+  // max(0, budget − actual) — 0 when unbudgeted, over budget, or the cycle
+  // has already closed (see "ALREADY-CLOSED CYCLES" above).
   remaining: number;
   unbudgeted: boolean;
+  // True when window.end < today — the statement has already closed, so
+  // `actual` is final, not a snapshot of an in-progress cycle.
+  closed: boolean;
 };
 
 /**
  * cardBudgets: cardId → carried-forward envelope total (e.g. monthly_goals
  * .card_goal, latest row at or before cycleMonth). A card with NO entry in
  * this map (not one saved at $0) is treated as unbudgeted.
+ *
+ * today: YYYY-MM-DD, used only to detect an already-closed cycle (see
+ * "ALREADY-CLOSED CYCLES" in the file header) — never to filter transactions.
  */
 export function computeCardEnvelopeRemainders(params: {
   cards: { id: string; name: string; statement_close_day: number | null }[];
   cardBudgets: Map<string, number>;
   transactions: { account_id: string; date: string; type: string; amount: number }[];
   cycleMonth: string; // YYYY-MM
+  today: string; // YYYY-MM-DD
 }): CardCycleRemainder[] {
-  const { cards, cardBudgets, transactions, cycleMonth } = params;
+  const { cards, cardBudgets, transactions, cycleMonth, today } = params;
 
   return cards.map((card) => {
     const window = statementCycleWindow(cycleMonth, card.statement_close_day);
     const cardTxns = transactions.filter((t) => t.account_id === card.id);
     const actual = netCycleSpend(cardTxns, window);
+    const closed = window.end < today;
 
     if (!cardBudgets.has(card.id)) {
-      return { cardId: card.id, cardName: card.name, budget: null, actual, remaining: 0, unbudgeted: true };
+      return { cardId: card.id, cardName: card.name, budget: null, actual, remaining: 0, unbudgeted: true, closed };
     }
 
     const budget = cardBudgets.get(card.id)!;
@@ -82,8 +101,9 @@ export function computeCardEnvelopeRemainders(params: {
       cardName: card.name,
       budget,
       actual,
-      remaining: Math.max(0, r2(budget - actual)),
+      remaining: closed ? 0 : Math.max(0, r2(budget - actual)),
       unbudgeted: false,
+      closed,
     };
   });
 }
