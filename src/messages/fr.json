@@ -355,7 +355,7 @@
     "projectedTile": {
       "badge": "Projection",
       "label": "Solde projeté en fin de mois (si les enveloppes de carte sont respectées)",
-      "basis": "Comprend {amount} reporté d'avant ce mois — contrairement au Surplus mensuel, qui ne reflète que les revenus et dépenses de ce mois-ci.",
+      "basis": "Comprend {amount} reporté d'avant ce mois. Il s'agit du solde de votre compte chèques — l'argent transféré vers l'épargne, les objectifs ou une dette sort du compte, mais il n'est pas dépensé.",
       "note": "Une estimation, pas un solde réel.",
       "viewRealBalance": "Voir les soldes réels sur la Chronologie",
       "unbudgeted": "Exclut {cards} — aucune enveloppe définie et aucune dépense enregistrée."

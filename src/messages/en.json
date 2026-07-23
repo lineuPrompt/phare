@@ -355,7 +355,7 @@
     "projectedTile": {
       "badge": "Projection",
       "label": "Projected balance at month end (if card budgets are respected)",
-      "basis": "Includes {amount} carried in from before this month — unlike Monthly surplus, which only reflects this month's income and expenses.",
+      "basis": "Includes {amount} carried in from before this month. This is your chequing balance — money moved to savings, goals, or debt still leaves chequing, but it's not spent.",
       "note": "An estimate, not a real balance.",
       "viewRealBalance": "See real balances on Timeline",
       "unbudgeted": "Excludes {cards} — no envelope set and no spending recorded yet."
