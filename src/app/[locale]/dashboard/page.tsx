@@ -11,7 +11,6 @@ import GoalsCard from '@/components/dashboard/GoalsCard';
 import ReviewCard from '@/components/dashboard/ReviewCard';
 import EmptyState from '@/components/dashboard/EmptyState';
 import DipTile from '@/components/dashboard/DipTile';
-import ProjectedBalanceTile from '@/components/dashboard/ProjectedBalanceTile';
 import { DashboardData } from '@/components/dashboard/types';
 import Sidebar from '@/components/dashboard/Sidebar';
 import { addMonthsToMonth } from '@/lib/goalHelpers';
@@ -243,30 +242,23 @@ export default function DashboardPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {data.topRecommendation && <TopPriorityCard text={data.topRecommendation} />}
-              <div className="space-y-6">
-                {data.summary && (
-                  <SnapshotCard
-                    summary={data.summary}
-                    locale={locale}
-                    month={displayMonth}
-                    onPrevMonth={handlePrevMonth}
-                    onNextMonth={handleNextMonth}
-                    isMaxMonth={isMaxMonth}
-                    isMinMonth={isMinMonth}
-                    loading={snapshotLoading}
-                    unanchoredIncomeCount={data.unanchoredIncomeCount}
-                    unanchoredExpenseCount={data.unanchoredExpenseCount}
-                  />
-                )}
-                {projectedMonthEnd !== null && monthView && data?.cardEnvelopeRemainders && (
-                  <ProjectedBalanceTile
-                    projectedMonthEnd={projectedMonthEnd}
-                    carriedInAmount={monthView.opensAt}
-                    remainders={data.cardEnvelopeRemainders}
-                    locale={locale}
-                  />
-                )}
-              </div>
+              {data.summary && (
+                <SnapshotCard
+                  summary={data.summary}
+                  locale={locale}
+                  month={displayMonth}
+                  onPrevMonth={handlePrevMonth}
+                  onNextMonth={handleNextMonth}
+                  isMaxMonth={isMaxMonth}
+                  isMinMonth={isMinMonth}
+                  loading={snapshotLoading}
+                  unanchoredIncomeCount={data.unanchoredIncomeCount}
+                  unanchoredExpenseCount={data.unanchoredExpenseCount}
+                  projectedMonthEnd={projectedMonthEnd}
+                  carriedInAmount={monthView?.opensAt}
+                  cardEnvelopeRemainders={data.cardEnvelopeRemainders}
+                />
+              )}
               {data.goalAccounts !== undefined && (
                 <GoalsCard goals={data.goalAccounts} locale={locale} />
               )}
