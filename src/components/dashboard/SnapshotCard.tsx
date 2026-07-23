@@ -153,7 +153,7 @@ export default function SnapshotCard({
           numbers are never mistaken for the same thing. */}
       <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>
         {t('monthOnlyNote')}{' '}
-        <Link href={`/${locale}/timeline`} className="underline hover:no-underline">
+        <Link href={`/${locale}/timeline?month=${month}`} className="underline hover:no-underline">
           {t('viewRealBalance')}
         </Link>
       </p>
@@ -188,7 +188,7 @@ export default function SnapshotCard({
 
           <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>
             {tProjected('note')}{' '}
-            <Link href={`/${locale}/timeline`} className="underline hover:no-underline">
+            <Link href={`/${locale}/timeline?month=${month}`} className="underline hover:no-underline">
               {tProjected('viewRealBalance')}
             </Link>
           </p>
