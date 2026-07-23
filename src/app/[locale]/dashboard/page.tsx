@@ -258,9 +258,10 @@ export default function DashboardPage() {
                     unanchoredExpenseCount={data.unanchoredExpenseCount}
                   />
                 )}
-                {projectedMonthEnd !== null && data?.cardEnvelopeRemainders && (
+                {projectedMonthEnd !== null && monthView && data?.cardEnvelopeRemainders && (
                   <ProjectedBalanceTile
                     projectedMonthEnd={projectedMonthEnd}
+                    carriedInAmount={monthView.opensAt}
                     remainders={data.cardEnvelopeRemainders}
                     locale={locale}
                   />

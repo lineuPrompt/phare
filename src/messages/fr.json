@@ -354,10 +354,11 @@
     },
     "projectedTile": {
       "badge": "Projection",
-      "label": "Solde de fin de mois projeté (si les enveloppes de carte sont respectées)",
+      "label": "Solde projeté en fin de mois (si les enveloppes de carte sont respectées)",
+      "basis": "Comprend {amount} reporté d'avant ce mois — contrairement au Surplus mensuel, qui ne reflète que les revenus et dépenses de ce mois-ci.",
       "note": "Une estimation, pas un solde réel.",
       "viewRealBalance": "Voir les soldes réels sur la Chronologie",
-      "unbudgeted": "Exclut {cards} — aucune enveloppe définie."
+      "unbudgeted": "Exclut {cards} — aucune enveloppe définie et aucune dépense enregistrée."
     },
     "snapshot": "Votre portrait financier",
     "income": "Revenu mensuel",

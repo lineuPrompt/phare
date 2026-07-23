@@ -394,7 +394,7 @@ describe('GET /api/dashboard — card envelope remainders for the projected mont
 
     expect(res.status).toBe(200);
     expect(json.cardEnvelopeRemainders).toEqual([
-      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 200, remaining: 300, unbudgeted: false, closed: false },
+      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 200, closed: false, payment: 500, deduction: 300, noData: false },
     ]);
   });
 
@@ -442,12 +442,18 @@ describe('GET /api/dashboard — card envelope remainders for the projected mont
 
     expect(res.status).toBe(200);
     expect(json.cardEnvelopeRemainders).toEqual([
-      // budget(500) - actual(100) would be 400 if still open — closed forces it to 0.
-      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 100, remaining: 0, unbudgeted: false, closed: true },
+      // The 500 budget is irrelevant once closed — payment is the real, final actual.
+      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 100, closed: true, payment: 100, deduction: 0, noData: false },
     ]);
   });
 
-  it('a card with no saved monthly_goals row is reported unbudgeted, contributing zero remaining', async () => {
+  // This is the exact live bug: a card with no envelope but real recorded
+  // spending used to be reported "unbudgeted" and contribute zero deduction
+  // in a way the UI then disclosed as "excluded" — readable as "this card's
+  // spending isn't counted," which is wrong. It IS counted (via `payment`,
+  // matching what the real bridge already reflects) — only a card with
+  // NEITHER a budget NOR any actual spend is genuinely excluded/disclosed.
+  it('a card with no saved envelope but real spending counts its actual spend — never silently treated as zero', async () => {
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh6', full_name: 'Someone' }, error: null }],
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
@@ -489,7 +495,56 @@ describe('GET /api/dashboard — card envelope remainders for the projected mont
 
     expect(res.status).toBe(200);
     expect(json.cardEnvelopeRemainders).toEqual([
-      { cardId: 'card-1', cardName: 'Visa', budget: null, actual: 75, remaining: 0, unbudgeted: true, closed: false },
+      { cardId: 'card-1', cardName: 'Visa', budget: null, actual: 75, closed: false, payment: 75, deduction: 0, noData: false },
+    ]);
+    // the real $75 already lands in the timeline via the bridge; the
+    // projected month-end must not additionally subtract or drop it.
+    expect(json.cardEnvelopeRemainders[0].noData).toBe(false);
+  });
+
+  it('a card with no saved envelope AND no real spending contributes nothing, flagged noData for the tile footnote', async () => {
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh7', full_name: 'Someone' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      budgets: [
+        { data: null, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [{
+        data: [
+          { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null, payment_day: null, statement_close_day: null },
+          { id: 'card-1', name: 'Visa', type: 'credit_card', goal_target: null, goal_target_date: null, payment_day: 5, statement_close_day: null },
+        ],
+        error: null,
+      }],
+      account_balance_anchors: [{ data: null, error: null }],
+      household_members: [{ data: { id: 'member-1' }, error: null }],
+      monthly_goals: [{ data: [], error: null }],
+      transactions: [
+        { data: [], error: null }, // no card activity at all this cycle
+        { data: [], error: null },
+      ],
+      sinking_funds: [{ data: [], error: null }],
+      conversations: [{ data: null, error: null }],
+      recurring_items: [
+        { count: 0, error: null },
+        { count: 0, error: null },
+      ],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const { businessToday } = await import('@/lib/dateHelpers');
+    (businessToday as ReturnType<typeof vi.fn>).mockReturnValue('2026-07-10');
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('http://localhost/api/dashboard?month=2026-08'));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.cardEnvelopeRemainders).toEqual([
+      { cardId: 'card-1', cardName: 'Visa', budget: null, actual: 0, closed: false, payment: 0, deduction: 0, noData: true },
     ]);
   });
 });

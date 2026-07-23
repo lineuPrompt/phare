@@ -354,10 +354,11 @@
     },
     "projectedTile": {
       "badge": "Projection",
-      "label": "Projected month-end (if card budgets are respected)",
+      "label": "Projected balance at month end (if card budgets are respected)",
+      "basis": "Includes {amount} carried in from before this month — unlike Monthly surplus, which only reflects this month's income and expenses.",
       "note": "An estimate, not a real balance.",
       "viewRealBalance": "See real balances on Timeline",
-      "unbudgeted": "Excludes {cards} — no envelope set."
+      "unbudgeted": "Excludes {cards} — no envelope set and no spending recorded yet."
     },
     "snapshot": "Your financial snapshot",
     "income": "Monthly income",
