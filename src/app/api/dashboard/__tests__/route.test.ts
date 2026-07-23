@@ -60,9 +60,13 @@ vi.mock('@/lib/supabase-server', () => ({
   createClient: vi.fn(),
 }));
 
-vi.mock('@/lib/bridgeHelpers', () => ({
-  ensureBridgesForWindow: vi.fn(),
-}));
+vi.mock('@/lib/bridgeHelpers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/bridgeHelpers')>();
+  return {
+    ...actual, // netCycleSpend (pure, no DB) stays real — projectionHelpers.ts depends on it
+    ensureBridgesForWindow: vi.fn(),
+  };
+});
 
 describe('GET /api/dashboard — plan existence gate', () => {
   beforeEach(() => {
@@ -299,6 +303,7 @@ describe('GET /api/dashboard?snapshotOnly=1 — month-switch fetch never touches
       unanchoredIncomeCount: 0,
       unanchoredExpenseCount: 0,
       earliestAnchorMonth: '2026-01',
+      cardEnvelopeRemainders: [], // no credit_card accounts in this fixture
     });
     // Explicitly absent — proves the goals/review/etc. code path never ran.
     expect(json.goalAccounts).toBeUndefined();
@@ -318,6 +323,109 @@ describe('GET /api/dashboard?snapshotOnly=1 — month-switch fetch never touches
 // itself is mocked here (its own read/write failure modes are covered by
 // bridgeReconciliationInvariant.test.ts) — this test is only about whether
 // dashboard/route.ts lets a thrown error from it escape as a 500.
+// New for the "Projected month-end" dashboard tile: proves the route wires
+// a card's carried-forward monthly_goals budget and its statement-cycle
+// actual spend into computeCardEnvelopeRemainders correctly, using the
+// SAME cycle-month mapping (actualsMonth − 1) ensureBridgesForWindow's
+// spendMonth already uses — see projectionHelpers.ts.
+describe('GET /api/dashboard — card envelope remainders for the projected month-end tile', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('computes remaining = carried-forward budget minus actual cycle spend, for the month before the viewed one', async () => {
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh5', full_name: 'Someone' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      budgets: [
+        { data: null, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [{
+        data: [
+          { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null, payment_day: null, statement_close_day: null },
+          { id: 'card-1', name: 'Visa', type: 'credit_card', goal_target: null, goal_target_date: null, payment_day: 5, statement_close_day: 15 },
+        ],
+        error: null,
+      }],
+      account_balance_anchors: [{ data: null, error: null }],
+      household_members: [{ data: { id: 'member-1' }, error: null }],
+      // Carried-forward card_goal for card-1, saved before the cycle month (2026-07).
+      monthly_goals: [{ data: [{ account_id: 'card-1', card_goal: 500, month: '2026-06-01' }], error: null }],
+      transactions: [
+        // 1st call: card-1's statement-cycle window for cycle month 2026-07
+        // (close day 15 → 2026-06-16..2026-07-15).
+        { data: [{ account_id: 'card-1', date: '2026-07-05', type: 'expense', amount: 200 }], error: null },
+        // 2nd call: actuals-month headline figures for the viewed month (2026-08).
+        { data: [], error: null },
+      ],
+      sinking_funds: [{ data: [], error: null }],
+      conversations: [{ data: null, error: null }],
+      recurring_items: [
+        { count: 0, error: null },
+        { count: 0, error: null },
+      ],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('http://localhost/api/dashboard?month=2026-08'));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.cardEnvelopeRemainders).toEqual([
+      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 200, remaining: 300, unbudgeted: false },
+    ]);
+  });
+
+  it('a card with no saved monthly_goals row is reported unbudgeted, contributing zero remaining', async () => {
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh6', full_name: 'Someone' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      budgets: [
+        { data: null, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [{
+        data: [
+          { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null, payment_day: null, statement_close_day: null },
+          { id: 'card-1', name: 'Visa', type: 'credit_card', goal_target: null, goal_target_date: null, payment_day: 5, statement_close_day: null },
+        ],
+        error: null,
+      }],
+      account_balance_anchors: [{ data: null, error: null }],
+      household_members: [{ data: { id: 'member-1' }, error: null }],
+      monthly_goals: [{ data: [], error: null }], // never saved for this card
+      transactions: [
+        { data: [{ account_id: 'card-1', date: '2026-07-10', type: 'expense', amount: 75 }], error: null },
+        { data: [], error: null },
+      ],
+      sinking_funds: [{ data: [], error: null }],
+      conversations: [{ data: null, error: null }],
+      recurring_items: [
+        { count: 0, error: null },
+        { count: 0, error: null },
+      ],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('http://localhost/api/dashboard?month=2026-08'));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.cardEnvelopeRemainders).toEqual([
+      { cardId: 'card-1', cardName: 'Visa', budget: null, actual: 75, remaining: 0, unbudgeted: true },
+    ]);
+  });
+});
+
 describe('GET /api/dashboard — a bridge-sync failure surfaces, never a silently understated snapshot', () => {
   beforeEach(() => {
     vi.resetModules();

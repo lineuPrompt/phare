@@ -352,6 +352,13 @@
       "dipsBelow": "You dip to {amount} on {date}",
       "noDip": "No paycheque scheduled ahead in this view — balance shown through {date}."
     },
+    "projectedTile": {
+      "badge": "Projection",
+      "label": "Projected month-end (if card budgets are respected)",
+      "note": "An estimate, not a real balance.",
+      "viewRealBalance": "See real balances on Timeline",
+      "unbudgeted": "Excludes {cards} — no envelope set."
+    },
     "snapshot": "Your financial snapshot",
     "income": "Monthly income",
     "expenses": "Monthly expenses",

@@ -11,14 +11,24 @@ import GoalsCard from '@/components/dashboard/GoalsCard';
 import ReviewCard from '@/components/dashboard/ReviewCard';
 import EmptyState from '@/components/dashboard/EmptyState';
 import DipTile from '@/components/dashboard/DipTile';
+import ProjectedBalanceTile from '@/components/dashboard/ProjectedBalanceTile';
 import { DashboardData } from '@/components/dashboard/types';
 import Sidebar from '@/components/dashboard/Sidebar';
 import { addMonthsToMonth } from '@/lib/goalHelpers';
-import type { DipInfo } from '@/lib/timelineHelpers';
+import type { DipInfo, TimelineDay } from '@/lib/timelineHelpers';
+import { buildMonthView, type UnbalancedDay } from '@/lib/timelineDisplayHelpers';
+import { computeProjectedMonthEnd } from '@/lib/projectionHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 
 type TimelineDipResponse =
-  | { ok: true; dip: DipInfo | null; balancesStartDate: string; days: { date: string }[] }
+  | {
+      ok: true;
+      dip: DipInfo | null;
+      balancesStartDate: string;
+      openingBalance: number;
+      days: TimelineDay[];
+      unbalancedDays: UnbalancedDay[];
+    }
   | { ok: false; reason: 'no_anchor' };
 
 export default function DashboardPage() {
@@ -47,6 +57,14 @@ export default function DashboardPage() {
   const [dipWindowEnd, setDipWindowEnd] = useState<string | null>(null);
   const [hasAnchor, setHasAnchor] = useState(true);
 
+  // Projected month-end tile — slices the SAME single timeline fetch above
+  // (via buildMonthView, exactly like Timeline page's own month nav) rather
+  // than issuing a second /api/timeline call per displayed month.
+  const [timelineDays, setTimelineDays] = useState<TimelineDay[]>([]);
+  const [timelineUnbalancedDays, setTimelineUnbalancedDays] = useState<UnbalancedDay[]>([]);
+  const [timelineOpeningBalance, setTimelineOpeningBalance] = useState(0);
+  const [timelineBalancesStartDate, setTimelineBalancesStartDate] = useState<string | null>(null);
+
   useEffect(() => {
     fetch('/api/accounts')
       .then((r) => (r.ok ? r.json() : null))
@@ -59,9 +77,27 @@ export default function DashboardPage() {
         if (!d || !d.ok) { setHasAnchor(false); return; }
         setDip(d.dip);
         setDipWindowEnd(d.days.length > 0 ? d.days[d.days.length - 1].date : d.balancesStartDate);
+        setTimelineDays(d.days);
+        setTimelineUnbalancedDays(d.unbalancedDays ?? []);
+        setTimelineOpeningBalance(d.openingBalance);
+        setTimelineBalancesStartDate(d.balancesStartDate);
       })
       .catch(() => {});
   }, []);
+
+  // Pure client-side re-slice, not a recompute: closesAt for displayMonth
+  // comes straight out of buildCashTimeline's already-fetched running-balance
+  // walk. computeProjectedMonthEnd only subtracts each card's unspent
+  // envelope remainder (dashboard fetch, month-scoped like the snapshot) —
+  // never re-derives the balance itself. Null (tile hides) whenever the
+  // month falls outside the fetched window or no anchor/remainder data exists
+  // yet — never a fabricated figure.
+  const monthView = timelineBalancesStartDate
+    ? buildMonthView(timelineDays, timelineUnbalancedDays, timelineOpeningBalance, timelineBalancesStartDate, displayMonth)
+    : null;
+  const projectedMonthEnd = monthView && data?.cardEnvelopeRemainders
+    ? computeProjectedMonthEnd(monthView.closesAt, data.cardEnvelopeRemainders)
+    : null;
 
   const loadDashboard = useCallback((month: string) => {
     setLoading(true);
@@ -119,6 +155,7 @@ export default function DashboardPage() {
           unanchoredIncomeCount: d.unanchoredIncomeCount,
           unanchoredExpenseCount: d.unanchoredExpenseCount,
           earliestAnchorMonth: d.earliestAnchorMonth,
+          cardEnvelopeRemainders: d.cardEnvelopeRemainders,
         } : prev));
       })
       .finally(() => setSnapshotLoading(false));
@@ -203,6 +240,14 @@ export default function DashboardPage() {
             </h1>
 
             {dipWindowEnd && <DipTile dip={dip} windowEndDate={dipWindowEnd} locale={locale} />}
+
+            {projectedMonthEnd !== null && data?.cardEnvelopeRemainders && (
+              <ProjectedBalanceTile
+                projectedMonthEnd={projectedMonthEnd}
+                remainders={data.cardEnvelopeRemainders}
+                locale={locale}
+              />
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {data.topRecommendation && <TopPriorityCard text={data.topRecommendation} />}

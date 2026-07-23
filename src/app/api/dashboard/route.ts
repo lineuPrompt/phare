@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server';
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth } from '@/lib/goalHelpers';
 import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
+import { computeCardEnvelopeRemainders, cycleFetchRange, type CardCycleRemainder } from '@/lib/projectionHelpers';
 import { logEvent, isFirstReturnToday } from '@/lib/eventLogger';
 import { businessToday, businessMonth } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
@@ -140,6 +141,20 @@ export async function GET(request: Request) {
       earliestAnchorMonth = earliestAnchor ? (earliestAnchor.anchor_date as string).slice(0, 7) : null;
     }
 
+    // A bridge payment for spend month M appears in the chequing ledger in
+    // month M+1 (bridgeHelpers.ts), so the spend/cycle month whose payment
+    // lands in the viewed actualsMonth is one month earlier — same mapping
+    // the "Projected month-end" tile's card envelope remainders use below
+    // (see projectionHelpers.ts's cycle-to-payment-month note).
+    const spendMonth = addMonthsToMonth(actualsMonth.slice(0, 7), -1);
+
+    // Card envelope remainders for the "Projected month-end" dashboard tile
+    // (client computes closingBalance − Σremaining via computeProjectedMonthEnd,
+    // reusing the timeline's own already-fetched balance walk — never
+    // recomputed here). [] when there are no cards; the tile then reduces to
+    // the plain timeline close.
+    let cardEnvelopeRemainders: CardCycleRemainder[] = [];
+
     if (chequingAccount && cardAccounts.length > 0) {
       const { data: memberRow } = await supabase
         .from('household_members')
@@ -156,11 +171,6 @@ export async function GET(request: Request) {
         statement_close_day: (a.statement_close_day ?? null) as number | null,
       }));
 
-      // A bridge payment for spend month M appears in the chequing ledger in
-      // month M+1 (bridgeHelpers.ts), so the spend month whose bridge lands
-      // in the viewed actualsMonth is one month earlier.
-      const spendMonth = addMonthsToMonth(actualsMonth.slice(0, 7), -1);
-
       await ensureBridgesForWindow({
         supabase,
         householdId,
@@ -168,6 +178,45 @@ export async function GET(request: Request) {
         memberId,
         cards,
         spendMonths: [spendMonth],
+      });
+
+      const cardIds = cards.map((c) => c.id);
+      const cycleRange = cycleFetchRange(cards, spendMonth);
+
+      const [{ data: goalRows }, { data: cycleTxns }] = await Promise.all([
+        // Carry-forward envelope total per card: latest monthly_goals row at
+        // or before the cycle month (same rule GET /api/card-envelope uses
+        // for a single card). Ordered desc so the first row seen per
+        // account_id below is the carried-forward one.
+        supabase
+          .from('monthly_goals')
+          .select('account_id, card_goal, month')
+          .eq('household_id', householdId)
+          .in('account_id', cardIds)
+          .lte('month', `${spendMonth}-01`)
+          .order('month', { ascending: false }),
+        cycleRange
+          ? supabase
+              .from('transactions')
+              .select('account_id, date, type, amount')
+              .eq('household_id', householdId)
+              .in('account_id', cardIds)
+              .in('type', ['expense', 'income'])
+              .gte('date', cycleRange.start)
+              .lte('date', cycleRange.end)
+          : Promise.resolve({ data: [] as { account_id: string; date: string; type: string; amount: number }[] }),
+      ]);
+
+      const cardBudgets = new Map<string, number>();
+      for (const row of (goalRows ?? []) as { account_id: string; card_goal: number }[]) {
+        if (!cardBudgets.has(row.account_id)) cardBudgets.set(row.account_id, Number(row.card_goal));
+      }
+
+      cardEnvelopeRemainders = computeCardEnvelopeRemainders({
+        cards,
+        cardBudgets,
+        transactions: (cycleTxns ?? []) as { account_id: string; date: string; type: string; amount: number }[],
+        cycleMonth: spendMonth,
       });
     }
 
@@ -243,6 +292,7 @@ export async function GET(request: Request) {
         unanchoredIncomeCount: unanchoredIncomeResult.count ?? 0,
         unanchoredExpenseCount: unanchoredExpenseResult.count ?? 0,
         earliestAnchorMonth,
+        cardEnvelopeRemainders,
       });
     }
 
@@ -377,6 +427,7 @@ export async function GET(request: Request) {
       unanchoredIncomeCount: unanchoredIncomeResult.count ?? 0,
       unanchoredExpenseCount: unanchoredExpenseResult.count ?? 0,
       earliestAnchorMonth,
+      cardEnvelopeRemainders,
     });
   } catch (error) {
     console.error('Dashboard error:', error);
