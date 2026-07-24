@@ -4,6 +4,10 @@ export type DashboardSummary = {
   totalIncome: number;
   totalExpenses: number;
   totalSavings: number;
+  // Real cash drawn from a debt account into chequing this month — excluded
+  // from netCashFlow (see computeMonthTotals's DEBT DRAWS note,
+  // dashboardHelpers.ts). Shown beside surplus/deficit, never folded into it.
+  totalBorrowed: number;
   netCashFlow: number;
 };
 

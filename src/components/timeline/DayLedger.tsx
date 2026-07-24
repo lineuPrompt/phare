@@ -62,7 +62,12 @@ function TransferControls({ entry, locale, onChanged }: { entry: TimelineTx; loc
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [date, setDate] = useState(entry.date);
   const [description, setDescription] = useState(entry.description ?? '');
-  const [amount, setAmount] = useState(String(entry.amount));
+  // A draw's stored amount is negative (see TRANSFER DIRECTION NOTE,
+  // timelineHelpers.ts) — the edit field always shows/edits a positive
+  // MAGNITUDE, same as the create form. PATCH /api/transfers/[id] re-applies
+  // the pair's existing sign server-side, so this never risks flipping a
+  // draw into a contribution (or vice versa) just by re-saving it unchanged.
+  const [amount, setAmount] = useState(String(Math.abs(entry.amount)));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -280,7 +285,19 @@ function EntryRow({
   onChanged: () => void;
 }) {
   const t = useTranslations('timeline.list');
-  const signed = formatSignedAmount(entry.amount, entry.type, locale);
+  // Every row here is on the chequing account (Timeline is chequing-scoped),
+  // so a negative 'transfer' amount can only mean one thing: a debt draw's
+  // chequing-side row (see timelineHelpers.ts's TRANSFER DIRECTION NOTE) —
+  // real cash coming IN. It reads with a "+" like income, but in a distinct
+  // amber, never green: this money was borrowed, not earned, and must not
+  // look identical to a paycheque at a glance. formatSignedAmount stays
+  // type-only (it's shared with the reconcile page and cards, where the same
+  // negative sign on a goal/debt account means the OPPOSITE — money owed
+  // going up), so the draw case is handled locally here instead.
+  const isDraw = entry.type === 'transfer' && entry.amount < 0;
+  const signed = isDraw
+    ? { text: `+${formatCurrency(Math.abs(entry.amount), locale)}`, color: '#B45309' }
+    : formatSignedAmount(entry.amount, entry.type, locale);
   const isFuture = entry.isFuture === true;
   // Editable directly here — never bridges (computed, not user rows; A4).
   // Any transfer (one-off or a single materialized recurring occurrence)

@@ -8,11 +8,14 @@ import { useBusinessToday } from '@/lib/useBusinessToday';
 interface Props {
   goals: GoalAccount[];
   defaultGoalId?: string;
+  // 'contribution' (default) — chequing → goal, the original behaviour.
+  // 'draw' — goal → chequing, restricted server-side to a debt account.
+  kind?: 'contribution' | 'draw';
   onSaved: () => void;
   onCancel?: () => void;
 }
 
-export default function TransferForm({ goals, defaultGoalId, onSaved, onCancel }: Props) {
+export default function TransferForm({ goals, defaultGoalId, kind = 'contribution', onSaved, onCancel }: Props) {
   const t = useTranslations('goals');
   const { today } = useBusinessToday();
 
@@ -39,6 +42,7 @@ export default function TransferForm({ goals, defaultGoalId, onSaved, onCancel }
         amount:        Number(amount),
         date,
         description:   description.trim() || undefined,
+        kind,
       }),
     });
 
@@ -145,9 +149,9 @@ export default function TransferForm({ goals, defaultGoalId, onSaved, onCancel }
           type="submit"
           disabled={saving || !amount || !goalId}
           className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
-          style={{ background: '#2ABFBF', color: 'white' }}
+          style={{ background: kind === 'draw' ? '#B45309' : '#2ABFBF', color: 'white' }}
         >
-          {saving ? t('transfer.saving') : t('transfer.save')}
+          {saving ? t('transfer.saving') : kind === 'draw' ? t('draw.save') : t('transfer.save')}
         </button>
       </div>
     </form>

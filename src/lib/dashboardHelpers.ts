@@ -25,17 +25,36 @@
  *
  * TRANSFER RULE
  * -------------
- * A transfer (chequing → goal account) is neither income nor expense.
+ * A transfer (chequing ↔ goal account) is neither income nor expense.
  * It creates two linked rows (transfer_peer_id):
- *   - chequing row: type='transfer', counted as savings
+ *   - chequing row: type='transfer', counted as savings (contribution) or
+ *     borrowed (draw) — see DEBT DRAWS below.
  *   - goal row:     type='transfer', counted in no bucket (goal balance only)
+ *
+ * DEBT DRAWS (2026-08-01) — borrowed cash is not income
+ * -------------------------------------------------------
+ * Drawing on a credit line (create_transfer with p_kind='draw') is the
+ * mirror of a debt payment: chequing gets real cash, the debt account owes
+ * more. It is stored as a chequing-side 'transfer' row with a NEGATIVE
+ * amount (contributions/payments are always positive — see create_transfer's
+ * migration comment for why the sign alone is enough to tell them apart, no
+ * extra column needed). That cash is real and does increase the real
+ * running chequing balance (timelineHelpers.ts), but it must NEVER read as
+ * surplus: a household that only "balanced" by borrowing did not have a good
+ * month. So a negative chequing-side transfer is excluded from `savings`
+ * entirely and instead sums into `totalBorrowed`, which `netCashFlow` never
+ * includes. Any consumer computing "how much room does this household have"
+ * (the surplus tile, the projection tile, and eventually a coaching layer's
+ * typical-surplus/sourcing contract) must read netCashFlow, never a raw
+ * income/inflow figure that borrowed cash could be sitting inside.
  *
  * BUCKET MATH
  * -----------
- *   income   = Σ amount WHERE type = 'income'  AND account_id ∈ chequing
- *   expenses = Σ amount WHERE type = 'expense' AND account_id ∈ chequing
- *   savings  = Σ amount WHERE type = 'transfer' AND account_id ∈ chequing
- *   net      = income − expenses − savings
+ *   income    = Σ amount WHERE type = 'income'  AND account_id ∈ chequing
+ *   expenses  = Σ amount WHERE type = 'expense' AND account_id ∈ chequing
+ *   savings   = Σ amount WHERE type = 'transfer' AND account_id ∈ chequing AND amount >= 0
+ *   borrowed  = Σ -amount WHERE type = 'transfer' AND account_id ∈ chequing AND amount < 0
+ *   net       = income − expenses − savings   (borrowed excluded, always)
  *
  * The goal-side transfer rows (account_id ∈ goal accounts) fall through all
  * predicates and are intentionally counted in zero buckets. Same now for a
@@ -76,6 +95,12 @@ export type MonthTotals = {
   totalIncome: number;
   totalExpenses: number;
   totalSavings: number;
+  // Real cash drawn into chequing from a debt account this month (a credit-
+  // line/loan draw). Excluded from netCashFlow — see DEBT DRAWS above. Any
+  // "how much can this household afford" computation (surplus tile,
+  // projection tile, future coaching sourcing contract) must treat this as
+  // NOT available capacity.
+  totalBorrowed: number;
   netCashFlow: number;
 };
 
@@ -99,6 +124,7 @@ export function computeMonthTotals(
   let income = 0;
   let expenses = 0;
   let savings = 0;
+  let borrowed = 0;
 
   for (const tx of transactions) {
     const amt = Number(tx.amount);
@@ -110,18 +136,27 @@ export function computeMonthTotals(
     } else if (tx.type === 'expense' && (onChequing || onSinkingFund)) {
       expenses += amt;
     } else if (tx.type === 'transfer' && onChequing) {
-      // Chequing-side outflow of a chequing→goal pair. Counted as savings.
-      // The goal-side peer row (type='transfer', goal account_id) is not on
-      // chequing, so it falls through and is counted in no bucket.
-      savings += amt;
+      // Chequing-side row of a chequing↔goal pair. A contribution/payment
+      // (amount >= 0) is counted as savings — money genuinely leaving
+      // chequing toward a goal. A draw (amount < 0, see DEBT DRAWS above) is
+      // real cash but borrowed, not earned — counted separately as
+      // `borrowed`, never folded into savings or netCashFlow. The goal-side
+      // peer row (type='transfer', goal account_id) is not on chequing, so
+      // it falls through and is counted in no bucket either way.
+      if (amt < 0) {
+        borrowed += -amt;
+      } else {
+        savings += amt;
+      }
     }
   }
 
   return {
-    totalIncome:   Math.round(income   * 100) / 100,
-    totalExpenses: Math.round(expenses * 100) / 100,
-    totalSavings:  Math.round(savings  * 100) / 100,
-    netCashFlow:   Math.round((income - expenses - savings) * 100) / 100,
+    totalIncome:    Math.round(income   * 100) / 100,
+    totalExpenses:  Math.round(expenses * 100) / 100,
+    totalSavings:   Math.round(savings  * 100) / 100,
+    totalBorrowed:  Math.round(borrowed * 100) / 100,
+    netCashFlow:    Math.round((income - expenses - savings) * 100) / 100,
   };
 }
 
@@ -145,6 +180,14 @@ export function computeMonthTotals(
  * "currently owed" and read as paid off, months before a single payment
  * actually lands. A row with no date at all is excluded, never assumed to
  * be in the past.
+ *
+ * DEBT DRAWS (2026-08-01): a draw's debt-side row is a 'transfer' row with a
+ * NEGATIVE amount (create_transfer, p_kind='draw') — summed directly below
+ * with no special-casing, same as every other transfer row. This already
+ * worked before draws existed: the debt opening-balance seed (POST
+ * /api/accounts) has stored a literal negative amount here from the start.
+ * A draw simply makes the balance more negative (owe more), a payment more
+ * positive (owe less) — one formula, no branch on kind.
  */
 /**
  * EXPENSE OUTFLOWS (Build 4 Part 2, 2026-07-21): a sinking fund is a cash

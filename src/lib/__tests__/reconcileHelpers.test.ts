@@ -201,6 +201,7 @@ describe('reconcileMonth — empty month', () => {
     expect(result.totalIncome).toBe(0);
     expect(result.totalExpenses).toBe(0);
     expect(result.totalSavings).toBe(0);
+    expect(result.totalBorrowed).toBe(0);
     expect(result.totalBridgePayments).toBe(0);
     expect(result.netFromBuckets).toBe(0);
     expect(result.netFromChequing).toBe(0);
@@ -344,6 +345,106 @@ describe('reconcileMonth — sinking fund contribution and bill payment stay rec
     ];
     for (const monthTxns of months) {
       const result = reconcileMonth(monthTxns, accountsWithFund);
+      expect(result.reconciled).toBe(true);
+      expect(result.netDifference).toBe(0);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Debt draws (Build 4, 2026-08-01)
+//
+// The live bug this feature fixes: a founder drew $2,000 from his credit
+// line to cover expenses. Before this change there was no draw concept at
+// all — the household had to type a plain type='income' row on chequing
+// (inflating totalIncome and netCashFlow, reading as a healthy surplus) plus
+// an unlinked negative transfer row on the debt account, with nothing
+// enforcing they agreed. Path 1 (buckets) and path 2 (chequingLedgerNet)
+// both had to learn the same new fact — a negative chequing-side transfer is
+// borrowed, not savings, and excluded from net — independently, the same
+// dual-path lesson the Phase 1 income-scope fix and the sinking-fund fix
+// above each already had to learn once.
+// ---------------------------------------------------------------------------
+
+const DEBT = 'debt-1';
+const accountsWithDebt: ReconcileAccountRow[] = [
+  ...accounts,
+  { id: DEBT, type: 'debt', name: 'Credit Line' },
+];
+
+describe('chequingLedgerNet — debt draws', () => {
+  it('a draw contributes neither an inflow nor an outflow — skipped entirely', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ type: 'income',   account_id: CHQ,  amount: 3000 }),
+      tx({ type: 'expense',  account_id: CHQ,  amount: 3005 }), // $5 short
+      tx({ type: 'transfer', account_id: CHQ,  amount: -2000 }), // draw — real cash, but skipped here
+      tx({ type: 'transfer', account_id: DEBT, amount: -2000 }),
+    ];
+    // 3000 income − 3005 expense = −5, exactly as if the draw never happened.
+    expect(chequingLedgerNet(transactions, accountsWithDebt)).toBe(-5);
+  });
+
+  it('a draw and a payment on the same debt account both net correctly', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ type: 'transfer', account_id: CHQ,  amount: -1000 }), // draw — skipped
+      tx({ type: 'transfer', account_id: DEBT, amount: -1000 }),
+      tx({ type: 'transfer', account_id: CHQ,  amount: 400 }),   // payment — outflow
+      tx({ type: 'transfer', account_id: DEBT, amount: 400 }),
+    ];
+    expect(chequingLedgerNet(transactions, accountsWithDebt)).toBe(-400);
+  });
+});
+
+describe('reconcileMonth — the founder scenario, fixed: a draw never reads as surplus', () => {
+  it('a $2,000 draw covering a real $5 shortfall reconciles at netCashFlow = −5, not +1995', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ type: 'income',   account_id: CHQ,  amount: 3000 }),
+      tx({ type: 'expense',  account_id: CHQ,  amount: 3005 }),
+      tx({ type: 'transfer', account_id: CHQ,  amount: -2000, description: 'Credit Line (draw)' }),
+      tx({ type: 'transfer', account_id: DEBT, amount: -2000, description: 'Credit Line (draw)' }),
+    ];
+    const result = reconcileMonth(transactions, accountsWithDebt);
+    expect(result.totalBorrowed).toBe(2000);
+    expect(result.netFromBuckets).toBe(-5);
+    expect(result.netFromChequing).toBe(-5);
+    expect(result.netDifference).toBe(0);
+    expect(result.reconciled).toBe(true);
+
+    // The debt account's own audit balance shows the draw made it worse —
+    // never framed as a positive inflow.
+    const debtAcct = result.accounts.find((a) => a.accountId === DEBT)!;
+    expect(debtAcct.monthBalance).toBe(-2000);
+
+    // And the real chequing balance genuinely did rise — the cash IS there,
+    // it's simply not surplus. monthBalance = income − expense − transfer =
+    // 3000 − 3005 − (−2000) = 1995.
+    const chqAcct = result.accounts.find((a) => a.accountId === CHQ)!;
+    expect(chqAcct.monthBalance).toBe(1995);
+  });
+
+  it('full-cycle invariant: draw → payment → draw stays reconciled at every step', () => {
+    const months: ReconcileTxRow[][] = [
+      [ // July — draw
+        tx({ type: 'income',   account_id: CHQ,  amount: 3000, date: '2026-07-15' }),
+        tx({ type: 'expense',  account_id: CHQ,  amount: 3005, date: '2026-07-20' }),
+        tx({ type: 'transfer', account_id: CHQ,  amount: -2000, date: '2026-07-21' }),
+        tx({ type: 'transfer', account_id: DEBT, amount: -2000, date: '2026-07-21' }),
+      ],
+      [ // August — payment, paying part of it back down
+        tx({ type: 'income',   account_id: CHQ,  amount: 3000, date: '2026-08-15' }),
+        tx({ type: 'expense',  account_id: CHQ,  amount: 2500, date: '2026-08-20' }),
+        tx({ type: 'transfer', account_id: CHQ,  amount: 500,  date: '2026-08-31' }),
+        tx({ type: 'transfer', account_id: DEBT, amount: 500,  date: '2026-08-31' }),
+      ],
+      [ // September — another draw
+        tx({ type: 'income',   account_id: CHQ,  amount: 3000, date: '2026-09-15' }),
+        tx({ type: 'expense',  account_id: CHQ,  amount: 4200, date: '2026-09-20' }),
+        tx({ type: 'transfer', account_id: CHQ,  amount: -1000, date: '2026-09-25' }),
+        tx({ type: 'transfer', account_id: DEBT, amount: -1000, date: '2026-09-25' }),
+      ],
+    ];
+    for (const monthTxns of months) {
+      const result = reconcileMonth(monthTxns, accountsWithDebt);
       expect(result.reconciled).toBe(true);
       expect(result.netDifference).toBe(0);
     }

@@ -35,6 +35,10 @@ export default function GoalsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [transferFor, setTransferFor] = useState<string | null>(null);
+  // "Record a draw" — the mirror of transferFor's "Make a payment", debt
+  // accounts only. Same TransferForm, just a different kind and inline slot,
+  // so a draw and a payment can never be open on the same goal at once.
+  const [drawFor, setDrawFor] = useState<string | null>(null);
   const [recurringSetupFor, setRecurringSetupFor] = useState<string | null>(null);
 
   // Transfer edit/delete state
@@ -71,6 +75,11 @@ export default function GoalsPage() {
     load();
   }
 
+  function handleDrawSaved() {
+    setDrawFor(null);
+    load();
+  }
+
   function handleRecurringSaved() {
     setRecurringSetupFor(null);
     load();
@@ -99,9 +108,14 @@ export default function GoalsPage() {
   const cadenceShort = (cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly') => tGoalsRecurring(`cadenceShort.${cadence}`);
 
   function startEdit(tr: GoalTransfer) {
+    // A draw's stored amount is negative (opening-balance seeds have always
+    // been too) — the edit field always shows/edits a positive MAGNITUDE,
+    // same as the create form. PATCH /api/transfers/[id] re-applies the
+    // pair's existing sign server-side, so a draw can't be silently
+    // reclassified as a contribution (or vice versa) just by re-saving it.
     setEditing({
       id: tr.id,
-      amount: String(tr.amount),
+      amount: String(Math.abs(tr.amount)),
       date: tr.date,
       description: tr.description ?? '',
     });
@@ -202,6 +216,7 @@ export default function GoalsPage() {
                     ? Math.min(100, Math.round((goal.balance / goal.goalTarget) * 100))
                     : null;
                   const isOpen = transferFor === goal.id;
+                  const isDrawOpen = drawFor === goal.id;
                   const isEditingGoal = editingGoalFor === goal.id;
 
                   return (
@@ -269,14 +284,29 @@ export default function GoalsPage() {
                           )}
                         </div>
 
-                        {!isOpen && (
-                          <button
-                            onClick={() => setTransferFor(goal.id)}
-                            className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold"
-                            style={{ background: goal.isDebt ? '#DC2626' : '#2ABFBF', color: 'white' }}
-                          >
-                            {goal.isDebt ? t('makePayment') : t('addMoney')}
-                          </button>
+                        {!isOpen && !isDrawOpen && (
+                          <div className="flex flex-col items-stretch gap-2 shrink-0">
+                            <button
+                              onClick={() => setTransferFor(goal.id)}
+                              className="px-4 py-2 rounded-xl text-sm font-semibold"
+                              style={{ background: goal.isDebt ? '#DC2626' : '#2ABFBF', color: 'white' }}
+                            >
+                              {goal.isDebt ? t('makePayment') : t('addMoney')}
+                            </button>
+                            {/* Draw — the mirror of a payment, debt accounts
+                                only: borrows against the credit line, real
+                                cash into chequing, excluded from surplus
+                                everywhere the month is summarized. */}
+                            {goal.isDebt && (
+                              <button
+                                onClick={() => setDrawFor(goal.id)}
+                                className="px-4 py-2 rounded-xl text-sm font-semibold"
+                                style={{ border: '1.5px solid #B45309', color: '#B45309', background: 'white' }}
+                              >
+                                {t('recordDraw')}
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
 
@@ -398,6 +428,26 @@ export default function GoalsPage() {
                             defaultGoalId={goal.id}
                             onSaved={handleTransferSaved}
                             onCancel={() => setTransferFor(null)}
+                          />
+                        </div>
+                      )}
+
+                      {/* Inline draw form — same TransferForm, kind='draw'.
+                          create_transfer restricts draws to debt accounts
+                          server-side too; this button only ever renders for
+                          goal.isDebt above. */}
+                      {isDrawOpen && (
+                        <div className="pt-2 border-t" style={{ borderColor: '#F3F4F6' }}>
+                          <h4 className="text-sm font-semibold mb-3" style={{ color: '#0F2044' }}>
+                            {t('draw.title')}
+                          </h4>
+                          <p className="text-xs mb-3" style={{ color: '#6B7280' }}>{t('draw.hint')}</p>
+                          <TransferForm
+                            goals={[goal]}
+                            defaultGoalId={goal.id}
+                            kind="draw"
+                            onSaved={handleDrawSaved}
+                            onCancel={() => setDrawFor(null)}
                           />
                         </div>
                       )}

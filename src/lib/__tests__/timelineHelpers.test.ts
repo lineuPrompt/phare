@@ -77,6 +77,42 @@ describe('buildCashTimeline — basic balance', () => {
     expect(result.closingBalance).toBe(1200);
   });
 
+  it('a debt draw (negative-amount transfer, Build 4 2026-08-01) INCREASES the real balance — real cash, even though it is later excluded from surplus at the computeMonthTotals layer', () => {
+    // The chequing-side row of a draw stores the NEGATIVE of the amount
+    // (create_transfer, p_kind='draw' — see TRANSFER DIRECTION NOTE in
+    // timelineHelpers.ts). `-tx.amount` on a negative amount yields a
+    // positive balance increase with no special-casing in signAmount.
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-07-01', 1000)],
+      transactions: [
+        tx({ date: '2026-07-10', amount: -2000, type: 'transfer' }), // draw
+      ],
+      windowStart: '2026-07-01',
+      windowEnd: '2026-07-31',
+      today: '2026-07-01',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.days.find(d => d.date === '2026-07-10')!.endOfDayBalance).toBe(3000); // 1000 + 2000
+    expect(result.closingBalance).toBe(3000);
+  });
+
+  it('a draw followed later by a payment nets correctly against the real balance', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-07-01', 1000)],
+      transactions: [
+        tx({ date: '2026-07-10', amount: -2000, type: 'transfer' }), // draw: +2000 to chequing
+        tx({ date: '2026-07-20', amount: 500,   type: 'transfer' }), // payment: −500 from chequing
+      ],
+      windowStart: '2026-07-01',
+      windowEnd: '2026-07-31',
+      today: '2026-07-01',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.closingBalance).toBe(2500); // 1000 + 2000 − 500
+  });
+
   it('openingBalance is the anchor value before that day\'s transactions', () => {
     const result = buildCashTimeline({
       anchors: [anchor('2026-07-01', 500)],

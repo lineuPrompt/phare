@@ -16,6 +16,7 @@ const CARD_ID     = 'card-1';
 const SAVINGS_ID  = 'sav-1';
 const TFSA_ID     = 'tfsa-1';
 const RRSP_ID     = 'rrsp-1';
+const DEBT_ID     = 'debt-1';
 
 const accounts: AccountRow[] = [
   { id: CHEQUING_ID, type: 'chequing'     },
@@ -23,6 +24,7 @@ const accounts: AccountRow[] = [
   { id: SAVINGS_ID,  type: 'savings'      },
   { id: TFSA_ID,     type: 'tfsa'         },
   { id: RRSP_ID,     type: 'rrsp'         },
+  { id: DEBT_ID,     type: 'debt'         },
 ];
 
 function tx(overrides: Partial<TxRow> & { amount: number }): TxRow {
@@ -39,6 +41,7 @@ describe('computeMonthTotals — baseline', () => {
       totalIncome:   0,
       totalExpenses: 0,
       totalSavings:  0,
+      totalBorrowed: 0,
       netCashFlow:   0,
     });
   });
@@ -211,6 +214,120 @@ describe('computeMonthTotals — transfers and savings bucket', () => {
     expect(result.totalExpenses).toBe(600);  // bridge counted once, card excluded
     expect(result.totalSavings).toBe(200);
     expect(result.netCashFlow).toBe(3200);   // 4000 − 600 − 200
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeMonthTotals — debt draws (Build 4, 2026-08-01)
+//
+// A draw (create_transfer p_kind='draw') stores the NEGATIVE of the amount
+// on both sides of the pair. Borrowed cash is real money in chequing but is
+// never income and never surplus — the founder's original bug: a $2,000
+// credit-line draw typed as income made a break-even month read as a
+// healthy surplus.
+// ---------------------------------------------------------------------------
+
+describe('computeMonthTotals — debt draws', () => {
+  it('a draw is counted as totalBorrowed, not totalSavings, and not totalIncome', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: CHEQUING_ID, amount: -2000 }, // chequing side — inflow, borrowed
+      { type: 'transfer', account_id: DEBT_ID,      amount: -2000 }, // debt side — owe more
+    ];
+    const result = computeMonthTotals(txns, accounts);
+    expect(result.totalBorrowed).toBe(2000);
+    expect(result.totalSavings).toBe(0);
+    expect(result.totalIncome).toBe(0);
+  });
+
+  it('a draw is excluded from netCashFlow — a break-even month stays break-even, never reads as a surplus', () => {
+    const txns: TxRow[] = [
+      { type: 'income',   account_id: CHEQUING_ID, amount: 3000 },
+      { type: 'expense',  account_id: CHEQUING_ID, amount: 3005 }, // $5 short
+      { type: 'transfer', account_id: CHEQUING_ID, amount: -2000 }, // draw covers the gap in real cash
+      { type: 'transfer', account_id: DEBT_ID,      amount: -2000 },
+    ];
+    const result = computeMonthTotals(txns, accounts);
+    expect(result.totalBorrowed).toBe(2000);
+    expect(result.netCashFlow).toBe(-5); // 3000 − 3005, borrowed cash never enters this formula
+  });
+
+  it('a draw and a payment in the same month are both counted correctly, independently', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: CHEQUING_ID, amount: -1000 }, // draw
+      { type: 'transfer', account_id: DEBT_ID,      amount: -1000 },
+      { type: 'transfer', account_id: CHEQUING_ID, amount: 400 },   // payment, same month
+      { type: 'transfer', account_id: DEBT_ID,      amount: 400 },
+    ];
+    const result = computeMonthTotals(txns, accounts);
+    expect(result.totalBorrowed).toBe(1000);
+    expect(result.totalSavings).toBe(400);
+    expect(result.netCashFlow).toBe(-400); // only the payment (savings) reduces net; the draw does not
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Coaching sourcing-contract safety (2026-08-01)
+//
+// No coaching module exists yet — this is the contract it must consume once
+// built (see the DEBT DRAWS note on MonthTotals). A future
+// computeTypicalSurplus must read netCashFlow, never totalIncome or a raw
+// chequing-inflow figure a draw could be sitting inside. This test pins down
+// the one guarantee that contract depends on: however large a draw is,
+// netCashFlow never reflects it as available capacity.
+// ---------------------------------------------------------------------------
+
+describe('coaching sourcing-contract safety — netCashFlow never treats borrowed cash as capacity', () => {
+  it('a large draw does not inflate netCashFlow, however small real income is', () => {
+    const txns: TxRow[] = [
+      { type: 'income',   account_id: CHEQUING_ID, amount: 500 },
+      { type: 'expense',  account_id: CHEQUING_ID, amount: 500 },
+      { type: 'transfer', account_id: CHEQUING_ID, amount: -50000 }, // a huge draw
+      { type: 'transfer', account_id: DEBT_ID,      amount: -50000 },
+    ];
+    const result = computeMonthTotals(txns, accounts);
+    // A naive "coach" reading raw chequing inflow (income + the draw) would
+    // see $50,500 of "capacity." netCashFlow must show exactly what it would
+    // without the draw at all — $0 — proving totalBorrowed is structurally
+    // unreachable from the field a coach is expected to read.
+    expect(result.netCashFlow).toBe(0);
+    expect(result.totalBorrowed).toBe(50000);
+  });
+
+  it('netCashFlow is identical whether or not a draw occurred, all else equal', () => {
+    const withoutDraw: TxRow[] = [
+      { type: 'income',  account_id: CHEQUING_ID, amount: 4000 },
+      { type: 'expense', account_id: CHEQUING_ID, amount: 3500 },
+    ];
+    const withDraw: TxRow[] = [
+      ...withoutDraw,
+      { type: 'transfer', account_id: CHEQUING_ID, amount: -2000 },
+      { type: 'transfer', account_id: DEBT_ID,      amount: -2000 },
+    ];
+    expect(computeMonthTotals(withDraw, accounts).netCashFlow)
+      .toBe(computeMonthTotals(withoutDraw, accounts).netCashFlow);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeGoalBalance — debt draws
+// ---------------------------------------------------------------------------
+
+describe('computeGoalBalance — debt draws', () => {
+  it('a draw makes a debt balance MORE negative (owe more), no special-casing needed', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: DEBT_ID, amount: -500, date: '2026-07-17' }, // opening balance
+      { type: 'transfer', account_id: DEBT_ID, amount: -2000, date: '2026-07-21' }, // draw
+    ];
+    expect(computeGoalBalance(txns, DEBT_ID, '2026-07-31')).toBe(-2500);
+  });
+
+  it('a draw followed by a payment nets correctly', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: DEBT_ID, amount: -500, date: '2026-07-01' },
+      { type: 'transfer', account_id: DEBT_ID, amount: -2000, date: '2026-07-21' }, // draw: owe more
+      { type: 'transfer', account_id: DEBT_ID, amount: 833.33, date: '2026-07-31' }, // payment: owe less
+    ];
+    expect(computeGoalBalance(txns, DEBT_ID, '2026-07-31')).toBeCloseTo(-1666.67, 2);
   });
 });
 

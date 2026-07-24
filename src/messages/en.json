@@ -366,6 +366,7 @@
     "savings": "Saved this month",
     "surplus": "Monthly surplus",
     "deficit": "Monthly deficit",
+    "borrowedNote": "{amount} of this is borrowed.",
     "monthOnlyNote": "This reflects this month's cash flow only, not your running balance.",
     "viewRealBalance": "View your real balance in Timeline",
     "topPriority": "Your #1 priority",
@@ -583,8 +584,11 @@
       "save": "Add expense",
       "saveIncome": "Add income",
       "saveTransfer": "Add contribution",
+      "saveDraw": "Record draw",
       "noGoals": "Create a goal first",
-      "debtOption": "{name} (payment)"
+      "debtOption": "{name} (payment)",
+      "kindPayment": "Payment",
+      "kindDraw": "Draw"
     },
     "remainingCash": {
       "label": "Remaining cash — {month} closes at"
@@ -612,8 +616,14 @@
     "noTarget": "No target set",
     "currentlyOwed": "currently owed",
     "makePayment": "Make a payment",
+    "recordDraw": "Record a draw",
     "payoffPlan": "Paying {amount}/mo · payoff {date}",
     "debtPaidOff": "Paid off",
+    "draw": {
+      "title": "Record a draw",
+      "hint": "Money borrowed from this credit line into your chequing account. This increases what you owe and is never counted as income or surplus.",
+      "save": "Record draw"
+    },
     "create": {
       "title": "Create a savings goal",
       "name": "Name",

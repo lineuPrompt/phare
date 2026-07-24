@@ -33,6 +33,11 @@ export default function TimelineEntryForm({
   const [cadence, setCadence] = useState<Cadence>('monthly');
   const [secondDay, setSecondDay] = useState('30');
   const [destinationAccountId, setDestinationAccountId] = useState('');
+  // Only meaningful when the resolved destination is a debt account — see
+  // resolvedDestination/isDebtDestination below. Reset to 'contribution'
+  // whenever the destination changes away from a debt account so switching
+  // goals can never leave a stale 'draw' silently selected.
+  const [transferKind, setTransferKind] = useState<'contribution' | 'draw'>('contribution');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [newCategoryMode, setNewCategoryMode] = useState(false);
@@ -41,6 +46,10 @@ export default function TimelineEntryForm({
 
   const isTransfer = entryType === 'transfer';
   const showCategoryField = entryType === 'expense';
+
+  const resolvedDestinationId = destinationAccountId || goalAccounts[0]?.id;
+  const isDebtDestination = goalAccounts.find((g) => g.id === resolvedDestinationId)?.isDebt ?? false;
+  const effectiveKind: 'contribution' | 'draw' = isDebtDestination ? transferKind : 'contribution';
 
   const switchType = (tp: 'expense' | 'income' | 'transfer') => {
     setEntryType(tp);
@@ -54,11 +63,11 @@ export default function TimelineEntryForm({
       let res: Response;
 
       if (isTransfer) {
-        // One-off contribution/debt payment from the Timeline — same atomic
-        // create_transfer path as the Goals page's "Add money"/"Make a
-        // payment". Timeline only offers "once" here; recurring contributions
-        // are set up from the Goals or Recurring page (Phase 2 machinery).
-        const resolvedDestinationId = destinationAccountId || goalAccounts[0]?.id;
+        // One-off contribution/debt payment/draw from the Timeline — same
+        // atomic create_transfer path as the Goals page's "Add money"/"Make
+        // a payment"/"Record a draw". Timeline only offers "once" here;
+        // recurring contributions are set up from the Goals or Recurring
+        // page (Phase 2 machinery) — draws are never recurring.
         res = await fetch('/api/transfers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -67,6 +76,7 @@ export default function TimelineEntryForm({
             amount: parseFloat(amount),
             goalAccountId: resolvedDestinationId,
             description: description.trim() || undefined,
+            kind: effectiveKind,
           }),
         });
       } else {
@@ -164,7 +174,8 @@ export default function TimelineEntryForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
             className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
-          <select value={destinationAccountId || goalAccounts[0]?.id || ''} onChange={(e) => setDestinationAccountId(e.target.value)}
+          <select value={destinationAccountId || goalAccounts[0]?.id || ''}
+            onChange={(e) => { setDestinationAccountId(e.target.value); setTransferKind('contribution'); }}
             className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
             {goalAccounts.length === 0 && <option value="">{t('noGoals')}</option>}
             {goalAccounts.map((g) => (
@@ -177,6 +188,24 @@ export default function TimelineEntryForm({
             placeholder={t('descriptionOptional')} className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
           <input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)}
             placeholder={t('amount')} className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
+          {/* Payment vs draw — only meaningful for a debt destination. A
+              draw borrows against the credit line into chequing (the mirror
+              of a payment) and is never counted as income or surplus. */}
+          {isDebtDestination && (
+            <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
+              {(['contribution', 'draw'] as const).map((k) => (
+                <button key={k} type="button" onClick={() => setTransferKind(k)}
+                  className="px-4 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all"
+                  style={{
+                    border: transferKind === k ? '2px solid #B45309' : '1.5px solid #D1D5DB',
+                    background: transferKind === k ? '#FEF3E7' : 'white',
+                    color: transferKind === k ? '#0F2044' : '#6B7280',
+                  }}>
+                  {k === 'contribution' ? t('kindPayment') : t('kindDraw')}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <div className={`grid grid-cols-1 sm:grid-cols-2 ${showCategoryField ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3 mb-3`}>
@@ -264,8 +293,14 @@ export default function TimelineEntryForm({
         )}
         <button onClick={submit} disabled={!canSave || saving}
           className="px-6 py-2.5 rounded-full text-white font-semibold cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
-          style={{ background: entryType === 'income' ? '#16A34A' : isTransfer ? '#2ABFBF' : '#0F2044' }}>
-          {saving ? t('saving') : entryType === 'income' ? t('saveIncome') : isTransfer ? t('saveTransfer') : t('save')}
+          style={{ background: entryType === 'income' ? '#16A34A' : isTransfer ? (effectiveKind === 'draw' ? '#B45309' : '#2ABFBF') : '#0F2044' }}>
+          {saving
+            ? t('saving')
+            : entryType === 'income'
+              ? t('saveIncome')
+              : isTransfer
+                ? (effectiveKind === 'draw' ? t('saveDraw') : t('saveTransfer'))
+                : t('save')}
         </button>
       </div>
     </div>

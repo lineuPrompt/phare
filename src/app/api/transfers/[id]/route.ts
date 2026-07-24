@@ -25,18 +25,18 @@ async function resolvePair(
   supabase: Awaited<ReturnType<typeof createClient>>,
   id: string,
   householdId: string
-): Promise<{ ids: string[]; type: string | null; recurringItemId: string | null; date: string | null }> {
+): Promise<{ ids: string[]; type: string | null; recurringItemId: string | null; date: string | null; amount: number | null }> {
   const [direct, reverse] = await Promise.all([
     supabase
       .from('transactions')
-      .select('id, type, transfer_peer_id, recurring_item_id, date')
+      .select('id, type, amount, transfer_peer_id, recurring_item_id, date')
       .eq('id', id)
       .eq('household_id', householdId)
       .maybeSingle(),
 
     supabase
       .from('transactions')
-      .select('id, recurring_item_id, date')
+      .select('id, amount, recurring_item_id, date')
       .eq('transfer_peer_id', id)
       .eq('household_id', householdId),
   ]);
@@ -57,8 +57,13 @@ async function resolvePair(
   // pair — read it off whichever side the query found it on.
   const recurringItemId = target?.recurring_item_id ?? reverse.data?.[0]?.recurring_item_id ?? null;
   const date = target?.date ?? reverse.data?.[0]?.date ?? null;
+  // Either side's stored amount carries the pair's sign — a draw stores both
+  // sides negative, a contribution/payment stores both positive (see
+  // create_transfer's sign-convention comment). Read off whichever side the
+  // query found.
+  const amount = target?.amount != null ? Number(target.amount) : reverse.data?.[0]?.amount != null ? Number(reverse.data[0].amount) : null;
 
-  return { ids: [...ids], type, recurringItemId, date };
+  return { ids: [...ids], type, recurringItemId, date, amount };
 }
 
 // See src/app/api/expenses/[id]/route.ts's identical helper for the full
@@ -82,7 +87,12 @@ async function tombstoneOccurrence(
 // PATCH: update a transfer's amount, date, and/or description on BOTH sides of the pair.
 // Works correctly when given either the chequing-side or goal-side id,
 // and recovers from a broken peer link on either side.
-// Body: { amount, date?, description? }
+// Body: { amount, date?, description? } — amount is always a positive
+// MAGNITUDE (same as the create form). A draw's pair is stored negative on
+// both sides (see create_transfer's sign-convention comment); the sign is
+// re-derived from the pair's EXISTING stored amount here, never trusted from
+// the client, so editing a draw can't silently reclassify it as a
+// contribution (or vice versa) by flipping its sign.
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -104,13 +114,14 @@ export async function PATCH(
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    const { ids, type, recurringItemId, date: originalDate } = await resolvePair(supabase, id, householdId);
+    const { ids, type, recurringItemId, date: originalDate, amount: existingAmount } = await resolvePair(supabase, id, householdId);
 
     if (ids.length === 0 || type !== 'transfer') {
       return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
     }
 
-    const patch: Record<string, unknown> = { amount: Number(amount) };
+    const sign = (existingAmount ?? 0) < 0 ? -1 : 1;
+    const patch: Record<string, unknown> = { amount: sign * Number(amount) };
     if (date) patch.date = date;
     if (description !== undefined) patch.description = description?.trim() ?? null;
 

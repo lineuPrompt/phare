@@ -132,7 +132,11 @@ export default function SnapshotCard({
         </div>
       </div>
 
-      {/* Net cash flow — remaining after income − expenses − savings */}
+      {/* Net cash flow — remaining after income − expenses − savings.
+          Borrowed cash (a debt draw) is deliberately excluded from this
+          figure — a month that only "balanced" by borrowing must never read
+          as a surplus month — and disclosed right beside it instead, same
+          wording and same placement style as the projection tile below. */}
       <div
         className="rounded-xl p-3 sm:p-4"
         style={{ background: surplus ? '#F0FDF4' : '#FEF2F2' }}
@@ -145,6 +149,11 @@ export default function SnapshotCard({
             {formatCurrency(summary.netCashFlow, locale)}
           </p>
         </div>
+        {summary.totalBorrowed > 0 && (
+          <p className="text-xs mt-1" style={{ color: '#B45309' }}>
+            {t('borrowedNote', { amount: formatCurrency(summary.totalBorrowed, locale) })}
+          </p>
+        )}
       </div>
 
       {/* This figure is this month's cash flow only — it never carries
@@ -179,6 +188,17 @@ export default function SnapshotCard({
           <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>
             {tProjected('basis', { amount: formatCurrency(carriedInAmount as number, locale) })}
           </p>
+
+          {/* Same disclosure, same wording, as the surplus box above — the
+              cash really is in chequing (that's why it's still counted in
+              this projection), but the reader needs the identical "this was
+              borrowed" signal here too, not a pass because it's technically
+              real money. */}
+          {summary.totalBorrowed > 0 && (
+            <p className="text-xs mt-2" style={{ color: '#B45309' }}>
+              {t('borrowedNote', { amount: formatCurrency(summary.totalBorrowed, locale) })}
+            </p>
+          )}
 
           {noDataCardNames.length > 0 && (
             <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>

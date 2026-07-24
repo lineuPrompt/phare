@@ -366,6 +366,7 @@
     "savings": "Épargne ce mois-ci",
     "surplus": "Surplus mensuel",
     "deficit": "Déficit mensuel",
+    "borrowedNote": "{amount} de ce montant est emprunté.",
     "monthOnlyNote": "Ceci reflète uniquement le flux de trésorerie de ce mois, pas votre solde réel.",
     "viewRealBalance": "Voir votre solde réel dans la Chronologie",
     "topPriority": "Votre priorité #1",
@@ -583,8 +584,11 @@
       "save": "Ajouter la dépense",
       "saveIncome": "Ajouter le revenu",
       "saveTransfer": "Ajouter la contribution",
+      "saveDraw": "Enregistrer le prélèvement",
       "noGoals": "Créez d'abord un objectif",
-      "debtOption": "{name} (paiement)"
+      "debtOption": "{name} (paiement)",
+      "kindPayment": "Paiement",
+      "kindDraw": "Prélèvement"
     },
     "remainingCash": {
       "label": "Trésorerie restante — {month} ferme à"
@@ -612,8 +616,14 @@
     "noTarget": "Aucun objectif fixé",
     "currentlyOwed": "actuellement dû",
     "makePayment": "Faire un paiement",
+    "recordDraw": "Enregistrer un prélèvement",
     "payoffPlan": "Paiement de {amount}/mois · remboursé d'ici {date}",
     "debtPaidOff": "Remboursé",
+    "draw": {
+      "title": "Enregistrer un prélèvement",
+      "hint": "Argent emprunté sur cette marge de crédit vers votre compte chèque. Ceci augmente le montant dû et n'est jamais compté comme revenu ou surplus.",
+      "save": "Enregistrer le prélèvement"
+    },
     "create": {
       "title": "Créer un objectif d'épargne",
       "name": "Nom",

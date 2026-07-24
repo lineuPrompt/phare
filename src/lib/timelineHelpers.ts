@@ -8,16 +8,27 @@
  * --------------------------
  * income   → + (money into chequing)
  * expense  → − (money out of chequing)
- * transfer → − (chequing→goal outflow)
+ * transfer → − tx.amount (chequing→goal contribution/payment is an outflow,
+ *              amount stored positive, so this is negative; a debt DRAW is
+ *              the reverse — an inflow — and is stored with amount already
+ *              negative, so the same `-tx.amount` formula yields a positive
+ *              balance increase for free. See TRANSFER DIRECTION NOTE below.)
  *
  * TRANSFER DIRECTION NOTE
  * -----------------------
- * All transfers today are chequing→goal only. The create_transfer RPC and
- * POST /api/transfers are strictly one-directional: p_chequing_id is always
- * the debit side, p_goal_id always the credit side. No goal→chequing reversal
- * mechanism exists. If one is ever added, signAmount must derive direction from
- * transfer_peer_id + account lookup rather than tx.type alone, and a
- * corresponding test must be added.
+ * Two directions exist (Build 4, 2026-08-01): chequing→goal (a contribution
+ * or a debt payment, p_kind='contribution', the original/default behaviour)
+ * and goal→chequing (a debt draw, p_kind='draw', debt accounts only). Both
+ * go through the same create_transfer RPC and POST /api/transfers — there is
+ * no separate goal→chequing endpoint. Direction is NOT looked up via
+ * transfer_peer_id + account type (ambiguous: a debt account pairs with
+ * chequing in BOTH directions, so account type alone can't distinguish a
+ * payment from a draw). Instead the RPC stores the signed amount directly:
+ * positive for a contribution/payment, negative for a draw, identically on
+ * both sides of the pair — see create_transfer's migration comment
+ * (20260801000000_create_transfer_draw_kind.sql) for the full rationale.
+ * signAmount() below needs no change as a result: `-tx.amount` already
+ * produces the correct sign for both directions.
  *
  * INTRA-DAY ORDER
  * ---------------
@@ -79,7 +90,9 @@ export type TimelineTx = {
   id: string;
   date: string;                // YYYY-MM-DD
   description: string | null;
-  amount: number;              // always positive in DB; sign derived from type
+  amount: number;              // positive in DB, EXCEPT a debt draw's chequing-
+                                // side row (type='transfer'), which is stored
+                                // negative — see TRANSFER DIRECTION NOTE above.
   type: 'income' | 'expense' | 'transfer';
   recurringItemId: string | null;
   recurrenceId: string | null;

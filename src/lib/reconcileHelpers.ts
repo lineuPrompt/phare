@@ -50,6 +50,11 @@ export type ReconciliationResult = {
   totalIncome: number;
   totalExpenses: number;
   totalSavings: number;
+  // Real cash drawn from a debt account into chequing this month — excluded
+  // from both nets below by design (see computeMonthTotals's DEBT DRAWS
+  // note). Surfaced here too so the audit view can show it was accounted
+  // for, not silently dropped.
+  totalBorrowed: number;
   /** Card→chequing bridge lines, a subset of totalExpenses — shown separately. */
   totalBridgePayments: number;
   netFromBuckets: number;
@@ -71,7 +76,15 @@ function r2(n: number): number {
 /**
  * Path 2 — real household cash net, derived directly from the ledger.
  *
- * Signs: income = inflow (+), expense = outflow (−), transfer on chequing = outflow (−).
+ * Signs: income = inflow (+), expense = outflow (−), a POSITIVE transfer on
+ * chequing (contribution/payment) = outflow (−). A NEGATIVE transfer on
+ * chequing (a debt draw — see computeMonthTotals's DEBT DRAWS note) is
+ * skipped here entirely, contributing neither an inflow nor an outflow —
+ * mirroring computeMonthTotals's own exclusion of borrowed cash from
+ * netCashFlow, independently, so the two paths keep agreeing (the same
+ * dual-path lesson this file's own reconcileMonth already exists to catch —
+ * see the Phase 1 income-scope fix in dashboardHelpers.ts for the last time
+ * these two paths drifted).
  * Chequing rows are always considered. A sinking-fund account's expense rows
  * are ALSO considered (Build 4 Part 2, 2026-07-21) — a bill paid straight
  * from the fund is real money leaving the household for good, unlike a card
@@ -105,9 +118,11 @@ export function chequingLedgerNet(
       inflows += amt;
     } else if (tx.type === 'expense' && (onChequing || onSinkingFund)) {
       outflows += amt;
-    } else if (tx.type === 'transfer' && onChequing) {
+    } else if (tx.type === 'transfer' && onChequing && amt >= 0) {
       outflows += amt;
     }
+    // A negative chequing-side transfer (a draw) is intentionally skipped —
+    // see the function doc comment above.
   }
 
   return r2(inflows - outflows);
@@ -200,6 +215,7 @@ export function reconcileMonth(
     totalIncome: buckets.totalIncome,
     totalExpenses: buckets.totalExpenses,
     totalSavings: buckets.totalSavings,
+    totalBorrowed: buckets.totalBorrowed,
     totalBridgePayments,
     netFromBuckets,
     netFromChequing,
