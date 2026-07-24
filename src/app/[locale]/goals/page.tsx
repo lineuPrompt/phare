@@ -521,6 +521,10 @@ export default function GoalsPage() {
                                   {fmtDate(tr.date)}
                                 </span>
                                 <span className="flex-1 min-w-0 truncate text-sm" style={{ color: '#0F2044' }}>
+                                  {/* A negative-amount row on a debt account is a draw (or the
+                                      pre-Phare opening balance) — same distinct warning icon as
+                                      Timeline, never blending in with a payment. */}
+                                  {tr.amount < 0 && <span className="mr-1">🚨</span>}
                                   {tr.description ?? '—'}
                                 </span>
                                 <span className="text-sm font-medium shrink-0" style={{ color: tr.amount < 0 ? '#DC2626' : '#2ABFBF' }}>

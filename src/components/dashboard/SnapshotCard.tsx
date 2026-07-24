@@ -135,8 +135,11 @@ export default function SnapshotCard({
       {/* Net cash flow — remaining after income − expenses − savings.
           Borrowed cash (a debt draw) is deliberately excluded from this
           figure — a month that only "balanced" by borrowing must never read
-          as a surplus month — and disclosed right beside it instead, same
-          wording and same placement style as the projection tile below. */}
+          as a surplus month. Disclosed right beside it with real visual
+          weight (red warning box, not a muted caption) — a family scanning
+          the number must not be able to miss that it was propped up by
+          borrowing. Same treatment, same prominence, as the projection
+          tile's own disclosure below. */}
       <div
         className="rounded-xl p-3 sm:p-4"
         style={{ background: surplus ? '#F0FDF4' : '#FEF2F2' }}
@@ -149,12 +152,17 @@ export default function SnapshotCard({
             {formatCurrency(summary.netCashFlow, locale)}
           </p>
         </div>
-        {summary.totalBorrowed > 0 && (
-          <p className="text-xs mt-1" style={{ color: '#B45309' }}>
+      </div>
+      {summary.totalBorrowed > 0 && (
+        <div
+          className="rounded-xl px-3 py-2.5 mt-2"
+          style={{ background: '#FEF2F2', border: '1.5px solid #FECACA' }}
+        >
+          <p className="text-sm font-semibold" style={{ color: '#B91C1C' }}>
             {t('borrowedNote', { amount: formatCurrency(summary.totalBorrowed, locale) })}
           </p>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* This figure is this month's cash flow only — it never carries
           forward a prior month's leftover balance. The real running balance
@@ -189,15 +197,22 @@ export default function SnapshotCard({
             {tProjected('basis', { amount: formatCurrency(carriedInAmount as number, locale) })}
           </p>
 
-          {/* Same disclosure, same wording, as the surplus box above — the
-              cash really is in chequing (that's why it's still counted in
-              this projection), but the reader needs the identical "this was
+          {/* Same prominence as the surplus box above — the cash really is
+              in chequing (that's why it's still counted in this
+              projection), but the reader needs the identical "this was
               borrowed" signal here too, not a pass because it's technically
-              real money. */}
+              real money. Wording differs (this figure INCLUDES the draw,
+              unlike surplus, which excludes it) but the visual weight —
+              red warning box, not a muted caption — does not. */}
           {summary.totalBorrowed > 0 && (
-            <p className="text-xs mt-2" style={{ color: '#B45309' }}>
-              {t('borrowedNote', { amount: formatCurrency(summary.totalBorrowed, locale) })}
-            </p>
+            <div
+              className="rounded-xl px-3 py-2.5 mt-2"
+              style={{ background: '#FEF2F2', border: '1.5px solid #FECACA' }}
+            >
+              <p className="text-sm font-semibold" style={{ color: '#B91C1C' }}>
+                {tProjected('borrowedNote', { amount: formatCurrency(summary.totalBorrowed, locale) })}
+              </p>
+            </div>
           )}
 
           {noDataCardNames.length > 0 && (

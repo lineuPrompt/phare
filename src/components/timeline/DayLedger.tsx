@@ -317,7 +317,9 @@ function EntryRow({
         style={{ color: muted ? '#9CA3AF' : isFuture ? '#6B7280' : '#0F2044' }}
       >
         {entry.isBridge && <span className="mr-1">💳</span>}
-        {isEditableTransfer && <span className="mr-1">🪙 →</span>}
+        {/* A draw gets a distinct warning icon — this is borrowed money, it
+            must never blend in with an ordinary contribution/payment. */}
+        {isEditableTransfer && (isDraw ? <span className="mr-1">🚨</span> : <span className="mr-1">🪙 →</span>)}
         {isEditableEntry && isRecurringOccurrence && <span className="mr-1">🔁</span>}
         {entry.description ?? t('untitled')}
         {entry.installmentLabel && (
