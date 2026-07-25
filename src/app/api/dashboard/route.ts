@@ -378,6 +378,15 @@ export async function GET(request: Request) {
     const review            = messages.find((msg) => msg.type === 'monthly_review')?.content ?? null;
     const topRecommendation = messages.find((msg) => msg.type === 'top_recommendation')?.content ?? null;
 
+    // Review-open instrumentation (Coaching Layer spec) — the strongest
+    // available retention predictor. Gated on a real, non-empty review
+    // string, and only on this full (non-snapshotOnly) load — snapshotOnly
+    // month-nav reloads never reach this branch (early return above) and
+    // never fire this, so clicking through months doesn't inflate the count.
+    if (review) {
+      void logEvent(supabase, householdId, user.id, 'viewed_monthly_review', { month: actualsMonth.slice(0, 7) });
+    }
+
     // Sinking funds now share ONE cash buffer (Build 4 Part A, 2026-07-21
     // revision) — no family runs seven separate sinking accounts. Every
     // sinking_funds row's linked_account_id points at the SAME account once

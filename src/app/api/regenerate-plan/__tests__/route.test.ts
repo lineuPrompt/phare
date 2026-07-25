@@ -87,6 +87,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [
         { data: [{ amount: 5000, type: 'income', description: 'Salary', account_id: 'chq-1' }], error: null },
+        { data: [], error: null }, // Coaching Layer history window (typical surplus / installments)
       ],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [
@@ -126,6 +127,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
       transactions: [
         // Month-scoped fetch (headline figures)
         { data: [{ amount: 5000, type: 'income', description: 'Salary', account_id: 'chq-1' }], error: null },
+        { data: [], error: null }, // Coaching Layer history window
         // All-time fetch for goal-account balance
         { data: [{ amount: 2000, type: 'transfer', account_id: 'goal-1', date: '2026-01-01' }], error: null },
       ],
@@ -171,7 +173,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
-      transactions: [{ data: [], error: null }],
+      transactions: [{ data: [], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
       recurring_items: [{ data: [], error: null }, { data: [], error: null }],
@@ -204,6 +206,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [
         { data: [], error: null }, // month-scoped headline figures
+        { data: [], error: null }, // Coaching Layer history window
         // All-time fetch for the debt account's balance: opened at -5000, one $200 payment.
         { data: [
           { amount: -5000, type: 'transfer', account_id: 'debt-1', date: '2026-05-01' },
@@ -265,6 +268,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [
         { data: [], error: null }, // month-scoped headline figures
+        { data: [], error: null }, // Coaching Layer history window
         { data: futureContributions, error: null }, // all-time fetch for the goal's balance — all future
       ],
       accounts: [
@@ -310,7 +314,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
-      transactions: [{ data: [], error: null }],
+      transactions: [{ data: [], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
       recurring_items: [
@@ -356,6 +360,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
           ],
           error: null,
         },
+        { data: [], error: null }, // Coaching Layer history window
       ],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
@@ -398,7 +403,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
-      transactions: [{ data: [], error: null }],
+      transactions: [{ data: [], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
       recurring_items: [{ data: [], error: null }, { data: [], error: null }],
@@ -438,7 +443,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
-      transactions: [{ data: [], error: null }],
+      transactions: [{ data: [], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       // No linked_account_id for either fund — the real, live shape today
       // (the shared buffer has never been started).
@@ -480,6 +485,7 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       transactions: [
         { data: [], error: null }, // month-scoped headline figures
+        { data: [], error: null }, // Coaching Layer history window
         { // all-time fetch for the shared buffer's balance
           data: [{ amount: 900, type: 'transfer', account_id: 'buffer-1', date: '2020-01-01' }],
           error: null,
@@ -518,5 +524,227 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
     // Neither individual fund entry carries its own fundedAlready any more —
     // it is a single shared signal, not a per-fund one.
     expect(reviewPromptSent).not.toMatch(/"dueMonth":3,"fundedAlready"/);
+  });
+});
+
+describe('POST /api/regenerate-plan — the Coaching Layer', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createMock.mockReset();
+  });
+
+  it('prioritization: a past-due goal ranks first even against a sinking fund due sooner on the calendar', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-17T12:00:00'));
+
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [
+        { data: [], error: null }, // month-scoped headline figures
+        { data: [], error: null }, // Coaching Layer history window
+        { data: [], error: null }, // all-time fetch for the goal's balance (savedSoFar: 0)
+      ],
+      accounts: [{
+        data: [
+          { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null },
+          // Target date already passed relative to "today" (2026-07-17).
+          { id: 'goal-1', name: 'Emergency fund', type: 'savings', goal_target: 2000, goal_target_date: '2026-01-01' },
+        ],
+        error: null,
+      }],
+      sinking_funds: [{
+        data: [
+          // Due next month — nearer on the calendar than the goal's (already
+          // passed) date, but must NOT outrank the past-due goal.
+          { name: 'Christmas fund', annual_amount: 3600, monthly_provision: 300, due_month: 8, due_day: 15, linked_account_id: null },
+        ],
+        error: null,
+      }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    try {
+      const { createClient } = await import('@/lib/supabase-server');
+      (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+      const { POST } = await import('../route');
+      const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+        method: 'POST',
+        body: JSON.stringify({ locale: 'en' }),
+      }));
+      expect(res.status).toBe(200);
+
+      const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
+      // The past-due goal is the FIRST element of coaching.rankedNeeds.
+      expect(reviewPromptSent).toContain('"rankedNeeds":[{"kind":"goal","name":"Emergency fund"');
+      expect(reviewPromptSent).toContain('"pastDue":true');
+      expect(reviewPromptSent).toContain('COACHING');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('sourcing: only the card category that actually exceeds its own target reaches coaching.sourceCategory, never one under/at target', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-17T12:00:00'));
+
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [
+        {
+          data: [
+            { account_id: 'card-1', amount: 350, type: 'expense', category_id: 'cat-hobby', date: '2026-07-05', is_bridge: false, description: 'Hobby stuff' },
+            { account_id: 'card-1', amount: 80, type: 'expense', category_id: 'cat-book', date: '2026-07-06', is_bridge: false, description: 'Book club dues' },
+          ],
+          error: null,
+        },
+        { data: [], error: null }, // Coaching Layer history window
+      ],
+      accounts: [{
+        data: [
+          { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null },
+          { id: 'card-1', name: 'Visa', type: 'credit_card', goal_target: null, goal_target_date: null },
+        ],
+        error: null,
+      }],
+      sinking_funds: [{ data: [], error: null }],
+      card_envelope_items: [{
+        data: [
+          // Over its own $200 target.
+          { account_id: 'card-1', category_id: 'cat-hobby', monthly_amount: 200, categories: { name: 'Hobby Supplies', name_fr: null } },
+          // Under its own $100 target — must never surface as a source.
+          { account_id: 'card-1', category_id: 'cat-book', monthly_amount: 100, categories: { name: 'Book Club', name_fr: null } },
+        ],
+        error: null,
+      }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    try {
+      const { createClient } = await import('@/lib/supabase-server');
+      (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+      const { POST } = await import('../route');
+      const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+        method: 'POST',
+        body: JSON.stringify({ locale: 'en' }),
+      }));
+      expect(res.status).toBe(200);
+
+      const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
+      expect(reviewPromptSent).toContain('"sourceCategory":{"categoryName":"Hobby Supplies","target":200,"actual":350,"over":150}');
+      // The under-target category never reaches the AI's context at all —
+      // there is no path for it to appear, structurally, not just by rule.
+      expect(reviewPromptSent).not.toContain('Book Club');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('empty-set fallback: fallbackApplies is true and the meaning-based hard rule is present when there is genuinely nothing to point to', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-17T12:00:00'));
+
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      // No income/expenses this month or in the trailing history — typical
+      // surplus computes to exactly 0, no card accounts, no sinking funds,
+      // no goals: nothing real to point to anywhere.
+      transactions: [{ data: [], error: null }, { data: [], error: null }],
+      accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+      sinking_funds: [{ data: [], error: null }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    try {
+      const { createClient } = await import('@/lib/supabase-server');
+      (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+      const { POST } = await import('../route');
+      const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+        method: 'POST',
+        body: JSON.stringify({ locale: 'en' }),
+      }));
+      expect(res.status).toBe(200);
+
+      const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
+      expect(reviewPromptSent).toContain('"fallbackApplies":true');
+      expect(reviewPromptSent).toContain('coaching.fallbackApplies');
+      expect(reviewPromptSent).toContain('never substitute a vaguer instruction like "look at your spending,"');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a misbehaving AI cannot inject a fabricated coaching object — the real plan.coaching is entirely code-computed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-17T12:00:00'));
+
+    const ROGUE_COACHING_AI = {
+      lineClassifications: [],
+      topRecommendation: 'Keep going.',
+      // None of this is ever read by the route — coaching is assembled
+      // entirely from coachingHelpers.ts, never from aiPart.
+      coaching: {
+        sourceCategory: { categoryName: 'Fake Category', target: 1, actual: 99999, over: 99998 },
+        rankedNeeds: [{ kind: 'goal', name: 'Fake need', monthlyPressure: 99999 }],
+        startingContribution: 99999,
+        fallbackApplies: false,
+      },
+    };
+
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify(ROGUE_COACHING_AI) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [{ data: [], error: null }, { data: [], error: null }],
+      accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+      sinking_funds: [{ data: [], error: null }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    try {
+      const { createClient } = await import('@/lib/supabase-server');
+      (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+      const { POST } = await import('../route');
+      const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+        method: 'POST',
+        body: JSON.stringify({ locale: 'en' }),
+      }));
+      expect(res.status).toBe(200);
+
+      const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
+      expect(reviewPromptSent).not.toContain('Fake Category');
+      expect(reviewPromptSent).not.toContain('Fake need');
+      expect(reviewPromptSent).not.toContain('99999');
+      expect(reviewPromptSent).not.toContain('99998');
+      // The real, code-computed fallback (nothing set up at all) reached the review instead.
+      expect(reviewPromptSent).toContain('"fallbackApplies":true');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

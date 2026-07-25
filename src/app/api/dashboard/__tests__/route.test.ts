@@ -30,6 +30,7 @@ function makeResultChain(resolution: Resolution) {
 
 function makeSupabaseMock(script: Record<string, Resolution[]>) {
   const cursors: Record<string, number> = {};
+  const inserts: { table: string; payload: unknown }[] = [];
 
   function entry(table: string, resolutionOverride?: Resolution) {
     const idx = cursors[table] ?? 0;
@@ -49,11 +50,14 @@ function makeSupabaseMock(script: Record<string, Resolution[]>) {
     auth: { getUser: async () => ({ data: { user: { id: 'user-1' } }, error: null }) },
     from: (table: string) => ({
       select: () => entry(table),
-      insert: () => entry(table),
+      insert: (payload: unknown) => {
+        if (table === 'events') inserts.push({ table, payload });
+        return entry(table);
+      },
     }),
   };
 
-  return { client };
+  return { client, inserts };
 }
 
 vi.mock('@/lib/supabase-server', () => ({
@@ -589,5 +593,107 @@ describe('GET /api/dashboard — a bridge-sync failure surfaces, never a silentl
     expect(res.status).toBe(500);
     expect(json.hasPlan).toBeUndefined(); // never got far enough to build a (partial) success payload
     expect(json.error).toBeTruthy();
+  });
+});
+
+// Review-open instrumentation (Coaching Layer spec, 2026-07-25): the
+// strongest available retention predictor. Must fire on the real "the
+// review was shown" signal — a full (non-snapshotOnly) load that actually
+// has a review string to return — never on every dashboard load in general.
+describe('GET /api/dashboard — review-open instrumentation', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  const baseFixture = {
+    users: [{ data: { household_id: 'hh1', full_name: 'Lineu Prompt' }, error: null }],
+    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    file_imports: [{ data: { id: 'imp-1' }, error: null }],
+    budgets: [
+      { data: null, error: null },
+      { data: [], error: null },
+    ],
+    accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+    account_balance_anchors: [{ data: { anchor_date: '2026-01-01' }, error: null }],
+    transactions: [{ data: [], error: null }],
+    sinking_funds: [{ data: [], error: null }],
+    recurring_items: [
+      { count: 0, error: null },
+      { count: 0, error: null },
+    ],
+  };
+
+  it('fires viewed_monthly_review on a full load that actually has a review to show', async () => {
+    const { client, inserts } = makeSupabaseMock({
+      ...baseFixture,
+      conversations: [{
+        data: {
+          created_at: '2026-07-01T00:00:00Z',
+          messages: [{ role: 'assistant', type: 'monthly_review', content: 'A fine month overall.' }],
+        },
+        error: null,
+      }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('http://localhost/api/dashboard'));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.review).toBe('A fine month overall.');
+    const fired = inserts.find((i) => (i.payload as { event_type: string }).event_type === 'viewed_monthly_review');
+    expect(fired).toBeTruthy();
+    expect((fired!.payload as { household_id: string }).household_id).toBe('hh1');
+  });
+
+  it('does not fire viewed_monthly_review when there is no review yet to show', async () => {
+    const { client, inserts } = makeSupabaseMock({
+      ...baseFixture,
+      conversations: [{ data: null, error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('http://localhost/api/dashboard'));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.review).toBeNull();
+    expect(inserts.find((i) => (i.payload as { event_type: string }).event_type === 'viewed_monthly_review')).toBeUndefined();
+  });
+
+  it('does not fire viewed_monthly_review on a snapshotOnly month-nav reload, even when a review exists', async () => {
+    const { client, inserts } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1', full_name: 'Lineu Prompt' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+      account_balance_anchors: [{ data: { anchor_date: '2026-01-01' }, error: null }],
+      transactions: [{ data: [], error: null }],
+      recurring_items: [
+        { count: 0, error: null },
+        { count: 0, error: null },
+      ],
+      // budgets/sinking_funds/conversations are deliberately left unscripted
+      // — snapshotOnly must never touch them (existing contract, see the
+      // "sinking fund buffer" describe block above), so this also proves
+      // the review-open logic (which lives past that branch) never runs.
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('http://localhost/api/dashboard?snapshotOnly=1'));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.review).toBeUndefined();
+    expect(inserts.find((i) => (i.payload as { event_type: string }).event_type === 'viewed_monthly_review')).toBeUndefined();
   });
 });

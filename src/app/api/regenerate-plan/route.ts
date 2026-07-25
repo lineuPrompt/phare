@@ -40,8 +40,21 @@ import { createClient } from '@/lib/supabase-server';
 import { anthropic } from '@/lib/anthropic';
 import { assembleCalculatedBudget, dedupeSinkingFunds } from '@/lib/planHelpers';
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
-import { evaluateGoals, isDebtGoalName, computeDebtPayoff, GoalResult, DebtPayoffResult } from '@/lib/goalHelpers';
+import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth, monthsBetween, GoalResult, DebtPayoffResult } from '@/lib/goalHelpers';
 import { detectWindfalls } from '@/lib/reviewContextHelpers';
+import { categoryActualsForCard } from '@/lib/envelopeHelpers';
+import {
+  computeSinkingFundUrgency,
+  rankFundingNeeds,
+  computeTypicalSurplus,
+  computeOverTargetCategories,
+  selectTopOverTargetCategory,
+  computeFreedCapacityEvents,
+  groupInstallmentSeries,
+  computeStartingContribution,
+  coachingFallbackApplies,
+  FundingNeed,
+} from '@/lib/coachingHelpers';
 import { businessToday, businessMonth } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
@@ -92,15 +105,20 @@ export async function POST(request: Request) {
     const month = tmo - 1; // 0-indexed, matching firstOfMonth's contract
     const monthStart = firstOfMonth(year, month);
     const monthEnd = firstOfMonth(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1);
+    const currentMonthLabel = monthStart.slice(0, 7); // YYYY-MM
 
     // ── recurring_item_id is now selected too (headline figures still come
     // entirely from computeMonthTotals over these same rows) — needed to
     // count each recurring item's occurrences this month for windfall
-    // detection below (Part B.4). ──
-    const [allTxResult, acctResult, sfResult] = await Promise.all([
+    // detection below (Part B.4). category_id/is_bridge/date are additive —
+    // needed by the Coaching Layer's over-target-category sourcing below,
+    // never used by the pre-existing headline/windfall/line-aggregation
+    // logic, which still relies on the query's own monthStart/monthEnd
+    // range exactly as before. ──
+    const [allTxResult, acctResult, sfResult, historyResult] = await Promise.all([
       supabase
         .from('transactions')
-        .select('id, amount, type, description, account_id, recurring_item_id, transfer_peer_id')
+        .select('id, amount, type, description, account_id, recurring_item_id, transfer_peer_id, category_id, is_bridge, date')
         .eq('household_id', householdId)
         .gte('date', monthStart)
         .lt('date', monthEnd),
@@ -112,14 +130,30 @@ export async function POST(request: Request) {
 
       supabase
         .from('sinking_funds')
-        .select('name, annual_amount, monthly_provision, due_month, linked_account_id')
+        .select('name, annual_amount, monthly_provision, due_month, due_day, linked_account_id')
         .eq('household_id', householdId)
         .eq('active', true),
+
+      // Coaching Layer (2026-07-25): one wide window covering the 3 complete
+      // calendar months before this one (typical-surplus history) through 12
+      // months ahead (real materialized future rows — same horizon
+      // convention as the dashboard's month nav — long enough to find any
+      // already-materialized installment series' real final row). Kept as
+      // its own query rather than widening the query above so the existing
+      // headline/windfall/line-aggregation logic above is untouched — it
+      // still sees exactly the current month, nothing more.
+      supabase
+        .from('transactions')
+        .select('amount, type, account_id, date, recurring_item_id, installment_label, recurrence_id, description')
+        .eq('household_id', householdId)
+        .gte('date', `${addMonthsToMonth(monthStart.slice(0, 7), -3)}-01`)
+        .lt('date', `${addMonthsToMonth(monthStart.slice(0, 7), 12)}-01`),
     ]);
 
     const allTxns = allTxResult.data ?? [];
     const accounts = acctResult.data ?? [];
     const sinkingFunds = sfResult.data ?? [];
+    const historyRows = historyResult.data ?? [];
 
     // ── One call for all buckets (same function as Expenses page) ───────────
     const { totalIncome: incomeTotal, totalExpenses: expenseTotal, totalSavings, totalDebtPayments, totalBorrowed, netCashFlow } =
@@ -220,6 +254,159 @@ export async function POST(request: Request) {
       (activeRecurringItems ?? []) as { id: string; description: string; cadence: string; type: string }[]
     );
 
+    // ── The Coaching Layer ────────────────────────────────────────────────────
+    // Every figure below is code-computed (coachingHelpers.ts) and only ever
+    // narrated by the review prompt — the AI is never asked to choose a
+    // category or a priority. See coachingHelpers.ts for why a category with
+    // no real overspend cannot reach this object at all, which is what makes
+    // fabrication structurally impossible rather than merely discouraged.
+
+    // 1. Prioritization: sinking-fund allocations + non-debt goals share one
+    // ranked list. Debts stay OUT of it — a debt's monthly payment is either
+    // already a committedTransfer above (already netted out of netCashFlow)
+    // or not set up yet, in which case the debt card's own verdict already
+    // surfaces that; folding it in here would pose a false choice between a
+    // bill already being paid and a need that isn't.
+    const fundingNeeds: FundingNeed[] = [
+      ...sinkingFunds
+        .filter((sf) => Number(sf.monthly_provision ?? 0) > 0)
+        .map((sf) => ({
+          kind: 'sinkingFundAllocation' as const,
+          name: sf.name,
+          monthlyProvision: Number(sf.monthly_provision),
+          monthsUntilDue: computeSinkingFundUrgency(
+            { dueMonth: sf.due_month ?? null, dueDay: sf.due_day ?? null },
+            today
+          ).monthsUntilDue,
+          pastDue: false as const,
+        })),
+      ...computedGoals
+        .filter((g) => !g.fundedAlready)
+        .map((g) => {
+          const amountRemaining = Math.max(0, g.targetAmount - g.savedSoFar);
+          return {
+            kind: 'goal' as const,
+            name: g.name,
+            // For an on-track/behind goal this is the real required $/month
+            // (requiredMonthlyContribution). A past-due goal has no valid
+            // $/month against an already-passed target date — amountRemaining
+            // substitutes purely as a ranking/tie-break magnitude here; the
+            // review is only ever given amountRemaining/targetDate/pastDue
+            // for a past-due item, never told to narrate this as a literal
+            // monthly figure.
+            monthlyContribution: g.pastDue ? amountRemaining : g.monthlyContribution,
+            monthsToTarget: g.hasTargetDate && g.targetDate ? monthsBetween(today, g.targetDate) : null,
+            pastDue: g.pastDue,
+            amountRemaining,
+          };
+        }),
+    ];
+    const rankedNeeds = rankFundingNeeds(fundingNeeds);
+    const topNeed = rankedNeeds[0] ?? null;
+
+    // 2a. Typical surplus: the 3 complete calendar months before this one,
+    // windfalls netted back out so a one-time extra paycheque never inflates
+    // what looks like ongoing room. historyRows' fixed 3-month/12-month-ahead
+    // window (fetched above) covers this.
+    const priorMonths = [1, 2, 3].map((n) => addMonthsToMonth(currentMonthLabel, -n));
+    const monthlyFigures = priorMonths.map((m) => {
+      const mStart = `${m}-01`;
+      const mEnd = `${addMonthsToMonth(m, 1)}-01`;
+      const monthRows = historyRows.filter((r) => r.date >= mStart && r.date < mEnd);
+      const monthTotals = computeMonthTotals(
+        monthRows.map((r) => ({ amount: Number(r.amount), type: r.type, account_id: r.account_id })),
+        accounts
+      );
+      const monthWindfalls = detectWindfalls(
+        monthRows.map((r) => ({ recurring_item_id: r.recurring_item_id ?? null, amount: r.amount })),
+        (activeRecurringItems ?? []) as { id: string; description: string; cadence: string; type: string }[]
+      );
+      const windfallExtra = monthWindfalls.reduce((sum, w) => sum + w.amount, 0);
+      return { month: m, netCashFlow: monthTotals.netCashFlow, windfallExtra };
+    });
+    const typicalSurplusResult = computeTypicalSurplus(monthlyFigures);
+    const typicalSurplus = typicalSurplusResult?.typicalSurplus ?? null;
+
+    // 2b. Real over-target categories — card-envelope categories only (the
+    // one place a family sets a real spending target today; there is no
+    // chequing-side category target anywhere in the schema). Code selects AT
+    // MOST ONE candidate (the largest overspend) — the AI is never given the
+    // full list and never chooses; it only narrates the one already chosen.
+    const cardAccounts = accounts.filter((a) => a.type === 'credit_card');
+    let overTargetCategories: ReturnType<typeof computeOverTargetCategories> = [];
+    if (cardAccounts.length > 0) {
+      const cardIds = cardAccounts.map((a) => a.id);
+      const { data: envelopeItemRows } = await supabase
+        .from('card_envelope_items')
+        .select('account_id, category_id, monthly_amount, categories(name, name_fr)')
+        .eq('household_id', householdId)
+        .in('account_id', cardIds)
+        .eq('month', monthStart);
+
+      const categoryFigures: { categoryName: string; target: number; actual: number }[] = [];
+      for (const item of (envelopeItemRows ?? []) as unknown as { account_id: string; category_id: string; monthly_amount: number; categories: { name: string; name_fr: string | null } | null }[]) {
+        const actualsMap = categoryActualsForCard(
+          allTxns.map((t) => ({
+            account_id: t.account_id as string,
+            amount: t.amount,
+            category_id: (t as { category_id?: string | null }).category_id ?? null,
+            type: t.type,
+            date: (t as { date?: string }).date ?? '',
+            is_bridge: (t as { is_bridge?: boolean | null }).is_bridge ?? false,
+          })),
+          item.account_id,
+          currentMonthLabel
+        );
+        categoryFigures.push({
+          categoryName: item.categories?.name ?? '?',
+          target: Number(item.monthly_amount),
+          actual: actualsMap.get(item.category_id) ?? 0,
+        });
+      }
+      overTargetCategories = computeOverTargetCategories(categoryFigures);
+    }
+    const sourceCategory = selectTopOverTargetCategory(overTargetCategories);
+
+    // 2c. Freed-capacity events: the debt's own already-computed payoff date
+    // (zero new math), plus any real installment series whose final,
+    // already-materialized row is still in the future (each row carries its
+    // own real date — no parsing of the cosmetic "N/Total" label needed,
+    // only that it's non-null so a plain monthly-repeat row is excluded).
+    const installmentSeries = groupInstallmentSeries(
+      historyRows.map((r) => ({
+        recurrence_id: (r as { recurrence_id?: string | null }).recurrence_id ?? null,
+        installment_label: (r as { installment_label?: string | null }).installment_label ?? null,
+        description: r.description ?? null,
+        amount: r.amount,
+        date: r.date,
+      }))
+    );
+    const endingInstallments = installmentSeries.filter((s) => s.lastDate > today);
+    const freedCapacityEvents = computeFreedCapacityEvents(computedDebtPayoff, endingInstallments);
+
+    // 3. Ramping: never more than the top-ranked need requires, never more
+    // than typical surplus (already net of committed transfers and
+    // windfalls — genuinely uncommitted room). No cushion (founder decision,
+    // 2026-07-25) — typicalSurplus already being an average is the margin.
+    const startingContribution = computeStartingContribution(topNeed, typicalSurplus);
+
+    // Meaning constraint, not fixed copy (founder decision, 2026-07-25): the
+    // review prompt below requires the model to state plainly, in its own
+    // words, that there's no clear extra room and to start small/revisit
+    // later whenever this is true — never a vaguer instruction, never an
+    // invented source.
+    const fallbackApplies = coachingFallbackApplies({ typicalSurplus, sourceCategory, freedCapacityEvents });
+
+    const coaching = {
+      rankedNeeds,
+      typicalSurplus,
+      monthsOfHistoryUsed: typicalSurplusResult?.monthsUsed ?? 0,
+      sourceCategory,
+      freedCapacityEvents,
+      startingContribution,
+      fallbackApplies,
+    };
+
     // ── Named review period (Part B.5) ───────────────────────────────────────
     // The AI must never guess or default to a different month than the one
     // actually reviewed — it's a computed input, not something to infer.
@@ -269,7 +456,6 @@ export async function POST(request: Request) {
 
     const monthlyBudget = assembleCalculatedBudget(calculated);
 
-    const currentMonthLabel = monthStart.slice(0, 7); // YYYY-MM
     const aiContext =
       `The reviewed period is ${reviewMonthName} (${currentMonthLabel}) — refer to it by this exact name, never a different month.\n` +
       `Net cash flow: $${netCashFlow}/month ` +
@@ -390,6 +576,12 @@ export async function POST(request: Request) {
       debtPayoff: computedDebtPayoff,
       goals: computedGoals,
       windfalls,
+      // The Coaching Layer — entirely code-computed (coachingHelpers.ts),
+      // same discipline as goals/debtPayoff above: the AI only narrates
+      // this, it never reorders rankedNeeds, never picks a different
+      // sourceCategory, never invents a freedCapacityEvent or a starting
+      // amount above startingContribution.
+      coaching,
       topRecommendation: aiPart.topRecommendation ?? '',
     };
 
@@ -439,7 +631,26 @@ export async function POST(request: Request) {
       `the reader must never see the word "code". An estimated date or figure reads as a plain estimate (e.g. ` +
       `"estimated: March 2027"), never "code-estimated" or "code-computed". A projected or computed amount ` +
       `(including a card/bridge payment total) reads as "expected", never "budgeted" — reserve "budgeted" only ` +
-      `for a figure the family actually set as a budget themselves.`;
+      `for a figure the family actually set as a budget themselves.\n` +
+      `- COACHING — WHERE THE MONEY COMES FROM: "coaching" is the ONLY source of any funding-priority or ` +
+      `money-source suggestion. Its "rankedNeeds" is already in the correct priority order — restate that order, ` +
+      `never re-rank it yourself and never suggest funding anything not in this list. "coaching.startingContribution" ` +
+      `is the most you may ever suggest starting at — never recommend a larger number. If "coaching.sourceCategory" ` +
+      `is non-null, you may name ONLY that one category as a possible source (its exact target/actual/over figures, ` +
+      `never any other category, never a target you were not given) — phrase it as an option the family can use if ` +
+      `they choose, e.g. "restaurants ran $X against your own $Y target — that's one place it could come from," ` +
+      `never a command like "cut back on X." If "coaching.sourceCategory" is null, do not name ANY category as a ` +
+      `money source. If "coaching.freedCapacityEvents" is non-empty, you may describe growth only from those exact ` +
+      `events (their own label/amount/freesOn) — e.g. "once X clears in {freesOn}, that $Y/month could go toward ` +
+      `{need}" — never invent a percentage, a schedule, or a growth event not in this list. If ` +
+      `"coaching.fallbackApplies" is true, you must state plainly, in your own natural words, that there is no ` +
+      `clear extra room right now and that starting small / revisiting later is the move — never substitute a ` +
+      `vaguer instruction like "look at your spending," and never name a category or event to fill the gap. TONE: ` +
+      `never write "cut", "cut back", "reduce your spending on", "wasteful", "unnecessary", "frivolous", ` +
+      `"shouldn't", "you need to stop", or "overspent" (say "ran higher than your own target" instead); never imply ` +
+      `a category is frivolous or that the family is failing; no category (groceries, childcare, health included) ` +
+      `is ever singled out as more discretionary than another — the voice is a humble coach offering an option, not ` +
+      `an auditor issuing a verdict.`;
 
     const reviewMessage = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',

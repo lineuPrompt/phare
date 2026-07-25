@@ -22,7 +22,12 @@ export type EventType =
   | 'viewed_planner'
   | 'created_first_goal'
   | 'added_second_family_member'
-  | 'returned';
+  | 'returned'
+  // The monthly review actually being shown to the user (not merely the
+  // dashboard loading) — the strongest available retention predictor, per
+  // the Coaching Layer spec. Fired from GET /api/dashboard's full (non-
+  // snapshotOnly) load, gated on a non-empty review string.
+  | 'viewed_monthly_review';
 
 /**
  * Insert one event row.
