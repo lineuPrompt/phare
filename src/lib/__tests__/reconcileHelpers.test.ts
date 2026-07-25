@@ -5,6 +5,7 @@ import {
   ReconcileTxRow,
   ReconcileAccountRow,
 } from '../reconcileHelpers';
+import { signedAmount } from '../envelopeHelpers';
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -164,6 +165,35 @@ describe('reconcileMonth — per-account balances', () => {
     const result = reconcileMonth(transactions, accounts);
     const card = result.accounts.find((a) => a.accountId === CARD)!;
     expect(card.monthBalance).toBe(350);
+  });
+
+  // Regression for the reconcile-vs-envelopes drift (2026-07-25): the
+  // credit_card branch used to sum only expense rows, silently dropping
+  // refund (income) rows, while Card Envelopes (envelopeHelpers.ts's
+  // signedAmount) already netted them. Fixture mirrors the real Visa Avion
+  // July 2026 data that surfaced the $129.33 gap ($4,008.18 expense-only vs.
+  // the correct $3,878.85 net). Asserted against signedAmount's own output,
+  // not a hardcoded number, so the two derivations can never silently
+  // re-diverge.
+  it('credit card balance nets refunds (income) against expenses, agreeing with envelopeHelpers signedAmount', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ type: 'expense', account_id: CARD, amount: 3000 }),
+      tx({ type: 'expense', account_id: CARD, amount: 1008.18 }),
+      tx({ type: 'income',  account_id: CARD, amount: 23.20 }),
+      tx({ type: 'income',  account_id: CARD, amount: 19.00 }),
+      tx({ type: 'income',  account_id: CARD, amount: 51.69 }),
+      tx({ type: 'income',  account_id: CARD, amount: 35.44 }),
+    ];
+
+    const result = reconcileMonth(transactions, accounts);
+    const card = result.accounts.find((a) => a.accountId === CARD)!;
+
+    const expectedFromSignedAmount = transactions
+      .filter((t) => t.account_id === CARD)
+      .reduce((sum, t) => sum + (signedAmount(t) ?? 0), 0);
+
+    expect(card.monthBalance).toBeCloseTo(expectedFromSignedAmount, 2);
+    expect(card.monthBalance).toBeCloseTo(3878.85, 2);
   });
 
   it('goal account balance = sum of transfer inflows', () => {

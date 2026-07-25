@@ -8,6 +8,7 @@
  */
 
 import { computeMonthTotals, AccountRow, TxRow } from './dashboardHelpers';
+import { signedAmount } from './envelopeHelpers';
 
 // Full transaction row needed by the audit — extends the minimal TxRow
 // with display fields and the bridge flag.
@@ -186,8 +187,14 @@ export function reconcileMonth(
         else if (tx.type === 'expense' || tx.type === 'transfer') monthBalance -= amt;
       }
     } else if (account.type === 'credit_card') {
+      // Same expense/income signing as envelopeHelpers.ts's signedAmount() —
+      // a refund (type='income' on a card) must net against spend here too,
+      // or this balance silently drifts from the Card Envelopes total for
+      // the same account/month. Do not reimplement the sign rule inline;
+      // import it so the two can't drift apart again.
       for (const tx of acctTxns) {
-        if (tx.type === 'expense') monthBalance += Number(tx.amount);
+        const signed = signedAmount(tx);
+        if (signed !== null) monthBalance += signed;
       }
     } else {
       // Goal accounts: inflows from transfer rows on that account, minus any
