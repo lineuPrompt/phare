@@ -367,6 +367,7 @@
     "savings": "Épargne ce mois-ci",
     "surplus": "Surplus mensuel",
     "deficit": "Déficit mensuel",
+    "debtPaymentsNote": "Comprend {amount} versé sur une dette — non compté comme épargne.",
     "borrowedNote": "⚠ {amount} emprunté ce mois-ci — non compté dans ce surplus.",
     "monthOnlyNote": "Ceci reflète uniquement le flux de trésorerie de ce mois, pas votre solde réel.",
     "viewRealBalance": "Voir votre solde réel dans la Chronologie",
@@ -860,7 +861,9 @@
       "includesBridge": "inclut les lignes de pont",
       "cardPayments": "Paiements de carte (pont)",
       "savingsTransfers": "Virements d'épargne",
-      "netFromBuckets": "Net (par catégorie)"
+      "debtPayments": "Paiements de dette",
+      "netFromBuckets": "Net (par catégorie)",
+      "borrowed": "⚠ {amount} emprunté ce mois-ci — non compté comme revenu, épargne ou paiement de dette."
     },
     "dualNet": {
       "title": "Comparaison des deux nets",

@@ -3,7 +3,11 @@ import type { CardCycleRemainder } from '@/lib/projectionHelpers';
 export type DashboardSummary = {
   totalIncome: number;
   totalExpenses: number;
+  // Contributions to savings/TFSA/RRSP/a sinking fund only — a debt payment
+  // is reported under totalDebtPayments instead (see computeMonthTotals's
+  // DEBT PAYMENTS vs SAVINGS note, dashboardHelpers.ts).
   totalSavings: number;
+  totalDebtPayments: number;
   // Real cash drawn from a debt account into chequing this month — excluded
   // from netCashFlow (see computeMonthTotals's DEBT DRAWS note,
   // dashboardHelpers.ts). Shown beside surplus/deficit, never folded into it.

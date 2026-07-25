@@ -132,8 +132,20 @@ export default function SnapshotCard({
         </div>
       </div>
 
-      {/* Net cash flow — remaining after income − expenses − savings.
-          Borrowed cash (a debt draw) is deliberately excluded from this
+      {/* Debt payments are no longer folded into "Saved this month" above
+          (2026-08-01) — paying down a credit line isn't saving, same
+          classification split as the reconcile screen's bucket breakdown.
+          Surfaced here so the now-smaller savings figure isn't read as money
+          that simply vanished. */}
+      {summary.totalDebtPayments > 0 && (
+        <p className="text-xs mb-3" style={{ color: '#7C3AED' }}>
+          {t('debtPaymentsNote', { amount: formatCurrency(summary.totalDebtPayments, locale) })}
+        </p>
+      )}
+
+      {/* Net cash flow — remaining after income − expenses − savings − debt
+          payments (netCashFlow already nets both; the split above is display
+          only). Borrowed cash (a debt draw) is deliberately excluded from this
           figure — a month that only "balanced" by borrowing must never read
           as a surplus month. Disclosed right beside it with real visual
           weight (red warning box, not a muted caption) — a family scanning

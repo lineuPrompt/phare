@@ -49,7 +49,7 @@ export async function GET(request: Request) {
 
       supabase
         .from('transactions')
-        .select('id, date, description, amount, type, account_id, is_bridge, installment_label, categories(name)')
+        .select('id, date, description, amount, type, account_id, transfer_peer_id, is_bridge, installment_label, categories(name)')
         .eq('household_id', householdId)
         .gte('date', monthStart)
         .lt('date', monthEnd)

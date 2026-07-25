@@ -38,11 +38,12 @@ function tx(overrides: Partial<TxRow> & { amount: number }): TxRow {
 describe('computeMonthTotals — baseline', () => {
   it('returns zeroes for an empty transaction list', () => {
     expect(computeMonthTotals([], accounts)).toEqual({
-      totalIncome:   0,
-      totalExpenses: 0,
-      totalSavings:  0,
-      totalBorrowed: 0,
-      netCashFlow:   0,
+      totalIncome:       0,
+      totalExpenses:     0,
+      totalSavings:      0,
+      totalDebtPayments: 0,
+      totalBorrowed:     0,
+      netCashFlow:       0,
     });
   });
 
@@ -262,6 +263,84 @@ describe('computeMonthTotals — debt draws', () => {
     expect(result.totalBorrowed).toBe(1000);
     expect(result.totalSavings).toBe(400);
     expect(result.netCashFlow).toBe(-400); // only the payment (savings) reduces net; the draw does not
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeMonthTotals — debt payments vs savings classification split
+// (Reconciliation screen fix, 2026-08-01)
+//
+// A debt payment used to fall into totalSavings, same bucket as a real
+// savings/TFSA/RRSP contribution — semantically wrong (paying down a credit
+// line isn't saving) and the reconcile screen's own version of the
+// borrowed-cash mislabeling bug. Classified by destination, resolved via
+// transfer_peer_id → the paired goal-side row → its account type.
+// ---------------------------------------------------------------------------
+
+describe('computeMonthTotals — debt payments vs savings split', () => {
+  it('a payment to a debt account is counted as totalDebtPayments, not totalSavings, when the peer link is present', () => {
+    const txns: TxRow[] = [
+      { id: 'chq-1', type: 'transfer', account_id: CHEQUING_ID, amount: 833.33, transfer_peer_id: 'debt-1' },
+      { id: 'debt-1', type: 'transfer', account_id: DEBT_ID,     amount: 833.33, transfer_peer_id: 'chq-1' },
+    ];
+    const result = computeMonthTotals(txns, accounts);
+    expect(result.totalDebtPayments).toBe(833.33);
+    expect(result.totalSavings).toBe(0);
+  });
+
+  it('a contribution to a savings/TFSA/RRSP account still counts as totalSavings, unaffected by the split', () => {
+    const txns: TxRow[] = [
+      { id: 'chq-1', type: 'transfer', account_id: CHEQUING_ID, amount: 300, transfer_peer_id: 'sav-1' },
+      { id: 'sav-1', type: 'transfer', account_id: SAVINGS_ID,   amount: 300, transfer_peer_id: 'chq-1' },
+    ];
+    const result = computeMonthTotals(txns, accounts);
+    expect(result.totalSavings).toBe(300);
+    expect(result.totalDebtPayments).toBe(0);
+  });
+
+  it('a debt payment and a savings contribution in the same month land in separate buckets', () => {
+    const txns: TxRow[] = [
+      { id: 'chq-1', type: 'transfer', account_id: CHEQUING_ID, amount: 833.33, transfer_peer_id: 'debt-1' },
+      { id: 'debt-1', type: 'transfer', account_id: DEBT_ID,     amount: 833.33, transfer_peer_id: 'chq-1' },
+      { id: 'chq-2', type: 'transfer', account_id: CHEQUING_ID, amount: 300, transfer_peer_id: 'sav-1' },
+      { id: 'sav-1', type: 'transfer', account_id: SAVINGS_ID,   amount: 300, transfer_peer_id: 'chq-2' },
+    ];
+    const result = computeMonthTotals(txns, accounts);
+    expect(result.totalDebtPayments).toBe(833.33);
+    expect(result.totalSavings).toBe(300);
+  });
+
+  it('falls back to totalSavings when transfer_peer_id is missing — never dropped, never crashes', () => {
+    const txns: TxRow[] = [
+      { type: 'transfer', account_id: CHEQUING_ID, amount: 500 }, // no id/transfer_peer_id at all
+    ];
+    const result = computeMonthTotals(txns, accounts);
+    expect(result.totalSavings).toBe(500);
+    expect(result.totalDebtPayments).toBe(0);
+  });
+
+  it('falls back to totalSavings when the peer id points at a row that is not in this batch (e.g. a broken/legacy link)', () => {
+    const txns: TxRow[] = [
+      { id: 'chq-1', type: 'transfer', account_id: CHEQUING_ID, amount: 500, transfer_peer_id: 'does-not-exist' },
+    ];
+    const result = computeMonthTotals(txns, accounts);
+    expect(result.totalSavings).toBe(500);
+    expect(result.totalDebtPayments).toBe(0);
+  });
+
+  it('is a presentation/classification split only — netCashFlow is identical to the pre-split single-bucket total', () => {
+    const txns: TxRow[] = [
+      { type: 'income',   account_id: CHEQUING_ID, amount: 5000 },
+      { type: 'expense',  account_id: CHEQUING_ID, amount: 2000 },
+      { id: 'chq-1', type: 'transfer', account_id: CHEQUING_ID, amount: 833.33, transfer_peer_id: 'debt-1' },
+      { id: 'debt-1', type: 'transfer', account_id: DEBT_ID,     amount: 833.33, transfer_peer_id: 'chq-1' },
+    ];
+    const result = computeMonthTotals(txns, accounts);
+    // Old formula would have been 5000 − 2000 − 833.33 (one savings bucket).
+    // New formula is 5000 − 2000 − 0 (savings) − 833.33 (debtPayments) —
+    // same arithmetic result either way.
+    expect(result.netCashFlow).toBe(5000 - 2000 - 833.33);
+    expect(result.totalSavings + result.totalDebtPayments).toBe(833.33);
   });
 });
 

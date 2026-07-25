@@ -48,13 +48,38 @@
  * typical-surplus/sourcing contract) must read netCashFlow, never a raw
  * income/inflow figure that borrowed cash could be sitting inside.
  *
+ * DEBT PAYMENTS vs SAVINGS — classification split (2026-08-01)
+ * -----------------------------------------------------------
+ * A contribution/payment transfer (amount >= 0, the non-draw case above) was
+ * previously always counted as `savings`, whether it landed on a savings/
+ * TFSA/RRSP/sinking-fund account OR a debt account. Paying down a credit
+ * line isn't saving — it reads as the household setting money aside when it
+ * actually reduced what it owes, the reconcile screen's own equivalent of
+ * the borrowed-cash mislabeling problem. So a chequing-side contribution row
+ * is now classified by its DESTINATION: resolved via transfer_peer_id to the
+ * paired goal-side row, then that row's account type. A debt destination →
+ * `debtPayments`; anything else (savings/tfsa/rrsp/a sinking fund) →
+ * `savings`, unchanged. If the peer link can't be resolved (transfer_peer_id
+ * missing from the caller's query, or a legacy row predating the RPC's peer-
+ * linking — resolvePair, api/transfers/[id]/route.ts, has handled this same
+ * possibility since 2026-07-19) the row falls back to `savings`, its
+ * original bucket — never silently dropped from both.
+ *
+ * This is a presentation/classification split ONLY: `savings` + `debtPayments`
+ * together always equal what the single old `savings` bucket used to be, for
+ * any given month, so netCashFlow's actual computed VALUE is unchanged —
+ * only which bucket a debt-payment row's amount is reported under changes.
+ *
  * BUCKET MATH
  * -----------
- *   income    = Σ amount WHERE type = 'income'  AND account_id ∈ chequing
- *   expenses  = Σ amount WHERE type = 'expense' AND account_id ∈ chequing
- *   savings   = Σ amount WHERE type = 'transfer' AND account_id ∈ chequing AND amount >= 0
- *   borrowed  = Σ -amount WHERE type = 'transfer' AND account_id ∈ chequing AND amount < 0
- *   net       = income − expenses − savings   (borrowed excluded, always)
+ *   income       = Σ amount WHERE type = 'income'  AND account_id ∈ chequing
+ *   expenses     = Σ amount WHERE type = 'expense' AND account_id ∈ chequing
+ *   savings      = Σ amount WHERE type = 'transfer' AND account_id ∈ chequing
+ *                    AND amount >= 0 AND destination NOT a debt account
+ *   debtPayments = Σ amount WHERE type = 'transfer' AND account_id ∈ chequing
+ *                    AND amount >= 0 AND destination IS a debt account
+ *   borrowed     = Σ -amount WHERE type = 'transfer' AND account_id ∈ chequing AND amount < 0
+ *   net          = income − expenses − savings − debtPayments   (borrowed excluded, always)
  *
  * The goal-side transfer rows (account_id ∈ goal accounts) fall through all
  * predicates and are intentionally counted in zero buckets. Same now for a
@@ -76,6 +101,16 @@ export type TxRow = {
   // runtime for its today cutoff; a row with no date is excluded, never
   // assumed to be in the past.
   date?: string;
+  // Both optional — only needed for computeMonthTotals's debt-payment vs
+  // savings split. `transfer_peer_id` on a chequing-side transfer row points
+  // at its paired goal-side row's `id`; that peer's account type decides the
+  // bucket. If either is missing (a caller that didn't select them, or a
+  // legacy row whose peer link was never written — the same possibility
+  // api/transfers/[id]/route.ts's resolvePair already tolerates) the row
+  // falls back to `savings`, its pre-split bucket — never a crash, never a
+  // silently dropped row.
+  id?: string;
+  transfer_peer_id?: string | null;
 };
 
 export type AccountRow = {
@@ -93,8 +128,15 @@ export type AccountRow = {
 
 export type MonthTotals = {
   totalIncome: number;
-  totalExpenses: number;
+  // Contributions to a savings/TFSA/RRSP/sinking-fund account only — a debt
+  // payment is no longer counted here. See DEBT PAYMENTS vs SAVINGS above.
   totalSavings: number;
+  totalExpenses: number;
+  // Payments to a debt account this month — split out of `totalSavings`
+  // (2026-08-01): paying down a credit line is not saving. Still a chequing
+  // outflow, still subtracted in netCashFlow exactly as it was when it lived
+  // inside `totalSavings` — this is a classification change, not a math one.
+  totalDebtPayments: number;
   // Real cash drawn into chequing from a debt account this month (a credit-
   // line/loan draw). Excluded from netCashFlow — see DEBT DRAWS above. Any
   // "how much can this household afford" computation (surplus tile,
@@ -120,10 +162,24 @@ export function computeMonthTotals(
   const sinkingFundIds = new Set(
     accounts.filter((a) => a.is_sinking_fund).map((a) => a.id)
   );
+  // Debt-payment vs savings split (2026-08-01) — see DEBT PAYMENTS vs SAVINGS
+  // above. Only need the id, not the whole row: a chequing-side transfer's
+  // destination type is looked up by resolving its transfer_peer_id against
+  // this set.
+  const debtAccountIds = new Set(
+    accounts.filter((a) => a.type === 'debt').map((a) => a.id)
+  );
+  // id → row, for the transfer_peer_id lookup above. Rows without an `id`
+  // (a caller that didn't select it) simply never match as anyone's peer —
+  // same safe "falls back to savings" outcome as a missing transfer_peer_id.
+  const byId = new Map(
+    transactions.filter((tx) => tx.id !== undefined).map((tx) => [tx.id as string, tx])
+  );
 
   let income = 0;
   let expenses = 0;
   let savings = 0;
+  let debtPayments = 0;
   let borrowed = 0;
 
   for (const tx of transactions) {
@@ -136,27 +192,39 @@ export function computeMonthTotals(
     } else if (tx.type === 'expense' && (onChequing || onSinkingFund)) {
       expenses += amt;
     } else if (tx.type === 'transfer' && onChequing) {
-      // Chequing-side row of a chequing↔goal pair. A contribution/payment
-      // (amount >= 0) is counted as savings — money genuinely leaving
-      // chequing toward a goal. A draw (amount < 0, see DEBT DRAWS above) is
-      // real cash but borrowed, not earned — counted separately as
-      // `borrowed`, never folded into savings or netCashFlow. The goal-side
-      // peer row (type='transfer', goal account_id) is not on chequing, so
-      // it falls through and is counted in no bucket either way.
+      // Chequing-side row of a chequing↔goal pair. A draw (amount < 0, see
+      // DEBT DRAWS above) is real cash but borrowed, not earned — counted
+      // separately as `borrowed`, never folded into savings, debtPayments,
+      // or netCashFlow. A contribution/payment (amount >= 0) is money
+      // genuinely leaving chequing toward a goal — classified by
+      // destination: a debt account → debtPayments, anything else →
+      // savings (its original, pre-split bucket). The goal-side peer row
+      // (type='transfer', goal account_id) is not on chequing, so it falls
+      // through and is counted in no bucket either way.
       if (amt < 0) {
         borrowed += -amt;
       } else {
-        savings += amt;
+        const peer = tx.transfer_peer_id != null ? byId.get(tx.transfer_peer_id) : undefined;
+        const peerIsDebt = peer?.account_id != null && debtAccountIds.has(peer.account_id);
+        if (peerIsDebt) {
+          debtPayments += amt;
+        } else {
+          savings += amt;
+        }
       }
     }
   }
 
   return {
-    totalIncome:    Math.round(income   * 100) / 100,
-    totalExpenses:  Math.round(expenses * 100) / 100,
-    totalSavings:   Math.round(savings  * 100) / 100,
-    totalBorrowed:  Math.round(borrowed * 100) / 100,
-    netCashFlow:    Math.round((income - expenses - savings) * 100) / 100,
+    totalIncome:       Math.round(income       * 100) / 100,
+    totalExpenses:     Math.round(expenses     * 100) / 100,
+    totalSavings:      Math.round(savings      * 100) / 100,
+    totalDebtPayments: Math.round(debtPayments * 100) / 100,
+    totalBorrowed:     Math.round(borrowed     * 100) / 100,
+    // Unchanged formula in spirit — savings + debtPayments together equal
+    // exactly what the single pre-split `savings` total used to be, so this
+    // number is identical to what netCashFlow returned before the split.
+    netCashFlow: Math.round((income - expenses - savings - debtPayments) * 100) / 100,
   };
 }
 

@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     const [allTxResult, acctResult, sfResult] = await Promise.all([
       supabase
         .from('transactions')
-        .select('amount, type, description, account_id, recurring_item_id')
+        .select('id, amount, type, description, account_id, recurring_item_id, transfer_peer_id')
         .eq('household_id', householdId)
         .gte('date', monthStart)
         .lt('date', monthEnd),
@@ -121,13 +121,15 @@ export async function POST(request: Request) {
     const accounts = acctResult.data ?? [];
     const sinkingFunds = sfResult.data ?? [];
 
-    // ── One call for all four buckets (same function as Expenses page) ───────
-    const { totalIncome: incomeTotal, totalExpenses: expenseTotal, totalSavings, netCashFlow } =
+    // ── One call for all buckets (same function as Expenses page) ───────────
+    const { totalIncome: incomeTotal, totalExpenses: expenseTotal, totalSavings, totalDebtPayments, totalBorrowed, netCashFlow } =
       computeMonthTotals(
         allTxns.map((tx) => ({
+          id: tx.id,
           amount: Number(tx.amount),
           type: tx.type,
           account_id: tx.account_id,
+          transfer_peer_id: tx.transfer_peer_id ?? null,
         })),
         accounts,
       );
@@ -271,8 +273,16 @@ export async function POST(request: Request) {
     const aiContext =
       `The reviewed period is ${reviewMonthName} (${currentMonthLabel}) — refer to it by this exact name, never a different month.\n` +
       `Net cash flow: $${netCashFlow}/month ` +
-      `(income $${incomeTotal}, expenses $${expenseTotal}, savings $${totalSavings})\n` +
-      `Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts)\n` +
+      `(income $${incomeTotal}, expenses $${expenseTotal}, savings $${totalSavings}, debt payments $${totalDebtPayments})\n` +
+      `Accounting model: net = income − expenses − savings − debt payments (savings = transfers to a ` +
+      `savings/TFSA/RRSP/sinking-fund account; debt payments = transfers to a debt account — paying down a ` +
+      `credit line is not saving, keep the two separate in the narration)\n` +
+      (totalBorrowed > 0
+        ? `Borrowed this month: $${totalBorrowed}, drawn from a credit line. This is debt, NOT income and NOT ` +
+          `savings — it is already excluded from every figure above. Never describe this month as having more ` +
+          `income, savings, or surplus because of it; if you mention the family's cash position, disclose that ` +
+          `part of it was borrowed.\n`
+        : '') +
       `All figures are ACTUAL ${currentMonthLabel} ledger — computed from materialized transactions, ` +
       `NOT from planned budgets or per-period recurring amounts.\n` +
       `Income lines: ${JSON.stringify(incomeLines)}\n` +

@@ -201,6 +201,7 @@ describe('reconcileMonth — empty month', () => {
     expect(result.totalIncome).toBe(0);
     expect(result.totalExpenses).toBe(0);
     expect(result.totalSavings).toBe(0);
+    expect(result.totalDebtPayments).toBe(0);
     expect(result.totalBorrowed).toBe(0);
     expect(result.totalBridgePayments).toBe(0);
     expect(result.netFromBuckets).toBe(0);
@@ -395,6 +396,70 @@ describe('chequingLedgerNet — debt draws', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Reconciliation screen fix (2026-08-01): debt payments split out of
+// "Savings transfers" — same math, separate bucket. chequingLedgerNet (path
+// 2) is untouched — it doesn't classify by destination, so both a debt
+// payment and a savings contribution are still just "a chequing outflow" to
+// it, exactly as before. Only path 1's bucket labeling changes.
+// ---------------------------------------------------------------------------
+
+describe('chequingLedgerNet — unaffected by the debt-payment/savings split', () => {
+  it('a debt payment nets the same way whether or not the peer link is available to path 1', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ id: 'chq-1', type: 'transfer', account_id: CHQ,  amount: 833.33, transfer_peer_id: 'debt-1' }),
+      tx({ id: 'debt-1', type: 'transfer', account_id: DEBT, amount: 833.33, transfer_peer_id: 'chq-1' }),
+    ];
+    expect(chequingLedgerNet(transactions, accountsWithDebt)).toBe(-833.33);
+  });
+});
+
+describe('reconcileMonth — debt payments vs savings split', () => {
+  it('a debt payment is bucketed as totalDebtPayments, dual-net still agrees', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ type: 'income',    account_id: CHQ,  amount: 3000 }),
+      tx({ id: 'chq-1', type: 'transfer', account_id: CHQ,  amount: 833.33, transfer_peer_id: 'debt-1' }),
+      tx({ id: 'debt-1', type: 'transfer', account_id: DEBT, amount: 833.33, transfer_peer_id: 'chq-1' }),
+    ];
+    const result = reconcileMonth(transactions, accountsWithDebt);
+    expect(result.totalDebtPayments).toBe(833.33);
+    expect(result.totalSavings).toBe(0);
+    expect(result.netFromBuckets).toBe(2166.67); // 3000 − 833.33, same as the old single-bucket total
+    expect(result.netFromChequing).toBe(2166.67);
+    expect(result.reconciled).toBe(true);
+  });
+
+  it('a debt payment and a savings contribution in the same month land in separate buckets, still fully reconciled', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ type: 'income',    account_id: CHQ,  amount: 5000 }),
+      tx({ id: 'chq-1', type: 'transfer', account_id: CHQ,  amount: 833.33, transfer_peer_id: 'debt-1' }),
+      tx({ id: 'debt-1', type: 'transfer', account_id: DEBT, amount: 833.33, transfer_peer_id: 'chq-1' }),
+      tx({ id: 'chq-2', type: 'transfer', account_id: CHQ,  amount: 300, transfer_peer_id: 'sav-1' }),
+      tx({ id: 'sav-1', type: 'transfer', account_id: SAV,  amount: 300, transfer_peer_id: 'chq-2' }),
+    ];
+    const result = reconcileMonth(transactions, accountsWithDebt);
+    expect(result.totalDebtPayments).toBe(833.33);
+    expect(result.totalSavings).toBe(300);
+    expect(result.reconciled).toBe(true);
+    expect(result.netDifference).toBe(0);
+  });
+
+  it('a debt payment and a draw in the same month are classified into three separate, correct buckets', () => {
+    const transactions: ReconcileTxRow[] = [
+      tx({ type: 'income',    account_id: CHQ,  amount: 3000 }),
+      tx({ id: 'chq-pay', type: 'transfer', account_id: CHQ,  amount: 400, transfer_peer_id: 'debt-pay' }),
+      tx({ id: 'debt-pay', type: 'transfer', account_id: DEBT, amount: 400, transfer_peer_id: 'chq-pay' }),
+      tx({ type: 'transfer', account_id: CHQ,  amount: -1000 }), // draw, unlinked in this fixture on purpose
+      tx({ type: 'transfer', account_id: DEBT, amount: -1000 }),
+    ];
+    const result = reconcileMonth(transactions, accountsWithDebt);
+    expect(result.totalDebtPayments).toBe(400);
+    expect(result.totalBorrowed).toBe(1000);
+    expect(result.totalSavings).toBe(0);
+    expect(result.reconciled).toBe(true);
+  });
+});
+
 describe('reconcileMonth — the founder scenario, fixed: a draw never reads as surplus', () => {
   it('a $2,000 draw covering a real $5 shortfall reconciles at netCashFlow = −5, not +1995', () => {
     const transactions: ReconcileTxRow[] = [
@@ -404,6 +469,10 @@ describe('reconcileMonth — the founder scenario, fixed: a draw never reads as 
       tx({ type: 'transfer', account_id: DEBT, amount: -2000, description: 'Credit Line (draw)' }),
     ];
     const result = reconcileMonth(transactions, accountsWithDebt);
+    // Verify the draw is not hiding inside Income: it is type='transfer',
+    // never type='income', so totalIncome must be exactly the real salary
+    // row — unaffected by a $2,000 draw landing in the same month.
+    expect(result.totalIncome).toBe(3000);
     expect(result.totalBorrowed).toBe(2000);
     expect(result.netFromBuckets).toBe(-5);
     expect(result.netFromChequing).toBe(-5);

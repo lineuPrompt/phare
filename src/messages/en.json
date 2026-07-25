@@ -367,6 +367,7 @@
     "savings": "Saved this month",
     "surplus": "Monthly surplus",
     "deficit": "Monthly deficit",
+    "debtPaymentsNote": "Includes {amount} paid toward debt — not counted as savings.",
     "borrowedNote": "⚠ {amount} borrowed this month — not counted in this surplus.",
     "monthOnlyNote": "This reflects this month's cash flow only, not your running balance.",
     "viewRealBalance": "View your real balance in Timeline",
@@ -860,7 +861,9 @@
       "includesBridge": "includes bridge lines",
       "cardPayments": "Card payments (bridge)",
       "savingsTransfers": "Savings transfers",
-      "netFromBuckets": "Net (from buckets)"
+      "debtPayments": "Debt payments",
+      "netFromBuckets": "Net (from buckets)",
+      "borrowed": "⚠ {amount} borrowed this month — not counted as income, savings, or a debt payment."
     },
     "dualNet": {
       "title": "Dual-Net Comparison",

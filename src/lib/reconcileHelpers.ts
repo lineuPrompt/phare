@@ -48,8 +48,15 @@ export type AccountAudit = {
 export type ReconciliationResult = {
   // Bucket path — via computeMonthTotals (path 1)
   totalIncome: number;
-  totalExpenses: number;
+  // Contributions to savings/TFSA/RRSP/a sinking fund only — see
+  // computeMonthTotals's DEBT PAYMENTS vs SAVINGS note. A debt payment is
+  // reported under totalDebtPayments instead, even though both are chequing
+  // outflows and net the same way.
   totalSavings: number;
+  totalExpenses: number;
+  // Payments toward a debt account this month — split out of totalSavings
+  // so the audit never reads "paying down a credit line" as saving.
+  totalDebtPayments: number;
   // Real cash drawn from a debt account into chequing this month — excluded
   // from both nets below by design (see computeMonthTotals's DEBT DRAWS
   // note). Surfaced here too so the audit view can show it was accounted
@@ -215,6 +222,7 @@ export function reconcileMonth(
     totalIncome: buckets.totalIncome,
     totalExpenses: buckets.totalExpenses,
     totalSavings: buckets.totalSavings,
+    totalDebtPayments: buckets.totalDebtPayments,
     totalBorrowed: buckets.totalBorrowed,
     totalBridgePayments,
     netFromBuckets,

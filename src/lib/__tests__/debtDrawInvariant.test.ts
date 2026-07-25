@@ -196,6 +196,10 @@ function reconcileAll(supabase: ReturnType<typeof makeFakeSupabase>) {
     amount: Number(r.amount),
     type: r.type as string,
     account_id: (r.account_id ?? null) as string | null,
+    // Debt-payment vs savings classification (2026-08-01) needs the real
+    // peer link create_transfer wrote — included here so this test exercises
+    // the actual data shape the RPC produces, not a hand-picked shortcut.
+    transfer_peer_id: (r.transfer_peer_id ?? null) as string | null,
     is_bridge: Boolean(r.is_bridge),
   })) as ReconcileTxRow[];
   return reconcileMonth(txns, accountsFixture());
@@ -261,6 +265,41 @@ describe('POST /api/transfers with kind=draw — creates a real linked pair', ()
     const chqAudit = result.accounts.find((a) => a.accountId === CHEQUING)!;
     expect(chqAudit.monthBalance).toBe(5000); // 3000 income + 2000 draw inflow
     expect(result.totalBorrowed).toBe(2000);
+    // Reconciliation-screen fix (2026-08-01): verify the draw is not hiding
+    // inside Income — it must not be, since it's type='transfer', never
+    // type='income'. totalIncome is exactly the real salary row, unchanged
+    // by a $2,000 draw landing in the same month.
+    expect(result.totalIncome).toBe(3000);
+    expect(result.reconciled).toBe(true);
+  });
+
+  it('a real debt payment (kind=contribution) is bucketed as totalDebtPayments, not totalSavings — reconciliation-screen fix, verified against the actual RPC-written peer link', async () => {
+    const supabase = seedSupabase([]);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
+
+    const { POST } = await import('../../app/api/transfers/route');
+    const res = await POST(new Request('http://localhost/api/transfers', {
+      method: 'POST',
+      body: JSON.stringify({ date: '2026-07-31', amount: 833.33, goalAccountId: DEBT, kind: 'contribution' }),
+    }));
+    expect(res.status).toBe(200);
+
+    // A savings contribution in the same month, for contrast — must land in
+    // the OTHER bucket.
+    await POST(new Request('http://localhost/api/transfers', {
+      method: 'POST',
+      body: JSON.stringify({ date: '2026-07-31', amount: 300, goalAccountId: SAVINGS, kind: 'contribution' }),
+    }));
+
+    const result = reconcileAll(supabase);
+    expect(result.totalDebtPayments).toBe(833.33);
+    expect(result.totalSavings).toBe(300);
+    expect(result.totalBorrowed).toBe(0);
+    // Split is presentation-only — both are still chequing outflows, netting
+    // the same way as if it were all one undifferentiated "savings" bucket.
+    expect(result.netFromBuckets).toBe(-1133.33);
+    expect(result.netFromChequing).toBe(-1133.33);
     expect(result.reconciled).toBe(true);
   });
 

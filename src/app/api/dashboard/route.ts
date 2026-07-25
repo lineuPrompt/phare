@@ -227,7 +227,7 @@ export async function GET(request: Request) {
         // Transactions for the ACTUALS month (not the plan month)
         supabase
           .from('transactions')
-          .select('amount, type, account_id')
+          .select('id, amount, type, account_id, transfer_peer_id')
           .eq('household_id', householdId)
           .gte('date', actualsMonth)
           .lt('date', actualsMonthEnd),

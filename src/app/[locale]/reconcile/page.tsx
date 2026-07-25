@@ -357,8 +357,32 @@ export default function ReconcilePage() {
                       color="#9A3412"
                     />
                     <Row label={t('bucketBreakdown.savingsTransfers')} value={data.totalSavings} locale={locale} color="#2563EB" />
+                    {/* Split out of savingsTransfers (2026-08-01) — a debt
+                        payment is a chequing outflow that nets the same way,
+                        but paying down a credit line isn't saving. Same
+                        classification split as computeMonthTotals; math
+                        unaffected, netFromBuckets below is unchanged. */}
+                    <Row label={t('bucketBreakdown.debtPayments')} value={data.totalDebtPayments} locale={locale} color="#7C3AED" />
                     <Divider />
                     <Row label={t('bucketBreakdown.netFromBuckets')} value={data.netFromBuckets} locale={locale} bold />
+
+                    {/* Borrowed cash (a credit-line draw) — deliberately NOT
+                        another Row in the list above: it's excluded from
+                        Income and from every bucket, by design (see
+                        computeMonthTotals's DEBT DRAWS note), so it must never
+                        look like it's being summed alongside them. Same red/
+                        warning box, same prominence, as the snapshot and
+                        projection tiles — consistent across every surface. */}
+                    {data.totalBorrowed > 0 && (
+                      <div
+                        className="rounded-xl px-3 py-2.5 mt-3"
+                        style={{ background: '#FEF2F2', border: '1.5px solid #FECACA' }}
+                      >
+                        <p className="text-sm font-semibold" style={{ color: '#B91C1C' }}>
+                          {t('bucketBreakdown.borrowed', { amount: fmt(data.totalBorrowed, locale) })}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Right: dual-net comparison */}
