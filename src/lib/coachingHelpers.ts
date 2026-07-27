@@ -270,3 +270,82 @@ export function coachingFallbackApplies(ctx: {
   const noSurplus = ctx.typicalSurplus === null || ctx.typicalSurplus <= 0;
   return noSurplus && ctx.sourceCategory === null && ctx.freedCapacityEvents.length === 0;
 }
+
+// ---------------------------------------------------------------------------
+// Post-generation guard: category-sourcing leak (Fix 3, 2026-07-28)
+// ---------------------------------------------------------------------------
+//
+// CONFIRMED LIVE (2026-07-28): plan.seedCategories and plan.monthlyBudget.
+// categories reach reviewPrompt in full regardless of coaching.sourceCategory
+// — a real data leak. Two live adversarial attempts (including Shopping at
+// 60% of income, no target at all) did not get the model to exploit it, but
+// "not yet observed" isn't "impossible" — this is a defense-in-depth net,
+// not the primary gate (the primary gate is still that sourceCategory itself
+// is the only category-with-real-overspend data the AI is fed for sourcing
+// purposes; this catches the case where the model reaches for a category
+// name from the wider budget/seed list anyway).
+//
+// Phrases the reviewPrompt itself teaches as the canonical way to describe
+// the ONE sanctioned money source (e.g. "that's one place it could come
+// from"). A DISALLOWED category name appearing near one of these phrases
+// means the model used a category outside coaching.sourceCategory as a
+// money source — a category mentioned purely as budget narration (no
+// sourcing phrase nearby) is not flagged, since that's legitimate and
+// happens in nearly every real review.
+const SOURCING_PHRASE_MARKERS = [
+  'could come from',
+  'come from',
+  'consider directing',
+  'consider moving',
+  'pull from',
+  'move money from',
+  'take from',
+  'cut back on',
+  'reduce spending on',
+  'use that room',
+  'room in',
+];
+
+/**
+ * Scans reviewText for a disallowed category name appearing near one of the
+ * canonical sourcing phrases. Returns the first offending category name, or
+ * null if none found. `allowedCategoryName` (coaching.sourceCategory's own
+ * name, or null when there is none) is exempt — the model IS allowed to
+ * describe that one as a source, per the prompt's COACHING rule.
+ */
+export function findUnsanctionedSourcingMention(
+  reviewText: string,
+  allCategoryNames: string[],
+  allowedCategoryName: string | null
+): string | null {
+  const lowerText = reviewText.toLowerCase();
+  for (const name of allCategoryNames) {
+    if (allowedCategoryName && name.toLowerCase() === allowedCategoryName.toLowerCase()) continue;
+    const lowerName = name.toLowerCase();
+    const nameIdx = lowerText.indexOf(lowerName);
+    if (nameIdx === -1) continue;
+    // A nearby window (before/after the mention) — a category named purely
+    // as budget narration, with no sourcing phrase nearby, is not flagged.
+    const windowStart = Math.max(0, nameIdx - 80);
+    const windowEnd = Math.min(lowerText.length, nameIdx + lowerName.length + 80);
+    const window = lowerText.slice(windowStart, windowEnd);
+    if (SOURCING_PHRASE_MARKERS.some((phrase) => window.includes(phrase))) {
+      return name;
+    }
+  }
+  return null;
+}
+
+/**
+ * Deterministic, minimal fallback used only when both the original
+ * generation AND one retry still contain an unsanctioned category-sourcing
+ * mention — a rare path (not observed in any live sample so far). Keeps the
+ * family from ever seeing a review that names an unproven source; the
+ * figures elsewhere on the dashboard (goals, sinking funds, snapshot) remain
+ * accurate regardless of this text.
+ */
+export function buildFallbackReviewText(reviewMonthName: string, locale: 'en' | 'fr'): string {
+  return locale === 'fr'
+    ? `La revue complète de ${reviewMonthName} n'a pas pu être générée de façon fiable cette fois-ci — les chiffres affichés ailleurs restent exacts, et une nouvelle revue sera prête la prochaine fois que vous régénérerez.`
+    : `${reviewMonthName}'s full review couldn't be generated safely this time — the figures shown elsewhere are still accurate, and a fresh review will be ready the next time you regenerate.`;
+}

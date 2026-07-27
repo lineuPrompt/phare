@@ -1067,3 +1067,256 @@ describe('POST /api/regenerate-plan — Fix 2: coaching.insufficientHistory', ()
     }
   });
 });
+
+// Adversarial-review Fix 2 (2026-07-28): the SINKING FUNDS rule (real, since
+// before the Coaching Layer) and the COACHING cap rule were never reconciled
+// — confirmed live: with startingContribution:0, reviewText reliably (3/3
+// live runs) recommended the fund's own $300 monthlyProvision, because the
+// sinking-funds rule's own template phrasing has no reference to the cap.
+// Founder's product decision: this is CORRECT, not a bug — monthlyProvision
+// is the plan's own established figure, not a discretionary AI suggestion.
+// The fix reconciles the two rules explicitly rather than leaving it an
+// accident. This test pins the prompt text carries both halves of the
+// reconciliation; live model behavior is verified separately (not a
+// deterministic assertion, since reviewText is free-form prose).
+describe('POST /api/regenerate-plan — Adversarial Fix 2: sinking-funds rule reconciled with coaching cap', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createMock.mockReset();
+  });
+
+  it('reviewPrompt states monthlyProvision may be restated regardless of startingContribution, and scopes the cap to discretionary extra amounts only', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [{ data: [], error: null }, { data: [], error: null }],
+      accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+      sinking_funds: [{ data: [], error: null }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    expect(res.status).toBe(200);
+
+    const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
+    // The SINKING FUNDS rule now cross-references the cap explicitly.
+    expect(reviewPromptSent).toContain('regardless of');
+    expect(reviewPromptSent).toContain('"coaching.startingContribution"');
+    // The COACHING rule now states the scope boundary explicitly.
+    expect(reviewPromptSent).toContain('SCOPE OF THE CAP');
+    expect(reviewPromptSent).toContain('DISCRETIONARY');
+    expect(reviewPromptSent).toContain('not a new suggestion');
+  });
+});
+
+// Adversarial-review Fix 3 (2026-07-28): plan.seedCategories/monthlyBudget.
+// categories reach reviewPrompt regardless of coaching.sourceCategory — a
+// confirmed, real (though not yet observed exploited) leak. Post-generation
+// guard: retry once if an unsanctioned category is used as a money source;
+// deterministic fallback if the retry also fails.
+describe('POST /api/regenerate-plan — Adversarial Fix 3: category-sourcing guard', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createMock.mockReset();
+  });
+
+  const noCardFixture = {
+    users: [{ data: { household_id: 'hh1' }, error: null }],
+    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    transactions: [{ data: [], error: null }, { data: [], error: null }],
+    accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+    sinking_funds: [{ data: [], error: null }],
+    recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+    conversations: [{ error: null }],
+  };
+
+  it('retries once when the first attempt names an unsanctioned category as a source, and uses the clean retry', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: "There's room to work with this month — that could come from Shopping if you wanted." }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
+
+    const { client } = makeSupabaseMock(noCardFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(3);
+    expect(json.reviewText).toBe('A fine, clean month overall.');
+  });
+
+  it('falls back to deterministic text when BOTH attempts name an unsanctioned category as a source', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: "That could come from Shopping if you wanted." }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: "You could also pull from Shopping this time." }] });
+
+    const { client } = makeSupabaseMock(noCardFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    // Only 3 total AI calls — plan + 2 review attempts — never a 3rd retry.
+    expect(createMock).toHaveBeenCalledTimes(3);
+    expect(json.reviewText).not.toContain('Shopping');
+    expect(json.reviewText).toContain("couldn't be generated safely");
+  });
+
+  it('never retries when the first attempt is already clean — the common case stays a single review call', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall, nothing to flag.' }] });
+
+    const { client } = makeSupabaseMock(noCardFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(2);
+    expect(json.reviewText).toBe('A fine month overall, nothing to flag.');
+  });
+
+  it('reviewPrompt carries the NO INVENTED TARGETS rule', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock(noCardFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    expect(res.status).toBe(200);
+
+    const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
+    expect(reviewPromptSent).toContain('NO INVENTED TARGETS');
+    expect(reviewPromptSent).toContain('never describe any category, fund, or line as having a "budget," "target," or');
+  });
+});
+
+// Adversarial-review Fix 4 (2026-07-28): borrowed cash mislabeled as surplus
+// when NO debt-payoff card exists at all — confirmed as a real open gap
+// (no reproduction attempted at the time). The guard must engage purely off
+// totalBorrowed, never gated on computedDebtPayoff existing.
+describe('POST /api/regenerate-plan — Adversarial Fix 4: borrowed cash framing, no debt-payoff card', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createMock.mockReset();
+  });
+
+  it('corrects a topRecommendation that labels a $1,000 credit-line draw as surplus, with no debt account anywhere', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
+        lineClassifications: [],
+        topRecommendation: 'Your $1,000 line-of-credit draw gives you $1,000 of surplus to invest.',
+      }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [
+        {
+          data: [
+            { amount: 2000, type: 'income', description: 'Salary', account_id: 'chq-1' },
+            { amount: 1800, type: 'expense', description: 'Rent', account_id: 'chq-1' },
+            // Credit-line draw: chequing-side transfer, NEGATIVE amount — no
+            // destination debt account exists anywhere in this fixture, so
+            // computedDebtPayoff is null. The guard must still engage.
+            { amount: -1000, type: 'transfer', description: 'Line of credit draw', account_id: 'chq-1', transfer_peer_id: 'peer-1', id: 'tx-1' },
+          ],
+          error: null,
+        },
+        { data: [], error: null }, // Coaching Layer history window
+      ],
+      accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+      sinking_funds: [{ data: [], error: null }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.topRecommendation).not.toContain('surplus to invest');
+    expect(json.topRecommendation).toContain('$1000.00');
+    expect(json.topRecommendation).toContain('borrowed');
+  });
+
+  it('leaves topRecommendation unchanged when nothing was borrowed this month', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
+        lineClassifications: [],
+        topRecommendation: 'Your $200 net cash flow this month is a solid, real gain.',
+      }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [{ data: [], error: null }, { data: [], error: null }],
+      accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+      sinking_funds: [{ data: [], error: null }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.topRecommendation).toBe('Your $200 net cash flow this month is a solid, real gain.');
+  });
+});

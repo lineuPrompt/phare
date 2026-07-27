@@ -10,6 +10,8 @@ import {
   groupInstallmentSeries,
   computeStartingContribution,
   coachingFallbackApplies,
+  findUnsanctionedSourcingMention,
+  buildFallbackReviewText,
   FundingNeed,
 } from '../coachingHelpers';
 
@@ -275,5 +277,53 @@ describe('coachingFallbackApplies', () => {
 
   it('is false when typical surplus is genuinely positive, even with no source/event', () => {
     expect(coachingFallbackApplies({ typicalSurplus: 180, sourceCategory: null, freedCapacityEvents: [] })).toBe(false);
+  });
+});
+
+describe('findUnsanctionedSourcingMention', () => {
+  const allCategories = ['Housing', 'Transportation', 'Restaurants', 'Shopping', 'Groceries & Pharmacy'];
+
+  it('does not flag a category mentioned purely as budget narration, with no sourcing phrase nearby', () => {
+    const text = 'Your spending on Shopping this month was $600, right in line with recent months.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, null)).toBeNull();
+  });
+
+  it('flags a disallowed category named as a money source', () => {
+    const text = 'There\'s room to work with this month — that could come from Shopping if you wanted.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, null)).toBe('Shopping');
+  });
+
+  it('does not flag the allowed sourceCategory even when used as a source', () => {
+    const text = 'Restaurants ran $680 against your own $450 target — that\'s one place it could come from.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, 'Restaurants')).toBeNull();
+  });
+
+  it('flags a different category as a source even when a real sourceCategory also exists', () => {
+    const text = 'Restaurants ran over target, but you could also pull from Groceries & Pharmacy if needed.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, 'Restaurants')).toBe('Groceries & Pharmacy');
+  });
+
+  it('recognizes several sourcing phrase variants', () => {
+    expect(findUnsanctionedSourcingMention('Consider directing money from Shopping toward the fund.', allCategories, null)).toBe('Shopping');
+    expect(findUnsanctionedSourcingMention('You could cut back on Shopping this month.', allCategories, null)).toBe('Shopping');
+    expect(findUnsanctionedSourcingMention('There\'s room in Shopping you could use.', allCategories, null)).toBe('Shopping');
+  });
+
+  it('returns null when no category is mentioned at all', () => {
+    expect(findUnsanctionedSourcingMention('This was a strong month overall.', allCategories, null)).toBeNull();
+  });
+});
+
+describe('buildFallbackReviewText', () => {
+  it('builds an honest English fallback naming the reviewed month', () => {
+    const text = buildFallbackReviewText('July 2026', 'en');
+    expect(text).toContain('July 2026');
+    expect(text).toContain('couldn\'t be generated safely');
+  });
+
+  it('builds an honest French fallback naming the reviewed month', () => {
+    const text = buildFallbackReviewText('juillet 2026', 'fr');
+    expect(text).toContain('juillet 2026');
+    expect(text).toContain('pas pu être générée');
   });
 });

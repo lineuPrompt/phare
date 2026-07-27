@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { enforceDebtFigureInTopRecommendation, DEBT_PAYMENT_PLACEHOLDER } from '../topRecommendationHelpers';
+import { enforceDebtFigureInTopRecommendation, enforceBorrowedCashFraming, DEBT_PAYMENT_PLACEHOLDER } from '../topRecommendationHelpers';
 
 const debtPayoff = { description: 'Credit Line', targetDate: '2026-10', monthlyPayment: 833.33 };
 
@@ -63,5 +63,80 @@ describe('enforceDebtFigureInTopRecommendation', () => {
   it('leaves text alone when the debt is named with no dollar amount present at all', () => {
     const text = 'Keep an eye on your Credit Line balance this month.';
     expect(enforceDebtFigureInTopRecommendation(text, debtPayoff, 'en')).toBe(text);
+  });
+});
+
+describe('Fix 1 (2026-07-28): placeholder-plus-extra-figure blind spot', () => {
+  const debt1000 = { description: 'Credit Line', targetDate: '2026-10', monthlyPayment: 1000.00 };
+
+  it('discards the recommendation when a correctly-used placeholder is padded with an extra invented figure — the confirmed live blind spot, EN', () => {
+    // Exact reproduction from the live diagnostic (2026-07-28): the
+    // placeholder substitution alone let "$833/month" ship untouched.
+    const text = `Focus on Credit Line: pay ${DEBT_PAYMENT_PLACEHOLDER}/month plus $833/month to clear it sooner.`;
+    const result = enforceDebtFigureInTopRecommendation(text, debt1000, 'en');
+    expect(result).not.toContain('$833');
+    expect(result).not.toContain(DEBT_PAYMENT_PLACEHOLDER);
+    expect(result).toContain('$1000.00');
+    expect(result).toContain('Credit Line');
+  });
+
+  it('discards the recommendation when a correctly-used placeholder is padded with an extra invented figure — the confirmed live blind spot, FR', () => {
+    const text = `Concentrez-vous sur Credit Line : payez ${DEBT_PAYMENT_PLACEHOLDER}/mois plus 833$/mois pour le rembourser plus vite.`;
+    const result = enforceDebtFigureInTopRecommendation(text, debt1000, 'fr');
+    expect(result).not.toContain('833');
+    expect(result).not.toContain(DEBT_PAYMENT_PLACEHOLDER);
+    expect(result).toContain('1000.00');
+    expect(result).toContain('Credit Line');
+  });
+
+  it('control: placeholder present, no extra figure — normal substitution still works unchanged', () => {
+    const text = `Focus on Credit Line: pay ${DEBT_PAYMENT_PLACEHOLDER}/month to clear it on schedule.`;
+    const result = enforceDebtFigureInTopRecommendation(text, debt1000, 'en');
+    expect(result).toBe('Focus on Credit Line: pay $1000.00/month to clear it on schedule.');
+  });
+
+  it('control: the placeholder repeated twice (same real figure) is not treated as an extra/unauthorized figure', () => {
+    const text = `Pay ${DEBT_PAYMENT_PLACEHOLDER}/month now, ${DEBT_PAYMENT_PLACEHOLDER}/month again next month toward Credit Line.`;
+    const result = enforceDebtFigureInTopRecommendation(text, debt1000, 'en');
+    expect(result).toBe('Pay $1000.00/month now, $1000.00/month again next month toward Credit Line.');
+  });
+});
+
+describe('enforceBorrowedCashFraming (Fix 4, 2026-07-28)', () => {
+  it('passes text through unchanged when nothing was borrowed', () => {
+    const text = 'Your $1,000 surplus this month is a great sign.';
+    expect(enforceBorrowedCashFraming(text, 0, 'en')).toBe(text);
+  });
+
+  it('replaces the recommendation when the borrowed amount is labeled as surplus — no debt-payoff card needed', () => {
+    const text = 'Your $1,000 line-of-credit draw gives you $1,000 of surplus to invest.';
+    const result = enforceBorrowedCashFraming(text, 1000, 'en');
+    expect(result).not.toBe(text);
+    expect(result).toContain('$1000.00');
+    expect(result).toContain('borrowed');
+  });
+
+  it('replaces the recommendation when the borrowed amount is called "extra" income', () => {
+    const text = 'You have an extra $1,000 available this month to put toward your goals.';
+    const result = enforceBorrowedCashFraming(text, 1000, 'en');
+    expect(result).toContain('borrowed');
+    expect(result).not.toContain('an extra $1,000 available');
+  });
+
+  it('leaves the text alone when the borrowed figure is disclosed honestly, with no surplus-labeling word nearby', () => {
+    const text = 'Part of this month\'s cash — $1,000 — was borrowed from your credit line, not earned.';
+    expect(enforceBorrowedCashFraming(text, 1000, 'en')).toBe(text);
+  });
+
+  it('leaves the text alone when the borrowed figure never appears at all', () => {
+    const text = 'Your net cash flow this month was $200, a modest but real gain.';
+    expect(enforceBorrowedCashFraming(text, 1000, 'en')).toBe(text);
+  });
+
+  it('builds a French fallback when locale is fr', () => {
+    const text = 'Vous avez 1000$ de surplus supplémentaire à investir ce mois-ci.';
+    const result = enforceBorrowedCashFraming(text, 1000, 'fr');
+    expect(result).toContain('1000.00');
+    expect(result).toContain('emprunt');
   });
 });

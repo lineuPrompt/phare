@@ -15,22 +15,26 @@
  * DEBT_PAYMENT_PLACEHOLDER wherever the debt's own monthly payment amount
  * would go, never digits. This alone doesn't structurally stop a model from
  * ignoring the instruction and typing its own number anyway — so
- * enforceDebtFigureInTopRecommendation is the actual gate: if the
- * placeholder is present, it's substituted with the real figure (the only
- * path that ever reaches the final output uses a code-owned number); if the
- * debt is named WITHOUT the placeholder AND a dollar amount appears anyway,
- * that means the model authored its own figure despite the instruction —
- * the entire recommendation is discarded and replaced with a deterministic,
- * code-built sentence using the real payment amount. Either path, the final
- * shipped figure can never be an AI-invented number.
+ * enforceDebtFigureInTopRecommendation is the actual gate: the placeholder
+ * (if present) is substituted with the real figure first, and THEN the full
+ * resulting text — every branch, always — is scanned for any remaining
+ * dollar figure that doesn't match the real payment amount. If one is found
+ * (whether the model skipped the placeholder entirely, or used it correctly
+ * and padded the sentence with an extra invented figure alongside it — the
+ * confirmed live blind spot, 2026-07-28: "pay {{DEBT_PAYMENT}}/month plus
+ * $833/month to clear it sooner" substituted correctly but let the extra
+ * $833 ship untouched), the entire recommendation is discarded and replaced
+ * with a deterministic, code-built sentence using the real payment amount.
+ * One detection path, used uniformly — never two regexes to keep in sync.
  */
 
 export const DEBT_PAYMENT_PLACEHOLDER = '{{DEBT_PAYMENT}}';
 
 // Matches both English ($3,000 / $833.33) and French-Canadian (3000$ / 3 000,00 $)
-// currency conventions — a fabricated figure must not slip past detection
-// just because the model wrote it in French formatting.
-const DOLLAR_AMOUNT_RE = /\$\s?[\d,]+(?:[.,]\d{1,2})?|[\d][\d,\s]*(?:[.,]\d{1,2})?\s?\$/;
+// currency conventions, globally — a fabricated figure must not slip past
+// detection just because the model wrote it in French formatting, and every
+// occurrence must be checked, not just the first.
+const DOLLAR_AMOUNT_RE = /\$\s?[\d,]+(?:[.,]\d{1,2})?|[\d][\d,\s]*(?:[.,]\d{1,2})?\s?\$/g;
 
 export type DebtPayoffForRecommendation = {
   description: string;
@@ -40,6 +44,33 @@ export type DebtPayoffForRecommendation = {
 
 function formatCurrency(n: number): string {
   return `$${n.toFixed(2)}`;
+}
+
+/**
+ * Parses a matched currency string (either "$1,234.56" or "1 234,56$") into
+ * a plain number. A comma immediately followed by exactly 2 trailing digits
+ * is treated as a French decimal separator; otherwise commas/spaces are
+ * treated as thousands separators and stripped.
+ */
+function parseAmount(raw: string): number {
+  const stripped = raw.replace(/\$/g, '').trim();
+  const decimalComma = stripped.match(/,(\d{2})$/);
+  const normalized = decimalComma
+    ? `${stripped.slice(0, -3).replace(/[,\s]/g, '')}.${decimalComma[1]}`
+    : stripped.replace(/[,\s]/g, '');
+  return parseFloat(normalized);
+}
+
+/**
+ * True when `text` contains any dollar figure whose numeric value doesn't
+ * match `allowedAmount` (within rounding tolerance). The one shared
+ * detection path both branches of enforceDebtFigureInTopRecommendation use —
+ * a figure equal to the allowed amount (e.g. the just-substituted
+ * placeholder) is never flagged, regardless of how many times it appears.
+ */
+function containsUnauthorizedFigure(text: string, allowedAmount: number): boolean {
+  const matches = text.match(DOLLAR_AMOUNT_RE) ?? [];
+  return matches.some((m) => Math.abs(parseAmount(m) - allowedAmount) > 0.005);
 }
 
 function formatTargetDate(targetDate: string, locale: 'en' | 'fr'): string {
@@ -73,16 +104,73 @@ export function enforceDebtFigureInTopRecommendation(
 ): string {
   if (!debtPayoff) return text;
 
-  if (text.includes(DEBT_PAYMENT_PLACEHOLDER)) {
-    return text.split(DEBT_PAYMENT_PLACEHOLDER).join(formatCurrency(debtPayoff.monthlyPayment));
-  }
+  // Substitute the placeholder FIRST (if present) so the real figure is
+  // already in place before scanning — the scan below then only ever flags
+  // a figure that genuinely differs from the real amount, never the
+  // substitution itself.
+  const substituted = text.includes(DEBT_PAYMENT_PLACEHOLDER)
+    ? text.split(DEBT_PAYMENT_PLACEHOLDER).join(formatCurrency(debtPayoff.monthlyPayment))
+    : text;
 
-  const mentionsDebt = text.toLowerCase().includes(debtPayoff.description.toLowerCase());
-  if (mentionsDebt && DOLLAR_AMOUNT_RE.test(text)) {
-    // The model named the debt and stated its own digits instead of the
-    // required placeholder — never trust an unconstrained figure here.
+  const mentionsDebt = substituted.toLowerCase().includes(debtPayoff.description.toLowerCase());
+  if (mentionsDebt && containsUnauthorizedFigure(substituted, debtPayoff.monthlyPayment)) {
+    // Either the model skipped the placeholder and typed its own digits, or
+    // it used the placeholder correctly but padded the sentence with an
+    // extra invented figure alongside it — never trust either shape.
     return buildFallbackDebtRecommendation(debtPayoff, locale);
   }
 
+  return substituted;
+}
+
+// ---------------------------------------------------------------------------
+// Fix 4 (2026-07-28): borrowed cash mislabeled as surplus, no debt card needed
+// ---------------------------------------------------------------------------
+//
+// The existing aiContext disclosure ("Borrowed this month: $X...") is already
+// unconditional on totalBorrowed > 0 — it does NOT depend on computedDebtPayoff
+// existing (confirmed by reading regenerate-plan/route.ts's aiContext
+// assembly). But that's still only a soft prompt instruction with no
+// code-level check behind it — the same class of gap Fix 1/Fix 3 closed
+// elsewhere. This adds an actual post-generation guard, called independently
+// of enforceDebtFigureInTopRecommendation/computedDebtPayoff — it engages
+// purely off totalBorrowed, whether or not a debt-payoff card exists at all.
+const SURPLUS_LABEL_WORDS = ['surplus', 'extra', 'additional income', 'free cash', 'to invest', 'to save', 'available to', 'on top of'];
+
+function buildBorrowedCashFallback(totalBorrowed: number, locale: 'en' | 'fr'): string {
+  const amount = formatCurrency(totalBorrowed);
+  return locale === 'fr'
+    ? `Une partie de vos liquidités ce mois-ci (${amount}) provient d'un emprunt sur une marge de crédit, pas de revenus réels — gardez cela en tête avant de décider où diriger un montant supplémentaire ce mois-ci.`
+    : `Part of this month's available cash (${amount}) was borrowed from a credit line, not earned — worth keeping that in mind before deciding where to direct anything extra this month.`;
+}
+
+/**
+ * Enforces that topRecommendation never labels the household's real,
+ * dated credit-line draw as surplus/extra/income. Runs purely off
+ * `totalBorrowed` — never gated on computedDebtPayoff/a debt-payoff card
+ * existing, so a draw with no matching debt account is still caught.
+ * Returns `text` unchanged when there's nothing borrowed this month.
+ */
+export function enforceBorrowedCashFraming(
+  text: string,
+  totalBorrowed: number,
+  locale: 'en' | 'fr'
+): string {
+  if (totalBorrowed <= 0) return text;
+
+  const lowerText = text.toLowerCase();
+  // matchAll (not .match()) so each occurrence keeps its own real index —
+  // the same "$1,000" figure can appear more than once in a sentence (once
+  // honestly disclosed as borrowed, once mislabeled as surplus), and a
+  // plain indexOf would always resolve to the first occurrence for both.
+  for (const match of text.matchAll(DOLLAR_AMOUNT_RE)) {
+    if (Math.abs(parseAmount(match[0]) - totalBorrowed) > 0.005) continue;
+    const idx = match.index;
+    if (idx === undefined) continue;
+    const window = lowerText.slice(Math.max(0, idx - 40), idx + match[0].length + 40);
+    if (SURPLUS_LABEL_WORDS.some((w) => window.includes(w))) {
+      return buildBorrowedCashFallback(totalBorrowed, locale);
+    }
+  }
   return text;
 }

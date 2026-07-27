@@ -43,7 +43,7 @@ import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/li
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth, monthsBetween, GoalResult, DebtPayoffResult } from '@/lib/goalHelpers';
 import { detectWindfalls } from '@/lib/reviewContextHelpers';
 import { categoryActualsForCard } from '@/lib/envelopeHelpers';
-import { enforceDebtFigureInTopRecommendation, DEBT_PAYMENT_PLACEHOLDER } from '@/lib/topRecommendationHelpers';
+import { enforceDebtFigureInTopRecommendation, enforceBorrowedCashFraming, DEBT_PAYMENT_PLACEHOLDER } from '@/lib/topRecommendationHelpers';
 import {
   computeSinkingFundUrgency,
   rankFundingNeeds,
@@ -55,6 +55,8 @@ import {
   groupInstallmentSeries,
   computeStartingContribution,
   coachingFallbackApplies,
+  findUnsanctionedSourcingMention,
+  buildFallbackReviewText,
   FundingNeed,
 } from '@/lib/coachingHelpers';
 import { businessToday, businessMonth } from '@/lib/dateHelpers';
@@ -599,9 +601,16 @@ export async function POST(request: Request) {
       // which case the whole recommendation is replaced with a deterministic
       // one) — see topRecommendationHelpers.ts for the full mechanism and the
       // confirmed live failure this closes.
-      topRecommendation: enforceDebtFigureInTopRecommendation(
-        aiPart.topRecommendation ?? '',
-        computedDebtPayoff,
+      // FIX 4 (2026-07-28): separately, never let a real credit-line draw get
+      // labeled as surplus/extra/income — runs purely off totalBorrowed, not
+      // gated on computedDebtPayoff/a debt-payoff card existing at all.
+      topRecommendation: enforceBorrowedCashFraming(
+        enforceDebtFigureInTopRecommendation(
+          aiPart.topRecommendation ?? '',
+          computedDebtPayoff,
+          locale
+        ),
+        totalBorrowed,
         locale
       ),
     };
@@ -643,7 +652,10 @@ export async function POST(request: Request) {
       `{name} so the {month} bill doesn't catch you off guard." NEVER say "you're setting aside $X/month" or ` +
       `"you're saving $X/month" for any fund unless sinkingFundBuffer.fundedAlready is true. You may mention ` +
       `"sinkingFundBuffer.totalMonthlyProvision" as the combined monthly amount across every fund, but never sum ` +
-      `the individual funds yourself — that figure is already given.\n` +
+      `the individual funds yourself — that figure is already given. "monthlyProvision"/"totalMonthlyProvision" are ` +
+      `the plan's OWN established figures and may always be restated using the phrasing above regardless of ` +
+      `"coaching.startingContribution" — that cap governs a different thing entirely: see COACHING below for ` +
+      `exactly what it bounds.\n` +
       `- WINDFALLS: if "windfalls" is non-empty, you MUST explicitly acknowledge each one by name and amount, ` +
       `framed as a one-time timing event that will NOT repeat next month (e.g. "${reviewMonthName} included a ` +
       `third biweekly paycheque — $X extra that won't repeat next month") — never described as a new normal ` +
@@ -655,8 +667,15 @@ export async function POST(request: Request) {
       `for a figure the family actually set as a budget themselves.\n` +
       `- COACHING — WHERE THE MONEY COMES FROM: "coaching" is the ONLY source of any funding-priority or ` +
       `money-source suggestion. Its "rankedNeeds" is already in the correct priority order — restate that order, ` +
-      `never re-rank it yourself and never suggest funding anything not in this list. "coaching.startingContribution" ` +
-      `is the most you may ever suggest starting at — never recommend a larger number. If "coaching.sourceCategory" ` +
+      `never re-rank it yourself and never suggest funding anything not in this list. SCOPE OF THE CAP: ` +
+      `"coaching.startingContribution" bounds only a DISCRETIONARY "extra"/"additional" amount YOU might suggest ` +
+      `directing toward a need ON TOP OF what the plan already calls for — it does NOT cap restating a sinking ` +
+      `fund's own "monthlyProvision" or a goal's own "monthlyContribution" verbatim (those are the plan's existing, ` +
+      `already-established figures, governed by the SINKING FUNDS and ON-TRACK CLAIMS rules above, not by this ` +
+      `cap; e.g. "your plan calls for $300/month toward Property Tax" is always fine to state even when ` +
+      `startingContribution is $0 — that number is not a new suggestion). What the cap DOES bound: ` +
+      `"coaching.startingContribution" is the most you may ever propose applying as NEW, additional, on-top-of-` +
+      `plan money — never recommend a larger discretionary figure than that. If "coaching.sourceCategory" ` +
       `is non-null, you may name ONLY that one category as a possible source (its exact target/actual/over figures, ` +
       `never any other category, never a target you were not given) — phrase it as an option the family can use if ` +
       `they choose, e.g. "restaurants ran $X against your own $Y target — that's one place it could come from," ` +
@@ -677,15 +696,39 @@ export async function POST(request: Request) {
       `"shouldn't", "you need to stop", or "overspent" (say "ran higher than your own target" instead); never imply ` +
       `a category is frivolous or that the family is failing; no category (groceries, childcare, health included) ` +
       `is ever singled out as more discretionary than another — the voice is a humble coach offering an option, not ` +
-      `an auditor issuing a verdict.`;
+      `an auditor issuing a verdict.\n` +
+      `- NO INVENTED TARGETS: never describe any category, fund, or line as having a "budget," "target," or ` +
+      `"limit" unless one is explicitly present in the given data for that specific item (e.g. a real target inside ` +
+      `"coaching.sourceCategory"). A category with no such figure given may be described only by its actual spend ` +
+      `("$X on Groceries this month") — never as "within budget," "on budget," or "over budget," since no budget ` +
+      `was ever set for it.`;
 
-    const reviewMessage = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
-      messages: [{ role: 'user', content: reviewPrompt }],
-    });
+    // ── Generate review, then a post-generation category-sourcing guard ──────
+    // Fix 3 (2026-07-28): plan.seedCategories/monthlyBudget.categories reach
+    // this prompt in full regardless of coaching.sourceCategory (a confirmed,
+    // real leak — not yet observed exploited live, but defense-in-depth, not
+    // the primary gate). If the model names a category other than the one
+    // sanctioned as a money source, retry once; if the retry also fails,
+    // replace reviewText with a deterministic, honest fallback rather than
+    // ship an unproven source.
+    const allowedSourceCategoryName = sourceCategory?.categoryName ?? null;
 
-    const reviewText = reviewMessage.content[0].type === 'text' ? reviewMessage.content[0].text : '';
+    async function generateReviewText(): Promise<string> {
+      const reviewMessage = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: reviewPrompt }],
+      });
+      return reviewMessage.content[0].type === 'text' ? reviewMessage.content[0].text : '';
+    }
+
+    let reviewText = await generateReviewText();
+    if (findUnsanctionedSourcingMention(reviewText, [...SEED_CATEGORIES], allowedSourceCategoryName)) {
+      reviewText = await generateReviewText();
+      if (findUnsanctionedSourcingMention(reviewText, [...SEED_CATEGORIES], allowedSourceCategoryName)) {
+        reviewText = buildFallbackReviewText(reviewMonthName, locale);
+      }
+    }
 
     // ── Save conversation row ─────────────────────────────────────────────────
     await supabase.from('conversations').insert({
