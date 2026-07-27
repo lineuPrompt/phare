@@ -48,6 +48,7 @@ import {
   computeSinkingFundUrgency,
   rankFundingNeeds,
   computeTypicalSurplus,
+  computeInsufficientHistory,
   computeOverTargetCategories,
   selectTopOverTargetCategory,
   computeFreedCapacityEvents,
@@ -323,10 +324,16 @@ export async function POST(request: Request) {
         (activeRecurringItems ?? []) as { id: string; description: string; cadence: string; type: string }[]
       );
       const windfallExtra = monthWindfalls.reduce((sum, w) => sum + w.amount, 0);
-      return { month: m, netCashFlow: monthTotals.netCashFlow, windfallExtra };
+      return { month: m, netCashFlow: monthTotals.netCashFlow, windfallExtra, hasRealData: monthRows.length > 0 };
     });
     const typicalSurplusResult = computeTypicalSurplus(monthlyFigures);
     const typicalSurplus = typicalSurplusResult?.typicalSurplus ?? null;
+    // Fix 2 (2026-07-27): separate from fallbackApplies, which asks "is there
+    // nothing anywhere to point to" — a household can have a real
+    // sourceCategory/freedCapacityEvents AND still have most of its trailing
+    // window be genuinely empty (e.g. recently onboarded). This lets the
+    // review explain a conservative $0 honestly instead of staying silent.
+    const insufficientHistory = computeInsufficientHistory(monthlyFigures);
 
     // 2b. Real over-target categories — card-envelope categories only (the
     // one place a family sets a real spending target today; there is no
@@ -406,6 +413,7 @@ export async function POST(request: Request) {
       freedCapacityEvents,
       startingContribution,
       fallbackApplies,
+      insufficientHistory,
     };
 
     // ── Named review period (Part B.5) ───────────────────────────────────────
@@ -658,7 +666,13 @@ export async function POST(request: Request) {
       `{need}" — never invent a percentage, a schedule, or a growth event not in this list. If ` +
       `"coaching.fallbackApplies" is true, you must state plainly, in your own natural words, that there is no ` +
       `clear extra room right now and that starting small / revisiting later is the move — never substitute a ` +
-      `vaguer instruction like "look at your spending," and never name a category or event to fill the gap. TONE: ` +
+      `vaguer instruction like "look at your spending," and never name a category or event to fill the gap. If ` +
+      `"coaching.insufficientHistory" is true, you may state plainly, in your own words, that a starting figure is ` +
+      `conservative because there isn't a full trailing history to draw on yet (e.g. "this is a cautious starting ` +
+      `point while we build a fuller picture of your typical months") — this is a DIFFERENT condition from ` +
+      `fallbackApplies and can be true even when fallbackApplies is false and a real sourceCategory/` +
+      `freedCapacityEvents exist; never treat the two as the same thing, and never invent a larger or different ` +
+      `number to fill the gap either way — the honest explanation is the only thing that changes. TONE: ` +
       `never write "cut", "cut back", "reduce your spending on", "wasteful", "unnecessary", "frivolous", ` +
       `"shouldn't", "you need to stop", or "overspent" (say "ran higher than your own target" instead); never imply ` +
       `a category is frivolous or that the family is failing; no category (groceries, childcare, health included) ` +

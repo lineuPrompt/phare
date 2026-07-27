@@ -3,6 +3,7 @@ import {
   computeSinkingFundUrgency,
   rankFundingNeeds,
   computeTypicalSurplus,
+  computeInsufficientHistory,
   computeOverTargetCategories,
   selectTopOverTargetCategory,
   computeFreedCapacityEvents,
@@ -104,6 +105,41 @@ describe('computeTypicalSurplus', () => {
       { month: '2026-04', netCashFlow: -200, windfallExtra: 0 },
     ]);
     expect(result?.typicalSurplus).toBe(-200);
+  });
+});
+
+describe('computeInsufficientHistory', () => {
+  it('is true when zero of the trailing months have any real data (freshly onboarded household)', () => {
+    expect(computeInsufficientHistory([
+      { month: '2026-04', hasRealData: false },
+      { month: '2026-05', hasRealData: false },
+      { month: '2026-06', hasRealData: false },
+    ])).toBe(true);
+  });
+
+  it('is true when only 1 or 2 of 3 months have real data', () => {
+    expect(computeInsufficientHistory([
+      { month: '2026-04', hasRealData: false },
+      { month: '2026-05', hasRealData: false },
+      { month: '2026-06', hasRealData: true },
+    ])).toBe(true);
+    expect(computeInsufficientHistory([
+      { month: '2026-04', hasRealData: false },
+      { month: '2026-05', hasRealData: true },
+      { month: '2026-06', hasRealData: true },
+    ])).toBe(true);
+  });
+
+  it('is false when all 3 trailing months have real data, regardless of what that data nets to', () => {
+    expect(computeInsufficientHistory([
+      { month: '2026-04', hasRealData: true },
+      { month: '2026-05', hasRealData: true },
+      { month: '2026-06', hasRealData: true },
+    ])).toBe(false);
+  });
+
+  it('is true when fewer than 3 months are supplied at all', () => {
+    expect(computeInsufficientHistory([{ month: '2026-06', hasRealData: true }])).toBe(true);
   });
 });
 

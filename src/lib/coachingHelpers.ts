@@ -120,6 +120,27 @@ export function computeTypicalSurplus(months: TypicalSurplusInput[]): TypicalSur
   return { typicalSurplus: round2(avg), monthsUsed: months.length };
 }
 
+export type MonthHistoryAvailability = { month: string; hasRealData: boolean };
+
+/**
+ * True when fewer than 3 of the intended trailing months have any real
+ * transaction data at all — e.g. a recently-onboarded household whose
+ * ledger doesn't reach back that far. Deliberately separate from
+ * fallbackApplies, which answers a different question ("is there nothing
+ * anywhere to point to" — sourceCategory/freedCapacityEvents can be real
+ * and present even when the trailing window itself is mostly empty). This
+ * signal exists so a $0 typicalSurplus/startingContribution caused by thin
+ * history can be explained honestly, rather than read as silent and
+ * incoherent next to a genuinely strong current month. Does NOT change how
+ * typicalSurplus itself is computed — an empty month legitimately
+ * contributes 0 to that average, exactly as computeTypicalSurplus already
+ * does; this is a separate narration signal, not a different formula.
+ */
+export function computeInsufficientHistory(months: MonthHistoryAvailability[]): boolean {
+  const monthsWithData = months.filter((m) => m.hasRealData).length;
+  return monthsWithData < 3;
+}
+
 export type OverTargetCategory = { categoryName: string; target: number; actual: number; over: number };
 
 /**

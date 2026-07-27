@@ -939,3 +939,131 @@ describe('POST /api/regenerate-plan — Fix 1: topRecommendation debt-figure enf
     expect(json.topRecommendation).toBe('Your Shopping category ran $200 over this month — worth a look.');
   });
 });
+
+// Fix 2 (2026-07-27): not a bug — typicalSurplus: 0 for a household with
+// fewer than 3 real trailing months is correct, defined behavior
+// (computeMonthTotals([], accounts) legitimately returns all-zero). The gap
+// is coherence: fallbackApplies stays false whenever a real sourceCategory
+// or freedCapacityEvent exists (its own, different, correctly-scoped
+// condition), so the review had no signal to explain WHY a strong current
+// month produced a $0 starting recommendation. coaching.insufficientHistory
+// is a separate, independent signal for exactly that gap.
+describe('POST /api/regenerate-plan — Fix 2: coaching.insufficientHistory', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createMock.mockReset();
+  });
+
+  it('is true even when a real sourceCategory AND freedCapacityEvents exist — independent of fallbackApplies', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-17T12:00:00'));
+
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [
+        // Month-scoped headline: real card spend, over its own target.
+        {
+          data: [
+            { account_id: 'card-1', amount: 350, type: 'expense', category_id: 'cat-hobby', date: '2026-07-05', is_bridge: false, description: 'Hobby stuff' },
+          ],
+          error: null,
+        },
+        { data: [], error: null }, // Coaching Layer history window — completely empty (0 of 3 months have data)
+        { data: [{ amount: -6000, type: 'transfer', account_id: 'debt-1', date: '2026-01-01' }], error: null }, // all-time debt balance
+      ],
+      accounts: [{
+        data: [
+          { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null },
+          { id: 'card-1', name: 'Visa', type: 'credit_card', goal_target: null, goal_target_date: null },
+          { id: 'debt-1', name: 'Credit Line', type: 'debt', goal_target: 0, goal_target_date: '2027-01-17' },
+        ],
+        error: null,
+      }],
+      sinking_funds: [{ data: [], error: null }],
+      card_envelope_items: [{
+        data: [
+          { account_id: 'card-1', category_id: 'cat-hobby', monthly_amount: 200, categories: { name: 'Hobby Supplies', name_fr: null } },
+        ],
+        error: null,
+      }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    try {
+      const { createClient } = await import('@/lib/supabase-server');
+      (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+      const { POST } = await import('../route');
+      const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+        method: 'POST',
+        body: JSON.stringify({ locale: 'en' }),
+      }));
+      expect(res.status).toBe(200);
+
+      const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
+      // Both real signals are present...
+      expect(reviewPromptSent).toContain('"sourceCategory":{"categoryName":"Hobby Supplies"');
+      expect(reviewPromptSent).toContain('"kind":"debtPayoff"');
+      // ...so fallbackApplies is correctly false...
+      expect(reviewPromptSent).toContain('"fallbackApplies":false');
+      // ...yet insufficientHistory is still true, independently.
+      expect(reviewPromptSent).toContain('"insufficientHistory":true');
+      expect(reviewPromptSent).toContain('coaching.insufficientHistory');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('is false when all 3 trailing months have real transaction data', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-17T12:00:00'));
+
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [
+        { data: [], error: null }, // month-scoped headline figures
+        {
+          // Real chequing activity in each of the 3 trailing months (April, May, June 2026).
+          data: [
+            { amount: 2000, type: 'income', account_id: 'chq-1', date: '2026-04-10', recurring_item_id: null },
+            { amount: 2000, type: 'income', account_id: 'chq-1', date: '2026-05-10', recurring_item_id: null },
+            { amount: 2000, type: 'income', account_id: 'chq-1', date: '2026-06-10', recurring_item_id: null },
+          ],
+          error: null,
+        },
+      ],
+      accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+      sinking_funds: [{ data: [], error: null }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    try {
+      const { createClient } = await import('@/lib/supabase-server');
+      (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+      const { POST } = await import('../route');
+      const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+        method: 'POST',
+        body: JSON.stringify({ locale: 'en' }),
+      }));
+      expect(res.status).toBe(200);
+
+      const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
+      expect(reviewPromptSent).toContain('"insufficientHistory":false');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
