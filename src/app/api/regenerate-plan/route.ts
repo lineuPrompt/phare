@@ -43,6 +43,7 @@ import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/li
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth, monthsBetween, GoalResult, DebtPayoffResult } from '@/lib/goalHelpers';
 import { detectWindfalls } from '@/lib/reviewContextHelpers';
 import { categoryActualsForCard } from '@/lib/envelopeHelpers';
+import { enforceDebtFigureInTopRecommendation, DEBT_PAYMENT_PLACEHOLDER } from '@/lib/topRecommendationHelpers';
 import {
   computeSinkingFundUrgency,
   rankFundingNeeds,
@@ -506,7 +507,8 @@ export async function POST(request: Request) {
       `  - "isFixed": true if it is a fixed recurring bill paid every month; false if variable day-to-day spending.\n` +
       `- Classify income lines too: category "Income", isFixed true.\n` +
       `- Do NOT output any sinking funds, goals, or debt payoff as structured data — there is no field for them in the JSON above. If you want to suggest one, put it in topRecommendation as a suggestion phrased as a suggestion ("Consider…"), never as a fund/goal/debt-plan they already have and never with a monthly amount presented as theirs.\n` +
-      `- Their goals and debt payoff (if any) are already evaluated (contribution, on-track verdict, and dates are all real, verified numbers) — do not invent or restate any of those figures anywhere; if you reference one in topRecommendation, use the exact numbers given.\n` +
+      `- Their goals (if any) are already evaluated (contribution, on-track verdict, and dates are all real, verified numbers) — do not invent or restate any of those figures anywhere.\n` +
+      `- DEBT PAYOFF: if topRecommendation mentions the debt's own required monthly payment amount, you MUST write the literal placeholder ${DEBT_PAYMENT_PLACEHOLDER} in its place — never type a dollar figure for it yourself, under any circumstance, in any language or currency format. You may still describe timing/urgency around it in your own words (e.g. "with the credit line's ${DEBT_PAYMENT_PLACEHOLDER}/month payment, this month's extra room could go toward it").\n` +
       `- Their recurring contributions and debt payments (if any) are already subtracted from the net cash flow figure above — if you mention one, say it's already accounted for (e.g. "your $500/mo RRSP contribution is already counted"), never present it as new discretionary room and never double-count it against a separate suggestion.\n` +
       `- Vocabulary: never write "code", "computed in code", or similar internal/technical phrasing — a reader must never see the word "code" at all. An estimated date or figure should read as a plain estimate (e.g. "estimated: March 2027"), never "code-estimated". Never call a figure "budgeted" unless the family actually set that budget themselves — a computed or projected amount (including a card/bridge payment total) should read as "expected", not "budgeted".\n` +
       `- Canadian context: RRSP, RESP, TFSA, CESG.\n` +
@@ -582,19 +584,19 @@ export async function POST(request: Request) {
       // sourceCategory, never invents a freedCapacityEvent or a starting
       // amount above startingContribution.
       coaching,
-      topRecommendation: aiPart.topRecommendation ?? '',
+      // FIX 1 (2026-07-27): topRecommendation is planPrompt's free text — the
+      // debt's own monthly payment figure inside it is never trusted as
+      // AI-authored digits. Either the model used the required placeholder
+      // (substituted with the real, code-computed amount) or it didn't (in
+      // which case the whole recommendation is replaced with a deterministic
+      // one) — see topRecommendationHelpers.ts for the full mechanism and the
+      // confirmed live failure this closes.
+      topRecommendation: enforceDebtFigureInTopRecommendation(
+        aiPart.topRecommendation ?? '',
+        computedDebtPayoff,
+        locale
+      ),
     };
-
-    console.log('COACHING_DEBUG', JSON.stringify({
-      topNeed,
-      coaching,
-      monthlyFigures,
-      historyRowCount: historyRows.length,
-      historyDateRange: historyRows.length > 0
-        ? [historyRows.reduce((min, r) => (r.date < min ? r.date : min), historyRows[0].date),
-           historyRows.reduce((max, r) => (r.date > max ? r.date : max), historyRows[0].date)]
-        : null,
-    }));
 
     // ── Generate review (blocking) ────────────────────────────────────────────
     // Part B hardening (2026-07-19), against four real failures in the
