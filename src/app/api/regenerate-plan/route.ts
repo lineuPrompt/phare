@@ -416,6 +416,14 @@ export async function POST(request: Request) {
       startingContribution,
       fallbackApplies,
       insufficientHistory,
+      // Fix (2026-07-28): borrowed cash is never real capacity — the same
+      // binding contract typicalSurplus/startingContribution already honor
+      // (netCashFlow, which both derive from, structurally excludes it).
+      // Placed here rather than top-level "plan" so the constraint sits next
+      // to the figures it constrains. reviewText previously had NO visibility
+      // into this at all (plan never carried it) — see the COACHING rule
+      // below for what the model may/may not say about it.
+      totalBorrowed,
     };
 
     // ── Named review period (Part B.5) ───────────────────────────────────────
@@ -691,7 +699,12 @@ export async function POST(request: Request) {
       `point while we build a fuller picture of your typical months") — this is a DIFFERENT condition from ` +
       `fallbackApplies and can be true even when fallbackApplies is false and a real sourceCategory/` +
       `freedCapacityEvents exist; never treat the two as the same thing, and never invent a larger or different ` +
-      `number to fill the gap either way — the honest explanation is the only thing that changes. TONE: ` +
+      `number to fill the gap either way — the honest explanation is the only thing that changes. BORROWED CASH: ` +
+      `"coaching.totalBorrowed" is real money drawn from a credit line this month (0 means none) — it is NOT ` +
+      `income, NOT savings, and NOT part of any surplus/capacity figure above (netCashFlow/typicalSurplus already ` +
+      `exclude it entirely). If it is non-zero, you may disclose it honestly (e.g. "$X of this month's cash was ` +
+      `borrowed from a credit line") but must NEVER describe it as surplus, extra, income, or savings, and must ` +
+      `never add it into or imply it inflates any capacity figure you state. TONE: ` +
       `never write "cut", "cut back", "reduce your spending on", "wasteful", "unnecessary", "frivolous", ` +
       `"shouldn't", "you need to stop", or "overspent" (say "ran higher than your own target" instead); never imply ` +
       `a category is frivolous or that the family is failing; no category (groceries, childcare, health included) ` +
