@@ -585,6 +585,8 @@ export async function POST(request: Request) {
       topRecommendation: aiPart.topRecommendation ?? '',
     };
 
+    console.log('COACHING_DEBUG', JSON.stringify({ topNeed, coaching }));
+
     // ── Generate review (blocking) ────────────────────────────────────────────
     // Part B hardening (2026-07-19), against four real failures in the
     // founder's July 17 review: a wrong month name, a windfall paycheque
