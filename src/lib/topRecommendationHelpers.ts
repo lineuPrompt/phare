@@ -36,6 +36,22 @@ export const DEBT_PAYMENT_PLACEHOLDER = '{{DEBT_PAYMENT}}';
 // occurrence must be checked, not just the first.
 const DOLLAR_AMOUNT_RE = /\$\s?[\d,]+(?:[.,]\d{1,2})?|[\d][\d,\s]*(?:[.,]\d{1,2})?\s?\$/g;
 
+// Any {{...}} shaped token, by NAME-AGNOSTIC pattern — not just
+// DEBT_PAYMENT_PLACEHOLDER specifically. Confirmed live (2026-07-28): with
+// no debt account at all (computedDebtPayoff null), the model still wrote
+// the literal "{{DEBT_PAYMENT}}" token in topRecommendation, and the old
+// early-return (`if (!debtPayoff) return text`) shipped it untouched — a
+// template token has no legitimate reason to ever reach a user. Matching by
+// shape, not by the one name we happen to define today, means a future
+// prompt template gaining a new placeholder can't silently reopen this same
+// hole under a different name. Non-global (no risk from reused .test()
+// statefulness) — this is a pure presence check, not a per-occurrence scan.
+const TEMPLATE_TOKEN_RE = /\{\{[^{}]*\}\}/;
+
+export function containsUnsubstitutedToken(text: string): boolean {
+  return TEMPLATE_TOKEN_RE.test(text);
+}
+
 export type DebtPayoffForRecommendation = {
   description: string;
   targetDate: string; // YYYY-MM
@@ -92,17 +108,37 @@ function buildFallbackDebtRecommendation(
 }
 
 /**
+ * Generic fallback for when a template token leaks with NO debt payoff to
+ * build a specific replacement from (confirmed live, 2026-07-28: a bare
+ * credit-line draw, no debt account at all). Deliberately not debt-specific
+ * — there's nothing real to say about a debt that doesn't exist.
+ */
+function buildGenericTokenFallback(locale: 'en' | 'fr'): string {
+  return locale === 'fr'
+    ? `Cette recommandation n'a pas pu être générée de façon fiable ce mois-ci — une nouvelle sera prête la prochaine fois que vous régénérerez.`
+    : `This month's recommendation couldn't be generated safely — a fresh one will be ready the next time you regenerate.`;
+}
+
+/**
  * Enforces that topRecommendation can never ship an AI-invented dollar
- * figure for the debt's own required monthly payment. Returns `text`
- * unchanged when there's no debt payoff at all, or when the text doesn't
- * reference the debt by name (nothing to enforce).
+ * figure for the debt's own required monthly payment, AND can never ship a
+ * raw, unsubstituted {{...}} template token under any circumstance —
+ * including when there's no debt payoff at all to substitute against
+ * (confirmed live, 2026-07-28: the model applied the "write the placeholder"
+ * style instruction even to a bare credit-line draw with no matching debt
+ * account, and the old early return shipped the literal token untouched).
  */
 export function enforceDebtFigureInTopRecommendation(
   text: string,
   debtPayoff: DebtPayoffForRecommendation | null,
   locale: 'en' | 'fr'
 ): string {
-  if (!debtPayoff) return text;
+  if (!debtPayoff) {
+    // No real figure exists to substitute a leaked token with — the only
+    // safe move is to discard the whole recommendation, never to return a
+    // literal template artifact to the user.
+    return containsUnsubstitutedToken(text) ? buildGenericTokenFallback(locale) : text;
+  }
 
   // Substitute the placeholder FIRST (if present) so the real figure is
   // already in place before scanning — the scan below then only ever flags
@@ -117,6 +153,14 @@ export function enforceDebtFigureInTopRecommendation(
     // Either the model skipped the placeholder and typed its own digits, or
     // it used the placeholder correctly but padded the sentence with an
     // extra invented figure alongside it — never trust either shape.
+    return buildFallbackDebtRecommendation(debtPayoff, locale);
+  }
+
+  // A DIFFERENT, unexpected template token could leak alongside a correctly
+  // substituted DEBT_PAYMENT_PLACEHOLDER — same class of gap as the
+  // placeholder-plus-extra-figure bug (2026-07-28), just for a stray token
+  // instead of a stray dollar figure.
+  if (containsUnsubstitutedToken(substituted)) {
     return buildFallbackDebtRecommendation(debtPayoff, locale);
   }
 

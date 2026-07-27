@@ -27,7 +27,15 @@ export type EventType =
   // dashboard loading) — the strongest available retention predictor, per
   // the Coaching Layer spec. Fired from GET /api/dashboard's full (non-
   // snapshotOnly) load, gated on a non-empty review string.
-  | 'viewed_monthly_review';
+  | 'viewed_monthly_review'
+  // reviewText's post-generation guards (category-sourcing leak, borrowed-
+  // cash mislabeling) required a retry — the only production visibility
+  // into how often the model actually violates these soft-instruction-
+  // backed rules. Fired from POST /api/regenerate-plan whenever the first
+  // attempt fails either check; metadata carries which check(s) triggered
+  // it and whether the retry passed or which deterministic fallback was
+  // used. Never fired on the common (clean-first-attempt) path.
+  | 'review_text_guard_retried';
 
 /**
  * Insert one event row.

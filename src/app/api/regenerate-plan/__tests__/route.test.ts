@@ -38,6 +38,10 @@ function makeSupabaseMock(script: Record<string, Resolution[]>) {
     cursors[table] = idx + 1;
     const list = script[table] ?? [];
     if (idx >= list.length) {
+      // events (review_text_guard_retried, etc.) is fire-and-forget and
+      // shields its own errors — safe to leave unscripted, same convention
+      // as the dashboard route's test harness.
+      if (table === 'events') return makeResultChain({ data: null, error: null, count: 0 });
       throw new Error(`No scripted response for table "${table}" call #${idx + 1} (method: ${method})`);
     }
     return makeResultChain(list[idx]);
@@ -1318,5 +1322,312 @@ describe('POST /api/regenerate-plan — Adversarial Fix 4: borrowed cash framing
 
     expect(res.status).toBe(200);
     expect(json.topRecommendation).toBe('Your $200 net cash flow this month is a solid, real gain.');
+  });
+});
+
+// Follow-up (2026-07-28): reviewText previously had NO visibility into
+// totalBorrowed at all (plan never carried it) — now it does, via
+// coaching.totalBorrowed, guarded by the SAME unified retry loop as the
+// category-sourcing guard (one retry cycle evaluates both checks together,
+// never two sequential cycles). Borrowed-cash mislabeling takes priority
+// for which fallback ships if both checks still fail after the retry.
+describe('POST /api/regenerate-plan — reviewText borrowed-cash guard (unified retry with Fix 3)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createMock.mockReset();
+  });
+
+  const drawFixture = {
+    users: [{ data: { household_id: 'hh1' }, error: null }],
+    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    transactions: [
+      {
+        data: [
+          { amount: 2000, type: 'income', description: 'Salary', account_id: 'chq-1' },
+          { amount: 1800, type: 'expense', description: 'Rent', account_id: 'chq-1' },
+          { amount: -1000, type: 'transfer', description: 'Line of credit draw', account_id: 'chq-1', transfer_peer_id: 'peer-1', id: 'tx-1' },
+        ],
+        error: null,
+      },
+      { data: [], error: null },
+    ],
+    accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+    sinking_funds: [{ data: [], error: null }],
+    recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+    conversations: [{ error: null }],
+  };
+
+  it('retries once when reviewText mislabels borrowed cash as surplus, and uses the clean retry', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Your $1,000 line-of-credit draw gives you $1,000 of surplus to invest.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
+
+    const { client, calls } = makeSupabaseMock(drawFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(3);
+    expect(json.reviewText).toBe('A fine, clean month overall.');
+
+    const eventCall = calls.find((c) => c.table === 'events' && c.method === 'insert');
+    expect(eventCall).toBeTruthy();
+    const eventPayload = eventCall!.args[0] as { event_type: string; metadata: { triggeredBy: string[]; outcome: string } };
+    expect(eventPayload.event_type).toBe('review_text_guard_retried');
+    expect(eventPayload.metadata.triggeredBy).toEqual(['borrowed_cash']);
+    expect(eventPayload.metadata.outcome).toBe('retry_passed');
+  });
+
+  it('falls back to the deterministic borrowed-cash text when BOTH attempts mislabel it', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Your $1,000 draw gives you $1,000 of surplus to invest.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'You have an extra $1,000 available this month to put toward your goals.' }] });
+
+    const { client, calls } = makeSupabaseMock(drawFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    // Only 3 total AI calls — plan + 2 review attempts — never a 3rd retry.
+    expect(createMock).toHaveBeenCalledTimes(3);
+    expect(json.reviewText).not.toContain('surplus');
+    expect(json.reviewText).toContain('$1000.00');
+    expect(json.reviewText).toContain('borrowed');
+
+    const eventCall = calls.find((c) => c.table === 'events' && c.method === 'insert');
+    const eventPayload = eventCall!.args[0] as { metadata: { outcome: string } };
+    expect(eventPayload.metadata.outcome).toBe('fallback_borrowed');
+  });
+
+  it('control: an honest borrowed-cash disclosure passes through untouched, no retry', async () => {
+    const honestText = 'Part of this month\'s cash — $1,000 — was borrowed from your credit line, not earned.';
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: honestText }] });
+
+    const { client } = makeSupabaseMock(drawFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(2); // no retry
+    expect(json.reviewText).toBe(honestText);
+  });
+
+  it('catches a repeated figure — the same amount honestly disclosed once and mislabeled once in the same text', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Part of this month\'s cash — $1,000 — was borrowed from your credit line, not earned, but that still gives you $1,000 of surplus to work with.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
+
+    const { client } = makeSupabaseMock(drawFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(3); // caught, retried
+    expect(json.reviewText).toBe('A fine, clean month overall.');
+  });
+
+  it('catches the mislabeling in French currency formatting too', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Continuez.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Vous avez 1000$ de surplus supplémentaire à investir ce mois-ci.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Un mois clair et simple.' }] });
+
+    const { client } = makeSupabaseMock(drawFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'fr' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(3);
+    expect(json.reviewText).toBe('Un mois clair et simple.');
+  });
+
+  it('priority: when the retry still fails BOTH checks, the borrowed-cash fallback wins over the category fallback', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'That could come from Shopping if you wanted.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'That could come from Shopping, and your $1,000 draw gives you $1,000 of surplus.' }] });
+
+    const { client } = makeSupabaseMock(drawFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(3); // never a 3rd retry
+    expect(json.reviewText).toContain('borrowed');
+    expect(json.reviewText).not.toContain("couldn't be generated safely");
+  });
+});
+
+// Follow-up (2026-07-28): reviewText's checkReviewGuards gained a third
+// condition — a leaked {{...}} template token — added defensively (no real
+// double-brace instruction reaches reviewPrompt today; reviewPrompt's own
+// single-brace illustrative examples are a related but different, unfixed
+// risk, reported separately). Same shared retry loop, same fallback
+// (buildFallbackReviewText), stated priority: borrowed_cash > token_leak >
+// category_sourcing.
+describe('POST /api/regenerate-plan — reviewText token-leak guard (third condition, same loop)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createMock.mockReset();
+  });
+
+  const noCardFixture = {
+    users: [{ data: { household_id: 'hh1' }, error: null }],
+    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    transactions: [{ data: [], error: null }, { data: [], error: null }],
+    accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+    sinking_funds: [{ data: [], error: null }],
+    recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+    conversations: [{ error: null }],
+  };
+
+  it('retries once when reviewText leaks a template token, and uses the clean retry', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Consider putting {{EXTRA_ROOM}} toward your goals this month.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
+
+    const { client, calls } = makeSupabaseMock(noCardFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(3);
+    expect(json.reviewText).toBe('A fine, clean month overall.');
+
+    const eventCall = calls.find((c) => c.table === 'events' && c.method === 'insert');
+    const eventPayload = eventCall!.args[0] as { metadata: { triggeredBy: string[]; outcome: string } };
+    expect(eventPayload.metadata.triggeredBy).toEqual(['token_leak']);
+    expect(eventPayload.metadata.outcome).toBe('retry_passed');
+  });
+
+  it('falls back to deterministic text when a repeated token leaks on both attempts', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Put {{EXTRA_ROOM}} here and {{EXTRA_ROOM}} there too.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Still {{ANOTHER_TOKEN}} leaking on the retry.' }] });
+
+    const { client, calls } = makeSupabaseMock(noCardFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(3); // never a 3rd retry
+    expect(json.reviewText).not.toContain('{{');
+    expect(json.reviewText).toContain("couldn't be generated safely");
+
+    const eventCall = calls.find((c) => c.table === 'events' && c.method === 'insert');
+    const eventPayload = eventCall!.args[0] as { metadata: { outcome: string } };
+    expect(eventPayload.metadata.outcome).toBe('fallback_token');
+  });
+
+  it('catches the leak in French too', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Continuez.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Mettez {{MONTANT_SUPPLEMENTAIRE}} de côté ce mois-ci.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Un mois clair et simple.' }] });
+
+    const { client } = makeSupabaseMock(noCardFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'fr' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(3);
+    expect(json.reviewText).toBe('Un mois clair et simple.');
+  });
+
+  it('priority: a token leak beats a category-sourcing violation when both fail on retry', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'That could come from Shopping if you wanted.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'That could come from Shopping, and also {{EXTRA_ROOM}} if available.' }] });
+
+    const { client, calls } = makeSupabaseMock(noCardFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.reviewText).toContain("couldn't be generated safely");
+
+    // Both fallbacks share the same generic text, but the outcome field
+    // must record token_leak as the deciding reason, not category_sourcing.
+    const eventCall = calls.find((c) => c.table === 'events' && c.method === 'insert');
+    const eventPayload = eventCall!.args[0] as { metadata: { outcome: string } };
+    expect(eventPayload.metadata.outcome).toBe('fallback_token');
   });
 });

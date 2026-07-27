@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { enforceDebtFigureInTopRecommendation, enforceBorrowedCashFraming, DEBT_PAYMENT_PLACEHOLDER } from '../topRecommendationHelpers';
+import { enforceDebtFigureInTopRecommendation, enforceBorrowedCashFraming, containsUnsubstitutedToken, DEBT_PAYMENT_PLACEHOLDER } from '../topRecommendationHelpers';
 
 const debtPayoff = { description: 'Credit Line', targetDate: '2026-10', monthlyPayment: 833.33 };
 
@@ -138,5 +138,54 @@ describe('enforceBorrowedCashFraming (Fix 4, 2026-07-28)', () => {
     const result = enforceBorrowedCashFraming(text, 1000, 'fr');
     expect(result).toContain('1000.00');
     expect(result).toContain('emprunt');
+  });
+});
+
+describe('containsUnsubstitutedToken', () => {
+  it('detects a {{...}} shaped token by pattern, not by a fixed name', () => {
+    expect(containsUnsubstitutedToken('pay {{DEBT_PAYMENT}}/month')).toBe(true);
+    expect(containsUnsubstitutedToken('pay {{SOME_FUTURE_TOKEN}}/month')).toBe(true);
+    expect(containsUnsubstitutedToken('a perfectly normal sentence')).toBe(false);
+  });
+});
+
+describe('Follow-up (2026-07-28): leaked {{...}} token ships to the user', () => {
+  const debt1000 = { description: 'Credit Line', targetDate: '2026-10', monthlyPayment: 1000.00 };
+
+  it('the exact observed live failure: debtPayoff is null (bare credit-line draw, no debt account) and the model still wrote {{DEBT_PAYMENT}}', () => {
+    const text = "...repay that credit line at its {{DEBT_PAYMENT}}/month required payment so the borrowed amount doesn't accumulate interest.";
+    const result = enforceDebtFigureInTopRecommendation(text, null, 'en');
+    expect(result).not.toContain('{{DEBT_PAYMENT}}');
+    expect(result).not.toBe(text);
+    expect(result).toContain("couldn't be generated safely");
+  });
+
+  it('generalizes: a differently-named token leaks with debtPayoff null too', () => {
+    const text = 'Consider putting {{EXTRA_ROOM}} toward your goals this month.';
+    const result = enforceDebtFigureInTopRecommendation(text, null, 'en');
+    expect(result).not.toContain('{{EXTRA_ROOM}}');
+    expect(result).toContain("couldn't be generated safely");
+  });
+
+  it('control: normal substitution is unaffected when debtPayoff exists and no stray token leaks', () => {
+    const text = `Apply your regular ${DEBT_PAYMENT_PLACEHOLDER}/month toward Credit Line to stay on track.`;
+    const result = enforceDebtFigureInTopRecommendation(text, debt1000, 'en');
+    expect(result).toBe('Apply your regular $1000.00/month toward Credit Line to stay on track.');
+  });
+
+  it('a DIFFERENT token leaking alongside a correctly-substituted placeholder is still caught, debtPayoff non-null', () => {
+    const text = `Pay ${DEBT_PAYMENT_PLACEHOLDER}/month toward Credit Line, plus {{BONUS_AMOUNT}} if you can.`;
+    const result = enforceDebtFigureInTopRecommendation(text, debt1000, 'en');
+    expect(result).not.toContain('{{BONUS_AMOUNT}}');
+    expect(result).not.toContain(DEBT_PAYMENT_PLACEHOLDER);
+    expect(result).toContain('$1000.00');
+    expect(result).toContain('Credit Line');
+  });
+
+  it('French: a leaked token with debtPayoff null gets the French generic fallback', () => {
+    const text = 'Payez {{DEBT_PAYMENT}}/mois pour rembourser la marge de crédit plus rapidement.';
+    const result = enforceDebtFigureInTopRecommendation(text, null, 'fr');
+    expect(result).not.toContain('{{DEBT_PAYMENT}}');
+    expect(result).toContain('pas pu être générée');
   });
 });

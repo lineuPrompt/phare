@@ -43,7 +43,8 @@ import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/li
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth, monthsBetween, GoalResult, DebtPayoffResult } from '@/lib/goalHelpers';
 import { detectWindfalls } from '@/lib/reviewContextHelpers';
 import { categoryActualsForCard } from '@/lib/envelopeHelpers';
-import { enforceDebtFigureInTopRecommendation, enforceBorrowedCashFraming, DEBT_PAYMENT_PLACEHOLDER } from '@/lib/topRecommendationHelpers';
+import { enforceDebtFigureInTopRecommendation, enforceBorrowedCashFraming, containsUnsubstitutedToken, DEBT_PAYMENT_PLACEHOLDER } from '@/lib/topRecommendationHelpers';
+import { logEvent } from '@/lib/eventLogger';
 import {
   computeSinkingFundUrgency,
   rankFundingNeeds,
@@ -716,14 +717,27 @@ export async function POST(request: Request) {
       `("$X on Groceries this month") — never as "within budget," "on budget," or "over budget," since no budget ` +
       `was ever set for it.`;
 
-    // ── Generate review, then a post-generation category-sourcing guard ──────
+    // ── Generate review, then two post-generation guards on reviewText ───────
     // Fix 3 (2026-07-28): plan.seedCategories/monthlyBudget.categories reach
     // this prompt in full regardless of coaching.sourceCategory (a confirmed,
-    // real leak — not yet observed exploited live, but defense-in-depth, not
-    // the primary gate). If the model names a category other than the one
-    // sanctioned as a money source, retry once; if the retry also fails,
-    // replace reviewText with a deterministic, honest fallback rather than
-    // ship an unproven source.
+    // real leak) — if the model names a category other than the one
+    // sanctioned as a money source, that's a violation.
+    // Fix (2026-07-28, reviewText half of Fix 4): coaching.totalBorrowed is
+    // now visible to this prompt for the first time — if the model mislabels
+    // it as surplus/extra/income, that's also a violation. enforceBorrowed-
+    // CashFraming is reused exactly as built for topRecommendation (not
+    // forked) — its own "did it change the text" result IS the detection
+    // signal here, no separate detector needed.
+    //
+    // ONE shared retry loop evaluates BOTH checks on every attempt (not two
+    // sequential retry cycles): a retry that fixes one violation could
+    // introduce the other with no bound on the ping-pong, and each retry is
+    // a full call on the most expensive prompt in the app. Retry once if
+    // EITHER fires; if the retry still fails either check, borrowed-cash
+    // mislabeling takes priority for which fallback ships — describing debt
+    // as spendable money is the more materially dangerous error to leave
+    // uncorrected, so it wins over the category-sourcing fallback when both
+    // are present.
     const allowedSourceCategoryName = sourceCategory?.categoryName ?? null;
 
     async function generateReviewText(): Promise<string> {
@@ -735,12 +749,65 @@ export async function POST(request: Request) {
       return reviewMessage.content[0].type === 'text' ? reviewMessage.content[0].text : '';
     }
 
+    // Follow-up (2026-07-28): reviewText carries no {{...}} placeholder
+    // instruction the way planPrompt's DEBT_PAYMENT_PLACEHOLDER does — but
+    // reviewPrompt's own COACHING/SINKING FUNDS rules use single-brace
+    // illustrative example syntax ("{name}", "{month}", "{need}",
+    // "{freesOn}") that the model could analogously echo literally. Added
+    // defensively (double-brace only, matching containsUnsubstitutedToken's
+    // scope) even though no real double-brace instruction reaches this
+    // prompt today — cheap insurance against any future template addition.
+    function checkReviewGuards(text: string): { category: boolean; borrowed: boolean; token: boolean } {
+      return {
+        category: findUnsanctionedSourcingMention(text, [...SEED_CATEGORIES], allowedSourceCategoryName) !== null,
+        borrowed: totalBorrowed > 0 && enforceBorrowedCashFraming(text, totalBorrowed, locale) !== text,
+        token: containsUnsubstitutedToken(text),
+      };
+    }
+
+    function violatedReasons(v: { category: boolean; borrowed: boolean; token: boolean }): string[] {
+      const reasons: string[] = [];
+      if (v.borrowed) reasons.push('borrowed_cash');
+      if (v.token) reasons.push('token_leak');
+      if (v.category) reasons.push('category_sourcing');
+      return reasons;
+    }
+
     let reviewText = await generateReviewText();
-    if (findUnsanctionedSourcingMention(reviewText, [...SEED_CATEGORIES], allowedSourceCategoryName)) {
+    const firstAttemptViolation = checkReviewGuards(reviewText);
+
+    if (firstAttemptViolation.category || firstAttemptViolation.borrowed || firstAttemptViolation.token) {
       reviewText = await generateReviewText();
-      if (findUnsanctionedSourcingMention(reviewText, [...SEED_CATEGORIES], allowedSourceCategoryName)) {
+      const retryViolation = checkReviewGuards(reviewText);
+
+      // Priority when the retry still fails more than one check — stated as
+      // a rule, not an accident of which check happens to run first:
+      // borrowed-cash (materially dangerous — debt described as spendable
+      // money) > a leaked template token (a visibly broken artifact that
+      // erodes trust, but not a financial misstatement) > category-sourcing
+      // (a plausible but unproven suggestion).
+      let outcome: 'retry_passed' | 'fallback_borrowed' | 'fallback_token' | 'fallback_category';
+      if (retryViolation.borrowed) {
+        reviewText = enforceBorrowedCashFraming(reviewText, totalBorrowed, locale);
+        outcome = 'fallback_borrowed';
+      } else if (retryViolation.token) {
         reviewText = buildFallbackReviewText(reviewMonthName, locale);
+        outcome = 'fallback_token';
+      } else if (retryViolation.category) {
+        reviewText = buildFallbackReviewText(reviewMonthName, locale);
+        outcome = 'fallback_category';
+      } else {
+        outcome = 'retry_passed';
       }
+
+      // Visibility (2026-07-28): the only production signal into how often
+      // the model actually violates these soft-instruction-backed rules —
+      // informs whether the Fix-1-audit-flagged items (goals/funds/headline
+      // figures, still unguarded) need real gates too, before this scales.
+      void logEvent(supabase, householdId, user.id, 'review_text_guard_retried', {
+        triggeredBy: violatedReasons(firstAttemptViolation),
+        outcome,
+      });
     }
 
     // ── Save conversation row ─────────────────────────────────────────────────
