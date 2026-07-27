@@ -349,3 +349,26 @@ export function buildFallbackReviewText(reviewMonthName: string, locale: 'en' | 
     ? `La revue complète de ${reviewMonthName} n'a pas pu être générée de façon fiable cette fois-ci — les chiffres affichés ailleurs restent exacts, et une nouvelle revue sera prête la prochaine fois que vous régénérerez.`
     : `${reviewMonthName}'s full review couldn't be generated safely this time — the figures shown elsewhere are still accurate, and a fresh review will be ready the next time you regenerate.`;
 }
+
+/**
+ * True when `text` contains a literal "{tokenName}" for any of the given
+ * illustrative example token names — the model echoing reviewPrompt's own
+ * few-shot example syntax verbatim instead of substituting a real value
+ * (same failure class as the {{DEBT_PAYMENT}} leak, single-brace
+ * convention; this model has previously been observed narrating a few-shot
+ * example's own details as if they were real — see the "Good tone" month
+ * example fix, Build 4 Part B — so echoing "{name}"/"{month}" literally is
+ * a real, not merely theoretical, risk).
+ *
+ * Deliberately NOT a generic /\{[^}]+\}/ scan — a single brace can
+ * legitimately appear in prose or in a user-defined category name (e.g. a
+ * category literally named "Fun {Money}"), and a false positive there would
+ * discard a valid review. Only the SPECIFIC, enumerated names the caller
+ * passes in are checked — regenerate-plan/route.ts defines and owns that
+ * list immediately next to reviewPrompt's own text, so a new illustrative
+ * placeholder added to the prompt later makes the omission here obvious
+ * (a missing entry in one small, visible array) rather than silent.
+ */
+export function containsIllustrativeTokenLeak(text: string, tokenNames: readonly string[]): boolean {
+  return tokenNames.some((name) => text.includes(`{${name}}`));
+}

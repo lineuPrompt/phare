@@ -12,6 +12,7 @@ import {
   coachingFallbackApplies,
   findUnsanctionedSourcingMention,
   buildFallbackReviewText,
+  containsIllustrativeTokenLeak,
   FundingNeed,
 } from '../coachingHelpers';
 
@@ -325,5 +326,36 @@ describe('buildFallbackReviewText', () => {
     const text = buildFallbackReviewText('juillet 2026', 'fr');
     expect(text).toContain('juillet 2026');
     expect(text).toContain('pas pu être générée');
+  });
+});
+
+describe('containsIllustrativeTokenLeak', () => {
+  const tokens = ['name', 'month', 'need', 'freesOn'] as const;
+
+  it('detects each enumerated token name leaking individually', () => {
+    expect(containsIllustrativeTokenLeak('your plan sets aside $300/month for {name}', tokens)).toBe(true);
+    expect(containsIllustrativeTokenLeak('the {month} bill is coming up', tokens)).toBe(true);
+    expect(containsIllustrativeTokenLeak('that could go toward {need}', tokens)).toBe(true);
+    expect(containsIllustrativeTokenLeak('once it clears in {freesOn}, that helps', tokens)).toBe(true);
+  });
+
+  it('does not flag a plain sentence with no braces at all', () => {
+    expect(containsIllustrativeTokenLeak('July 2026 was a solid month overall.', tokens)).toBe(false);
+  });
+
+  it('control: a legitimate brace in prose or a user-defined category name is not a false positive', () => {
+    // A brace-containing category name that is NOT one of the enumerated
+    // token names — must never trigger.
+    expect(containsIllustrativeTokenLeak('Your Fun {Money} category ran $50 over this month.', tokens)).toBe(false);
+    // A different bracketed word entirely, not in the enumerated list.
+    expect(containsIllustrativeTokenLeak('Consider putting {amount} toward savings.', tokens)).toBe(false);
+  });
+
+  it('is case-sensitive and requires an exact match — "{Name}" is not "{name}"', () => {
+    expect(containsIllustrativeTokenLeak('toward {Name} this month', tokens)).toBe(false);
+  });
+
+  it('only checks the token names actually passed in — an empty list never flags anything', () => {
+    expect(containsIllustrativeTokenLeak('toward {name} this month', [])).toBe(false);
   });
 });

@@ -58,6 +58,7 @@ import {
   coachingFallbackApplies,
   findUnsanctionedSourcingMention,
   buildFallbackReviewText,
+  containsIllustrativeTokenLeak,
   FundingNeed,
 } from '@/lib/coachingHelpers';
 import { businessToday, businessMonth } from '@/lib/dateHelpers';
@@ -629,6 +630,21 @@ export async function POST(request: Request) {
     // founder's July 17 review: a wrong month name, a windfall paycheque
     // narrated as a new run-rate, an on-track claim beyond what evaluateGoals
     // actually verified, and prose arithmetic that didn't match its own parts.
+    //
+    // KEEP THIS LIST IN SYNC WITH reviewPrompt's OWN TEXT BELOW (2026-07-28):
+    // every illustrative single-brace example token reviewPrompt's hard rules
+    // use ("...toward {name} so the {month} bill...", "...clears in
+    // {freesOn}, that $Y/month could go toward {need}...") must be listed
+    // here too, or a leaked one goes undetected. This model has been observed
+    // echoing prompt example text verbatim before (the Build 4 Part B "Good
+    // tone" month-name fix), and the {{DEBT_PAYMENT}} leak confirmed it can
+    // happen with template-shaped tokens specifically — adding a new
+    // illustrative placeholder to a rule below without adding its name here
+    // is a silent gap, not a caught one. (planPrompt has none of these —
+    // checked; its only template token is the double-brace
+    // DEBT_PAYMENT_PLACEHOLDER, already covered by containsUnsubstitutedToken.)
+    const REVIEW_PROMPT_ILLUSTRATIVE_TOKENS = ['name', 'month', 'need', 'freesOn'] as const;
+
     const reviewPrompt =
       `You are Phare, an AI financial coach for Canadian families. Write this family's monthly review in ${lang}.\n\n` +
       `Their plan:\n${JSON.stringify(plan)}\n\n` +
@@ -761,7 +777,11 @@ export async function POST(request: Request) {
       return {
         category: findUnsanctionedSourcingMention(text, [...SEED_CATEGORIES], allowedSourceCategoryName) !== null,
         borrowed: totalBorrowed > 0 && enforceBorrowedCashFraming(text, totalBorrowed, locale) !== text,
-        token: containsUnsubstitutedToken(text),
+        // Same condition, two shapes of leak: a real {{...}} template token
+        // (containsUnsubstitutedToken) and reviewPrompt's own single-brace
+        // illustrative examples echoed verbatim (containsIllustrativeTokenLeak,
+        // REVIEW_PROMPT_ILLUSTRATIVE_TOKENS defined next to reviewPrompt above).
+        token: containsUnsubstitutedToken(text) || containsIllustrativeTokenLeak(text, REVIEW_PROMPT_ILLUSTRATIVE_TOKENS),
       };
     }
 
