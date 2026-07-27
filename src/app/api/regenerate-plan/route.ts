@@ -585,7 +585,16 @@ export async function POST(request: Request) {
       topRecommendation: aiPart.topRecommendation ?? '',
     };
 
-    console.log('COACHING_DEBUG', JSON.stringify({ topNeed, coaching }));
+    console.log('COACHING_DEBUG', JSON.stringify({
+      topNeed,
+      coaching,
+      monthlyFigures,
+      historyRowCount: historyRows.length,
+      historyDateRange: historyRows.length > 0
+        ? [historyRows.reduce((min, r) => (r.date < min ? r.date : min), historyRows[0].date),
+           historyRows.reduce((max, r) => (r.date > max ? r.date : max), historyRows[0].date)]
+        : null,
+    }));
 
     // ── Generate review (blocking) ────────────────────────────────────────────
     // Part B hardening (2026-07-19), against four real failures in the
