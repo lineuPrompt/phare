@@ -313,6 +313,22 @@ describe('findUnsanctionedSourcingMention', () => {
   it('returns null when no category is mentioned at all', () => {
     expect(findUnsanctionedSourcingMention('This was a strong month overall.', allCategories, null)).toBeNull();
   });
+
+  it('CONTROL (Codex finding 5ii): "room in your budget" followed much later by the ordinary verb "shopping" is not a sourcing construction', () => {
+    const text = 'There is room in your budget to keep shopping around for lower insurance premiums.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, null)).toBeNull();
+  });
+
+  it('still flags a genuine sourcing construction even when an unrelated later mention of the same category exists', () => {
+    const text = "That's one place it could come from Shopping — separately, shopping around for insurance is also worth doing.";
+    expect(findUnsanctionedSourcingMention(text, allCategories, null)).toBe('Shopping');
+  });
+
+  it('word-boundary: a category name embedded inside a longer unrelated word is not flagged', () => {
+    // "Housing" should not match inside an unrelated longer word.
+    const text = 'You could pull from Housingallowance this month.'; // not a real category name
+    expect(findUnsanctionedSourcingMention(text, ['Housing'], null)).toBeNull();
+  });
 });
 
 describe('buildFallbackReviewText', () => {
@@ -357,5 +373,20 @@ describe('containsIllustrativeTokenLeak', () => {
 
   it('only checks the token names actually passed in — an empty list never flags anything', () => {
     expect(containsIllustrativeTokenLeak('toward {name} this month', [])).toBe(false);
+  });
+
+  it('CONTROL (Codex finding 5i): a token that exactly matches a real, user-chosen fund/goal name is not a leak', () => {
+    const text = 'Your plan sets aside $300/month for {name}, so plan around it.';
+    expect(containsIllustrativeTokenLeak(text, tokens, ['{name}'])).toBe(false);
+    // Still flagged when the real-name list doesn't happen to include it.
+    expect(containsIllustrativeTokenLeak(text, tokens, ['Property Tax'])).toBe(true);
+    // Default (no third arg) exempts nothing — still flagged.
+    expect(containsIllustrativeTokenLeak(text, tokens)).toBe(true);
+  });
+
+  it('a different token leaking is still caught even when an unrelated one is exempted', () => {
+    const text = 'Your plan sets aside $300/month for {name}, once it clears in {freesOn}.';
+    // "{name}" is a real fund name here, but "{freesOn}" never was set up as one.
+    expect(containsIllustrativeTokenLeak(text, tokens, ['{name}'])).toBe(true);
   });
 });

@@ -12,6 +12,7 @@
  */
 
 import { monthsBetween } from './goalHelpers';
+import { escapeRegExp } from './textMatchHelpers';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -287,12 +288,12 @@ export function coachingFallbackApplies(ctx: {
 //
 // Phrases the reviewPrompt itself teaches as the canonical way to describe
 // the ONE sanctioned money source (e.g. "that's one place it could come
-// from"). A DISALLOWED category name appearing near one of these phrases
-// means the model used a category outside coaching.sourceCategory as a
-// money source — a category mentioned purely as budget narration (no
-// sourcing phrase nearby) is not flagged, since that's legitimate and
-// happens in nearly every real review.
-const SOURCING_PHRASE_MARKERS = [
+// from"). A DISALLOWED category name appearing shortly AFTER one of these
+// phrases means the model used a category outside coaching.sourceCategory
+// as a money source — a category mentioned purely as budget narration (no
+// sourcing phrase immediately before it) is not flagged, since that's
+// legitimate and happens in nearly every real review.
+const SOURCING_PHRASE_MARKERS_EN = [
   'could come from',
   'come from',
   'consider directing',
@@ -306,31 +307,62 @@ const SOURCING_PHRASE_MARKERS = [
   'room in',
 ];
 
+// PROXIMITY FIX (2026-07-28, Codex finding 5ii): confirmed false positive —
+// sourceCategory:null, "There is room in your budget to keep shopping
+// around for lower insurance premiums." tripped this guard, pairing "room
+// in" with "Shopping" (the SEED category) even though the sentence never
+// names a category as a source at all — "shopping" here is the ordinary verb
+// ("shop around for a better rate"), 21 characters after "room in" with
+// "your budget to keep " in between. Measured empirically against every
+// real true-positive phrasing already covered by tests: the sourcing phrase
+// always ends within 1-12 characters of the category name it actually
+// introduces (e.g. "pull from Groceries & Pharmacy", "consider directing
+// money from Shopping"). SOURCING_PROXIMITY_CHARS sits comfortably inside
+// that gap, with margin on both sides. Also fixed: category names are now
+// matched by whole word (word-boundary regex, matchAll for every
+// occurrence), not by unbounded substring — "shopping" the verb and
+// "Shopping" the category are literally the same word, so word-boundary
+// alone doesn't fully separate them; requiring genuine PHRASE-then-CATEGORY
+// adjacency is what actually distinguishes "used as a source" from
+// "happened to appear nearby."
+const SOURCING_PROXIMITY_CHARS = 15;
+
 /**
- * Scans reviewText for a disallowed category name appearing near one of the
- * canonical sourcing phrases. Returns the first offending category name, or
- * null if none found. `allowedCategoryName` (coaching.sourceCategory's own
- * name, or null when there is none) is exempt — the model IS allowed to
- * describe that one as a source, per the prompt's COACHING rule.
+ * Scans reviewText for a disallowed category name appearing shortly after
+ * one of the canonical sourcing phrases — a genuine "phrase introduces this
+ * category as a source" construction, not mere co-occurrence anywhere in a
+ * wide window. Returns the first offending category name, or null if none
+ * found. `allowedCategoryName` (coaching.sourceCategory's own name, or null
+ * when there is none) is exempt — the model IS allowed to describe that one
+ * as a source, per the prompt's COACHING rule.
  */
 export function findUnsanctionedSourcingMention(
   reviewText: string,
   allCategoryNames: string[],
-  allowedCategoryName: string | null
+  allowedCategoryName: string | null,
+  sourcingPhrases: string[] = SOURCING_PHRASE_MARKERS_EN
 ): string | null {
   const lowerText = reviewText.toLowerCase();
+
+  const phraseEnds: number[] = [];
+  for (const phrase of sourcingPhrases) {
+    for (const m of lowerText.matchAll(new RegExp(escapeRegExp(phrase), 'g'))) {
+      if (m.index !== undefined) phraseEnds.push(m.index + phrase.length);
+    }
+  }
+  if (phraseEnds.length === 0) return null;
+
   for (const name of allCategoryNames) {
     if (allowedCategoryName && name.toLowerCase() === allowedCategoryName.toLowerCase()) continue;
-    const lowerName = name.toLowerCase();
-    const nameIdx = lowerText.indexOf(lowerName);
-    if (nameIdx === -1) continue;
-    // A nearby window (before/after the mention) — a category named purely
-    // as budget narration, with no sourcing phrase nearby, is not flagged.
-    const windowStart = Math.max(0, nameIdx - 80);
-    const windowEnd = Math.min(lowerText.length, nameIdx + lowerName.length + 80);
-    const window = lowerText.slice(windowStart, windowEnd);
-    if (SOURCING_PHRASE_MARKERS.some((phrase) => window.includes(phrase))) {
-      return name;
+    const nameRe = new RegExp(`\\b${escapeRegExp(name.toLowerCase())}\\b`, 'g');
+    for (const m of lowerText.matchAll(nameRe)) {
+      if (m.index === undefined) continue;
+      const nameStart = m.index;
+      const nearPhrase = phraseEnds.some((end) => {
+        const gap = nameStart - end;
+        return gap >= 0 && gap <= SOURCING_PROXIMITY_CHARS;
+      });
+      if (nearPhrase) return name;
     }
   }
   return null;
@@ -368,7 +400,23 @@ export function buildFallbackReviewText(reviewMonthName: string, locale: 'en' | 
  * list immediately next to reviewPrompt's own text, so a new illustrative
  * placeholder added to the prompt later makes the omission here obvious
  * (a missing entry in one small, visible array) rather than silent.
+ *
+ * EXEMPTION (2026-07-28, Codex finding 5i): if a family's own real sinking
+ * fund/goal name literally IS "{name}" (an odd but legitimate choice — a
+ * literal brace character in a chosen name), the matching text is real, not
+ * a leak. `realEntityNames` is the household's actual fund/goal names for
+ * this review; a candidate token is only flagged when it does NOT match one
+ * of them exactly. Defaults to empty (nothing exempted) so existing callers
+ * that don't have this data are unaffected.
  */
-export function containsIllustrativeTokenLeak(text: string, tokenNames: readonly string[]): boolean {
-  return tokenNames.some((name) => text.includes(`{${name}}`));
+export function containsIllustrativeTokenLeak(
+  text: string,
+  tokenNames: readonly string[],
+  realEntityNames: string[] = []
+): boolean {
+  return tokenNames.some((name) => {
+    const token = `{${name}}`;
+    if (!text.includes(token)) return false;
+    return !realEntityNames.includes(token);
+  });
 }

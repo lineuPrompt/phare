@@ -773,6 +773,16 @@ export async function POST(request: Request) {
     // defensively (double-brace only, matching containsUnsubstitutedToken's
     // scope) even though no real double-brace instruction reaches this
     // prompt today — cheap insurance against any future template addition.
+    // A family's own real fund/goal name could coincidentally BE one of the
+    // illustrative token strings (e.g. a fund literally named "{name}") —
+    // that's real text, not a leak (Codex finding 5i). Collected from the
+    // same real rows already fetched above, nothing new queried.
+    const realEntityNames = [
+      ...sinkingFunds.map((sf) => sf.name),
+      ...computedGoals.map((g) => g.name),
+      ...(debtGoalLine ? [debtGoalLine.name] : []),
+    ];
+
     function checkReviewGuards(text: string): { category: boolean; borrowed: boolean; token: boolean } {
       return {
         category: findUnsanctionedSourcingMention(text, [...SEED_CATEGORIES], allowedSourceCategoryName) !== null,
@@ -781,7 +791,9 @@ export async function POST(request: Request) {
         // (containsUnsubstitutedToken) and reviewPrompt's own single-brace
         // illustrative examples echoed verbatim (containsIllustrativeTokenLeak,
         // REVIEW_PROMPT_ILLUSTRATIVE_TOKENS defined next to reviewPrompt above).
-        token: containsUnsubstitutedToken(text) || containsIllustrativeTokenLeak(text, REVIEW_PROMPT_ILLUSTRATIVE_TOKENS),
+        // realEntityNames exempts a token string that's coincidentally a
+        // real, user-chosen fund/goal name.
+        token: containsUnsubstitutedToken(text) || containsIllustrativeTokenLeak(text, REVIEW_PROMPT_ILLUSTRATIVE_TOKENS, realEntityNames),
       };
     }
 

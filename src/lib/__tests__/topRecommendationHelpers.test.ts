@@ -139,6 +139,23 @@ describe('enforceBorrowedCashFraming (Fix 4, 2026-07-28)', () => {
     expect(result).toContain('1000.00');
     expect(result).toContain('emprunt');
   });
+
+  it('CONTROL (Codex finding 4): an unrelated category coincidentally named "Extra" near an unrelated coincidentally-equal figure is not a false positive — the guard requires the label to sit near the SAME occurrence as the real draw', () => {
+    const text = 'Your Extra category had a $1,000 refund; your credit-line draw was $1,000 and must be repaid.';
+    expect(enforceBorrowedCashFraming(text, 1000, 'en')).toBe(text);
+  });
+
+  it('still fires when the label is genuinely close to the SAME occurrence of the real figure, even with an unrelated same-value figure elsewhere in the text', () => {
+    const text = 'Your Extra category had a $1,000 refund; that extra $1,000 could go toward your goals.';
+    const result = enforceBorrowedCashFraming(text, 1000, 'en');
+    expect(result).not.toBe(text);
+    expect(result).toContain('borrowed');
+  });
+
+  it('word-boundary: "extraordinary" does not match the "extra" label', () => {
+    const text = "It's been an extraordinary month — your credit line draw was $1,000 and must be repaid.";
+    expect(enforceBorrowedCashFraming(text, 1000, 'en')).toBe(text);
+  });
 });
 
 describe('containsUnsubstitutedToken', () => {

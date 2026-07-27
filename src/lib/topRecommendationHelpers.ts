@@ -28,6 +28,8 @@
  * One detection path, used uniformly — never two regexes to keep in sync.
  */
 
+import { escapeRegExp } from './textMatchHelpers';
+
 export const DEBT_PAYMENT_PLACEHOLDER = '{{DEBT_PAYMENT}}';
 
 // Matches both English ($3,000 / $833.33) and French-Canadian (3000$ / 3 000,00 $)
@@ -179,7 +181,36 @@ export function enforceDebtFigureInTopRecommendation(
 // elsewhere. This adds an actual post-generation guard, called independently
 // of enforceDebtFigureInTopRecommendation/computedDebtPayoff — it engages
 // purely off totalBorrowed, whether or not a debt-payoff card exists at all.
-const SURPLUS_LABEL_WORDS = ['surplus', 'extra', 'additional income', 'free cash', 'to invest', 'to save', 'available to', 'on top of'];
+//
+// IMPORTANT — this is best-effort pattern matching over free prose, NOT a
+// structural guarantee the way DEBT_PAYMENT_PLACEHOLDER substitution is.
+// Substitution is genuinely impossible to get wrong (the AI never authors
+// the digit, code inserts it). This guard instead infers intent from word
+// proximity — it can miss a phrasing it wasn't taught, and (before the
+// 2026-07-28 fix below) could false-positive on an unrelated word sharing a
+// label's spelling near an unrelated coincidentally-equal dollar figure.
+// Never describe this mechanism as making anything "impossible."
+//
+// PROXIMITY FIX (2026-07-28, Codex finding 4): confirmed false positive —
+// "Your Extra category had a $1,000 refund; your credit-line draw was
+// $1,000 and must be repaid." discarded the whole (valid) sentence, because
+// the word "Extra" (part of an unrelated category's name) sat within the old
+// 80-char-wide window around the FIRST $1,000 (an unrelated refund that
+// merely happened to equal totalBorrowed too). Two independent bugs fixed
+// together: (1) label words were matched by substring, not word boundary;
+// (2) more fundamentally, "nearby" was too wide and didn't require the label
+// to be grammatically attached to that specific figure. Measured empirically
+// against real phrasings before picking the threshold: every genuine
+// mislabeling case tested (e.g. "extra $1,000", "$1,000 of surplus") has its
+// label within 1-4 characters of the figure; the false-positive repro's
+// unrelated "Extra" sits 16 characters away. BORROWED_LABEL_PROXIMITY_CHARS
+// is set well inside that gap, with margin on both sides.
+const BORROWED_LABEL_PROXIMITY_CHARS = 10;
+
+// English forms only here — French forms are added in coachingHelpers.ts's
+// sibling list and Part C's extension of this file (kept adjacent, not
+// scattered, per the standing rule below).
+const SURPLUS_LABEL_WORDS_EN = ['surplus', 'extra', 'additional income', 'free cash', 'to invest', 'to save', 'available to', 'on top of'];
 
 function buildBorrowedCashFallback(totalBorrowed: number, locale: 'en' | 'fr'): string {
   const amount = formatCurrency(totalBorrowed);
@@ -188,33 +219,57 @@ function buildBorrowedCashFallback(totalBorrowed: number, locale: 'en' | 'fr'): 
     : `Part of this month's available cash (${amount}) was borrowed from a credit line, not earned — worth keeping that in mind before deciding where to direct anything extra this month.`;
 }
 
+/** Word-boundary match spans for every label in `labels`, across the whole text. */
+function findLabelSpans(text: string, labels: string[]): { start: number; end: number }[] {
+  const spans: { start: number; end: number }[] = [];
+  for (const label of labels) {
+    const re = new RegExp(`\\b${escapeRegExp(label)}\\b`, 'gi');
+    for (const m of text.matchAll(re)) {
+      if (m.index !== undefined) spans.push({ start: m.index, end: m.index + m[0].length });
+    }
+  }
+  return spans;
+}
+
 /**
  * Enforces that topRecommendation never labels the household's real,
  * dated credit-line draw as surplus/extra/income. Runs purely off
  * `totalBorrowed` — never gated on computedDebtPayoff/a debt-payoff card
  * existing, so a draw with no matching debt account is still caught.
  * Returns `text` unchanged when there's nothing borrowed this month.
+ *
+ * Best-effort proximity heuristic (see the module-level note above) — a
+ * figure must both (a) numerically equal totalBorrowed and (b) have a
+ * whole-word label within BORROWED_LABEL_PROXIMITY_CHARS of it. Every
+ * occurrence of the figure and every label are found independently
+ * (matchAll on both) so a repeated figure — once honest, once mislabeled —
+ * is judged occurrence-by-occurrence, never by the first match found.
  */
 export function enforceBorrowedCashFraming(
   text: string,
   totalBorrowed: number,
-  locale: 'en' | 'fr'
+  locale: 'en' | 'fr',
+  labels: string[] = SURPLUS_LABEL_WORDS_EN
 ): string {
   if (totalBorrowed <= 0) return text;
 
-  const lowerText = text.toLowerCase();
-  // matchAll (not .match()) so each occurrence keeps its own real index —
-  // the same "$1,000" figure can appear more than once in a sentence (once
-  // honestly disclosed as borrowed, once mislabeled as surplus), and a
-  // plain indexOf would always resolve to the first occurrence for both.
+  const labelSpans = findLabelSpans(text, labels);
+  if (labelSpans.length === 0) return text;
+
   for (const match of text.matchAll(DOLLAR_AMOUNT_RE)) {
     if (Math.abs(parseAmount(match[0]) - totalBorrowed) > 0.005) continue;
-    const idx = match.index;
-    if (idx === undefined) continue;
-    const window = lowerText.slice(Math.max(0, idx - 40), idx + match[0].length + 40);
-    if (SURPLUS_LABEL_WORDS.some((w) => window.includes(w))) {
-      return buildBorrowedCashFallback(totalBorrowed, locale);
-    }
+    const figStart = match.index;
+    if (figStart === undefined) continue;
+    const figEnd = figStart + match[0].length;
+
+    const nearbyLabel = labelSpans.some((span) => {
+      const gapBefore = figStart - span.end; // label ends before the figure starts
+      const gapAfter = span.start - figEnd;  // label starts after the figure ends
+      return (gapBefore >= 0 && gapBefore <= BORROWED_LABEL_PROXIMITY_CHARS) ||
+             (gapAfter >= 0 && gapAfter <= BORROWED_LABEL_PROXIMITY_CHARS);
+    });
+
+    if (nearbyLabel) return buildBorrowedCashFallback(totalBorrowed, locale);
   }
   return text;
 }
