@@ -229,6 +229,15 @@ const BORROWED_LABEL_PROXIMITY_CHARS_EN = 10;
 // positives; the two locales get their own constants instead.
 const BORROWED_LABEL_PROXIMITY_CHARS_FR = 20;
 
+// KNOWN, ACCEPTED LIMITATION (2026-07-29) — NOT IN SCOPE, do not widen this
+// past 20: that trade was made deliberately in Part C. This guard is
+// best-effort prose matching over free text, not the primary defense —
+// reviewPrompt/planPrompt's own BORROWED CASH rule (never describe
+// totalBorrowed as surplus/extra/income) is the primary defense; this is a
+// net behind it. Real-world frequency of any missed French phrasing is
+// measured via the review_text_guard_retried event, not by further widening
+// ahead of observed failures.
+
 // English and French kept adjacent, not scattered, so a future addition to
 // one list makes the other's omission visible. French list populated from
 // Codex's actual repro vocabulary, not translated guesses: "liquidités

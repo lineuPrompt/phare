@@ -1278,6 +1278,172 @@ describe('POST /api/regenerate-plan — Adversarial Fix 3: category-sourcing gua
   });
 });
 
+// Final review bugfix 1 (2026-07-29): findUnsanctionedSourcingMention was
+// called with SEED_CATEGORIES only — never the retained category line
+// labels (category.name, e.g. "Winners") that buildReviewPayload deliberately
+// keeps for every category. coachingHelpers.ts's own module note documents
+// this guard as load-bearing against exactly that surface, but the guard was
+// never given it, so an unsanctioned LINE LABEL used as a money source could
+// never be caught. Fixed by passing retainedCategoryLineLabels alongside
+// SEED_CATEGORIES at the checkReviewGuards call site.
+describe('POST /api/regenerate-plan — Final review bugfix 1: unsanctioned line-label sourcing is now caught', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createMock.mockReset();
+  });
+
+  // "Museum Membership" is a real expense line label — not one of
+  // SEED_CATEGORIES, and not coaching.sourceCategory (there is no card
+  // account here, so sourceCategory is null) — exactly the surface the bug
+  // left unguarded.
+  const lineLabelFixture = {
+    users: [{ data: { household_id: 'hh1' }, error: null }],
+    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    transactions: [
+      { data: [{ amount: 600, type: 'expense', description: 'Museum Membership', account_id: 'chq-1' }], error: null },
+      { data: [], error: null }, // Coaching Layer history window
+    ],
+    accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+    sinking_funds: [{ data: [], error: null }],
+    recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+    conversations: [{ error: null }],
+  };
+
+  it('retries once when the first attempt names an unsanctioned LINE LABEL (not a seed category) as a source', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
+        lineClassifications: [{ label: 'Museum Membership', category: 'Unexpected', isFixed: false }],
+        topRecommendation: 'Keep going.',
+      }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'You could pull from Museum Membership this month.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
+
+    const { client } = makeSupabaseMock(lineLabelFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    // A retry only happens if the guard actually caught it — before the fix,
+    // this shipped unchanged with no retry at all.
+    expect(createMock).toHaveBeenCalledTimes(3);
+    expect(json.reviewText).toBe('A fine, clean month overall.');
+  });
+
+  it('FR: retries once when the first attempt names an unsanctioned line label as a source in French', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
+        lineClassifications: [{ label: 'Museum Membership', category: 'Unexpected', isFixed: false }],
+        topRecommendation: 'Continuez.',
+      }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Vous pourriez puiser dans Museum Membership.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Un mois clair et simple.' }] });
+
+    const { client } = makeSupabaseMock(lineLabelFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'fr' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(3);
+    expect(json.reviewText).toBe('Un mois clair et simple.');
+  });
+});
+
+// Final review bugfix 2 (2026-07-29): realEntityNames (the allow-list for
+// containsIllustrativeTokenLeak's "{name}"-shaped token exemption) was built
+// from sinking funds, goals, and debt only — omitting coaching.sourceCategory
+// and the retained category line labels. A household with a category
+// literally named "{name}" had a perfectly valid review discarded and
+// replaced with the generic safety fallback. Fixed by adding both to
+// realEntityNames' construction.
+describe('POST /api/regenerate-plan — Final review bugfix 2: a category literally named "{name}" is no longer a false leak', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createMock.mockReset();
+  });
+
+  const braceCategoryFixture = {
+    users: [{ data: { household_id: 'hh1' }, error: null }],
+    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    transactions: [
+      { data: [{ amount: 500, type: 'expense', description: '{name}', account_id: 'chq-1' }], error: null },
+      { data: [], error: null }, // Coaching Layer history window
+    ],
+    accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+    sinking_funds: [{ data: [], error: null }],
+    recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+    conversations: [{ error: null }],
+  };
+
+  it('a review mentioning the real category "{name}" passes through untouched — no retry', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
+        lineClassifications: [{ label: '{name}', category: 'Unexpected', isFixed: false }],
+        topRecommendation: 'Keep going.',
+      }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'You spent $500 at {name} this month, worth watching next month.' }] });
+
+    const { client } = makeSupabaseMock(braceCategoryFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    // Real category name matching an illustrative token shape — exempt, no retry.
+    expect(createMock).toHaveBeenCalledTimes(2);
+    expect(json.reviewText).toBe('You spent $500 at {name} this month, worth watching next month.');
+  });
+
+  // A genuine leak (no matching real entity anywhere) is still caught — this
+  // is not a new test (see "reviewText illustrative single-brace token leak"
+  // below, e.g. the "{month}" and "{need}" cases), but restated here directly
+  // beside the fix so the two behaviors — real name passes, genuine leak
+  // still caught — are visibly paired in one place.
+  it('a genuine token leak with NO matching real entity is still caught, in the same household shape', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
+        lineClassifications: [{ label: '{name}', category: 'Unexpected', isFixed: false }],
+        topRecommendation: 'Keep going.',
+      }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Your plan sets aside $300/month for {month}, so plan around it.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
+
+    const { client } = makeSupabaseMock(braceCategoryFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(3);
+    expect(json.reviewText).toBe('A fine, clean month overall.');
+  });
+});
+
 // Adversarial-review Fix 4 (2026-07-28): borrowed cash mislabeled as surplus
 // when NO debt-payoff card exists at all — confirmed as a real open gap
 // (no reproduction attempted at the time). The guard must engage purely off

@@ -332,6 +332,16 @@ const SOURCING_PHRASE_MARKERS_FR = [
   'utiliser … de',
 ];
 
+// KNOWN, ACCEPTED LIMITATION (2026-07-29) — NOT IN SCOPE, do not expand this
+// list speculatively: French equivalents of "cut back on," "room in," etc.
+// ("transférer … de" and similar) are not covered. Enumerating every natural
+// French sourcing phrasing is unbounded and this guard is best-effort prose
+// matching, not the primary defense — reviewPrompt's own COACHING rule (only
+// coaching.sourceCategory may ever be named as a source) is the primary
+// defense; this is a net behind it. Real-world frequency of any missed
+// phrasing is measured via the review_text_guard_retried event, not by
+// further guessing at vocabulary ahead of observed failures.
+
 // PROXIMITY FIX (2026-07-28, Codex finding 5ii): confirmed false positive —
 // sourceCategory:null, "There is room in your budget to keep shopping
 // around for lower insurance premiums." tripped this guard, pairing "room

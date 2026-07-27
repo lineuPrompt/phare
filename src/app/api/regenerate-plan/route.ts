@@ -589,6 +589,14 @@ export async function POST(request: Request) {
       };
     });
 
+    // Final review bugfix (2026-07-29): buildReviewPayload retains
+    // category.name (e.g. "Winners") for EVERY category, always — only
+    // seedCategory is stripped. These line labels are therefore just as
+    // reachable by reviewText as the seed categories are, and both guards
+    // below that need "every real category name in this payload" must be
+    // given this list, not just SEED_CATEGORIES.
+    const retainedCategoryLineLabels = classifiedCategories.map((c) => c.name);
+
     const plan = {
       reviewMonth: reviewMonthName,
       monthlyBudget: { ...monthlyBudget, categories: classifiedCategories },
@@ -774,14 +782,24 @@ export async function POST(request: Request) {
     // defensively (double-brace only, matching containsUnsubstitutedToken's
     // scope) even though no real double-brace instruction reaches this
     // prompt today — cheap insurance against any future template addition.
-    // A family's own real fund/goal name could coincidentally BE one of the
-    // illustrative token strings (e.g. a fund literally named "{name}") —
-    // that's real text, not a leak (Codex finding 5i). Collected from the
-    // same real rows already fetched above, nothing new queried.
+    // A family's own real fund/goal/category name could coincidentally BE one
+    // of the illustrative token strings (e.g. a fund literally named
+    // "{name}") — that's real text, not a leak (Codex finding 5i). Collected
+    // from the same real rows already fetched above, nothing new queried.
+    //
+    // Final review bugfix (2026-07-29): this list previously omitted
+    // coaching.sourceCategory's own name and the retained category line
+    // labels (retainedCategoryLineLabels, computed above right after
+    // classifiedCategories) — both are real, user-facing names that reach
+    // reviewText via buildReviewPayload just like sinking funds/goals/debt
+    // do, so a household with a category literally named "{name}" had a
+    // perfectly valid review discarded. Both are now included.
     const realEntityNames = [
       ...sinkingFunds.map((sf) => sf.name),
       ...computedGoals.map((g) => g.name),
       ...(debtGoalLine ? [debtGoalLine.name] : []),
+      ...(sourceCategory ? [sourceCategory.categoryName] : []),
+      ...retainedCategoryLineLabels,
     ];
 
     function checkReviewGuards(text: string): { category: boolean; borrowed: boolean; token: boolean } {
@@ -789,7 +807,16 @@ export async function POST(request: Request) {
         // locale passed explicitly (2026-07-28, Part C wiring check) — this
         // call site previously omitted it entirely, silently defaulting to
         // the English phrase list/proximity even for French households.
-        category: findUnsanctionedSourcingMention(text, [...SEED_CATEGORIES], allowedSourceCategoryName, locale) !== null,
+        //
+        // Final review bugfix (2026-07-29): this call previously scanned
+        // ONLY SEED_CATEGORIES (the classification bucket names), never the
+        // category.name line labels buildReviewPayload deliberately retains
+        // (e.g. "Winners") — the exact surface coachingHelpers.ts's own
+        // module note documents this guard as load-bearing against. Passing
+        // retainedCategoryLineLabels alongside SEED_CATEGORIES closes that
+        // gap; allowedSourceCategoryName still exempts the one sanctioned
+        // name from both.
+        category: findUnsanctionedSourcingMention(text, [...SEED_CATEGORIES, ...retainedCategoryLineLabels], allowedSourceCategoryName, locale) !== null,
         borrowed: totalBorrowed > 0 && enforceBorrowedCashFraming(text, totalBorrowed, locale) !== text,
         // Same condition, two shapes of leak: a real {{...}} template token
         // (containsUnsubstitutedToken) and reviewPrompt's own single-brace
