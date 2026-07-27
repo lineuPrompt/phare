@@ -240,7 +240,7 @@ export default function DashboardPage() {
 
             {dipWindowEnd && <DipTile dip={dip} windowEndDate={dipWindowEnd} locale={locale} />}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-6">
               {data.topRecommendation && <TopPriorityCard text={data.topRecommendation} />}
               {data.summary && (
                 <SnapshotCard
@@ -259,6 +259,9 @@ export default function DashboardPage() {
                   cardEnvelopeRemainders={data.cardEnvelopeRemainders}
                 />
               )}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {data.goalAccounts !== undefined && (
                 <GoalsCard goals={data.goalAccounts} locale={locale} />
               )}
