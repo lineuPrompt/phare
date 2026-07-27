@@ -1233,6 +1233,49 @@ describe('POST /api/regenerate-plan — Adversarial Fix 3: category-sourcing gua
     expect(reviewPromptSent).toContain('NO INVENTED TARGETS');
     expect(reviewPromptSent).toContain('never describe any category, fund, or line as having a "budget," "target," or');
   });
+
+  it('FR: retries once when the first attempt names an unsanctioned category as a source in French, and uses the clean retry', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Continuez.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Vous pourriez puiser dans Shopping si vous le souhaitez.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Un mois clair et simple.' }] });
+
+    const { client } = makeSupabaseMock(noCardFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'fr' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(3);
+    expect(json.reviewText).toBe('Un mois clair et simple.');
+  });
+
+  it('FR CONTROL: a genuine French sourcing phrase followed much later by an unrelated neutral mention of a category never triggers a retry', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Continuez.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Vous pourriez puiser dans vos économies avant la fin du mois, et Shopping reste stable dernièrement.' }] });
+
+    const { client } = makeSupabaseMock(noCardFixture);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'fr' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(2); // no retry — not a false positive
+    expect(json.reviewText).toBe('Vous pourriez puiser dans vos économies avant la fin du mois, et Shopping reste stable dernièrement.');
+  });
 });
 
 // Adversarial-review Fix 4 (2026-07-28): borrowed cash mislabeled as surplus
@@ -1290,6 +1333,50 @@ describe('POST /api/regenerate-plan — Adversarial Fix 4: borrowed cash framing
     expect(json.topRecommendation).not.toContain('surplus to invest');
     expect(json.topRecommendation).toContain('$1000.00');
     expect(json.topRecommendation).toContain('borrowed');
+  });
+
+  it('FR: corrects a topRecommendation that labels a $1,000 credit-line draw as "liquidités supplémentaires", with no debt account anywhere', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
+        lineClassifications: [],
+        topRecommendation: '1 000 $ de liquidités supplémentaires à investir ce mois-ci.',
+      }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Un mois clair et simple.' }] });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [
+        {
+          data: [
+            { amount: 2000, type: 'income', description: 'Salary', account_id: 'chq-1' },
+            { amount: 1800, type: 'expense', description: 'Rent', account_id: 'chq-1' },
+            { amount: -1000, type: 'transfer', description: 'Line of credit draw', account_id: 'chq-1', transfer_peer_id: 'peer-1', id: 'tx-1' },
+          ],
+          error: null,
+        },
+        { data: [], error: null },
+      ],
+      accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
+      sinking_funds: [{ data: [], error: null }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations: [{ error: null }],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'fr' }),
+    }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.topRecommendation).not.toContain('liquidités supplémentaires');
+    expect(json.topRecommendation).toContain('1000.00');
+    expect(json.topRecommendation).toContain('emprunt');
   });
 
   it('leaves topRecommendation unchanged when nothing was borrowed this month', async () => {

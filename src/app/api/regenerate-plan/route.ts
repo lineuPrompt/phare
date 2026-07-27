@@ -59,6 +59,7 @@ import {
   findUnsanctionedSourcingMention,
   buildFallbackReviewText,
   containsIllustrativeTokenLeak,
+  buildReviewPayload,
   FundingNeed,
 } from '@/lib/coachingHelpers';
 import { businessToday, businessMonth } from '@/lib/dateHelpers';
@@ -647,7 +648,7 @@ export async function POST(request: Request) {
 
     const reviewPrompt =
       `You are Phare, an AI financial coach for Canadian families. Write this family's monthly review in ${lang}.\n\n` +
-      `Their plan:\n${JSON.stringify(plan)}\n\n` +
+      `Their plan:\n${JSON.stringify(buildReviewPayload(plan))}\n\n` +
       `Write four paragraphs maximum. Specific numbers. One clear recommendation. Plain language. ` +
       `It must feel like a letter from a trusted financial advisor, not a report.\n\n` +
       `Good tone: "${reviewMonthName} was a solid month overall. You stayed within budget in four of five categories..."\n` +
@@ -785,7 +786,10 @@ export async function POST(request: Request) {
 
     function checkReviewGuards(text: string): { category: boolean; borrowed: boolean; token: boolean } {
       return {
-        category: findUnsanctionedSourcingMention(text, [...SEED_CATEGORIES], allowedSourceCategoryName) !== null,
+        // locale passed explicitly (2026-07-28, Part C wiring check) — this
+        // call site previously omitted it entirely, silently defaulting to
+        // the English phrase list/proximity even for French households.
+        category: findUnsanctionedSourcingMention(text, [...SEED_CATEGORIES], allowedSourceCategoryName, locale) !== null,
         borrowed: totalBorrowed > 0 && enforceBorrowedCashFraming(text, totalBorrowed, locale) !== text,
         // Same condition, two shapes of leak: a real {{...}} template token
         // (containsUnsubstitutedToken) and reviewPrompt's own single-brace

@@ -13,6 +13,8 @@ import {
   findUnsanctionedSourcingMention,
   buildFallbackReviewText,
   containsIllustrativeTokenLeak,
+  buildReviewPayload,
+  ReviewPayloadPlan,
   FundingNeed,
 } from '../coachingHelpers';
 
@@ -329,6 +331,60 @@ describe('findUnsanctionedSourcingMention', () => {
     const text = 'You could pull from Housingallowance this month.'; // not a real category name
     expect(findUnsanctionedSourcingMention(text, ['Housing'], null)).toBeNull();
   });
+
+  it('FR: does not flag a category mentioned purely as budget narration, with no sourcing phrase nearby', () => {
+    const text = 'Vos dépenses Shopping ce mois-ci étaient de 600 $, conformes aux mois précédents.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBeNull();
+  });
+
+  it('FR: flags a disallowed category named as a money source ("puiser dans")', () => {
+    const text = 'Vous pourriez puiser dans Shopping si nécessaire.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBe('Shopping');
+  });
+
+  it('FR: flags a disallowed category named as a money source ("provenir de")', () => {
+    const text = 'Cela pourrait provenir de Shopping, par exemple.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBe('Shopping');
+  });
+
+  it('FR: flags a disallowed category named as a money source ("utiliser … de")', () => {
+    const text = 'Vous pourriez utiliser une partie de Shopping pour ce fonds.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBe('Shopping');
+  });
+
+  it('FR: flags a disallowed category named as a money source ("pourriez prendre … de")', () => {
+    const text = 'Vous pourriez prendre un peu de Shopping ce mois-ci.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBe('Shopping');
+  });
+
+  it('FR: does not flag the allowed sourceCategory even when used as a source', () => {
+    const text = "Restaurants a dépassé de 680 $ votre propre cible de 450 $ — c'est un endroit où vous pourriez puiser dans Restaurants.";
+    expect(findUnsanctionedSourcingMention(text, allCategories, 'Restaurants', 'fr')).toBeNull();
+  });
+
+  it('FR: flags a different category as a source even when a real sourceCategory also exists', () => {
+    const text = 'Restaurants a dépassé la cible, mais vous pourriez aussi puiser dans Groceries & Pharmacy si nécessaire.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, 'Restaurants', 'fr')).toBe('Groceries & Pharmacy');
+  });
+
+  it('FR: returns null when no category is mentioned at all', () => {
+    expect(findUnsanctionedSourcingMention('Ce fut un mois solide dans l\'ensemble.', allCategories, null, 'fr')).toBeNull();
+  });
+
+  it('FR CONTROL (Codex finding 5ii analogue): a genuine French sourcing phrase followed much later by an unrelated neutral mention of the (English) category name is not a sourcing construction', () => {
+    const text = 'Vous pourriez prendre le temps de planifier votre budget ce mois-ci, car Shopping a été stable dernièrement.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBeNull();
+  });
+
+  it('FR CONTROL: another genuine phrase, unrelated later category mention', () => {
+    const text = 'Vous pourriez puiser dans vos économies avant la fin du mois, et Shopping reste une catégorie à surveiller.';
+    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBeNull();
+  });
+
+  it('FR: word-boundary — a category name embedded inside a longer unrelated word is not flagged', () => {
+    const text = 'Vous pourriez puiser dans Housingallowance ce mois-ci.'; // not a real category name
+    expect(findUnsanctionedSourcingMention(text, ['Housing'], null, 'fr')).toBeNull();
+  });
 });
 
 describe('buildFallbackReviewText', () => {
@@ -355,8 +411,19 @@ describe('containsIllustrativeTokenLeak', () => {
     expect(containsIllustrativeTokenLeak('once it clears in {freesOn}, that helps', tokens)).toBe(true);
   });
 
+  it('FR: detects each enumerated token name leaking individually — the token NAMES are literal English identifiers from the English-authored prompt, so they leak unchanged regardless of the surrounding French prose', () => {
+    expect(containsIllustrativeTokenLeak('votre plan met de côté 300 $/mois pour {name}', tokens)).toBe(true);
+    expect(containsIllustrativeTokenLeak('la facture de {month} arrive bientôt', tokens)).toBe(true);
+    expect(containsIllustrativeTokenLeak('cela pourrait aller vers {need}', tokens)).toBe(true);
+    expect(containsIllustrativeTokenLeak('une fois libéré en {freesOn}, cela aide', tokens)).toBe(true);
+  });
+
   it('does not flag a plain sentence with no braces at all', () => {
     expect(containsIllustrativeTokenLeak('July 2026 was a solid month overall.', tokens)).toBe(false);
+  });
+
+  it('FR: does not flag a plain sentence with no braces at all', () => {
+    expect(containsIllustrativeTokenLeak('Juillet 2026 fut un mois solide dans l\'ensemble.', tokens)).toBe(false);
   });
 
   it('control: a legitimate brace in prose or a user-defined category name is not a false positive', () => {
@@ -388,5 +455,89 @@ describe('containsIllustrativeTokenLeak', () => {
     const text = 'Your plan sets aside $300/month for {name}, once it clears in {freesOn}.';
     // "{name}" is a real fund name here, but "{freesOn}" never was set up as one.
     expect(containsIllustrativeTokenLeak(text, tokens, ['{name}'])).toBe(true);
+  });
+});
+
+describe('buildReviewPayload (Part B, 2026-07-28)', () => {
+  function makePlan(sourceCategoryName: string | null): ReviewPayloadPlan {
+    return {
+      reviewMonth: 'July 2026',
+      monthlyBudget: {
+        totalIncome: 6000,
+        totalExpenses: 3100,
+        totalSavings: 0,
+        categories: [
+          { name: 'Salary', budgeted: 6000, type: 'income', isFixed: true, seedCategory: 'Income' },
+          { name: 'Rent', budgeted: 2200, type: 'expense', isFixed: true, seedCategory: 'Housing' },
+          { name: 'Winners', budgeted: 600, type: 'expense', isFixed: false, seedCategory: 'Shopping' },
+          { name: 'La Belle Province', budgeted: 300, type: 'expense', isFixed: false, seedCategory: 'Restaurants' },
+        ],
+      },
+      sinkingFunds: [{ name: 'Property Tax', monthlyProvision: 300 }],
+      sinkingFundBuffer: { fundedAlready: false, totalMonthlyProvision: 300 },
+      debtPayoff: null,
+      goals: [],
+      windfalls: [],
+      coaching: {
+        sourceCategory: sourceCategoryName
+          ? ({ categoryName: sourceCategoryName, target: 450, actual: 680, over: 230 } as { categoryName: string })
+          : null,
+        rankedNeeds: [],
+      },
+      topRecommendation: 'Keep going.',
+    };
+  }
+
+  it('omits the top-level seedCategories array — it is not part of the allow-list at all', () => {
+    const payload = buildReviewPayload(makePlan(null)) as { seedCategories?: unknown };
+    expect(payload.seedCategories).toBeUndefined();
+    expect(JSON.stringify(payload)).not.toContain('seedCategories');
+  });
+
+  it('strips seedCategory from every category when sourceCategory is null', () => {
+    const payload = buildReviewPayload(makePlan(null)) as { monthlyBudget: { categories: Record<string, unknown>[] } };
+    for (const cat of payload.monthlyBudget.categories) {
+      expect(cat.seedCategory).toBeUndefined();
+    }
+  });
+
+  it('keeps seedCategory ONLY on the one category matching coaching.sourceCategory when non-null', () => {
+    const payload = buildReviewPayload(makePlan('Restaurants')) as { monthlyBudget: { categories: { name: string; seedCategory?: string }[] } };
+    const withSeedCategory = payload.monthlyBudget.categories.filter((c) => c.seedCategory !== undefined);
+    expect(withSeedCategory).toHaveLength(1);
+    expect(withSeedCategory[0].name).toBe('La Belle Province');
+    expect(withSeedCategory[0].seedCategory).toBe('Restaurants');
+  });
+
+  it('applies the reduction ALWAYS, not only when sourceCategory is null — founder\'s explicit widening', () => {
+    const payload = buildReviewPayload(makePlan('Restaurants')) as { monthlyBudget: { categories: { name: string; seedCategory?: string }[] } };
+    const winners = payload.monthlyBudget.categories.find((c) => c.name === 'Winners')!;
+    // Winners' own seedCategory is "Shopping" — not the sanctioned "Restaurants" — so it's stripped even though a real sourceCategory exists.
+    expect(winners.seedCategory).toBeUndefined();
+  });
+
+  it('name/budgeted/type/isFixed remain present on every category, sourceCategory null or not', () => {
+    for (const plan of [makePlan(null), makePlan('Restaurants')]) {
+      const payload = buildReviewPayload(plan) as { monthlyBudget: { categories: { name: unknown; budgeted: unknown; type: unknown; isFixed: unknown }[] } };
+      for (const cat of payload.monthlyBudget.categories) {
+        expect(cat.name).toBeDefined();
+        expect(cat.budgeted).toBeDefined();
+        expect(cat.type).toBeDefined();
+        expect(cat.isFixed).toBeDefined();
+      }
+    }
+  });
+
+  it('carries every other allow-listed field through unchanged', () => {
+    const plan = makePlan('Restaurants');
+    const payload = buildReviewPayload(plan) as Record<string, unknown>;
+    expect(payload.reviewMonth).toBe('July 2026');
+    expect(payload.sinkingFunds).toBe(plan.sinkingFunds);
+    expect(payload.sinkingFundBuffer).toBe(plan.sinkingFundBuffer);
+    expect(payload.debtPayoff).toBe(plan.debtPayoff);
+    expect(payload.goals).toBe(plan.goals);
+    expect(payload.windfalls).toBe(plan.windfalls);
+    expect(payload.coaching).toBe(plan.coaching);
+    expect(payload.topRecommendation).toBe('Keep going.');
   });
 });

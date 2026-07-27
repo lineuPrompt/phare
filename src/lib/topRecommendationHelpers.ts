@@ -32,11 +32,15 @@ import { escapeRegExp } from './textMatchHelpers';
 
 export const DEBT_PAYMENT_PLACEHOLDER = '{{DEBT_PAYMENT}}';
 
-// Matches both English ($3,000 / $833.33) and French-Canadian (3000$ / 3 000,00 $)
-// currency conventions, globally — a fabricated figure must not slip past
-// detection just because the model wrote it in French formatting, and every
-// occurrence must be checked, not just the first.
-const DOLLAR_AMOUNT_RE = /\$\s?[\d,]+(?:[.,]\d{1,2})?|[\d][\d,\s]*(?:[.,]\d{1,2})?\s?\$/g;
+// Matches English ($3,000 / $833.33), French-Canadian symbol forms (3000$ /
+// 3 000,00 $ — regular space, and JS's \s already covers non-breaking
+// U+00A0 and narrow non-breaking U+202F, confirmed empirically, 2026-07-28),
+// AND spelled-out French currency with no symbol at all ("833 dollars" —
+// Codex finding 3, confirmed live: "payez {{DEBT_PAYMENT}}/mois plus 833
+// dollars/mois" shipped with "833 dollars" intact after substitution,
+// because the old regex required a "$" literal). Case-insensitive ("i") for
+// "Dollars" at a sentence start. Global, every occurrence must be checked.
+const DOLLAR_AMOUNT_RE = /\$\s?[\d,]+(?:[.,]\d{1,2})?|[\d][\d,\s]*(?:[.,]\d{1,2})?\s?\$|[\d][\d,\s]*(?:[.,]\d{1,2})?\s?dollars?/gi;
 
 // Any {{...}} shaped token, by NAME-AGNOSTIC pattern — not just
 // DEBT_PAYMENT_PLACEHOLDER specifically. Confirmed live (2026-07-28): with
@@ -65,13 +69,14 @@ function formatCurrency(n: number): string {
 }
 
 /**
- * Parses a matched currency string (either "$1,234.56" or "1 234,56$") into
- * a plain number. A comma immediately followed by exactly 2 trailing digits
- * is treated as a French decimal separator; otherwise commas/spaces are
+ * Parses a matched currency string (e.g. "$1,234.56", "1 234,56 $", or the
+ * spelled-out "833 dollars") into a plain number. A comma immediately
+ * followed by exactly 2 trailing digits is treated as a French decimal
+ * separator; otherwise commas/spaces (including non-breaking varieties) are
  * treated as thousands separators and stripped.
  */
 function parseAmount(raw: string): number {
-  const stripped = raw.replace(/\$/g, '').trim();
+  const stripped = raw.replace(/\$/g, '').replace(/\s*dollars?/gi, '').trim();
   const decimalComma = stripped.match(/,(\d{2})$/);
   const normalized = decimalComma
     ? `${stripped.slice(0, -3).replace(/[,\s]/g, '')}.${decimalComma[1]}`
@@ -203,14 +208,44 @@ export function enforceDebtFigureInTopRecommendation(
 // against real phrasings before picking the threshold: every genuine
 // mislabeling case tested (e.g. "extra $1,000", "$1,000 of surplus") has its
 // label within 1-4 characters of the figure; the false-positive repro's
-// unrelated "Extra" sits 16 characters away. BORROWED_LABEL_PROXIMITY_CHARS
+// unrelated "Extra" sits 16 characters away. BORROWED_LABEL_PROXIMITY_CHARS_EN
 // is set well inside that gap, with margin on both sides.
-const BORROWED_LABEL_PROXIMITY_CHARS = 10;
+const BORROWED_LABEL_PROXIMITY_CHARS_EN = 10;
 
-// English forms only here — French forms are added in coachingHelpers.ts's
-// sibling list and Part C's extension of this file (kept adjacent, not
-// scattered, per the standing rule below).
+// FRENCH RECALIBRATION (2026-07-28, Part C, Codex finding on locale gap):
+// French constructions genuinely need a wider window — NOT because the EN
+// constant was wrong, but because French mislabeling phrasing has more
+// connective tissue between figure and label. Measured empirically (a
+// throwaway script over real phrasings, not a guess) before picking this:
+// "1 000 $ de liquidités supplémentaires à investir" (Codex's own repro)
+// needs 15 chars for "supplémentaire(s)"; "il vous reste 1 000 $
+// disponible" needs 1; "1 000 $ en argent en plus" needs 4; a natural-word-
+// -order "un excédent de 1 000 $" needs 4. A constructed French false
+// positive analogous to the English one ("Votre catégorie Supplémentaire a
+// eu un remboursement de 1 000 $ ; votre marge de crédit était de 1 000 $...")
+// measures 26 chars away. 20 sits with margin on both sides (5 above the
+// tightest real requirement, 6 below the false positive) — do NOT widen the
+// EN constant to this value, that would reintroduce Part A's English false
+// positives; the two locales get their own constants instead.
+const BORROWED_LABEL_PROXIMITY_CHARS_FR = 20;
+
+// English and French kept adjacent, not scattered, so a future addition to
+// one list makes the other's omission visible. French list populated from
+// Codex's actual repro vocabulary, not translated guesses: "liquidités
+// supplémentaires" (both singular/plural forms needed — word-boundary
+// matching means "supplémentaire" does NOT match inside "supplémentaires"),
+// "excédent", "à investir", "argent en plus", "disponible". "surplus" is a
+// legitimate loanword in French financial text too, kept in both lists.
 const SURPLUS_LABEL_WORDS_EN = ['surplus', 'extra', 'additional income', 'free cash', 'to invest', 'to save', 'available to', 'on top of'];
+const SURPLUS_LABEL_WORDS_FR = ['surplus', 'supplémentaire', 'supplémentaires', 'excédent', 'à investir', 'argent en plus', 'disponible'];
+
+function labelsForLocale(locale: 'en' | 'fr'): string[] {
+  return locale === 'fr' ? SURPLUS_LABEL_WORDS_FR : SURPLUS_LABEL_WORDS_EN;
+}
+
+function borrowedProximityForLocale(locale: 'en' | 'fr'): number {
+  return locale === 'fr' ? BORROWED_LABEL_PROXIMITY_CHARS_FR : BORROWED_LABEL_PROXIMITY_CHARS_EN;
+}
 
 function buildBorrowedCashFallback(totalBorrowed: number, locale: 'en' | 'fr'): string {
   const amount = formatCurrency(totalBorrowed);
@@ -240,21 +275,32 @@ function findLabelSpans(text: string, labels: string[]): { start: number; end: n
  *
  * Best-effort proximity heuristic (see the module-level note above) — a
  * figure must both (a) numerically equal totalBorrowed and (b) have a
- * whole-word label within BORROWED_LABEL_PROXIMITY_CHARS of it. Every
+ * whole-word label within the locale's proximity threshold of it. Every
  * occurrence of the figure and every label are found independently
  * (matchAll on both) so a repeated figure — once honest, once mislabeled —
  * is judged occurrence-by-occurrence, never by the first match found.
+ *
+ * WIRING (2026-07-28, Part C, Codex finding on locale wiring): `labels`
+ * defaults to `labelsForLocale(locale)`, NOT a fixed English list — a call
+ * site that only ever passes 3 args (as every real call site in this
+ * codebase does) automatically gets the correct language's vocabulary and
+ * proximity threshold. This is deliberate: "the caller must remember to
+ * pass the French list" is exactly the failure mode that would silently
+ * ship an English-only guard against French output. `labels` stays
+ * overridable only for tests that want to probe a specific list directly.
  */
 export function enforceBorrowedCashFraming(
   text: string,
   totalBorrowed: number,
   locale: 'en' | 'fr',
-  labels: string[] = SURPLUS_LABEL_WORDS_EN
+  labels: string[] = labelsForLocale(locale)
 ): string {
   if (totalBorrowed <= 0) return text;
 
   const labelSpans = findLabelSpans(text, labels);
   if (labelSpans.length === 0) return text;
+
+  const proximity = borrowedProximityForLocale(locale);
 
   for (const match of text.matchAll(DOLLAR_AMOUNT_RE)) {
     if (Math.abs(parseAmount(match[0]) - totalBorrowed) > 0.005) continue;
@@ -265,8 +311,8 @@ export function enforceBorrowedCashFraming(
     const nearbyLabel = labelSpans.some((span) => {
       const gapBefore = figStart - span.end; // label ends before the figure starts
       const gapAfter = span.start - figEnd;  // label starts after the figure ends
-      return (gapBefore >= 0 && gapBefore <= BORROWED_LABEL_PROXIMITY_CHARS) ||
-             (gapAfter >= 0 && gapAfter <= BORROWED_LABEL_PROXIMITY_CHARS);
+      return (gapBefore >= 0 && gapBefore <= proximity) ||
+             (gapAfter >= 0 && gapAfter <= proximity);
     });
 
     if (nearbyLabel) return buildBorrowedCashFallback(totalBorrowed, locale);
