@@ -3,10 +3,7 @@
 import { Fragment, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatCurrency, formatSignedAmount } from '@/components/expenses/types';
-import {
-  EnvelopeStatus, envelopeStatus, sumWarning, CategoryEntryLine, UNCATEGORIZED_ROW_ID,
-  isPostCloseEntry, sumRolledOverEntries,
-} from '@/lib/envelopeHelpers';
+import { EnvelopeStatus, envelopeStatus, sumWarning, CategoryEntryLine, UNCATEGORIZED_ROW_ID } from '@/lib/envelopeHelpers';
 import { cardCycleContext } from '@/lib/dateHelpers';
 
 function formatShortDate(iso: string, locale: string): string {
@@ -35,11 +32,14 @@ export type DecisionViewProps = {
   locale: string;
   onEditEnvelope: () => void;
   onEntryChanged: () => void;
-  // Cycle context (2026-07-30) — display only, no math changes to
-  // Over/Spent/Remaining, which stay calendar-month vs. calendar-month (see
-  // envelopeHelpers.ts's DISPLAY CONTRACT). month is the currently viewed
-  // calendar month (YYYY-MM); statementCloseDay/paymentDay are the card's own
-  // settings, already returned by GET /api/card-envelope.
+  // Cycle context (2026-07-30, moved to statement-cycle scoping 2026-07-31) —
+  // Goal/Spent/Remaining below are now cycle-scoped themselves (see
+  // envelopeHelpers.ts's DISPLAY CONTRACT), so this line is the one place
+  // that spells out exactly which window and payment date "this tab" means.
+  // month is the currently viewed calendar month (YYYY-MM, i.e. the tab
+  // label — the cycle CLOSING in this month, per the approved labeling);
+  // statementCloseDay/paymentDay are the card's own settings, already
+  // returned by GET /api/card-envelope.
   month: string;
   statementCloseDay: number | null;
   paymentDay: number | null;
@@ -47,15 +47,7 @@ export type DecisionViewProps = {
 
 // One entry line inside a category's accordion — view mode, or an inline
 // edit form (date/description/amount), plus delete with a confirm step.
-// cycleWindowEnd/nextPaysOn: null when the card has no statement close day
-// set (or in the rare case a page renders entries with no cycle context at
-// all) — the post-close badge simply never shows, never a false flag.
-function EntryLine({
-  entry, locale, onChanged, cycleWindowEnd, nextPaysOn,
-}: {
-  entry: CategoryEntryLine; locale: string; onChanged: () => void;
-  cycleWindowEnd: string | null; nextPaysOn: string | null;
-}) {
+function EntryLine({ entry, locale, onChanged }: { entry: CategoryEntryLine; locale: string; onChanged: () => void }) {
   const t = useTranslations('cards.decision.entries');
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -118,22 +110,9 @@ function EntryLine({
     );
   }
 
-  const rollsOver = cycleWindowEnd !== null && isPostCloseEntry(entry.date, cycleWindowEnd);
-
   return (
     <div className="flex items-center gap-3 py-1.5 px-2">
-      <span className="text-xs w-24 shrink-0" style={{ color: '#9CA3AF' }}>
-        {entry.date}
-        {rollsOver && nextPaysOn && (
-          <span
-            className="ml-1 cursor-help"
-            title={t('rollsIntoNext', { date: formatShortDate(nextPaysOn, locale) })}
-            aria-label={t('rollsIntoNext', { date: formatShortDate(nextPaysOn, locale) })}
-          >
-            ↻
-          </span>
-        )}
-      </span>
+      <span className="text-xs w-24 shrink-0" style={{ color: '#9CA3AF' }}>{entry.date}</span>
       <span className="flex-1 min-w-0 truncate text-xs" style={{ color: '#374151' }}>
         {entry.description ?? '—'}
         {entry.installmentLabel && (
@@ -157,12 +136,7 @@ function EntryLine({
   );
 }
 
-function CategoryEntries({
-  entries, locale, onChanged, cycleWindowEnd, nextPaysOn,
-}: {
-  entries: CategoryEntryLine[]; locale: string; onChanged: () => void;
-  cycleWindowEnd: string | null; nextPaysOn: string | null;
-}) {
+function CategoryEntries({ entries, locale, onChanged }: { entries: CategoryEntryLine[]; locale: string; onChanged: () => void }) {
   const t = useTranslations('cards.decision.entries');
   if (entries.length === 0) {
     return <p className="text-xs py-2 px-2 italic" style={{ color: '#9CA3AF' }}>{t('noEntries')}</p>;
@@ -170,10 +144,7 @@ function CategoryEntries({
   return (
     <div className="divide-y" style={{ borderColor: '#F3F4F6' }}>
       {entries.map((entry) => (
-        <EntryLine
-          key={entry.id} entry={entry} locale={locale} onChanged={onChanged}
-          cycleWindowEnd={cycleWindowEnd} nextPaysOn={nextPaysOn}
-        />
+        <EntryLine key={entry.id} entry={entry} locale={locale} onChanged={onChanged} />
       ))}
     </div>
   );
@@ -198,15 +169,11 @@ export default function CardDecisionView({
   const remaining = totalGoal !== null ? totalGoal - totalSpent : null;
   const overGoal = remaining !== null && remaining < 0;
 
-  // Cycle context — null when this card has no statement close day set,
-  // which naturally makes every post-close check below a no-op (the whole
-  // calendar month IS the cycle in that case). Never recomputed here beyond
-  // calling cardCycleContext, which itself only calls statementCycleWindow/
-  // bridgePaymentDate.
+  // Cycle context — null when this card has no statement close day set (the
+  // whole calendar month is the cycle then, nothing extra to say). Display
+  // only: Goal/Spent/Remaining below are already cycle-scoped server-side
+  // (GET /api/card-envelope) — this just names the window in words.
   const cycle = statementCloseDay !== null ? cardCycleContext(month, statementCloseDay, paymentDay) : null;
-  const allEntries = [...Object.values(entriesByCategory).flat(), ...uncategorizedEntries];
-  const hasPostCloseEntries = cycle !== null && allEntries.some((e) => isPostCloseEntry(e.date, cycle.window.end));
-  const rolledOverTotal = cycle !== null ? sumRolledOverEntries(allEntries, cycle.window.end) : 0;
   // Regression fix: this used to gate on envelopeItems.length alone, which
   // hid the ENTIRE table — including the uncategorized row — whenever a
   // card had no saved envelope items yet but did have real, uncategorized
@@ -243,11 +210,13 @@ export default function CardDecisionView({
   return (
     <div className="space-y-4">
       {/* Cycle context — display only, never a second money figure. Goal/
-          Spent/Remaining below stay exactly calendar-month vs. calendar-month;
-          this line just tells the truth about when the statement that closed
-          THIS month is actually paid. Only rendered when the card has a real
-          close day set — with none, the whole calendar month IS the cycle and
-          there's nothing extra to say. */}
+          Spent/Remaining below are now themselves cycle-scoped (statement
+          cycle, not calendar month — see envelopeHelpers.ts's DISPLAY
+          CONTRACT), so this line spells out exactly which window and
+          payment date "this tab" refers to. More necessary now than before,
+          not less: the numbers on screen ARE the cycle's numbers. Only
+          rendered when the card has a real close day set — with none, the
+          whole calendar month IS the cycle and there's nothing extra to say. */}
       {cycle && (
         <p className="text-xs sm:text-sm" style={{ color: '#6B7280' }}>
           {t('decision.cycleLine', {
@@ -295,20 +264,6 @@ export default function CardDecisionView({
           )}
         </div>
       </div>
-
-      {/* Rollover disclosure — only when this calendar month actually
-          contains post-close-day entries. Summed from the exact same entries
-          the accordions below render (allEntries), never a parallel query.
-          Does not change Over goal above — that stays calendar vs. calendar,
-          per the explicit instruction not to touch that math. */}
-      {hasPostCloseEntries && cycle && (
-        <p className="text-xs sm:text-sm px-3 py-2 rounded-lg" style={{ background: '#F0FDFD', color: '#0F2044' }}>
-          {t('decision.rollsIntoNext', {
-            amount: formatCurrency(rolledOverTotal, locale),
-            date: formatShortDate(cycle.nextPaysOn, locale),
-          })}
-        </p>
-      )}
 
       {/* Per-category decision table */}
       <div className="rounded-2xl bg-white p-3 sm:p-6" style={{ border: '1px solid #E5E7EB' }}>
@@ -395,8 +350,6 @@ export default function CardDecisionView({
                               entries={entriesByCategory[row.categoryId] ?? []}
                               locale={locale}
                               onChanged={onEntryChanged}
-                              cycleWindowEnd={cycle?.window.end ?? null}
-                              nextPaysOn={cycle?.nextPaysOn ?? null}
                             />
                           </td>
                         </tr>
@@ -435,8 +388,6 @@ export default function CardDecisionView({
                             entries={uncategorizedEntries}
                             locale={locale}
                             onChanged={onEntryChanged}
-                            cycleWindowEnd={cycle?.window.end ?? null}
-                            nextPaysOn={cycle?.nextPaysOn ?? null}
                           />
                         </td>
                       </tr>

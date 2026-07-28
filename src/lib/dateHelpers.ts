@@ -335,26 +335,24 @@ export type CardCycleContext = {
   // This viewed month's own cycle — its statement closed within this
   // calendar month, paid the following month.
   paysOn: string;
-  // The FOLLOWING cycle's payment date — what a transaction dated after
-  // window.end (still within this viewed calendar month) actually rolls
-  // into, since it belongs to next month's statement cycle, not this one.
-  nextPaysOn: string;
 };
 
 /**
  * Composes statementCycleWindow + bridgePaymentDate into the display-ready
  * shape the card envelope page needs to surface its cycle context alongside
- * the calendar-month goal — no new date math beyond the trivial "month after
- * viewedMonth" string increment (same wraparound pattern statementCycleWindow
- * and bridgePaymentDate already use inline); every actual date (window
- * bounds, both payment dates) comes from those two existing functions.
+ * the (now cycle-scoped) goal comparison — every date comes from those two
+ * existing functions, nothing recomputed here.
  *
  * closeDay null falls through to statementCycleWindow's own calendar-month
- * fallback — window spans the whole viewed month, so nothing within it can
- * ever be "post-close" (see envelopeHelpers.isPostCloseEntry), and this
- * context becomes informationally a no-op for a card with no close day set.
- * payDay null defaults to 1, same convention bridgeHelpers.ts already uses
- * for bridge-row insertion (`card.payment_day ?? 1`).
+ * fallback. payDay null defaults to 1, same convention bridgeHelpers.ts
+ * already uses for bridge-row insertion (`card.payment_day ?? 1`).
+ *
+ * 2026-07-31: dropped the `nextPaysOn` field this used to carry (for a
+ * post-close-entry rollover marker) — cards moved to statement-cycle
+ * scoping, so an entry dated after the close day now lands in the NEXT
+ * tab's own window entirely; there is no longer such a thing as a
+ * post-close entry WITHIN a tab to flag. See envelopeHelpers.ts's DISPLAY
+ * CONTRACT for the full account of what changed and why.
  */
 export function cardCycleContext(
   viewedMonth: string,       // YYYY-MM
@@ -363,14 +361,40 @@ export function cardCycleContext(
 ): CardCycleContext {
   const window = statementCycleWindow(viewedMonth, closeDay);
   const effectivePayDay = payDay ?? 1;
-
-  const [y, m] = viewedMonth.split('-').map(Number);
-  const nextYear = y + Math.floor(m / 12);
-  const nextCycleMonth = `${nextYear}-${String((m % 12) + 1).padStart(2, '0')}`;
-
   return {
     window,
     paysOn: bridgePaymentDate(viewedMonth, effectivePayDay),
-    nextPaysOn: bridgePaymentDate(nextCycleMonth, effectivePayDay),
   };
+}
+
+/**
+ * The cycleMonth (YYYY-MM) whose statementCycleWindow contains `today` — the
+ * currently OPEN cycle, resolved independently of any tab-labeling/
+ * navigation scheme. Used by the coaching layer (regenerate-plan), which
+ * doesn't navigate and shouldn't inherit navigation semantics — it just
+ * needs "whichever cycle is live right now," the same window the Cards page
+ * shows under its own current-month tab (both must resolve to the same
+ * window; they don't need to share a lookup path — this is the coaching
+ * layer's own path).
+ *
+ * closeDay null always resolves to today's own calendar month, matching
+ * statementCycleWindow's calendar-month fallback (the whole month is one
+ * cycle, so today is trivially "in" whichever month it falls in).
+ *
+ * Otherwise: if today's day-of-month is on or before closeDay, today is
+ * still inside the cycle closing THIS month; if today's day is after
+ * closeDay, the open cycle is the one closing NEXT month (it started the day
+ * after this month's close). Comparing against the raw (unclamped) closeDay
+ * is deliberate and safe even when a short month clamps the effective close
+ * date (e.g. closeDay 31 in a 30-day month) — today's day-of-month can never
+ * exceed the real month length, so the comparison never disagrees with the
+ * clamped result; see dateHelpers.test.ts for the worked short-month case.
+ */
+export function cycleMonthContaining(today: string, closeDay: number | null): string {
+  const [y, m, d] = today.split('-').map(Number);
+  if (closeDay === null || d <= closeDay) {
+    return `${y}-${String(m).padStart(2, '0')}`;
+  }
+  const nextYear = y + Math.floor(m / 12);
+  return `${nextYear}-${String((m % 12) + 1).padStart(2, '0')}`;
 }

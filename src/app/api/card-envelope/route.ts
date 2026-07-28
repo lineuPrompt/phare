@@ -11,6 +11,7 @@ import {
   groupEntriesByCategory,
 } from '@/lib/envelopeHelpers';
 import { categoryDisplayName } from '@/lib/categoryTranslations';
+import { statementCycleWindow } from '@/lib/dateHelpers';
 
 async function resolveHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -48,6 +49,13 @@ export async function GET(request: Request) {
       .single();
     if (!card) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
 
+    // Statement-cycle scoping (2026-07-31) — see envelopeHelpers.ts's
+    // rewritten DISPLAY CONTRACT. closeDay null falls back to the plain
+    // calendar month via statementCycleWindow's own fallback, so a card with
+    // no close day set behaves exactly as before.
+    const closeDay = (card.statement_close_day as number | null) ?? null;
+    const cycleWindow = statementCycleWindow(monthParam, closeDay);
+
     // Card's total monthly goal (carry-forward: latest goal on or before this month)
     const monthStart = `${monthParam}-01`;
     const { data: goalRow } = await supabase
@@ -71,30 +79,27 @@ export async function GET(request: Request) {
       .eq('account_id', cardId)
       .eq('month', monthStart);
 
-    // Transactions for this card in this month
-    const [y, m] = monthParam.split('-').map(Number);
-    const nextMonth = m === 12
-      ? `${y + 1}-01-01`
-      : `${y}-${String(m + 1).padStart(2, '0')}-01`;
-
+    // Transactions for this card's statement cycle — the window can spill
+    // into the adjacent calendar month at either end, so the query is scoped
+    // to the cycle window itself, not the calendar month.
     const { data: rawTxns } = await supabase
       .from('transactions')
       .select('id, account_id, amount, category_id, type, date, is_bridge, description, installment_label')
       .eq('household_id', householdId)
       .eq('account_id', cardId)
-      .gte('date', monthStart)
-      .lt('date', nextMonth);
+      .gte('date', cycleWindow.start)
+      .lte('date', cycleWindow.end);
 
     const txns = (rawTxns ?? []) as EnvTx[];
-    const byCategory = categoryActualsForCard(txns, cardId, monthParam);
+    const byCategory = categoryActualsForCard(txns, cardId, monthParam, closeDay);
 
-    // Per-category entry lines for the accordion — same calendar-month
-    // filter categoryActualsForCard uses above, so the entry list can never
-    // drift from the $ actual shown next to it. See groupEntriesByCategory's
-    // docstring for the display contract (calendar month, never the
-    // statement cycle).
+    // Per-category entry lines for the accordion — same cycle-window filter
+    // categoryActualsForCard uses above, so the entry list can never drift
+    // from the $ actual shown next to it. See groupEntriesByCategory's
+    // docstring for the current display contract (statement cycle, not
+    // calendar month).
     const { byCategory: entriesByCategory, uncategorized: uncategorizedEntries } =
-      groupEntriesByCategory(txns as CardTxRow[], cardId, monthParam);
+      groupEntriesByCategory(txns as CardTxRow[], cardId, monthParam, closeDay);
 
     // All household expense categories — needed both for the editor's
     // add-category dropdown and to name any category that has net activity
@@ -137,8 +142,8 @@ export async function GET(request: Request) {
       });
     }
 
-    const uncategorized = uncategorizedSpend(txns, cardId, monthParam);
-    const totalSpent = totalSpendForCard(txns, cardId, monthParam);
+    const uncategorized = uncategorizedSpend(txns, cardId, monthParam, closeDay);
+    const totalSpent = totalSpendForCard(txns, cardId, monthParam, closeDay);
 
     const categoriesForEditor = (categories ?? []).map((c) => ({
       id: c.id,

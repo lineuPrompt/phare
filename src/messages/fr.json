@@ -446,7 +446,6 @@
       "noEnvelope": "Aucune enveloppe définie — ajoutez des catégories ci-dessous pour suivre vos dépenses par catégorie.",
       "goalVsAllocated": "Objectif {goal} · sous-budgets {sum} · {over} en surallocation",
       "cycleLine": "Cycle : {start} – {end} · payé le {paysOn}",
-      "rollsIntoNext": "{amount} des dépenses de ce mois-ci figureront sur votre paiement du {date}.",
       "entries": {
         "noEntries": "Aucune entrée ce mois-ci.",
         "edit": "Modifier",
@@ -454,8 +453,7 @@
         "save": "Enregistrer",
         "saving": "Enregistrement...",
         "cancel": "Annuler",
-        "confirmDelete": "Supprimer cette entrée?",
-        "rollsIntoNext": "Figurera sur votre paiement du {date}"
+        "confirmDelete": "Supprimer cette entrée?"
       }
     },
     "editor": {

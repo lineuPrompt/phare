@@ -613,12 +613,23 @@ describe('POST /api/regenerate-plan — the Coaching Layer', () => {
           ],
           error: null,
         },
-        { data: [], error: null }, // Coaching Layer history window
+        {
+          // Coaching Layer history window — this is what the card-envelope
+          // over-target check reads from (2026-07-31: moved off the narrower
+          // current-month-only query above so a live cycle spanning a
+          // calendar-month edge is never missed); same two card transactions,
+          // since a real DB query for either range would return both.
+          data: [
+            { account_id: 'card-1', amount: 350, type: 'expense', category_id: 'cat-hobby', date: '2026-07-05', is_bridge: false },
+            { account_id: 'card-1', amount: 80, type: 'expense', category_id: 'cat-book', date: '2026-07-06', is_bridge: false },
+          ],
+          error: null,
+        },
       ],
       accounts: [{
         data: [
           { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null },
-          { id: 'card-1', name: 'Visa', type: 'credit_card', goal_target: null, goal_target_date: null },
+          { id: 'card-1', name: 'Visa', type: 'credit_card', goal_target: null, goal_target_date: null, statement_close_day: null },
         ],
         error: null,
       }],
@@ -626,9 +637,9 @@ describe('POST /api/regenerate-plan — the Coaching Layer', () => {
       card_envelope_items: [{
         data: [
           // Over its own $200 target.
-          { account_id: 'card-1', category_id: 'cat-hobby', monthly_amount: 200, categories: { name: 'Hobby Supplies', name_fr: null } },
+          { category_id: 'cat-hobby', monthly_amount: 200, categories: { name: 'Hobby Supplies', name_fr: null } },
           // Under its own $100 target — must never surface as a source.
-          { account_id: 'card-1', category_id: 'cat-book', monthly_amount: 100, categories: { name: 'Book Club', name_fr: null } },
+          { category_id: 'cat-book', monthly_amount: 100, categories: { name: 'Book Club', name_fr: null } },
         ],
         error: null,
       }],
@@ -977,13 +988,24 @@ describe('POST /api/regenerate-plan — Fix 2: coaching.insufficientHistory', ()
           ],
           error: null,
         },
-        { data: [], error: null }, // Coaching Layer history window — completely empty (0 of 3 months have data)
+        {
+          // Coaching Layer history window — this is what the card-envelope
+          // over-target check now reads from (2026-07-31); "0 of 3 months
+          // have data" for the typical-surplus average still holds (that's
+          // computed from a separate monthly slice below, not from whether
+          // this array is empty) — this real July card transaction must be
+          // present here for the coaching check itself to see it.
+          data: [
+            { account_id: 'card-1', amount: 350, type: 'expense', category_id: 'cat-hobby', date: '2026-07-05', is_bridge: false },
+          ],
+          error: null,
+        },
         { data: [{ amount: -6000, type: 'transfer', account_id: 'debt-1', date: '2026-01-01' }], error: null }, // all-time debt balance
       ],
       accounts: [{
         data: [
           { id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null },
-          { id: 'card-1', name: 'Visa', type: 'credit_card', goal_target: null, goal_target_date: null },
+          { id: 'card-1', name: 'Visa', type: 'credit_card', goal_target: null, goal_target_date: null, statement_close_day: null },
           { id: 'debt-1', name: 'Credit Line', type: 'debt', goal_target: 0, goal_target_date: '2027-01-17' },
         ],
         error: null,
@@ -991,7 +1013,7 @@ describe('POST /api/regenerate-plan — Fix 2: coaching.insufficientHistory', ()
       sinking_funds: [{ data: [], error: null }],
       card_envelope_items: [{
         data: [
-          { account_id: 'card-1', category_id: 'cat-hobby', monthly_amount: 200, categories: { name: 'Hobby Supplies', name_fr: null } },
+          { category_id: 'cat-hobby', monthly_amount: 200, categories: { name: 'Hobby Supplies', name_fr: null } },
         ],
         error: null,
       }],

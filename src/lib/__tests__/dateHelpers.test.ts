@@ -10,6 +10,7 @@ import {
   nextOccurrence,
   statementCycleWindow,
   cardCycleContext,
+  cycleMonthContaining,
   businessToday,
   businessMonth,
   excludeSkippedDates,
@@ -481,17 +482,15 @@ describe('statementCycleWindow', () => {
 });
 
 describe('cardCycleContext', () => {
-  it('Visa Avion fixture: close 27, pay 17, viewing July → window Jun28-Jul27, pays Aug17, next cycle pays Sep17', () => {
+  it('Visa Avion fixture: close 27, pay 17, viewing July → window Jun28-Jul27, pays Aug17', () => {
     const ctx = cardCycleContext('2026-07', 27, 17);
     expect(ctx.window).toEqual({ start: '2026-06-28', end: '2026-07-27' });
     expect(ctx.paysOn).toBe('2026-08-17');
-    expect(ctx.nextPaysOn).toBe('2026-09-17');
   });
 
   it('handles a December→January cycle-month rollover', () => {
     const ctx = cardCycleContext('2026-12', 15, 5);
     expect(ctx.paysOn).toBe('2027-01-05');
-    expect(ctx.nextPaysOn).toBe('2027-02-05');
   });
 
   it('defaults payDay to 1 when null, same convention as bridgeHelpers', () => {
@@ -502,6 +501,43 @@ describe('cardCycleContext', () => {
   it('closeDay null falls back to the calendar month, matching statementCycleWindow', () => {
     const ctx = cardCycleContext('2026-07', null, 17);
     expect(ctx.window).toEqual({ start: '2026-07-01', end: '2026-07-31' });
+  });
+});
+
+describe('cycleMonthContaining — the coaching layer\'s "live cycle right now" resolution', () => {
+  it('today on or before the close day → the cycle closing THIS month', () => {
+    expect(cycleMonthContaining('2026-07-15', 27)).toBe('2026-07');
+    expect(cycleMonthContaining('2026-07-27', 27)).toBe('2026-07'); // exactly on close day
+  });
+
+  it('today after the close day → the cycle closing NEXT month', () => {
+    expect(cycleMonthContaining('2026-07-28', 27)).toBe('2026-08');
+    expect(cycleMonthContaining('2026-07-31', 27)).toBe('2026-08');
+  });
+
+  it('matches the Cards page: the resolved cycleMonth\'s window genuinely contains today', () => {
+    for (const today of ['2026-07-01', '2026-07-15', '2026-07-27', '2026-07-28', '2026-07-31']) {
+      const cycleMonth = cycleMonthContaining(today, 27);
+      const window = statementCycleWindow(cycleMonth, 27);
+      expect(today >= window.start && today <= window.end).toBe(true);
+    }
+  });
+
+  it('closeDay null always resolves to today\'s own calendar month', () => {
+    expect(cycleMonthContaining('2026-07-15', null)).toBe('2026-07');
+    expect(cycleMonthContaining('2026-07-31', null)).toBe('2026-07');
+  });
+
+  it('handles a December→January rollover', () => {
+    expect(cycleMonthContaining('2026-12-28', 27)).toBe('2027-01');
+  });
+
+  it('a short-month clamp (closeDay 31) never misresolves — today\'s day can never exceed the real month length', () => {
+    // February 2026 has 28 days; closeDay 31 clamps to 28 for statementCycleWindow.
+    // The whole month is trivially inside "the cycle closing this month" either way.
+    expect(cycleMonthContaining('2026-02-28', 31)).toBe('2026-02');
+    const window = statementCycleWindow('2026-02', 31);
+    expect('2026-02-28' >= window.start && '2026-02-28' <= window.end).toBe(true);
   });
 });
 

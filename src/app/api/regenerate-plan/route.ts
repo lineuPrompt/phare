@@ -62,7 +62,7 @@ import {
   buildReviewPayload,
   FundingNeed,
 } from '@/lib/coachingHelpers';
-import { businessToday, businessMonth } from '@/lib/dateHelpers';
+import { businessToday, businessMonth, cycleMonthContaining } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 const SEED_CATEGORIES = [
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
 
       supabase
         .from('accounts')
-        .select('id, name, type, goal_target, goal_target_date, is_sinking_fund')
+        .select('id, name, type, goal_target, goal_target_date, is_sinking_fund, statement_close_day')
         .eq('household_id', householdId),
 
       supabase
@@ -148,10 +148,15 @@ export async function POST(request: Request) {
       // already-materialized installment series' real final row). Kept as
       // its own query rather than widening the query above so the existing
       // headline/windfall/line-aggregation logic above is untouched — it
-      // still sees exactly the current month, nothing more.
+      // still sees exactly the current month, nothing more. category_id/
+      // is_bridge (2026-07-31) are additive: the card-envelope over-target
+      // check below needs this same wide range (a live statement cycle can
+      // extend a few days into the adjacent calendar month) but couldn't
+      // reuse allTxns without widening ITS scope too — see the comment
+      // right above this one, which still applies unchanged.
       supabase
         .from('transactions')
-        .select('amount, type, account_id, date, recurring_item_id, installment_label, recurrence_id, description')
+        .select('amount, type, account_id, date, recurring_item_id, installment_label, recurrence_id, description, category_id, is_bridge')
         .eq('household_id', householdId)
         .gte('date', `${addMonthsToMonth(monthStart.slice(0, 7), -3)}-01`)
         .lt('date', `${addMonthsToMonth(monthStart.slice(0, 7), 12)}-01`),
@@ -345,36 +350,49 @@ export async function POST(request: Request) {
     // chequing-side category target anywhere in the schema). Code selects AT
     // MOST ONE candidate (the largest overspend) — the AI is never given the
     // full list and never chooses; it only narrates the one already chosen.
+    //
+    // STATEMENT-CYCLE SCOPING (2026-07-31): the coach anchors to "the cycle
+    // whose window contains today" (cycleMonthContaining), resolved
+    // PER CARD since two cards can have different close days and therefore
+    // different live cycles right now. This is deliberately NOT tied to
+    // Cards' own tab-navigation labeling — the coach doesn't navigate, it
+    // just needs the live window, the same one the Cards page shows under
+    // its own "current" tab absent any navigation. Uses historyRows (a wide,
+    // already-fetched range) rather than allTxns (scoped to exactly the
+    // current calendar month, too narrow for a cycle that spills into the
+    // adjacent month at the boundary).
     const cardAccounts = accounts.filter((a) => a.type === 'credit_card');
     let overTargetCategories: ReturnType<typeof computeOverTargetCategories> = [];
     if (cardAccounts.length > 0) {
-      const cardIds = cardAccounts.map((a) => a.id);
-      const { data: envelopeItemRows } = await supabase
-        .from('card_envelope_items')
-        .select('account_id, category_id, monthly_amount, categories(name, name_fr)')
-        .eq('household_id', householdId)
-        .in('account_id', cardIds)
-        .eq('month', monthStart);
+      const historyTxns = historyRows.map((t) => ({
+        account_id: t.account_id as string,
+        amount: t.amount,
+        category_id: (t as { category_id?: string | null }).category_id ?? null,
+        type: t.type,
+        date: t.date,
+        is_bridge: (t as { is_bridge?: boolean | null }).is_bridge ?? false,
+      }));
 
       const categoryFigures: { categoryName: string; target: number; actual: number }[] = [];
-      for (const item of (envelopeItemRows ?? []) as unknown as { account_id: string; category_id: string; monthly_amount: number; categories: { name: string; name_fr: string | null } | null }[]) {
-        const actualsMap = categoryActualsForCard(
-          allTxns.map((t) => ({
-            account_id: t.account_id as string,
-            amount: t.amount,
-            category_id: (t as { category_id?: string | null }).category_id ?? null,
-            type: t.type,
-            date: (t as { date?: string }).date ?? '',
-            is_bridge: (t as { is_bridge?: boolean | null }).is_bridge ?? false,
-          })),
-          item.account_id,
-          currentMonthLabel
-        );
-        categoryFigures.push({
-          categoryName: item.categories?.name ?? '?',
-          target: Number(item.monthly_amount),
-          actual: actualsMap.get(item.category_id) ?? 0,
-        });
+      for (const card of cardAccounts) {
+        const closeDay = (card as { statement_close_day?: number | null }).statement_close_day ?? null;
+        const liveCycleMonth = cycleMonthContaining(today, closeDay);
+
+        const { data: envelopeItemRows } = await supabase
+          .from('card_envelope_items')
+          .select('category_id, monthly_amount, categories(name, name_fr)')
+          .eq('household_id', householdId)
+          .eq('account_id', card.id)
+          .eq('month', `${liveCycleMonth}-01`);
+
+        const actualsMap = categoryActualsForCard(historyTxns, card.id, liveCycleMonth, closeDay);
+        for (const item of (envelopeItemRows ?? []) as unknown as { category_id: string; monthly_amount: number; categories: { name: string; name_fr: string | null } | null }[]) {
+          categoryFigures.push({
+            categoryName: item.categories?.name ?? '?',
+            target: Number(item.monthly_amount),
+            actual: actualsMap.get(item.category_id) ?? 0,
+          });
+        }
       }
       overTargetCategories = computeOverTargetCategories(categoryFigures);
     }

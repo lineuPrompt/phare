@@ -2,16 +2,19 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { buildGrid, EnvTx, EnvelopeSnapshotItem } from '@/lib/envelopeHelpers';
 import { categoryDisplayName } from '@/lib/categoryTranslations';
-import { businessMonth } from '@/lib/dateHelpers';
+import { businessMonth, businessToday, statementCycleWindow } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 // GET /api/card-envelope/grid?cardId=<uuid>&locale=en|fr
-// Forward-looking grid for one card: current month + next 11. The current
-// month shows real actuals (from this month's transactions); future months
+// Forward-looking grid for one card: current cycle + next 11. The current
+// cycle shows real actuals (from this cycle's transactions); future cycles
 // are budget-only — the past doesn't help the decision, so this grid never
 // looks backward. Budgets are carried forward per-cell from the nearest
 // saved envelope snapshot at or before that month (read-only projection;
-// never writes anything).
+// never writes anything). Statement-cycle scoping (2026-07-31): "current"
+// means the cycle whose window contains today, not merely the calendar
+// month — see envelopeHelpers.buildGrid's isFuture, which is day-aware for
+// exactly this reason.
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -30,14 +33,17 @@ export async function GET(request: Request) {
     if (!userRow?.household_id) return NextResponse.json({ error: 'No household' }, { status: 400 });
     const householdId = userRow.household_id as string;
 
-    // Guard: card must belong to this household
+    // Guard: card must belong to this household. statement_close_day is
+    // fetched here too — threaded to every cycle computation below.
     const { data: card } = await supabase
-      .from('accounts').select('id').eq('id', cardId).eq('household_id', householdId).single();
+      .from('accounts').select('id, statement_close_day').eq('id', cardId).eq('household_id', householdId).single();
     if (!card) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+    const closeDay = (card.statement_close_day as number | null) ?? null;
 
     // Current month + next 11
     const timezone = await getHouseholdTimezone(supabase, householdId);
     const currentMonth = businessMonth(timezone);
+    const today = businessToday(timezone);
     const [cy0, cm0] = currentMonth.split('-').map(Number);
     const months: string[] = [];
     for (let i = 0; i < 12; i++) {
@@ -45,18 +51,22 @@ export async function GET(request: Request) {
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
 
-    // Only the current month can have real actuals in a forward-looking grid.
-    const monthStart = `${currentMonth}-01`;
-    const [cy, cm] = currentMonth.split('-').map(Number);
-    const nextMonth = cm === 12 ? `${cy + 1}-01-01` : `${cy}-${String(cm + 1).padStart(2, '0')}-01`;
+    // Only the currently-open cycle(s) can have real actuals in a
+    // forward-looking grid. Fetch from the current calendar month's cycle
+    // window through the NEXT calendar month's cycle window — near a
+    // close-day boundary, the cycle labeled with next month may already have
+    // started (see buildGrid's isFuture), so both windows are covered rather
+    // than assuming only `currentMonth`'s window can ever be "live."
+    const rangeStart = statementCycleWindow(months[0], closeDay).start;
+    const rangeEnd = statementCycleWindow(months[1], closeDay).end;
 
     const { data: rawTxns } = await supabase
       .from('transactions')
       .select('account_id, amount, category_id, type, date, is_bridge')
       .eq('household_id', householdId)
       .eq('account_id', cardId)
-      .gte('date', monthStart)
-      .lt('date', nextMonth);
+      .gte('date', rangeStart)
+      .lte('date', rangeEnd);
 
     // All envelope-item snapshots ever saved for this card, grouped by month
     // — carried forward per-cell so future columns show the projected plan.
@@ -104,7 +114,9 @@ export async function GET(request: Request) {
       categoryNames,
       months,
       goalsByMonth,
-      currentMonth
+      currentMonth,
+      closeDay,
+      today
     );
 
     return NextResponse.json(grid);

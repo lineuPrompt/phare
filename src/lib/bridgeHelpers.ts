@@ -12,6 +12,23 @@
  * in dateHelpers.ts) — not a plain calendar month. Cards without a
  * statement_close_day set fall back to the calendar month.
  *
+ * KNOWN, STATED LIMITATION (2026-07-31) — an OPEN cycle projects nothing to
+ * Timeline. A bridge row is only ever created/synced by ensureBridgesForWindow
+ * for a cycle that has already been asked about (lazily, when chequing is
+ * viewed) — there is no forward projection of an in-progress, not-yet-closed
+ * cycle's eventual total onto Timeline. So for the currently-open cycle,
+ * Timeline shows nothing on its future payment date until the cycle actually
+ * closes and a bridge materializes. The Cards page's own envelope total for
+ * that same open cycle IS live and real (see envelopeHelpers.ts's DISPLAY
+ * CONTRACT) — it just hasn't been mirrored onto Timeline yet, by design, not
+ * by omission. A live projection of an open cycle is a separate, unbuilt
+ * feature (distinct from the dashboard's own "Projected month-end" tile,
+ * which projects a lump sum, not a per-card Timeline entry) — not addressed
+ * by the statement-cycle scoping change; see envelopeHelpers.test.ts's
+ * "closed-cycle tab total === Timeline bridge payment amount" suite for what
+ * IS guaranteed: once a cycle closes, its tab total and its bridge payment
+ * are provably the same number.
+ *
  * REFUND NETTING
  * ---------------
  * The bridge amount for a cycle is that card's expenses MINUS its money-in

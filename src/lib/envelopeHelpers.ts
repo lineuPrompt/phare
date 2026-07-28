@@ -1,6 +1,8 @@
 // Pure helpers for per-card budget envelope math.
 // No Supabase / browser dependencies — safe to import in API routes and tests.
 
+import { statementCycleWindow } from './dateHelpers';
+
 export type EnvTx = {
   account_id: string;
   amount: number | string;
@@ -47,23 +49,26 @@ export function signedAmount(t: { type: string; amount: number | string }): numb
 }
 
 // ---------------------------------------------------------------------------
-// Single-month per-category actuals
+// Single-cycle per-category actuals
 // ---------------------------------------------------------------------------
 
 // Returns Map<category_id, netAmount> for categorized transactions on cardId
-// in month (YYYY-MM): expenses minus refunds (income), net. Bridge lines and
-// null category_id excluded. Net can go negative when refunds exceed spend —
-// that's the honest number, not clamped to zero.
+// within cycleMonth's statement cycle (statementCycleWindow(cycleMonth,
+// closeDay) — see DISPLAY CONTRACT below): expenses minus refunds (income),
+// net. Bridge lines and null category_id excluded. Net can go negative when
+// refunds exceed spend — that's the honest number, not clamped to zero.
 export function categoryActualsForCard(
   transactions: EnvTx[],
   cardId: string,
-  month: string
+  cycleMonth: string,
+  closeDay: number | null
 ): Map<string, number> {
+  const window = statementCycleWindow(cycleMonth, closeDay);
   const map = new Map<string, number>();
   for (const t of transactions) {
     if (t.account_id !== cardId) continue;
     if (t.is_bridge) continue;
-    if (!t.date.startsWith(month)) continue;
+    if (t.date < window.start || t.date > window.end) continue;
     if (!t.category_id) continue;
     const signed = signedAmount(t);
     if (signed === null) continue;
@@ -72,26 +77,55 @@ export function categoryActualsForCard(
   return map;
 }
 
-// DISPLAY CONTRACT: entries are grouped by the CALENDAR month of their date
-// (t.date.startsWith(month)) — the exact same filter categoryActualsForCard
-// uses above, so the entry list a category's accordion shows can never drift
-// from the $ actual figure shown next to it. The statement cycle a card may
-// have configured (statementCycleWindow, dateHelpers.ts) governs ONLY which
-// bridge payment date a card's spend rolls into — it never affects whether
-// an entry is visible here. An entry always appears under the calendar
-// month of the date the founder entered, full stop.
+/**
+ * DISPLAY CONTRACT (rewritten 2026-07-31 — supersedes the calendar-month
+ * contract this docstring used to record; see the OLD CONTRACT note at the
+ * end for what changed and why).
+ *
+ * Entries are grouped by STATEMENT CYCLE, not calendar month: a transaction
+ * belongs to the cycle whose statementCycleWindow(cycleMonth, closeDay)
+ * contains its date — the exact same window categoryActualsForCard uses
+ * above, so the entry list a category's accordion shows can never drift from
+ * the $ actual figure shown next to it. closeDay null falls back to the
+ * plain calendar month (statementCycleWindow's own fallback), so a card with
+ * no close day set behaves identically to the old calendar-month contract.
+ *
+ * WHY THIS CHANGED: the card page's job is answering "what will my statement
+ * be" — a genuinely cycle-shaped question. Under the old calendar-month
+ * contract, a charge dated after the close day counted against THIS month's
+ * goal while actually being paid the FOLLOWING month's bridge — the goal
+ * could read "Over" for a month whose real statement wasn't over at all, and
+ * the number the family saw here structurally could not agree with the real
+ * payment landing on Timeline. Cycle scoping makes those the same number by
+ * construction: the tab labeled "July" is exactly the cycle bridgeHelpers.ts
+ * calls spendMonth/cycleMonth "2026-07" — same window, same signedAmount
+ * netting, same transactions — so a closed cycle's tab total and its
+ * Timeline bridge payment amount are provably identical (see
+ * bridgeHelpers.test.ts / envelopeHelpers.test.ts's cross-check).
+ *
+ * OLD CONTRACT (superseded, kept here for the record): entries used to be
+ * grouped by the CALENDAR month of their date, with the statement cycle
+ * governing ONLY which bridge payment date a card's spend rolled into, never
+ * whether an entry was visible under a given month. That was a deliberate,
+ * tested decision at the time (see project history, Build 4 Phase 1 round 2)
+ * — this is not an accidental reversal of it, it's a considered replacement
+ * once the calendar-month choice was found to make the card page's own goal
+ * figure disagree with the real payment it was supposedly tracking.
+ */
 export function groupEntriesByCategory(
   transactions: CardTxRow[],
   cardId: string,
-  month: string
+  cycleMonth: string,
+  closeDay: number | null
 ): { byCategory: Record<string, CategoryEntryLine[]>; uncategorized: CategoryEntryLine[] } {
+  const window = statementCycleWindow(cycleMonth, closeDay);
   const byCategory: Record<string, CategoryEntryLine[]> = {};
   const uncategorized: CategoryEntryLine[] = [];
 
   for (const t of transactions) {
     if (t.account_id !== cardId) continue;
     if (t.is_bridge) continue;
-    if (!t.date.startsWith(month)) continue;
+    if (t.date < window.start || t.date > window.end) continue;
 
     const line: CategoryEntryLine = {
       id: t.id,
@@ -112,51 +146,20 @@ export function groupEntriesByCategory(
   return { byCategory, uncategorized };
 }
 
-// ---------------------------------------------------------------------------
-// Card-cycle display support (2026-07-30) — surfaces the statement cycle
-// alongside the calendar-month envelope. Does NOT change the DISPLAY
-// CONTRACT above: an entry's calendar-month grouping/visibility is untouched;
-// this only flags which already-visible entries belong to the FOLLOWING
-// cycle's payment (see dateHelpers.cardCycleContext), so the truth about
-// when something is actually paid is told without moving it out of the
-// calendar month it's genuinely in.
-// ---------------------------------------------------------------------------
-
-/** True when entryDate falls after the current cycle's close date (cardCycleContext's window.end) — it belongs to the next cycle's payment, not this one. */
-export function isPostCloseEntry(entryDate: string, cycleWindowEnd: string): boolean {
-  return entryDate > cycleWindowEnd;
-}
-
-/**
- * Net (expense minus refund) of just the post-close-day entries in a list —
- * same signedAmount netting rule as totalSpendForCard, applied to whatever
- * entry list the caller already has on screen (never a fresh query), so this
- * can never drift from what's rendered.
- */
-export function sumRolledOverEntries(
-  entries: { date: string; type: string; amount: number | string }[],
-  cycleWindowEnd: string
-): number {
-  let sum = 0;
-  for (const e of entries) {
-    if (!isPostCloseEntry(e.date, cycleWindowEnd)) continue;
-    const signed = signedAmount(e);
-    if (signed !== null) sum += signed;
-  }
-  return r2(sum);
-}
-
-// Net (expenses minus refunds) of transactions on cardId in month with null category_id.
+// Net (expenses minus refunds) of transactions on cardId within cycleMonth's
+// statement cycle, with null category_id.
 export function uncategorizedSpend(
   transactions: EnvTx[],
   cardId: string,
-  month: string
+  cycleMonth: string,
+  closeDay: number | null
 ): number {
+  const window = statementCycleWindow(cycleMonth, closeDay);
   let total = 0;
   for (const t of transactions) {
     if (t.account_id !== cardId) continue;
     if (t.is_bridge) continue;
-    if (!t.date.startsWith(month)) continue;
+    if (t.date < window.start || t.date > window.end) continue;
     if (t.category_id) continue;
     const signed = signedAmount(t);
     if (signed === null) continue;
@@ -165,17 +168,20 @@ export function uncategorizedSpend(
   return r2(total);
 }
 
-// Total spend (categorized + uncategorized) for cardId in month.
-// Must equal the totalSpent shown on the Expenses page for the same card+month.
+// Total spend (categorized + uncategorized) for cardId within cycleMonth's
+// statement cycle. This is the figure that must equal the bridge payment
+// landing on Timeline for a CLOSED cycle (see the DISPLAY CONTRACT above and
+// envelopeHelpers.test.ts's cross-check against bridgeHelpers.netCycleSpend).
 export function totalSpendForCard(
   transactions: EnvTx[],
   cardId: string,
-  month: string
+  cycleMonth: string,
+  closeDay: number | null
 ): number {
   const categorized = Array.from(
-    categoryActualsForCard(transactions, cardId, month).values()
+    categoryActualsForCard(transactions, cardId, cycleMonth, closeDay).values()
   ).reduce((s, v) => s + v, 0);
-  return r2(categorized + uncategorizedSpend(transactions, cardId, month));
+  return r2(categorized + uncategorizedSpend(transactions, cardId, cycleMonth, closeDay));
 }
 
 // ---------------------------------------------------------------------------
@@ -224,8 +230,8 @@ export function carryForwardMap<T>(
 }
 
 // ---------------------------------------------------------------------------
-// Forward-looking grid: current month + next 11. The current month shows
-// real actuals (even $0 so far); future months are budget-only (actuals
+// Forward-looking grid: current cycle + next 11. The current cycle shows
+// real actuals (even $0 so far); future cycles are budget-only (actuals
 // null) — the past doesn't help the decision, so this grid never looks
 // backward. Budgets are carried forward per-cell from the nearest saved
 // envelope snapshot at or before that month.
@@ -237,7 +243,7 @@ export type GridRow = {
   categoryId: string;
   name: string;
   budgets: number[];          // one per month, carried forward
-  actuals: (number | null)[]; // null = future month, budget-only
+  actuals: (number | null)[]; // null = future cycle, budget-only
 };
 export type GridData = {
   months: string[];
@@ -253,6 +259,17 @@ export type GridData = {
 // category — needed because a category can appear via actual activity
 // (e.g. a refund) without ever having a saved envelope item.
 // goalsByMonth: Map<'YYYY-MM', cardGoal saved for exactly that month>
+// closeDay: the card's own statement_close_day — threaded to every cycle
+// computation below; null produces exactly the old calendar-month behavior.
+// today: a real YYYY-MM-DD (not just a calendar month) — needed because
+// isFuture must compare against the currently open CYCLE's start date, not
+// merely "is this calendar month in the future." Without today's exact day,
+// a cycle spanning a calendar-month edge (e.g. a card closing on the 27th,
+// viewed on the 28th) would have its already-open, already-accruing cycle
+// wrongly classified as future/budget-only for the few days between the
+// close day and the end of the calendar month — a live cycle with real money
+// in it rendered as a placeholder. See envelopeHelpers.test.ts for the
+// worked boundary case.
 export function buildGrid(
   transactions: EnvTx[],
   cardId: string,
@@ -260,20 +277,22 @@ export function buildGrid(
   categoryNames: Map<string, string>,
   months: string[],
   goalsByMonth: Map<string, number>,
-  currentMonth: string
+  currentMonth: string,
+  closeDay: number | null,
+  today: string
 ): GridData {
-  const isFuture = (month: string) => month > currentMonth;
+  const isFuture = (month: string) => statementCycleWindow(month, closeDay).start > today;
 
   const effectiveItems = months.map((month) => carryForwardMap(itemSnapshotsByMonth, month) ?? []);
 
   // Row set: any category ever in an effective snapshot, union any category
-  // with actual activity in an eligible (non-future) month — a refund in a
+  // with actual activity in an eligible (non-future) cycle — a refund in a
   // budgetless category must still be visible, never a totals-only ghost.
   const rowIds = new Set<string>();
   effectiveItems.forEach((items) => items.forEach((i) => rowIds.add(i.categoryId)));
   months.forEach((month) => {
     if (isFuture(month)) return;
-    for (const catId of categoryActualsForCard(transactions, cardId, month).keys()) {
+    for (const catId of categoryActualsForCard(transactions, cardId, month, closeDay).keys()) {
       rowIds.add(catId);
     }
   });
@@ -285,16 +304,16 @@ export function buildGrid(
       (items) => items.find((i) => i.categoryId === categoryId)?.monthlyAmount ?? 0
     ),
     actuals: months.map((month) =>
-      isFuture(month) ? null : (categoryActualsForCard(transactions, cardId, month).get(categoryId) ?? 0)
+      isFuture(month) ? null : (categoryActualsForCard(transactions, cardId, month, closeDay).get(categoryId) ?? 0)
     ),
   }));
 
   const uncategorizedActuals = months.map((month) =>
-    isFuture(month) ? null : uncategorizedSpend(transactions, cardId, month)
+    isFuture(month) ? null : uncategorizedSpend(transactions, cardId, month, closeDay)
   );
 
   const totalActuals = months.map((month) =>
-    isFuture(month) ? null : totalSpendForCard(transactions, cardId, month)
+    isFuture(month) ? null : totalSpendForCard(transactions, cardId, month, closeDay)
   );
 
   const totalGoals = months.map((month) => carryForwardMap(goalsByMonth, month));
