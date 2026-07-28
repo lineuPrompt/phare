@@ -790,10 +790,15 @@
       "onTargetLabel": "On budget",
       "noTargetLabel": "No budget set",
       "uncategorized": "Uncategorized",
-      "empty": "No spending or budget data yet for this month."
+      "empty": "No spending or budget data yet for this month.",
+      "noActivity": "No transactions recorded for {month}.",
+      "variableTitle": "Variable spending",
+      "fixedTitle": "Fixed commitments this month",
+      "fixedSubtitle": "Recurring bills — nothing to be over or under here."
     },
     "goalProgress": {
       "title": "Goal progress",
+      "asOfToday": "As of today, regardless of the month shown above.",
       "notStartedBadge": "Not started yet",
       "notStartedPlan": "Plan: {amount}/mo → on track for {date}",
       "notStartedNoDate": "Set a target date on the Goals page to see a plan.",

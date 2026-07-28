@@ -790,10 +790,15 @@
       "onTargetLabel": "Dans le budget",
       "noTargetLabel": "Aucun budget établi",
       "uncategorized": "Non catégorisé",
-      "empty": "Aucune donnée de dépenses ou de budget pour ce mois-ci."
+      "empty": "Aucune donnée de dépenses ou de budget pour ce mois-ci.",
+      "noActivity": "Aucune transaction enregistrée pour {month}.",
+      "variableTitle": "Dépenses variables",
+      "fixedTitle": "Engagements fixes ce mois-ci",
+      "fixedSubtitle": "Factures récurrentes — rien ici à dépasser ou respecter."
     },
     "goalProgress": {
       "title": "Progression des objectifs",
+      "asOfToday": "En date d'aujourd'hui, peu importe le mois affiché ci-dessus.",
       "notStartedBadge": "Pas encore commencé",
       "notStartedPlan": "Plan : {amount}/mois → en voie d'atteindre {date}",
       "notStartedNoDate": "Fixez une date cible sur la page Objectifs pour voir un plan.",

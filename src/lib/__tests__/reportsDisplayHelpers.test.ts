@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   buildBudgetVsActualRows,
   sumOverTarget,
+  buildFixedCommitmentRows,
+  sumFixedCommitments,
   classifyGoalProgress,
   BudgetTarget,
 } from '../reportsDisplayHelpers';
@@ -70,6 +72,49 @@ describe('buildBudgetVsActualRows', () => {
     const manualSum = rows.reduce((s, r) => s + r.overAmount, 0);
     expect(headline).toBe(manualSum);
     expect(headline).toBe(300);
+  });
+});
+
+describe('buildFixedCommitmentRows', () => {
+  it('renders a plain list, no target/overAmount concept at all', () => {
+    const fixed = new Map([[CAT_HOUSING, 3113.20], [CAT_GROCERY, 220.50]]);
+    const rows = buildFixedCommitmentRows(fixed, new Map([[CAT_HOUSING, 'Housing'], [CAT_GROCERY, 'Transportation']]), 'Uncategorized');
+    expect(rows).toEqual([
+      { categoryId: CAT_HOUSING, categoryName: 'Housing', actual: 3113.20 },
+      { categoryId: CAT_GROCERY, categoryName: 'Transportation', actual: 220.50 },
+    ]);
+  });
+
+  it('sorts by actual descending', () => {
+    const fixed = new Map([[CAT_GROCERY, 100], [CAT_HOUSING, 3000]]);
+    const rows = buildFixedCommitmentRows(fixed, new Map(), 'Uncategorized');
+    expect(rows[0].categoryId).toBe(CAT_HOUSING);
+    expect(rows[1].categoryId).toBe(CAT_GROCERY);
+  });
+
+  it('sumFixedCommitments agrees with a direct reduce over the same rendered rows', () => {
+    const fixed = new Map([[CAT_HOUSING, 3113.20], [CAT_GROCERY, 220.50]]);
+    const rows = buildFixedCommitmentRows(fixed, new Map(), 'Uncategorized');
+    expect(sumFixedCommitments(rows)).toBe(rows.reduce((s, r) => s + r.actual, 0));
+    expect(sumFixedCommitments(rows)).toBe(3333.70);
+  });
+
+  it('a category appearing in both the variable chart and the fixed block is not double-counted in either total', () => {
+    // Transportation: $75 variable spend compared against a $75 budget (on
+    // target), plus $2,532.03 of fixed car payments/insurance listed
+    // separately with no target — the real household shape this fix targets.
+    const targets: BudgetTarget[] = [{ categoryId: CAT_HOUSING, name: 'Transportation', amount: 75 }];
+    const variableActuals = new Map([[CAT_HOUSING, 75]]);
+    const fixedActuals = new Map([[CAT_HOUSING, 2532.03]]);
+
+    const variableRows = buildBudgetVsActualRows(targets, variableActuals, new Map(), 'Uncategorized');
+    const fixedRows = buildFixedCommitmentRows(fixedActuals, new Map([[CAT_HOUSING, 'Transportation']]), 'Uncategorized');
+
+    expect(sumOverTarget(variableRows)).toBe(0); // exactly on budget, not "over" by the fixed amount
+    expect(sumFixedCommitments(fixedRows)).toBe(2532.03);
+    // Neither total absorbed the other's figure.
+    expect(variableRows.find((r) => r.categoryId === CAT_HOUSING)?.actual).toBe(75);
+    expect(fixedRows.find((r) => r.categoryId === CAT_HOUSING)?.actual).toBe(2532.03);
   });
 });
 

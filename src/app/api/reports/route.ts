@@ -2,16 +2,23 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { computeGoalBalance, computeMonthTotals, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff } from '@/lib/goalHelpers';
-import { householdCategoryActuals } from '@/lib/categorySpendHelpers';
-import type { EnvTx } from '@/lib/envelopeHelpers';
+import { householdCategoryActualsSplit, CategorySpendTx } from '@/lib/categorySpendHelpers';
 import { businessToday, businessMonth } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
-// GET /api/reports — data for the Reports page (charts A/B/C). Every figure
-// here is produced by an existing, already-tested helper (computeGoalBalance,
-// evaluateGoals, computeDebtPayoff, householdCategoryActuals) — this route
-// only fetches and passes through, same convention as /api/dashboard.
-export async function GET() {
+function monthBounds(month: string): { start: string; end: string } {
+  const start = `${month}-01`;
+  const [y, m] = month.split('-').map(Number);
+  const end = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+  return { start, end };
+}
+
+// GET /api/reports?month=YYYY-MM — data for the Reports page (charts A/B/C).
+// Every figure here is produced by an existing, already-tested helper
+// (computeGoalBalance, evaluateGoals, computeDebtPayoff,
+// householdCategoryActualsSplit) — this route only fetches and passes
+// through, same convention as /api/dashboard.
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
 
@@ -45,10 +52,20 @@ export async function GET() {
 
     const timezone = await getHouseholdTimezone(supabase, householdId);
     const today = businessToday(timezone);
-    const month = businessMonth(timezone); // YYYY-MM
-    const monthStart = `${month}-01`;
-    const [y, m] = month.split('-').map(Number);
-    const monthEnd = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+    const currentMonth = businessMonth(timezone); // YYYY-MM — always "now", never navigated
+
+    // The month charts A/B are scoped to — navigable via ?month=, defaulting
+    // to currentMonth. Chart C (goals) deliberately does NOT use this: it
+    // always reads currentMonth's capacity and `today`'s balances, regardless
+    // of what the family is browsing here (see goalAccounts block below) —
+    // "Goal progress — as of today" must never silently mix with a past
+    // month's spending.
+    const url = new URL(request.url);
+    const monthParam = url.searchParams.get('month');
+    const viewedMonth = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : currentMonth;
+
+    const { start: viewedMonthStart, end: viewedMonthEnd } = monthBounds(viewedMonth);
+    const { start: currentMonthStart, end: currentMonthEnd } = monthBounds(currentMonth);
 
     const { data: rawAccounts } = await supabase
       .from('accounts')
@@ -56,10 +73,10 @@ export async function GET() {
       .eq('household_id', householdId);
     const accounts = rawAccounts ?? [];
 
-    // Plan month for budget targets: latest saved budget row, falling back to
-    // the actuals month — identical fallback /api/dashboard uses, since
-    // budgets is a one-time plan snapshot, not a per-month recurring entry
-    // like card envelopes.
+    // Plan month for budget targets: latest saved budget row, independent of
+    // viewedMonth — budgets is a one-time plan snapshot (save-plan writes it
+    // once), not a per-month recurring entry like card envelopes, so the
+    // same target applies no matter which month's actuals are being viewed.
     const { data: latestBudget } = await supabase
       .from('budgets')
       .select('month')
@@ -67,7 +84,7 @@ export async function GET() {
       .order('month', { ascending: false })
       .limit(1)
       .maybeSingle();
-    const planMonth = (latestBudget?.month as string | undefined) ?? monthStart;
+    const planMonth = (latestBudget?.month as string | undefined) ?? viewedMonthStart;
 
     const [
       { data: budgetRows },
@@ -86,10 +103,13 @@ export async function GET() {
         .eq('type', 'expense'),
       supabase
         .from('transactions')
-        .select('id, amount, type, account_id, category_id, date, is_bridge')
+        // recurring_item_id is the fixed/variable split signal (see
+        // categorySpendHelpers.ts's file header for why it's this column and
+        // not recurrence_id) — additive over step 1/1b's select.
+        .select('id, amount, type, account_id, category_id, date, is_bridge, recurring_item_id')
         .eq('household_id', householdId)
-        .gte('date', monthStart)
-        .lt('date', monthEnd),
+        .gte('date', viewedMonthStart)
+        .lt('date', viewedMonthEnd),
     ]);
 
     type BudgetRow = { category_id: string; amount: number; categories: { name: string; name_fr: string | null } | null };
@@ -106,13 +126,19 @@ export async function GET() {
       nameFr: (c.name_fr as string | null) ?? null,
     }));
 
-    const txns = (rawTxns ?? []) as EnvTx[];
-    const actualsMap = householdCategoryActuals(txns, accounts, month);
-    const categoryActuals = Array.from(actualsMap.entries()).map(([categoryId, actual]) => ({ categoryId, actual }));
+    const txns = (rawTxns ?? []) as CategorySpendTx[];
+    // Today cutoff only actually excludes anything when viewedMonth is the
+    // current month (a past month's rows are all already ≤ today; a future
+    // month's rows are all > today and the whole month comes back empty,
+    // correctly — nothing has been spent yet in a month that hasn't arrived).
+    const { variable, fixed } = householdCategoryActualsSplit(txns, accounts, viewedMonth, today);
+    const variableActuals = Array.from(variable.entries()).map(([categoryId, actual]) => ({ categoryId, actual }));
+    const fixedActuals = Array.from(fixed.entries()).map(([categoryId, actual]) => ({ categoryId, actual }));
 
     // Goal progress — identical computation to /api/dashboard's goalAccounts
     // block (computeGoalBalance / evaluateGoals / computeDebtPayoff), reused
-    // rather than reimplemented, on this route's own fresh query.
+    // rather than reimplemented, on this route's own fresh query. Always
+    // anchored to `today`/currentMonth, never viewedMonth — see the note above.
     const goalTypeAccounts = accounts.filter((a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type));
     const goalAccountList = goalTypeAccounts.filter((a) => !a.is_sinking_fund);
     const goalIds = goalTypeAccounts.map((a) => a.id);
@@ -127,17 +153,19 @@ export async function GET() {
       goalTxData = data ?? [];
     }
 
-    // Household net cash flow for this month, needed by evaluateGoals — reuse
-    // the exact same chequing-scoped transactions/accounts computeMonthTotals
-    // would use. Fetched once more here rather than importing the dashboard
-    // route's already-computed value (routes don't share request state).
-    const { data: monthTxns } = await supabase
+    // Household net cash flow for THIS (current, real) month, needed by
+    // evaluateGoals — reuse the exact same chequing-scoped
+    // transactions/accounts computeMonthTotals would use. Fetched once more
+    // here rather than importing the dashboard route's already-computed
+    // value (routes don't share request state). Deliberately currentMonth,
+    // not viewedMonth.
+    const { data: currentMonthTxns } = await supabase
       .from('transactions')
       .select('id, amount, type, account_id, transfer_peer_id')
       .eq('household_id', householdId)
-      .gte('date', monthStart)
-      .lt('date', monthEnd);
-    const summary = computeMonthTotals(monthTxns ?? [], accounts);
+      .gte('date', currentMonthStart)
+      .lt('date', currentMonthEnd);
+    const summary = computeMonthTotals(currentMonthTxns ?? [], accounts);
 
     const withTarget = goalAccountList.filter((a) => a.goal_target != null);
     const rawGoalsForVerdict = withTarget.map((a) => ({
@@ -174,9 +202,10 @@ export async function GET() {
 
     return NextResponse.json({
       hasPlan: true,
-      month,
+      month: viewedMonth,
       budgetCategories,
-      categoryActuals,
+      variableActuals,
+      fixedActuals,
       categories,
       goalAccounts,
     });

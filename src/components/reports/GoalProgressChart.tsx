@@ -29,7 +29,11 @@ export default function GoalProgressChart({
 
   return (
     <div className="rounded-2xl bg-white p-6 sm:p-8" style={{ border: '1px solid #E5E7EB' }}>
-      <h2 className="text-xl font-bold mb-4" style={{ color: '#0F2044' }}>{t('title')}</h2>
+      <h2 className="text-xl font-bold mb-1" style={{ color: '#0F2044' }}>{t('title')}</h2>
+      {/* Goals are point-in-time, not month-scoped — this never changes with
+          the month navigation above, and says so explicitly rather than
+          silently mixing today's real balance with a past month's spending. */}
+      <p className="text-xs mb-4" style={{ color: '#9CA3AF' }}>{t('asOfToday')}</p>
 
       {goals.length === 0 ? (
         <p className="text-sm text-center py-6" style={{ color: '#6B7280' }}>{t('empty')}</p>

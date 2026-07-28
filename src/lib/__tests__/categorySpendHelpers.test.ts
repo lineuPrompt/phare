@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   householdCategoryActuals,
   householdCategoryActualRows,
+  householdCategoryActualsSplit,
   CategorySpendAccount,
 } from '../categorySpendHelpers';
 import { signedAmount, UNCATEGORIZED_ROW_ID, EnvTx } from '../envelopeHelpers';
@@ -12,6 +13,12 @@ const VISA = 'visa-1';
 const GOAL = 'goal-1';
 const CAT_HOUSING = 'cat-housing';
 const CAT_GROCERY = 'cat-grocery';
+
+// Fixed "today" for every fixture below except the future-dated cutoff tests,
+// which vary it deliberately — a date safely past every fixture date in this
+// file's June/July examples, so adding the cutoff never changes any
+// pre-existing test's outcome.
+const TODAY = '2026-06-30';
 
 const DEFAULT_ACCOUNTS: CategorySpendAccount[] = [
   { id: CHEQUING, type: 'chequing' },
@@ -30,6 +37,7 @@ type Tx = {
   date: string;
   category_id: string | null;
   is_bridge?: boolean;
+  recurring_item_id?: string | null;
 };
 
 function tx(overrides: Partial<Tx> & { amount: number; date: string }): Tx {
@@ -50,7 +58,7 @@ describe('categorized transfer rows are structurally excluded', () => {
     const draw: Tx = {
       account_id: GOAL, amount: -500, type: 'transfer', date: '2026-06-10', category_id: CAT_HOUSING,
     };
-    const result = householdCategoryActuals([draw] as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
+    const result = householdCategoryActuals([draw] as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
     expect(result.has(CAT_HOUSING)).toBe(false);
     expect(result.size).toBe(0);
   });
@@ -60,7 +68,7 @@ describe('categorized transfer rows are structurally excluded', () => {
       tx({ amount: 200, date: '2026-06-05', category_id: CAT_HOUSING }),
       { account_id: GOAL, amount: -500, type: 'transfer', date: '2026-06-10', category_id: CAT_HOUSING },
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
     // If the draw had leaked in, Housing would be 200 - 500 = -300.
     expect(result.get(CAT_HOUSING)).toBe(200);
   });
@@ -77,7 +85,7 @@ describe('card refund netting — regression, must not break', () => {
       tx({ account_id: VISA, amount: 80, type: 'expense', date: '2026-06-10', category_id: CAT_GROCERY }),
       tx({ account_id: VISA, amount: 10, type: 'income', date: '2026-06-15', category_id: CAT_GROCERY }),
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
     expect(result.get(CAT_GROCERY)).toBe(70);
   });
 
@@ -86,7 +94,7 @@ describe('card refund netting — regression, must not break', () => {
       tx({ account_id: VISA, amount: 50, type: 'expense', date: '2026-06-10', category_id: CAT_GROCERY }),
       tx({ account_id: VISA, amount: 50, type: 'income', date: '2026-06-11', category_id: CAT_GROCERY }),
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
     expect(result.has(CAT_GROCERY)).toBe(true);
     expect(result.get(CAT_GROCERY)).toBe(0);
   });
@@ -104,7 +112,7 @@ describe('chequing income is excluded — the step 1b fix', () => {
       tx({ amount: 150, date: '2026-06-06', category_id: null }),                 // a real uncategorized expense
       tx({ amount: 3000, date: '2026-06-01', type: 'income', category_id: null }), // a real paycheque
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
     expect(result.get(UNCATEGORIZED_ROW_ID)).toBe(150);
   });
 
@@ -117,7 +125,7 @@ describe('chequing income is excluded — the step 1b fix', () => {
       tx({ amount: 200, date: '2026-06-05', category_id: CAT_HOUSING }),
       tx({ amount: 3000, date: '2026-06-01', type: 'income', category_id: CAT_HOUSING }),
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
     expect(result.get(CAT_HOUSING)).toBe(200);
   });
 });
@@ -131,7 +139,7 @@ describe('uncategorized transactions', () => {
     const txns: Tx[] = [
       tx({ amount: 40, date: '2026-06-05', category_id: null }),
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
     expect(result.get(UNCATEGORIZED_ROW_ID)).toBe(40);
   });
 
@@ -141,7 +149,7 @@ describe('uncategorized transactions', () => {
       tx({ amount: 25, date: '2026-06-06', category_id: CAT_HOUSING }),
     ];
     const rows = householdCategoryActualRows(
-      txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', new Map([[CAT_HOUSING, 'Housing']]), 'Uncategorized'
+      txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY, new Map([[CAT_HOUSING, 'Housing']]), 'Uncategorized'
     );
     const uncategorizedRow = rows.find((r) => r.categoryId === UNCATEGORIZED_ROW_ID);
     expect(uncategorizedRow?.categoryName).toBe('Uncategorized');
@@ -157,7 +165,7 @@ describe('uncategorized transactions', () => {
 
 describe('a month with no transactions', () => {
   it('returns an empty map', () => {
-    const result = householdCategoryActuals([], DEFAULT_ACCOUNTS, '2026-06');
+    const result = householdCategoryActuals([], DEFAULT_ACCOUNTS, '2026-06', TODAY);
     expect(result.size).toBe(0);
   });
 
@@ -165,7 +173,7 @@ describe('a month with no transactions', () => {
     const txns: Tx[] = [
       tx({ amount: 100, date: '2026-05-20', category_id: CAT_HOUSING }),
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
     expect(result.size).toBe(0);
   });
 
@@ -173,8 +181,112 @@ describe('a month with no transactions', () => {
     const txns: Tx[] = [
       tx({ amount: 999, date: '2026-06-01', category_id: CAT_GROCERY, is_bridge: true }),
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
     expect(result.size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Today cutoff — future-dated rows within the selected month are plan, not
+// history (real household bug: two real expense rows dated after today
+// within the current month were counted as already spent).
+// ---------------------------------------------------------------------------
+
+describe('today cutoff', () => {
+  it('a future-dated expense within the current month is excluded from actuals', () => {
+    const txns: Tx[] = [
+      tx({ amount: 418.94, date: '2026-06-29', category_id: CAT_HOUSING }),
+    ];
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', '2026-06-28');
+    expect(result.has(CAT_HOUSING)).toBe(false);
+  });
+
+  it('the same row IS included once that date has passed (today advances)', () => {
+    const txns: Tx[] = [
+      tx({ amount: 418.94, date: '2026-06-29', category_id: CAT_HOUSING }),
+    ];
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', '2026-06-29');
+    expect(result.get(CAT_HOUSING)).toBe(418.94);
+  });
+
+  it('a row dated exactly today is included (cutoff is inclusive)', () => {
+    const txns: Tx[] = [
+      tx({ amount: 50, date: '2026-06-15', category_id: CAT_HOUSING }),
+    ];
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', '2026-06-15');
+    expect(result.get(CAT_HOUSING)).toBe(50);
+  });
+
+  it('a past month is entirely history regardless of today — nothing in it is future-dated relative to a later today', () => {
+    const txns: Tx[] = [
+      tx({ amount: 200, date: '2026-06-05', category_id: CAT_HOUSING }),
+      tx({ amount: 150, date: '2026-06-29', category_id: CAT_HOUSING }),
+    ];
+    // Viewing June from a vantage point of July 28 — every June row is in the past.
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', '2026-07-28');
+    expect(result.get(CAT_HOUSING)).toBe(350);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fixed vs variable split — recurring_item_id is the signal (NOT
+// recurrence_id, a different column used only by manual ExpenseForm repeat
+// bursts — confirmed against a real household's data before choosing this).
+// ---------------------------------------------------------------------------
+
+describe('householdCategoryActualsSplit', () => {
+  it('a transaction WITH recurring_item_id lands in fixed, never in variable', () => {
+    const txns: Tx[] = [
+      tx({ amount: 1500, date: '2026-06-13', category_id: CAT_HOUSING, recurring_item_id: 'rec-mortgage' }),
+    ];
+    const { variable, fixed } = householdCategoryActualsSplit(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
+    expect(fixed.get(CAT_HOUSING)).toBe(1500);
+    expect(variable.has(CAT_HOUSING)).toBe(false);
+  });
+
+  it('a transaction WITHOUT recurring_item_id lands in variable, never in fixed', () => {
+    const txns: Tx[] = [
+      tx({ amount: 61.87, date: '2026-06-16', category_id: CAT_HOUSING }),
+    ];
+    const { variable, fixed } = householdCategoryActualsSplit(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
+    expect(variable.get(CAT_HOUSING)).toBe(61.87);
+    expect(fixed.has(CAT_HOUSING)).toBe(false);
+  });
+
+  it('a manual repeat-burst row (recurrence_id-style manual entry, no recurring_item_id) still lands in variable', () => {
+    // recurrence_id itself isn't part of CategorySpendTx (it never feeds this
+    // split) — a manual installment burst is just a row with no
+    // recurring_item_id, so it falls into variable by the same rule as any
+    // other one-off manual entry. See file header for why recurrence_id was
+    // rejected as the split signal.
+    const txns: Tx[] = [
+      tx({ amount: 135.61, date: '2026-06-16', category_id: CAT_HOUSING, recurring_item_id: null }),
+    ];
+    const { variable, fixed } = householdCategoryActualsSplit(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
+    expect(variable.get(CAT_HOUSING)).toBe(135.61);
+    expect(fixed.size).toBe(0);
+  });
+
+  it('a category appearing in both buckets is not double-counted in either total — they partition the combined total exactly', () => {
+    const txns: Tx[] = [
+      tx({ amount: 418.94, date: '2026-06-01', category_id: CAT_HOUSING, recurring_item_id: 'rec-car' }), // fixed
+      tx({ amount: 75, date: '2026-06-16', category_id: CAT_HOUSING }),                                    // variable
+    ];
+    const combined = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
+    const { variable, fixed } = householdCategoryActualsSplit(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', TODAY);
+    expect(fixed.get(CAT_HOUSING)).toBe(418.94);
+    expect(variable.get(CAT_HOUSING)).toBe(75);
+    expect((fixed.get(CAT_HOUSING) ?? 0) + (variable.get(CAT_HOUSING) ?? 0)).toBe(combined.get(CAT_HOUSING));
+  });
+
+  it('the today cutoff and chequing-income exclusion apply identically inside the split, not just the combined view', () => {
+    const txns: Tx[] = [
+      tx({ amount: 418.94, date: '2026-06-29', category_id: CAT_HOUSING, recurring_item_id: 'rec-car' }), // future
+      tx({ amount: 3000, date: '2026-06-01', type: 'income', category_id: null }),                          // paycheque
+    ];
+    const { variable, fixed } = householdCategoryActualsSplit(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', '2026-06-28');
+    expect(fixed.size).toBe(0);
+    expect(variable.size).toBe(0);
   });
 });
 
@@ -192,7 +304,7 @@ describe('consistency with computeMonthTotals', () => {
     ];
 
     const totals = computeMonthTotals(txns as TxRow[], accounts);
-    const categoryTotal = Array.from(householdCategoryActuals(txns as EnvTx[], accounts, '2026-06').values())
+    const categoryTotal = Array.from(householdCategoryActuals(txns as EnvTx[], accounts, '2026-06', TODAY).values())
       .reduce((sum, v) => sum + v, 0);
 
     expect(totals.totalExpenses).toBe(350);
@@ -212,7 +324,7 @@ describe('consistency with computeMonthTotals', () => {
     ];
 
     const totals = computeMonthTotals(txns as TxRow[], accounts);
-    const categoryTotal = Array.from(householdCategoryActuals(txns as EnvTx[], accounts, '2026-06').values())
+    const categoryTotal = Array.from(householdCategoryActuals(txns as EnvTx[], accounts, '2026-06', TODAY).values())
       .reduce((sum, v) => sum + v, 0);
 
     expect(totals.totalExpenses).toBe(350);
@@ -236,7 +348,7 @@ describe('consistency with computeMonthTotals', () => {
     ];
 
     const totals = computeMonthTotals(txns as TxRow[], accounts);
-    const categoryTotal = Array.from(householdCategoryActuals(txns as EnvTx[], accounts, '2026-06').values())
+    const categoryTotal = Array.from(householdCategoryActuals(txns as EnvTx[], accounts, '2026-06', TODAY).values())
       .reduce((sum, v) => sum + v, 0);
 
     // Cash-flow view: chequing housing (200) + this month's bridge, i.e. LAST

@@ -104,9 +104,52 @@ export function buildBudgetVsActualRows(
  * The headline "how much over budget" figure — summed directly from the same
  * rows the chart renders (one source of truth, no separate computation
  * path). Always >= 0.
+ *
+ * Fed ONLY variable rows (see buildFixedCommitmentRows below) — a fixed bill
+ * has no target to be over, so it must never contribute to this figure.
  */
 export function sumOverTarget(rows: BudgetVsActualRow[]): number {
   return r2(rows.reduce((sum, r) => sum + r.overAmount, 0));
+}
+
+// ---------------------------------------------------------------------------
+// Chart A, fixed side — "Fixed commitments this month"
+// ---------------------------------------------------------------------------
+
+export type FixedCommitmentRow = {
+  categoryId: string;
+  categoryName: string;
+  actual: number;
+};
+
+/**
+ * Shapes the FIXED half of categorySpendHelpers.householdCategoryActualsSplit
+ * — a plain list, judgment-free by design: no target, no over/under, no
+ * color coding. A mortgage is not something to be over on (see the reports
+ * route's split rationale). Sorted by actual descending, same convention as
+ * the untargeted rows in buildBudgetVsActualRows. Includes Uncategorized
+ * under the caller-supplied label if a fixed row somehow lacks a category
+ * (never expected in practice — every recurring_items row is created with
+ * one at onboarding/setup — but never silently dropped if it happens).
+ */
+export function buildFixedCommitmentRows(
+  fixedActualsByCategory: Map<string, number>,
+  categoryNames: Map<string, string>,
+  uncategorizedLabel: string
+): FixedCommitmentRow[] {
+  return Array.from(fixedActualsByCategory.entries())
+    .map(([categoryId, actual]) => ({
+      categoryId,
+      categoryName:
+        categoryId === UNCATEGORIZED_ROW_ID ? uncategorizedLabel : (categoryNames.get(categoryId) ?? '?'),
+      actual,
+    }))
+    .sort((a, b) => b.actual - a.actual);
+}
+
+/** Sum of a fixed-commitment block — same "reshape, don't recompute" rule. */
+export function sumFixedCommitments(rows: FixedCommitmentRow[]): number {
+  return r2(rows.reduce((sum, r) => sum + r.actual, 0));
 }
 
 // ---------------------------------------------------------------------------
