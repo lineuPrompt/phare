@@ -224,10 +224,13 @@ export async function GET(request: Request) {
 
     const [txResult, budgetResult, sfResult, convResult, unanchoredIncomeResult, unanchoredExpenseResult] =
       await Promise.all([
-        // Transactions for the ACTUALS month (not the plan month)
+        // Transactions for the ACTUALS month (not the plan month). category_id
+        // is additive here (Visual Reports step 1) — computeMonthTotals below
+        // doesn't read it; it's fetched now so a future category-actuals chart
+        // can reuse this same query instead of adding a second one.
         supabase
           .from('transactions')
-          .select('id, amount, type, account_id, transfer_peer_id')
+          .select('id, amount, type, account_id, transfer_peer_id, category_id')
           .eq('household_id', householdId)
           .gte('date', actualsMonth)
           .lt('date', actualsMonthEnd),
