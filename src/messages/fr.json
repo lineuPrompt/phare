@@ -412,6 +412,7 @@
       "recurring": "Récurrents",
       "reconcile": "Audit",
       "goals": "Objectifs",
+      "reports": "Rapports",
       "sinkingFunds": "Fonds de prévoyance",
       "household": "Foyer",
       "cards": "Cartes",
@@ -774,6 +775,38 @@
     "confirmDeleteBtn": "Arrêter et supprimer",
     "deleting": "Suppression…",
     "deleteError": "Impossible de supprimer le fonds — réessayez."
+  },
+  "reports": {
+    "title": "Rapports",
+    "subtitle": "Voyez où va votre argent, en un coup d'œil.",
+    "loading": "Chargement de vos rapports…",
+    "budgetVsActual": {
+      "title": "Budget vs. réel",
+      "subtitle": "Par catégorie, ce mois-ci",
+      "headlineOver": "{amount} au-dessus du budget ce mois-ci, dans {count, plural, one {1 catégorie} other {# catégories}}.",
+      "headlineOnTarget": "Tout est dans le budget ce mois-ci — aucune catégorie ne dépasse sa cible.",
+      "overLabel": "{amount} de dépassement",
+      "underLabel": "{amount} restant",
+      "onTargetLabel": "Dans le budget",
+      "noTargetLabel": "Aucun budget établi",
+      "uncategorized": "Non catégorisé",
+      "empty": "Aucune donnée de dépenses ou de budget pour ce mois-ci."
+    },
+    "goalProgress": {
+      "title": "Progression des objectifs",
+      "notStartedBadge": "Pas encore commencé",
+      "notStartedPlan": "Plan : {amount}/mois → en voie d'atteindre {date}",
+      "notStartedNoDate": "Fixez une date cible sur la page Objectifs pour voir un plan.",
+      "fundedBadge": "Atteint",
+      "noTarget": "Aucune cible établie",
+      "onTrackBadge": "En bonne voie",
+      "behindBadge": "En retard",
+      "estimated": "Estimé : {date}",
+      "debtOwed": "{amount} dû",
+      "debtPaidOff": "Remboursé",
+      "empty": "Aucun objectif pour l'instant — ajoutez-en un sur la page Objectifs.",
+      "savedOfTarget": "{saved} sur {target}"
+    }
   },
   "recurring": {
     "title": "Récurrents",

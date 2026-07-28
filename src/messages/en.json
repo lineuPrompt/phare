@@ -412,6 +412,7 @@
       "recurring": "Recurring",
       "reconcile": "Audit",
       "goals": "Goals",
+      "reports": "Reports",
       "sinkingFunds": "Sinking Funds",
       "household": "Household",
       "cards": "Cards",
@@ -774,6 +775,38 @@
     "confirmDeleteBtn": "Stop and remove",
     "deleting": "Removing…",
     "deleteError": "Couldn't remove the fund — try again."
+  },
+  "reports": {
+    "title": "Reports",
+    "subtitle": "See where your money is going, at a glance.",
+    "loading": "Loading your reports…",
+    "budgetVsActual": {
+      "title": "Budget vs. actual",
+      "subtitle": "By category, this month",
+      "headlineOver": "{amount} over budget this month, across {count, plural, one {1 category} other {# categories}}.",
+      "headlineOnTarget": "Right on budget this month — no category is over its target.",
+      "overLabel": "{amount} over",
+      "underLabel": "{amount} left",
+      "onTargetLabel": "On budget",
+      "noTargetLabel": "No budget set",
+      "uncategorized": "Uncategorized",
+      "empty": "No spending or budget data yet for this month."
+    },
+    "goalProgress": {
+      "title": "Goal progress",
+      "notStartedBadge": "Not started yet",
+      "notStartedPlan": "Plan: {amount}/mo → on track for {date}",
+      "notStartedNoDate": "Set a target date on the Goals page to see a plan.",
+      "fundedBadge": "Funded",
+      "noTarget": "No target set yet",
+      "onTrackBadge": "On track",
+      "behindBadge": "Behind pace",
+      "estimated": "Estimated: {date}",
+      "debtOwed": "{amount} owed",
+      "debtPaidOff": "Paid off",
+      "empty": "No goals yet — add one on the Goals page.",
+      "savedOfTarget": "{saved} of {target}"
+    }
   },
   "recurring": {
     "title": "Recurring",
