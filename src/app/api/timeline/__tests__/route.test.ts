@@ -42,6 +42,12 @@ function makeSupabaseMock(script: Record<string, Resolution[]>) {
     auth: { getUser: async () => ({ data: { user: { id: 'user-1' } }, error: null }) },
     from: (table: string) => ({
       select: (...args: unknown[]) => entry(table, args),
+      // Only 'events' inserts are exercised by these tests (logEvent) — a
+      // plain resolved success is all any caller here needs.
+      insert: (row: unknown) => {
+        calls.push({ table, args: ['insert', row] });
+        return Promise.resolve({ error: null });
+      },
     }),
   };
 
@@ -169,5 +175,72 @@ describe('GET /api/timeline — windowStart param and unbalancedDays', () => {
 
     expect(res.status).toBe(200);
     expect(json.balancesStartDate).toBe('2026-07-01'); // default windowStart, not clamped forward to Sept
+  });
+});
+
+describe('GET /api/timeline — timeline_opened funnel event', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    ensureBridgesMock.mockClear();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-20T12:00:00'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const baseScript = {
+    users: [{ data: { household_id: 'hh1' } }],
+    households: [{ data: { timezone: 'America/Toronto' } }],
+    accounts: [
+      { data: { id: 'acc-1', type: 'chequing' } },
+      { data: [] },
+    ],
+    household_members: [{ data: { id: 'mem-1' } }],
+    account_balance_anchors: [{ data: [{ anchor_date: '2026-07-01', balance: 1000 }] }],
+    transactions: [{ data: [] }],
+  };
+
+  it('fires once on a genuine Timeline page load (pageView=1)', async () => {
+    const { client, calls } = makeSupabaseMock(baseScript);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const res = await getTimeline('account=acc-1&pageView=1');
+    expect(res.status).toBe(200);
+
+    const eventInserts = calls.filter((c) => c.table === 'events');
+    expect(eventInserts).toHaveLength(1);
+    expect((eventInserts[0].args[1] as { event_type: string }).event_type).toBe('timeline_opened');
+  });
+
+  it('does NOT fire when pageView is absent — the dashboard\'s dip-tile call to this same endpoint must never count as a Timeline open', async () => {
+    const { client, calls } = makeSupabaseMock(baseScript);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const res = await getTimeline('account=acc-1');
+    expect(res.status).toBe(200);
+
+    const eventInserts = calls.filter((c) => c.table === 'events');
+    expect(eventInserts).toHaveLength(0);
+  });
+
+  it('fires on every real load, not gated to the first ever — a repeat visit still logs (frequency signal, not a one-time milestone)', async () => {
+    const { client, calls } = makeSupabaseMock(baseScript);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    await getTimeline('account=acc-1&pageView=1');
+
+    // A second, independent page load (fresh mock instance, same household)
+    // must fire again — this is not an isFirstEvent-gated milestone.
+    const { client: client2, calls: calls2 } = makeSupabaseMock(baseScript);
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client2);
+    await getTimeline('account=acc-1&pageView=1');
+
+    expect(calls.filter((c) => c.table === 'events')).toHaveLength(1);
+    expect(calls2.filter((c) => c.table === 'events')).toHaveLength(1);
   });
 });

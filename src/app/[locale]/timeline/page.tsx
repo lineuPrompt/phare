@@ -127,7 +127,10 @@ export default function TimelinePage() {
           }
         }
 
-        return fetch(`/api/timeline?account=${chequingId}${windowStartParam}`)
+        // pageView=1 marks this as a genuine Timeline page load (distinct
+        // from the dashboard's own call to this endpoint for the dip tile)
+        // — see eventLogger.ts's FUNNEL INSTRUMENTATION note.
+        return fetch(`/api/timeline?account=${chequingId}${windowStartParam}&pageView=1`)
           .then((r) => (r.status === 401 ? null : r.ok ? r.json() : null));
       })
       .then((d: TimelineResponse | null) => { if (d) setData(d); })

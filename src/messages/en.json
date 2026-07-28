@@ -412,7 +412,6 @@
       "recurring": "Recurring",
       "reconcile": "Audit",
       "goals": "Goals",
-      "reports": "Reports",
       "sinkingFunds": "Sinking Funds",
       "household": "Household",
       "cards": "Cards",
@@ -776,27 +775,6 @@
     "confirmDeleteBtn": "Stop and remove",
     "deleting": "Removing…",
     "deleteError": "Couldn't remove the fund — try again."
-  },
-  "reports": {
-    "title": "Reports",
-    "subtitle": "See where your money is going, at a glance.",
-    "loading": "Loading your reports…",
-    "budgetVsActual": {
-      "title": "Budget vs. actual",
-      "subtitle": "By category, this month",
-      "headlineOver": "{amount} over budget this month, across {count, plural, one {1 category} other {# categories}}.",
-      "headlineOnTarget": "Right on budget this month — no category is over its target.",
-      "overLabel": "{amount} over",
-      "underLabel": "{amount} left",
-      "onTargetLabel": "On budget",
-      "noTargetLabel": "No budget set",
-      "uncategorized": "Uncategorized",
-      "empty": "No spending or budget data yet for this month.",
-      "noActivity": "No transactions recorded for {month}.",
-      "variableTitle": "Variable spending",
-      "fixedTitle": "Fixed commitments this month",
-      "fixedSubtitle": "Recurring bills — nothing to be over or under here."
-    }
   },
   "recurring": {
     "title": "Recurring",

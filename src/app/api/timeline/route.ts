@@ -10,6 +10,7 @@ import { groupUnbalancedTransactions } from '@/lib/timelineDisplayHelpers';
 import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
 import { businessToday } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
+import { logEvent } from '@/lib/eventLogger';
 
 const TRANSACTION_COLUMNS =
   'id, date, description, amount, type, recurring_item_id, recurrence_id, installment_label, transfer_peer_id, is_bridge, bridge_source_account, bridge_source_month';
@@ -64,6 +65,10 @@ export async function GET(request: Request) {
     if (windowStartParam && !/^\d{4}-\d{2}-01$/.test(windowStartParam)) {
       return NextResponse.json({ error: 'Invalid windowStart param (expected YYYY-MM-01)' }, { status: 400 });
     }
+    // Distinguishes a genuine Timeline PAGE load from the dashboard's own
+    // call to this same endpoint (the dip tile) — only the Timeline page
+    // sends this. See eventLogger.ts's FUNNEL INSTRUMENTATION note.
+    const isPageView = url.searchParams.get('pageView') === '1';
 
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -75,6 +80,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'No household' }, { status: 400 });
     }
     const householdId = userRow.household_id as string;
+
+    if (isPageView) {
+      void logEvent(supabase, householdId, user.id, 'timeline_opened');
+    }
 
     const { data: account } = await supabase
       .from('accounts')

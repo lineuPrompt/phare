@@ -35,7 +35,27 @@ export type EventType =
   // attempt fails either check; metadata carries which check(s) triggered
   // it and whether the retry passed or which deterministic fallback was
   // used. Never fired on the common (clean-first-attempt) path.
-  | 'review_text_guard_retried';
+  | 'review_text_guard_retried'
+  // FUNNEL INSTRUMENTATION (2026-07-31) — these events look unused right
+  // now; they aren't. They exist so that, once there's enough data (aimed
+  // at November), someone can ask retention questions this app currently
+  // has no way to answer: do families who create a goal (completed_onboarding
+  // → created_first_goal) retain better than those who never do? Does
+  // opening Timeline predict retention more strongly than opening the
+  // monthly review does (timeline_opened vs. viewed_monthly_review, the
+  // existing "strongest available retention predictor" per the Coaching
+  // Layer spec)? None of that can be asked without the raw event rows
+  // existing first — this is that raw data, not a dashboard, not analyzed
+  // yet. Fired from GET /api/timeline, gated on a `pageView` marker so the
+  // dashboard's own /api/timeline call (for the dip tile) never counts as
+  // "Timeline opened" — see that route for the distinguishing signal. Fires
+  // on every real page load, same convention as viewed_monthly_review (no
+  // isFirstEvent gate — this is a frequency signal, not a one-time
+  // milestone); the Timeline page itself only calls this once per mount
+  // (month navigation re-slices client-side, no refetch), so this is
+  // already "once per real load, never per nav" by construction on the
+  // client side, not by a dedup check here.
+  | 'timeline_opened';
 
 /**
  * Insert one event row.

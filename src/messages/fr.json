@@ -412,7 +412,6 @@
       "recurring": "Récurrents",
       "reconcile": "Audit",
       "goals": "Objectifs",
-      "reports": "Rapports",
       "sinkingFunds": "Fonds de prévoyance",
       "household": "Foyer",
       "cards": "Cartes",
@@ -776,27 +775,6 @@
     "confirmDeleteBtn": "Arrêter et supprimer",
     "deleting": "Suppression…",
     "deleteError": "Impossible de supprimer le fonds — réessayez."
-  },
-  "reports": {
-    "title": "Rapports",
-    "subtitle": "Voyez où va votre argent, en un coup d'œil.",
-    "loading": "Chargement de vos rapports…",
-    "budgetVsActual": {
-      "title": "Budget vs. réel",
-      "subtitle": "Par catégorie, ce mois-ci",
-      "headlineOver": "{amount} au-dessus du budget ce mois-ci, dans {count, plural, one {1 catégorie} other {# catégories}}.",
-      "headlineOnTarget": "Tout est dans le budget ce mois-ci — aucune catégorie ne dépasse sa cible.",
-      "overLabel": "{amount} de dépassement",
-      "underLabel": "{amount} restant",
-      "onTargetLabel": "Dans le budget",
-      "noTargetLabel": "Aucun budget établi",
-      "uncategorized": "Non catégorisé",
-      "empty": "Aucune donnée de dépenses ou de budget pour ce mois-ci.",
-      "noActivity": "Aucune transaction enregistrée pour {month}.",
-      "variableTitle": "Dépenses variables",
-      "fixedTitle": "Engagements fixes ce mois-ci",
-      "fixedSubtitle": "Factures récurrentes — rien ici à dépasser ou respecter."
-    }
   },
   "recurring": {
     "title": "Récurrents",

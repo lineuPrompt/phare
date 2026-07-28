@@ -1,5 +1,15 @@
 /**
- * Household-wide actual spend by category, for visual reports (charts A/B).
+ * Household-wide actual spend by category.
+ *
+ * NO CALLER RIGHT NOW (2026-07-31) — /reports (charts A/B) was removed
+ * entirely; this file is retained deliberately, not dead-code-by-oversight.
+ * The math here (the today-cutoff fix, the fixed/variable split, the
+ * account-type income-exclusion rule) survived real scrutiny — a real
+ * household's numbers, a diagnosed scope-mismatch bug, a corrected split
+ * signal — and is the one place that work is preserved if a future surface
+ * needs household-wide category actuals again. Its test suite is kept green
+ * for the same reason. Safe to delete outright if this reasoning no longer
+ * applies whenever someone next looks at it.
  *
  * Distinct from envelopeHelpers.categoryActualsForCard, which is deliberately
  * scoped to ONE card — this sums across every account in the household.
@@ -42,8 +52,10 @@
  * `budgets` rows only ever cover a category's VARIABLE portion (save-plan
  * never writes a budget row for an isFixed line) — comparing a variable-only
  * target against a fixed+variable actual is an apples-to-oranges scope
- * mismatch, not a data bug. See reportsDisplayHelpers.ts for how the two
- * buckets render (compared vs. budget / listed judgment-free).
+ * mismatch, not a data bug. (The display layer that rendered these two
+ * buckets — compared vs. budget / listed judgment-free — lived in the now-
+ * removed /reports; the split itself is kept here regardless, per the note
+ * at the top of this file.)
  *
  * SCOPE IS CALENDAR-MONTH, NOT CASH-FLOW MONTH — this deliberately diverges
  * from dashboardHelpers.computeMonthTotals, and the two will legitimately
@@ -120,8 +132,8 @@ function computeSignedSpendRows(
 /**
  * Returns Map<category_id | UNCATEGORIZED_ROW_ID, netAmount> across ALL
  * accounts for the given month, cut off at `today` (see file header) —
- * fixed and variable spend combined. Kept for callers that want the whole
- * category total regardless of the fixed/variable split (e.g. chart B).
+ * fixed and variable spend combined. Kept for a future caller that wants the
+ * whole category total regardless of the fixed/variable split.
  * A category with real activity that nets to exactly 0 (e.g. a refund
  * cancelling a purchase) still appears, with value 0 — only categories with
  * zero activity are absent, never listed as a phantom zero.
