@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   householdCategoryActuals,
   householdCategoryActualRows,
+  CategorySpendAccount,
 } from '../categorySpendHelpers';
 import { signedAmount, UNCATEGORIZED_ROW_ID, EnvTx } from '../envelopeHelpers';
 import { computeMonthTotals, TxRow, AccountRow } from '../dashboardHelpers';
@@ -11,6 +12,12 @@ const VISA = 'visa-1';
 const GOAL = 'goal-1';
 const CAT_HOUSING = 'cat-housing';
 const CAT_GROCERY = 'cat-grocery';
+
+const DEFAULT_ACCOUNTS: CategorySpendAccount[] = [
+  { id: CHEQUING, type: 'chequing' },
+  { id: VISA, type: 'credit_card' },
+  { id: GOAL, type: 'savings' },
+];
 
 // One fixture shape that structurally satisfies both EnvTx (for the new
 // helper) and TxRow (for computeMonthTotals) — lets the same array feed both
@@ -43,7 +50,7 @@ describe('categorized transfer rows are structurally excluded', () => {
     const draw: Tx = {
       account_id: GOAL, amount: -500, type: 'transfer', date: '2026-06-10', category_id: CAT_HOUSING,
     };
-    const result = householdCategoryActuals([draw] as EnvTx[], '2026-06');
+    const result = householdCategoryActuals([draw] as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
     expect(result.has(CAT_HOUSING)).toBe(false);
     expect(result.size).toBe(0);
   });
@@ -53,23 +60,24 @@ describe('categorized transfer rows are structurally excluded', () => {
       tx({ amount: 200, date: '2026-06-05', category_id: CAT_HOUSING }),
       { account_id: GOAL, amount: -500, type: 'transfer', date: '2026-06-10', category_id: CAT_HOUSING },
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
     // If the draw had leaked in, Housing would be 200 - 500 = -300.
     expect(result.get(CAT_HOUSING)).toBe(200);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Refund/income netting — consistent with signedAmount and Card Envelopes
+// Refund/income netting — account type distinguishes a card refund (nets)
+// from real chequing income (excluded). Both directions regression-tested.
 // ---------------------------------------------------------------------------
 
-describe('refund netting', () => {
-  it('an income (refund) row nets against its category, same sign rule as categoryActualsForCard', () => {
+describe('card refund netting — regression, must not break', () => {
+  it('an income (refund) row on a CARD nets against its category, same sign rule as categoryActualsForCard', () => {
     const txns: Tx[] = [
       tx({ account_id: VISA, amount: 80, type: 'expense', date: '2026-06-10', category_id: CAT_GROCERY }),
       tx({ account_id: VISA, amount: 10, type: 'income', date: '2026-06-15', category_id: CAT_GROCERY }),
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
     expect(result.get(CAT_GROCERY)).toBe(70);
   });
 
@@ -78,9 +86,39 @@ describe('refund netting', () => {
       tx({ account_id: VISA, amount: 50, type: 'expense', date: '2026-06-10', category_id: CAT_GROCERY }),
       tx({ account_id: VISA, amount: 50, type: 'income', date: '2026-06-11', category_id: CAT_GROCERY }),
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
     expect(result.has(CAT_GROCERY)).toBe(true);
     expect(result.get(CAT_GROCERY)).toBe(0);
+  });
+});
+
+describe('chequing income is excluded — the step 1b fix', () => {
+  it('chequing income (a paycheque, category_id null) is excluded entirely — Uncategorized = 150, not -2850', () => {
+    // Step 1 (before this fix) yielded -2850 here: signedAmount netted the
+    // paycheque as if it were a refund, because it can't tell "real income"
+    // from "a refund" on its own. Step 1b fixes this by excluding
+    // chequing-side income before signedAmount ever runs on it — the account
+    // (not the row) is the signal, same distinction computeMonthTotals
+    // already makes. See categorySpendHelpers.ts's file header, THE RULE.
+    const txns: Tx[] = [
+      tx({ amount: 150, date: '2026-06-06', category_id: null }),                 // a real uncategorized expense
+      tx({ amount: 3000, date: '2026-06-01', type: 'income', category_id: null }), // a real paycheque
+    ];
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
+    expect(result.get(UNCATEGORIZED_ROW_ID)).toBe(150);
+  });
+
+  it('a chequing income row WITH a category_id set is still excluded, not netted against that category', () => {
+    // Someone will eventually categorize a paycheque (e.g. tag it "Salary").
+    // It must not become negative spend under Housing just because it now
+    // carries a category_id — account type is the only signal used, per the
+    // instruction to avoid any category-naming or description heuristic.
+    const txns: Tx[] = [
+      tx({ amount: 200, date: '2026-06-05', category_id: CAT_HOUSING }),
+      tx({ amount: 3000, date: '2026-06-01', type: 'income', category_id: CAT_HOUSING }),
+    ];
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
+    expect(result.get(CAT_HOUSING)).toBe(200);
   });
 });
 
@@ -93,7 +131,7 @@ describe('uncategorized transactions', () => {
     const txns: Tx[] = [
       tx({ amount: 40, date: '2026-06-05', category_id: null }),
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
     expect(result.get(UNCATEGORIZED_ROW_ID)).toBe(40);
   });
 
@@ -103,7 +141,7 @@ describe('uncategorized transactions', () => {
       tx({ amount: 25, date: '2026-06-06', category_id: CAT_HOUSING }),
     ];
     const rows = householdCategoryActualRows(
-      txns as EnvTx[], '2026-06', new Map([[CAT_HOUSING, 'Housing']]), 'Uncategorized'
+      txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06', new Map([[CAT_HOUSING, 'Housing']]), 'Uncategorized'
     );
     const uncategorizedRow = rows.find((r) => r.categoryId === UNCATEGORIZED_ROW_ID);
     expect(uncategorizedRow?.categoryName).toBe('Uncategorized');
@@ -119,7 +157,7 @@ describe('uncategorized transactions', () => {
 
 describe('a month with no transactions', () => {
   it('returns an empty map', () => {
-    const result = householdCategoryActuals([], '2026-06');
+    const result = householdCategoryActuals([], DEFAULT_ACCOUNTS, '2026-06');
     expect(result.size).toBe(0);
   });
 
@@ -127,7 +165,7 @@ describe('a month with no transactions', () => {
     const txns: Tx[] = [
       tx({ amount: 100, date: '2026-05-20', category_id: CAT_HOUSING }),
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
     expect(result.size).toBe(0);
   });
 
@@ -135,7 +173,7 @@ describe('a month with no transactions', () => {
     const txns: Tx[] = [
       tx({ amount: 999, date: '2026-06-01', category_id: CAT_GROCERY, is_bridge: true }),
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], '2026-06');
+    const result = householdCategoryActuals(txns as EnvTx[], DEFAULT_ACCOUNTS, '2026-06');
     expect(result.size).toBe(0);
   });
 });
@@ -154,36 +192,31 @@ describe('consistency with computeMonthTotals', () => {
     ];
 
     const totals = computeMonthTotals(txns as TxRow[], accounts);
-    const categoryTotal = Array.from(householdCategoryActuals(txns as EnvTx[], '2026-06').values())
+    const categoryTotal = Array.from(householdCategoryActuals(txns as EnvTx[], accounts, '2026-06').values())
       .reduce((sum, v) => sum + v, 0);
 
     expect(totals.totalExpenses).toBe(350);
     expect(categoryTotal).toBe(350);
   });
 
-  // KNOWN GAP — surfaced by this audit, not fixed here (see file header of
-  // categorySpendHelpers.ts). Deliberately left as a documented, pinned
-  // behavior rather than patched, since patching it means deciding how to
-  // tell "real income" apart from "a refund," a scope decision this build
-  // step doesn't own.
-  it('KNOWN GAP: real chequing income (a paycheque, category_id null) nets NEGATIVE into Uncategorized — signedAmount cannot tell a paycheque from a refund', () => {
-    // save-plan/route.ts always saves income recurring rows with
-    // category_id: null and account_id = chequing (never a card) — so this
-    // is not a hypothetical fixture, it is exactly how every real household's
-    // paycheque row looks. categoryActualsForCard never sees this problem
-    // because it's scoped to one card and paycheques never land on a card;
-    // summing household-wide (this helper) makes it a live risk.
+  it('still agrees exactly when chequing income is present, now that it is excluded rather than netted', () => {
+    // Re-derivation check: before step 1b this test would have failed (income
+    // would have netted into Uncategorized and thrown the totals off by the
+    // income amount). With the fix, income contributes to neither total, so
+    // they still agree.
+    const accounts: AccountRow[] = [{ id: CHEQUING, type: 'chequing' }];
     const txns: Tx[] = [
-      tx({ amount: 150, date: '2026-06-06', category_id: null }),         // a real uncategorized expense
-      tx({ amount: 3000, date: '2026-06-01', type: 'income', category_id: null }), // a real paycheque
+      tx({ amount: 200, date: '2026-06-05', category_id: CAT_HOUSING }),
+      tx({ amount: 150, date: '2026-06-06', category_id: null }),
+      tx({ amount: 3000, date: '2026-06-01', type: 'income', category_id: null }),
     ];
-    const result = householdCategoryActuals(txns as EnvTx[], '2026-06');
-    // Honest expectation given the current, unmodified signedAmount reuse:
-    // 150 (expense) - 3000 (income, netted as if it were a refund) = -2850.
-    // A chart rendering this bucket as "Uncategorized spend: -$2850" would be
-    // nonsensical. This test exists to keep that fact visible, not to argue
-    // it's acceptable.
-    expect(result.get(UNCATEGORIZED_ROW_ID)).toBe(-2850);
+
+    const totals = computeMonthTotals(txns as TxRow[], accounts);
+    const categoryTotal = Array.from(householdCategoryActuals(txns as EnvTx[], accounts, '2026-06').values())
+      .reduce((sum, v) => sum + v, 0);
+
+    expect(totals.totalExpenses).toBe(350);
+    expect(categoryTotal).toBe(350);
   });
 
   it('legitimately diverges by exactly one card-cycle timing shift when a card is involved — documented, not a bug', () => {
@@ -203,7 +236,7 @@ describe('consistency with computeMonthTotals', () => {
     ];
 
     const totals = computeMonthTotals(txns as TxRow[], accounts);
-    const categoryTotal = Array.from(householdCategoryActuals(txns as EnvTx[], '2026-06').values())
+    const categoryTotal = Array.from(householdCategoryActuals(txns as EnvTx[], accounts, '2026-06').values())
       .reduce((sum, v) => sum + v, 0);
 
     // Cash-flow view: chequing housing (200) + this month's bridge, i.e. LAST
