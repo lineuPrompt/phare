@@ -9,10 +9,12 @@ import {
   carryForwardMap,
   buildGrid,
   groupEntriesByCategory,
+  isPostCloseEntry,
+  sumRolledOverEntries,
   EnvTx,
   CardTxRow,
 } from '../envelopeHelpers';
-import { statementCycleWindow, bridgePaymentDate } from '../dateHelpers';
+import { statementCycleWindow, bridgePaymentDate, cardCycleContext } from '../dateHelpers';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -437,3 +439,54 @@ describe('groupEntriesByCategory — calendar-month display contract', () => {
   );
 });
 
+
+// ---------------------------------------------------------------------------
+// Card-cycle display support — the same entries above, now flagged/summed
+// rather than just proven to land in different bridge cycles.
+// ---------------------------------------------------------------------------
+
+describe('isPostCloseEntry / sumRolledOverEntries', () => {
+  const CLOSE_DAY = 27;
+  const PAY_DAY = 17;
+
+  it('an entry dated after the close day is flagged', () => {
+    const ctx = cardCycleContext('2026-07', CLOSE_DAY, PAY_DAY);
+    expect(isPostCloseEntry('2026-07-28', ctx.window.end)).toBe(true);
+  });
+
+  it('an entry dated on or before the close day is NOT flagged', () => {
+    const ctx = cardCycleContext('2026-07', CLOSE_DAY, PAY_DAY);
+    expect(isPostCloseEntry('2026-07-27', ctx.window.end)).toBe(false);
+    expect(isPostCloseEntry('2026-07-01', ctx.window.end)).toBe(false);
+  });
+
+  it('sumRolledOverEntries equals the sum of just the flagged entries — the same list the page renders', () => {
+    const ctx = cardCycleContext('2026-07', CLOSE_DAY, PAY_DAY);
+    const entries = [
+      { date: '2026-07-10', type: 'expense', amount: 50 },   // in-cycle, not flagged
+      { date: '2026-07-28', type: 'expense', amount: 100 },  // post-close, flagged
+      { date: '2026-07-30', type: 'expense', amount: 25 },   // post-close, flagged
+    ];
+    const flaggedSum = entries
+      .filter((e) => isPostCloseEntry(e.date, ctx.window.end))
+      .reduce((s, e) => s + e.amount, 0);
+    expect(sumRolledOverEntries(entries, ctx.window.end)).toBe(flaggedSum);
+    expect(sumRolledOverEntries(entries, ctx.window.end)).toBe(125);
+  });
+
+  it('nets a refund against post-close spend, same signedAmount convention as totalSpendForCard', () => {
+    const ctx = cardCycleContext('2026-07', CLOSE_DAY, PAY_DAY);
+    const entries = [
+      { date: '2026-07-28', type: 'expense', amount: 100 },
+      { date: '2026-07-29', type: 'income', amount: 20 }, // a refund on a post-close purchase
+    ];
+    expect(sumRolledOverEntries(entries, ctx.window.end)).toBe(80);
+  });
+
+  it('a card with no close day set never flags anything — the whole calendar month is one cycle', () => {
+    const ctx = cardCycleContext('2026-07', null, PAY_DAY);
+    expect(isPostCloseEntry('2026-07-31', ctx.window.end)).toBe(false);
+    const entries = [{ date: '2026-07-31', type: 'expense', amount: 100 }];
+    expect(sumRolledOverEntries(entries, ctx.window.end)).toBe(0);
+  });
+});

@@ -221,6 +221,9 @@ export default function CardsPage() {
                         locale={locale}
                         onEditEnvelope={() => setEditingEnvelope(true)}
                         onEntryChanged={onExpenseSaved}
+                        month={selectedMonth}
+                        statementCloseDay={envelopeData.card.statement_close_day ?? null}
+                        paymentDay={envelopeData.card.payment_day ?? null}
                       />
                     )}
 

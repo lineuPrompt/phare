@@ -9,6 +9,7 @@ import {
   bridgePaymentDate,
   nextOccurrence,
   statementCycleWindow,
+  cardCycleContext,
   businessToday,
   businessMonth,
   excludeSkippedDates,
@@ -476,6 +477,31 @@ describe('statementCycleWindow', () => {
   it('clamps the previous month close day too (close day 31, cycle month March → prev Feb clamps to 28)', () => {
     const window = statementCycleWindow('2026-03', 31);
     expect(window).toEqual({ start: '2026-03-01', end: '2026-03-31' });
+  });
+});
+
+describe('cardCycleContext', () => {
+  it('Visa Avion fixture: close 27, pay 17, viewing July → window Jun28-Jul27, pays Aug17, next cycle pays Sep17', () => {
+    const ctx = cardCycleContext('2026-07', 27, 17);
+    expect(ctx.window).toEqual({ start: '2026-06-28', end: '2026-07-27' });
+    expect(ctx.paysOn).toBe('2026-08-17');
+    expect(ctx.nextPaysOn).toBe('2026-09-17');
+  });
+
+  it('handles a December→January cycle-month rollover', () => {
+    const ctx = cardCycleContext('2026-12', 15, 5);
+    expect(ctx.paysOn).toBe('2027-01-05');
+    expect(ctx.nextPaysOn).toBe('2027-02-05');
+  });
+
+  it('defaults payDay to 1 when null, same convention as bridgeHelpers', () => {
+    const ctx = cardCycleContext('2026-07', 27, null);
+    expect(ctx.paysOn).toBe('2026-08-01');
+  });
+
+  it('closeDay null falls back to the calendar month, matching statementCycleWindow', () => {
+    const ctx = cardCycleContext('2026-07', null, 17);
+    expect(ctx.window).toEqual({ start: '2026-07-01', end: '2026-07-31' });
   });
 });
 

@@ -329,3 +329,48 @@ export function statementCycleWindow(
 
   return { start, end };
 }
+
+export type CardCycleContext = {
+  window: { start: string; end: string };
+  // This viewed month's own cycle — its statement closed within this
+  // calendar month, paid the following month.
+  paysOn: string;
+  // The FOLLOWING cycle's payment date — what a transaction dated after
+  // window.end (still within this viewed calendar month) actually rolls
+  // into, since it belongs to next month's statement cycle, not this one.
+  nextPaysOn: string;
+};
+
+/**
+ * Composes statementCycleWindow + bridgePaymentDate into the display-ready
+ * shape the card envelope page needs to surface its cycle context alongside
+ * the calendar-month goal — no new date math beyond the trivial "month after
+ * viewedMonth" string increment (same wraparound pattern statementCycleWindow
+ * and bridgePaymentDate already use inline); every actual date (window
+ * bounds, both payment dates) comes from those two existing functions.
+ *
+ * closeDay null falls through to statementCycleWindow's own calendar-month
+ * fallback — window spans the whole viewed month, so nothing within it can
+ * ever be "post-close" (see envelopeHelpers.isPostCloseEntry), and this
+ * context becomes informationally a no-op for a card with no close day set.
+ * payDay null defaults to 1, same convention bridgeHelpers.ts already uses
+ * for bridge-row insertion (`card.payment_day ?? 1`).
+ */
+export function cardCycleContext(
+  viewedMonth: string,       // YYYY-MM
+  closeDay: number | null,
+  payDay: number | null
+): CardCycleContext {
+  const window = statementCycleWindow(viewedMonth, closeDay);
+  const effectivePayDay = payDay ?? 1;
+
+  const [y, m] = viewedMonth.split('-').map(Number);
+  const nextYear = y + Math.floor(m / 12);
+  const nextCycleMonth = `${nextYear}-${String((m % 12) + 1).padStart(2, '0')}`;
+
+  return {
+    window,
+    paysOn: bridgePaymentDate(viewedMonth, effectivePayDay),
+    nextPaysOn: bridgePaymentDate(nextCycleMonth, effectivePayDay),
+  };
+}

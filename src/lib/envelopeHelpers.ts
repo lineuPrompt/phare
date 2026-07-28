@@ -112,6 +112,40 @@ export function groupEntriesByCategory(
   return { byCategory, uncategorized };
 }
 
+// ---------------------------------------------------------------------------
+// Card-cycle display support (2026-07-30) — surfaces the statement cycle
+// alongside the calendar-month envelope. Does NOT change the DISPLAY
+// CONTRACT above: an entry's calendar-month grouping/visibility is untouched;
+// this only flags which already-visible entries belong to the FOLLOWING
+// cycle's payment (see dateHelpers.cardCycleContext), so the truth about
+// when something is actually paid is told without moving it out of the
+// calendar month it's genuinely in.
+// ---------------------------------------------------------------------------
+
+/** True when entryDate falls after the current cycle's close date (cardCycleContext's window.end) — it belongs to the next cycle's payment, not this one. */
+export function isPostCloseEntry(entryDate: string, cycleWindowEnd: string): boolean {
+  return entryDate > cycleWindowEnd;
+}
+
+/**
+ * Net (expense minus refund) of just the post-close-day entries in a list —
+ * same signedAmount netting rule as totalSpendForCard, applied to whatever
+ * entry list the caller already has on screen (never a fresh query), so this
+ * can never drift from what's rendered.
+ */
+export function sumRolledOverEntries(
+  entries: { date: string; type: string; amount: number | string }[],
+  cycleWindowEnd: string
+): number {
+  let sum = 0;
+  for (const e of entries) {
+    if (!isPostCloseEntry(e.date, cycleWindowEnd)) continue;
+    const signed = signedAmount(e);
+    if (signed !== null) sum += signed;
+  }
+  return r2(sum);
+}
+
 // Net (expenses minus refunds) of transactions on cardId in month with null category_id.
 export function uncategorizedSpend(
   transactions: EnvTx[],

@@ -445,6 +445,8 @@
       "uncategorized": "Uncategorized",
       "noEnvelope": "No envelope set — add categories below to track spending by category.",
       "goalVsAllocated": "Goal {goal} · sub-budgets {sum} · {over} over-allocated",
+      "cycleLine": "Cycle: {start} – {end} · pays {paysOn}",
+      "rollsIntoNext": "{amount} of this month's spend lands on your {date} payment.",
       "entries": {
         "noEntries": "No entries this month.",
         "edit": "Edit",
@@ -452,7 +454,8 @@
         "save": "Save",
         "saving": "Saving...",
         "cancel": "Cancel",
-        "confirmDelete": "Delete this entry?"
+        "confirmDelete": "Delete this entry?",
+        "rollsIntoNext": "Rolls into your {date} payment"
       }
     },
     "editor": {
