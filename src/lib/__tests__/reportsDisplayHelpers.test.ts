@@ -4,7 +4,6 @@ import {
   sumOverTarget,
   buildFixedCommitmentRows,
   sumFixedCommitments,
-  classifyGoalProgress,
   BudgetTarget,
 } from '../reportsDisplayHelpers';
 import { UNCATEGORIZED_ROW_ID } from '../envelopeHelpers';
@@ -115,54 +114,5 @@ describe('buildFixedCommitmentRows', () => {
     // Neither total absorbed the other's figure.
     expect(variableRows.find((r) => r.categoryId === CAT_HOUSING)?.actual).toBe(75);
     expect(fixedRows.find((r) => r.categoryId === CAT_HOUSING)?.actual).toBe(2532.03);
-  });
-});
-
-describe('classifyGoalProgress', () => {
-  const baseGoal = {
-    id: 'g1', name: 'Emergency fund', isDebt: false, balance: 0,
-    goalTarget: 5000 as number | null, onTrack: null as boolean | null,
-    monthlyContribution: null as number | null, estimatedDate: null as string | null,
-    debtPayoff: null,
-  };
-
-  it('a debt goal gets kind "debt" and no percentage, regardless of balance', () => {
-    const result = classifyGoalProgress({ ...baseGoal, isDebt: true, balance: -2000, goalTarget: 0 });
-    expect(result.kind).toBe('debt');
-    expect(result.pct).toBeNull();
-  });
-
-  it('no target set at all → kind "noTarget", no percentage', () => {
-    const result = classifyGoalProgress({ ...baseGoal, goalTarget: null });
-    expect(result.kind).toBe('noTarget');
-    expect(result.pct).toBeNull();
-  });
-
-  it('$0 balance with a real code-computed ETA → "notStarted", never treated as behind/failure', () => {
-    const result = classifyGoalProgress({
-      ...baseGoal, balance: 0, onTrack: false, // even if the raw verdict were "behind"
-      monthlyContribution: 200, estimatedDate: '2027-01',
-    });
-    expect(result.kind).toBe('notStarted');
-    expect(result.pct).toBe(0);
-  });
-
-  it('$0 balance with no target date yet is still "notStarted", not a warning state', () => {
-    const result = classifyGoalProgress({
-      ...baseGoal, balance: 0, onTrack: false, monthlyContribution: null, estimatedDate: null,
-    });
-    expect(result.kind).toBe('notStarted');
-  });
-
-  it('partial progress computes a plain percentage of target', () => {
-    const result = classifyGoalProgress({ ...baseGoal, balance: 2500, goalTarget: 5000, onTrack: true });
-    expect(result.kind).toBe('inProgress');
-    expect(result.pct).toBe(50);
-  });
-
-  it('balance at or above target is "funded", capped at 100%', () => {
-    const result = classifyGoalProgress({ ...baseGoal, balance: 6000, goalTarget: 5000 });
-    expect(result.kind).toBe('funded');
-    expect(result.pct).toBe(100);
   });
 });

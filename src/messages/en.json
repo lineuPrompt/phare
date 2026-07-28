@@ -795,22 +795,6 @@
       "variableTitle": "Variable spending",
       "fixedTitle": "Fixed commitments this month",
       "fixedSubtitle": "Recurring bills — nothing to be over or under here."
-    },
-    "goalProgress": {
-      "title": "Goal progress",
-      "asOfToday": "As of today, regardless of the month shown above.",
-      "notStartedBadge": "Not started yet",
-      "notStartedPlan": "Plan: {amount}/mo → on track for {date}",
-      "notStartedNoDate": "Set a target date on the Goals page to see a plan.",
-      "fundedBadge": "Funded",
-      "noTarget": "No target set yet",
-      "onTrackBadge": "On track",
-      "behindBadge": "Behind pace",
-      "estimated": "Estimated: {date}",
-      "debtOwed": "{amount} owed",
-      "debtPaidOff": "Paid off",
-      "empty": "No goals yet — add one on the Goals page.",
-      "savedOfTarget": "{saved} of {target}"
     }
   },
   "recurring": {

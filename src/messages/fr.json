@@ -795,22 +795,6 @@
       "variableTitle": "Dépenses variables",
       "fixedTitle": "Engagements fixes ce mois-ci",
       "fixedSubtitle": "Factures récurrentes — rien ici à dépasser ou respecter."
-    },
-    "goalProgress": {
-      "title": "Progression des objectifs",
-      "asOfToday": "En date d'aujourd'hui, peu importe le mois affiché ci-dessus.",
-      "notStartedBadge": "Pas encore commencé",
-      "notStartedPlan": "Plan : {amount}/mois → en voie d'atteindre {date}",
-      "notStartedNoDate": "Fixez une date cible sur la page Objectifs pour voir un plan.",
-      "fundedBadge": "Atteint",
-      "noTarget": "Aucune cible établie",
-      "onTrackBadge": "En bonne voie",
-      "behindBadge": "En retard",
-      "estimated": "Estimé : {date}",
-      "debtOwed": "{amount} dû",
-      "debtPaidOff": "Remboursé",
-      "empty": "Aucun objectif pour l'instant — ajoutez-en un sur la page Objectifs.",
-      "savedOfTarget": "{saved} sur {target}"
     }
   },
   "recurring": {

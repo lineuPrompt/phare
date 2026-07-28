@@ -1,14 +1,15 @@
 /**
- * Pure display-shaping for the Reports page (charts A and C). No computation
- * of source figures happens here — targets come from the budgets table,
- * actuals from categorySpendHelpers.householdCategoryActuals, and goal
- * figures from goalHelpers.evaluateGoals/computeDebtPayoff, all upstream and
+ * Pure display-shaping for the Reports page (chart A). No computation of
+ * source figures happens here — targets come from the budgets table, actuals
+ * from categorySpendHelpers.householdCategoryActualsSplit, both upstream and
  * already tested. This file only sorts, buckets, and labels what those
  * helpers already produced.
+ *
+ * Goal progress (formerly chart C) was removed — redundant with the
+ * dashboard's GoalsCard and the Goals page itself.
  */
 
 import { UNCATEGORIZED_ROW_ID } from './envelopeHelpers';
-import type { GoalAccount } from '@/components/dashboard/types';
 
 function r2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -150,66 +151,4 @@ export function buildFixedCommitmentRows(
 /** Sum of a fixed-commitment block — same "reshape, don't recompute" rule. */
 export function sumFixedCommitments(rows: FixedCommitmentRow[]): number {
   return r2(rows.reduce((sum, r) => sum + r.actual, 0));
-}
-
-// ---------------------------------------------------------------------------
-// Chart C — goal progress
-// ---------------------------------------------------------------------------
-
-export type GoalProgressKind = 'debt' | 'noTarget' | 'notStarted' | 'inProgress' | 'funded';
-
-export type GoalProgressRow = Pick<
-  GoalAccount,
-  'id' | 'name' | 'balance' | 'goalTarget' | 'onTrack' | 'monthlyContribution' | 'estimatedDate' | 'debtPayoff'
-> & {
-  kind: GoalProgressKind;
-  // 0-100, null when a percentage isn't meaningful (debt has no fixed
-  // baseline to bar against; noTarget has no denominator).
-  pct: number | null;
-};
-
-/**
- * TREATMENT — debt goals: no progress bar. A debt's target is 0 by design
- * (dashboardHelpers.GOAL_ACCOUNT_TYPES comment) — there is no original-amount
- * baseline in GoalAccount to measure "percentage paid off" against, only the
- * current balance owed. Inventing one here would be exactly the kind of
- * figure this build must never compute. Debt goals get kind: 'debt', pct:
- * null; the component renders balance owed + debtPayoff's own
- * monthlyPayment/targetDate instead, same as the existing dashboard GoalsCard.
- *
- * TREATMENT — $0-or-negative balance (not started yet), see constraints:
- * this must never read as failure regardless of the code's onTrack verdict.
- * A goal that's behind because nothing has been saved YET is not the same
- * situation as one that's behind despite active contributions — kind:
- * 'notStarted' overrides onTrack styling entirely; the component shows the
- * plan (monthlyContribution + estimatedDate) neutrally when one exists, or a
- * plain "set a target date" prompt when it doesn't (no target date →
- * monthlyContribution/estimatedDate are null, per evaluateGoals' no_date
- * status) — never a warning color either way.
- */
-export type GoalProgressInput = Pick<
-  GoalAccount,
-  'id' | 'name' | 'isDebt' | 'balance' | 'goalTarget' | 'onTrack' | 'monthlyContribution' | 'estimatedDate' | 'debtPayoff'
->;
-
-export function classifyGoalProgress(goal: GoalProgressInput): GoalProgressRow {
-  const base = {
-    id: goal.id, name: goal.name, balance: goal.balance, goalTarget: goal.goalTarget,
-    onTrack: goal.onTrack, monthlyContribution: goal.monthlyContribution,
-    estimatedDate: goal.estimatedDate, debtPayoff: goal.debtPayoff,
-  };
-
-  if (goal.isDebt) {
-    return { ...base, kind: 'debt', pct: null };
-  }
-  if (goal.goalTarget == null || goal.goalTarget <= 0) {
-    return { ...base, kind: 'noTarget', pct: null };
-  }
-  if (goal.balance <= 0) {
-    return { ...base, kind: 'notStarted', pct: 0 };
-  }
-  if (goal.balance >= goal.goalTarget) {
-    return { ...base, kind: 'funded', pct: 100 };
-  }
-  return { ...base, kind: 'inProgress', pct: Math.min(100, Math.round((goal.balance / goal.goalTarget) * 100)) };
 }

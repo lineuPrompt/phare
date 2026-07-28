@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { computeGoalBalance, computeMonthTotals, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
-import { evaluateGoals, isDebtGoalName, computeDebtPayoff } from '@/lib/goalHelpers';
 import { householdCategoryActualsSplit, CategorySpendTx } from '@/lib/categorySpendHelpers';
 import { businessToday, businessMonth } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
@@ -13,11 +11,11 @@ function monthBounds(month: string): { start: string; end: string } {
   return { start, end };
 }
 
-// GET /api/reports?month=YYYY-MM — data for the Reports page (charts A/B/C).
-// Every figure here is produced by an existing, already-tested helper
-// (computeGoalBalance, evaluateGoals, computeDebtPayoff,
-// householdCategoryActualsSplit) — this route only fetches and passes
-// through, same convention as /api/dashboard.
+// GET /api/reports?month=YYYY-MM — data for the Reports page (chart A;
+// goal progress was removed as redundant with the dashboard/goals page —
+// see project handoff). Every figure here comes from
+// householdCategoryActualsSplit, already tested — this route only fetches
+// and passes through, same convention as /api/dashboard.
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
@@ -54,22 +52,19 @@ export async function GET(request: Request) {
     const today = businessToday(timezone);
     const currentMonth = businessMonth(timezone); // YYYY-MM — always "now", never navigated
 
-    // The month charts A/B are scoped to — navigable via ?month=, defaulting
-    // to currentMonth. Chart C (goals) deliberately does NOT use this: it
-    // always reads currentMonth's capacity and `today`'s balances, regardless
-    // of what the family is browsing here (see goalAccounts block below) —
-    // "Goal progress — as of today" must never silently mix with a past
-    // month's spending.
+    // The month chart A is scoped to — navigable via ?month=, defaulting to
+    // currentMonth.
     const url = new URL(request.url);
     const monthParam = url.searchParams.get('month');
     const viewedMonth = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : currentMonth;
 
     const { start: viewedMonthStart, end: viewedMonthEnd } = monthBounds(viewedMonth);
-    const { start: currentMonthStart, end: currentMonthEnd } = monthBounds(currentMonth);
 
+    // Only id/type are needed — householdCategoryActualsSplit uses type
+    // solely to identify chequing accounts (for the income-exclusion rule).
     const { data: rawAccounts } = await supabase
       .from('accounts')
-      .select('id, name, type, goal_target, goal_target_date, is_sinking_fund')
+      .select('id, type')
       .eq('household_id', householdId);
     const accounts = rawAccounts ?? [];
 
@@ -135,71 +130,6 @@ export async function GET(request: Request) {
     const variableActuals = Array.from(variable.entries()).map(([categoryId, actual]) => ({ categoryId, actual }));
     const fixedActuals = Array.from(fixed.entries()).map(([categoryId, actual]) => ({ categoryId, actual }));
 
-    // Goal progress — identical computation to /api/dashboard's goalAccounts
-    // block (computeGoalBalance / evaluateGoals / computeDebtPayoff), reused
-    // rather than reimplemented, on this route's own fresh query. Always
-    // anchored to `today`/currentMonth, never viewedMonth — see the note above.
-    const goalTypeAccounts = accounts.filter((a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type));
-    const goalAccountList = goalTypeAccounts.filter((a) => !a.is_sinking_fund);
-    const goalIds = goalTypeAccounts.map((a) => a.id);
-
-    let goalTxData: { amount: number | string; type: string; account_id: string | null; date?: string }[] = [];
-    if (goalIds.length > 0) {
-      const { data } = await supabase
-        .from('transactions')
-        .select('amount, type, account_id, date')
-        .eq('household_id', householdId)
-        .in('account_id', goalIds);
-      goalTxData = data ?? [];
-    }
-
-    // Household net cash flow for THIS (current, real) month, needed by
-    // evaluateGoals — reuse the exact same chequing-scoped
-    // transactions/accounts computeMonthTotals would use. Fetched once more
-    // here rather than importing the dashboard route's already-computed
-    // value (routes don't share request state). Deliberately currentMonth,
-    // not viewedMonth.
-    const { data: currentMonthTxns } = await supabase
-      .from('transactions')
-      .select('id, amount, type, account_id, transfer_peer_id')
-      .eq('household_id', householdId)
-      .gte('date', currentMonthStart)
-      .lt('date', currentMonthEnd);
-    const summary = computeMonthTotals(currentMonthTxns ?? [], accounts);
-
-    const withTarget = goalAccountList.filter((a) => a.goal_target != null);
-    const rawGoalsForVerdict = withTarget.map((a) => ({
-      accountId: a.id,
-      name: a.name,
-      targetAmount: Number(a.goal_target),
-      savedSoFar: computeGoalBalance(goalTxData, a.id, today),
-      targetDate: a.goal_target_date ?? null,
-      isDebt: a.type === 'debt',
-    }));
-    const explicitDebtAcct = rawGoalsForVerdict.find((g) => g.isDebt);
-    const debtLineAcct = explicitDebtAcct ?? rawGoalsForVerdict.find((g) => isDebtGoalName(g.name));
-    const nonDebtGoalsAcct = rawGoalsForVerdict.filter((g) => g !== debtLineAcct);
-    const verdicts = evaluateGoals(nonDebtGoalsAcct, summary.netCashFlow, today);
-    const verdictByAccountId = new Map(nonDebtGoalsAcct.map((g, i) => [g.accountId, verdicts[i]]));
-    const debtPayoffAcct = debtLineAcct ? computeDebtPayoff(debtLineAcct, today) : null;
-
-    const goalAccounts = goalAccountList.map((a) => {
-      const verdict = verdictByAccountId.get(a.id) ?? null;
-      return {
-        id: a.id,
-        name: a.name,
-        type: a.type,
-        isDebt: a.type === 'debt',
-        balance: computeGoalBalance(goalTxData, a.id, today),
-        goalTarget: a.goal_target != null ? Number(a.goal_target) : null,
-        goalTargetDate: a.goal_target_date ?? null,
-        onTrack: verdict?.onTrack ?? null,
-        monthlyContribution: verdict?.monthlyContribution ?? null,
-        estimatedDate: verdict?.estimatedDate ?? null,
-        debtPayoff: debtLineAcct?.accountId === a.id ? debtPayoffAcct : null,
-      };
-    });
-
     return NextResponse.json({
       hasPlan: true,
       month: viewedMonth,
@@ -207,7 +137,6 @@ export async function GET(request: Request) {
       variableActuals,
       fixedActuals,
       categories,
-      goalAccounts,
     });
   } catch (error) {
     console.error('GET /api/reports error:', error);

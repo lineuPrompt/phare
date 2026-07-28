@@ -7,8 +7,7 @@ import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import EmptyState from '@/components/dashboard/EmptyState';
 import BudgetVsActualChart from '@/components/reports/BudgetVsActualChart';
-import GoalProgressChart from '@/components/reports/GoalProgressChart';
-import { buildBudgetVsActualRows, buildFixedCommitmentRows, GoalProgressInput } from '@/lib/reportsDisplayHelpers';
+import { buildBudgetVsActualRows, buildFixedCommitmentRows } from '@/lib/reportsDisplayHelpers';
 import { categoryDisplayName } from '@/lib/categoryTranslations';
 import { addMonthsToMonth } from '@/lib/goalHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
@@ -22,7 +21,6 @@ type ReportsResponse =
       variableActuals: { categoryId: string; actual: number }[];
       fixedActuals: { categoryId: string; actual: number }[];
       categories: { id: string; name: string; nameFr: string | null }[];
-      goalAccounts: GoalProgressInput[];
     };
 
 export default function ReportsPage() {
@@ -178,7 +176,6 @@ export default function ReportsPage() {
                 locale={locale}
               />
             </div>
-            <GoalProgressChart goals={data.goalAccounts} locale={locale} />
           </div>
         </div>
       </div>
