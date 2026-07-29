@@ -1,5 +1,3 @@
-import type { CardCycleRemainder } from '@/lib/projectionHelpers';
-
 export type DashboardSummary = {
   totalIncome: number;
   totalExpenses: number;
@@ -116,10 +114,6 @@ export type DashboardData = {
   // YYYY-MM of the chequing account's earliest balance anchor, or null if
   // none exists — the snapshot's lower navigation bound, matching Timeline's.
   earliestAnchorMonth?: string | null;
-  // Each card's unspent envelope room for the statement cycle whose payment
-  // lands in `month` — feeds the "Projected month-end" tile's
-  // computeProjectedMonthEnd. [] when the household has no credit cards.
-  cardEnvelopeRemainders?: CardCycleRemainder[];
 };
 
 export function formatCurrency(amount: number, locale: string) {

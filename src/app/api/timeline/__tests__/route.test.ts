@@ -244,3 +244,68 @@ describe('GET /api/timeline — timeline_opened funnel event', () => {
     expect(calls2.filter((c) => c.table === 'events')).toHaveLength(1);
   });
 });
+
+describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    ensureBridgesMock.mockClear();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-20T12:00:00'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const baseScript = {
+    users: [{ data: { household_id: 'hh1' } }],
+    households: [{ data: { timezone: 'America/Toronto' } }],
+    accounts: [
+      { data: { id: 'acc-1', type: 'chequing' } },
+      { data: [] }, // no credit cards — skips the monthly_goals/card-transactions queries
+    ],
+    household_members: [{ data: { id: 'mem-1' } }],
+    account_balance_anchors: [{ data: [{ anchor_date: '2026-07-01', balance: 1000 }] }],
+    transactions: [
+      { data: [] }, // main real-walk fetch
+      { data: [] }, // trailing variable-spend window fetch
+    ],
+    recurring_items: [
+      { count: 0, data: [] }, // unanchored income count
+      { count: 0, data: [] }, // unanchored expense count
+    ],
+  };
+
+  it('omits `plan` entirely when includePlan is not passed (no extra queries run)', async () => {
+    const { client, calls } = makeSupabaseMock({ ...baseScript, transactions: [{ data: [] }] });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const res = await getTimeline('account=acc-1');
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.plan).toBeNull();
+    expect(calls.filter((c) => c.table === 'recurring_items')).toHaveLength(0);
+  });
+
+  it('includePlan=1 returns a 12-month chain anchored at todayBalance', async () => {
+    const { client } = makeSupabaseMock(baseScript);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const res = await getTimeline('account=acc-1&includePlan=1');
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.todayBalance).toBe(1000);
+    expect(json.plan).not.toBeNull();
+    expect(json.plan.months).toHaveLength(12);
+    expect(json.plan.months[0].month).toBe('2026-07');
+    expect(json.plan.months[0].isPartialMonth).toBe(true);
+    // No fixed rows, no card cost, no variable history → the anchor never moves.
+    expect(json.plan.months.every((m: { balance: number }) => m.balance === 1000)).toBe(true);
+    expect(json.plan.variableEstimateMonthly).toBe(0);
+  });
+});

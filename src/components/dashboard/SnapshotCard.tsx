@@ -1,7 +1,6 @@
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
-import type { CardCycleRemainder } from '@/lib/projectionHelpers';
 import { DashboardSummary, formatCurrency } from './types';
 
 export default function SnapshotCard({
@@ -15,9 +14,6 @@ export default function SnapshotCard({
   loading,
   unanchoredIncomeCount,
   unanchoredExpenseCount,
-  projectedMonthEnd,
-  carriedInAmount,
-  cardEnvelopeRemainders,
 }: {
   summary: DashboardSummary;
   locale: string;
@@ -38,25 +34,10 @@ export default function SnapshotCard({
   loading?: boolean;
   unanchoredIncomeCount?: number;
   unanchoredExpenseCount?: number;
-  // Projection section (below the surplus/deficit row) — month-scoped to the
-  // SAME `month` this card already navigates, so it lives inside this card
-  // rather than as a separate tile elsewhere on the dashboard. null/undefined
-  // hides the section entirely (no anchor, no timeline data yet, etc.) —
-  // never a fabricated figure. See projectionHelpers.ts for the math; this
-  // component only renders numbers it's handed.
-  projectedMonthEnd?: number | null;
-  carriedInAmount?: number;
-  cardEnvelopeRemainders?: CardCycleRemainder[];
 }) {
   const t = useTranslations('dashboard');
   const tNav = useTranslations('dashboard.snapshotNav');
-  const tProjected = useTranslations('dashboard.projectedTile');
   const surplus = summary.netCashFlow >= 0;
-
-  const showProjection =
-    projectedMonthEnd !== undefined && projectedMonthEnd !== null &&
-    carriedInAmount !== undefined && cardEnvelopeRemainders !== undefined;
-  const noDataCardNames = (cardEnvelopeRemainders ?? []).filter((r) => r.noData).map((r) => r.cardName);
 
   const [y, m] = month.split('-').map(Number);
   const monthLabel = new Date(y, m - 1, 1).toLocaleDateString(
@@ -186,61 +167,6 @@ export default function SnapshotCard({
           {t('viewRealBalance')}
         </Link>
       </p>
-
-      {/* Projection section — same month as the header above, updates with
-          the ‹ › nav for free since it's fed the same `month`-scoped props.
-          Deliberately not its own green/red real-balance styling (DipTile/
-          the surplus box above) — this is the app's first forward-looking
-          estimate and must stay visually distinct from real balances. */}
-      {showProjection && (
-        <div className="mt-4 pt-4" style={{ borderTop: '1px solid #E5E7EB' }}>
-          <span
-            className="inline-block text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full mb-2"
-            style={{ background: '#EDE9FE', color: '#6D28D9' }}
-          >
-            {tProjected('badge')}
-          </span>
-          <p className="text-sm mb-1" style={{ color: '#6B7280' }}>{tProjected('label')}</p>
-          <p className="text-2xl font-bold" style={{ color: '#4C1D95' }}>
-            {formatCurrency(projectedMonthEnd as number, locale)}
-          </p>
-
-          <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>
-            {tProjected('basis', { amount: formatCurrency(carriedInAmount as number, locale) })}
-          </p>
-
-          {/* Same prominence as the surplus box above — the cash really is
-              in chequing (that's why it's still counted in this
-              projection), but the reader needs the identical "this was
-              borrowed" signal here too, not a pass because it's technically
-              real money. Wording differs (this figure INCLUDES the draw,
-              unlike surplus, which excludes it) but the visual weight —
-              red warning box, not a muted caption — does not. */}
-          {summary.totalBorrowed > 0 && (
-            <div
-              className="rounded-xl px-3 py-2.5 mt-2"
-              style={{ background: '#FEF2F2', border: '1.5px solid #FECACA' }}
-            >
-              <p className="text-sm font-semibold" style={{ color: '#B91C1C' }}>
-                {tProjected('borrowedNote', { amount: formatCurrency(summary.totalBorrowed, locale) })}
-              </p>
-            </div>
-          )}
-
-          {noDataCardNames.length > 0 && (
-            <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>
-              {tProjected('unbudgeted', { cards: noDataCardNames.join(', ') })}
-            </p>
-          )}
-
-          <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>
-            {tProjected('note')}{' '}
-            <Link href={`/${locale}/timeline?month=${month}`} className="underline hover:no-underline">
-              {tProjected('viewRealBalance')}
-            </Link>
-          </p>
-        </div>
-      )}
     </div>
   );
 }

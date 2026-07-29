@@ -11,6 +11,15 @@ import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
 import { businessToday } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { logEvent } from '@/lib/eventLogger';
+import { addMonthsToMonth } from '@/lib/goalHelpers';
+import { computeInsufficientHistory } from '@/lib/coachingHelpers';
+import {
+  buildPlanChain,
+  computeTrailingVariableMonthlyTotal,
+  computeTrailingVariableAverage,
+  type ChequingChainTx,
+  type PlanChainMonth,
+} from '@/lib/planChainHelpers';
 
 const TRANSACTION_COLUMNS =
   'id, date, description, amount, type, recurring_item_id, recurrence_id, installment_label, transfer_peer_id, is_bridge, bridge_source_account, bridge_source_month';
@@ -69,6 +78,10 @@ export async function GET(request: Request) {
     // call to this same endpoint (the dip tile) — only the Timeline page
     // sends this. See eventLogger.ts's FUNNEL INSTRUMENTATION note.
     const isPageView = url.searchParams.get('pageView') === '1';
+    // The chained 12-month plan (planChainHelpers.ts) is several extra
+    // queries — opt-in so the dashboard's lightweight dip-tile call to this
+    // same endpoint doesn't pay for it.
+    const includePlan = url.searchParams.get('includePlan') === '1';
 
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -204,6 +217,7 @@ export async function GET(request: Request) {
     // deliberately omits (no known balance to attach them to). Fetched separately
     // since they fall before fetchStart (= anchors[0].date = balancesStartDate here).
 
+    let unbalancedDays: ReturnType<typeof groupUnbalancedTransactions> = [];
     if (result.ok && result.balancesStartDate > windowStart) {
       const { data: rawPreAnchorTxns } = await supabase
         .from('transactions')
@@ -214,16 +228,133 @@ export async function GET(request: Request) {
         .lt('date', result.balancesStartDate)
         .order('date', { ascending: true });
 
-      const unbalancedDays = groupUnbalancedTransactions(
+      unbalancedDays = groupUnbalancedTransactions(
         toTimelineTxs(rawPreAnchorTxns ?? []),
         windowStart,
         result.balancesStartDate
       );
-
-      return NextResponse.json({ ...result, unbalancedDays });
     }
 
-    return NextResponse.json(result.ok ? { ...result, unbalancedDays: [] } : result);
+    // ── The chained 12-month plan (opt-in, planChainHelpers.ts) ─────────────────
+    // Anchors at result.todayBalance (real balance as of today — never
+    // recomputed here) and chains forward using dated fixed income/expense,
+    // per-card cost (closed/open/max, reusing computeCardEnvelopeRemainders
+    // unchanged), and a trailing-average variable-spend estimate. See
+    // planChainHelpers.ts's file header for the full design.
+    let plan: { months: PlanChainMonth[]; variableEstimateMonthly: number; insufficientHistory: boolean } | null = null;
+
+    if (includePlan && result.ok && result.todayBalance !== null) {
+      const currentMonth = today.slice(0, 7);
+
+      // Fixed income/expense basis: the SAME chequing transactions already
+      // fetched for the real walk above (fetchStart..windowEnd) — no second
+      // query. planChainHelpers filters recurring_item_id/is_bridge itself.
+      const fixedTransactions: ChequingChainTx[] = transactions.map((t) => ({
+        account_id: chequingId,
+        date: t.date,
+        type: t.type,
+        amount: t.amount,
+        recurring_item_id: t.recurringItemId,
+        is_bridge: t.isBridge,
+      }));
+
+      // Trailing variable-spend window: the 3 complete calendar months before
+      // this one, same convention as coachingHelpers.computeTypicalSurplus
+      // (regenerate-plan/route.ts). Fetched separately — the real-walk fetch
+      // above starts at the earliest anchor, which may postdate this window
+      // for a recently-anchored household.
+      const trailingMonths = [3, 2, 1].map((n) => addMonthsToMonth(currentMonth, -n));
+      const { data: trailingRows } = await supabase
+        .from('transactions')
+        .select('date, type, amount, recurring_item_id, is_bridge')
+        .eq('household_id', householdId)
+        .eq('account_id', chequingId)
+        .gte('date', `${trailingMonths[0]}-01`)
+        .lt('date', `${currentMonth}-01`);
+
+      const trailingChequingTx: ChequingChainTx[] = (trailingRows ?? []).map((t) => ({
+        account_id: chequingId,
+        date: t.date as string,
+        type: t.type as string,
+        amount: Number(t.amount),
+        recurring_item_id: (t.recurring_item_id ?? null) as string | null,
+        is_bridge: Boolean(t.is_bridge),
+      }));
+
+      const trailingMonthlyTotals = trailingMonths.map((m) =>
+        computeTrailingVariableMonthlyTotal(trailingChequingTx, chequingId, m)
+      );
+      const variableEstimateMonthly = computeTrailingVariableAverage(trailingMonthlyTotals);
+      const insufficientHistory = computeInsufficientHistory(
+        trailingMonths.map((m) => ({ month: m, hasRealData: trailingChequingTx.some((t) => t.date.startsWith(m)) }))
+      );
+
+      // Card budgets/actuals across the whole 12-month plan horizon. Cards
+      // were already resolved above for bridge-ensuring; reused as-is.
+      let cardBudgetRows: { account_id: string; card_goal: number; month: string }[] = [];
+      let cardTxRows: { account_id: string; date: string; type: string; amount: number }[] = [];
+      if (cards.length > 0) {
+        const cardIds = cards.map((c) => c.id);
+        // Latest cycle month the chain ever needs: month 12's relevant cycle
+        // is (currentMonth + 11) − 1 = currentMonth + 10.
+        const latestCycleMonth = addMonthsToMonth(currentMonth, 10);
+
+        const [{ data: goalRows }, { data: cardTxns }] = await Promise.all([
+          supabase
+            .from('monthly_goals')
+            .select('account_id, card_goal, month')
+            .eq('household_id', householdId)
+            .in('account_id', cardIds)
+            .lte('month', `${latestCycleMonth}-01`),
+          supabase
+            .from('transactions')
+            .select('account_id, date, type, amount')
+            .eq('household_id', householdId)
+            .in('account_id', cardIds)
+            .in('type', ['expense', 'income'])
+            // A close_day near month-start can push a cycle's window back
+            // close to a month early — 2 months of slack is generous.
+            .gte('date', `${addMonthsToMonth(currentMonth, -2)}-01`)
+            .lte('date', windowEnd),
+        ]);
+
+        cardBudgetRows = (goalRows ?? []).map((r) => ({
+          account_id: r.account_id as string, card_goal: Number(r.card_goal), month: r.month as string,
+        }));
+        cardTxRows = (cardTxns ?? []).map((r) => ({
+          account_id: r.account_id as string, date: r.date as string, type: r.type as string, amount: Number(r.amount),
+        }));
+      }
+
+      // Unanchored recurring items disclosed per month (all months equally
+      // affected — a never-anchored rule materializes into none of them,
+      // see planChainHelpers.ts / dashboard's own existing disclosure).
+      const [{ count: unanchoredIncomeCount }, { count: unanchoredExpenseCount }] = await Promise.all([
+        supabase.from('recurring_items').select('id', { count: 'exact', head: true })
+          .eq('household_id', householdId).eq('type', 'income').eq('active', true).is('anchor_date', null),
+        supabase.from('recurring_items').select('id', { count: 'exact', head: true })
+          .eq('household_id', householdId).eq('type', 'expense').eq('active', true).is('anchor_date', null),
+      ]);
+
+      const months = buildPlanChain({
+        anchorBalance: result.todayBalance,
+        today,
+        currentMonth,
+        monthsAhead: 12,
+        chequingId,
+        fixedTransactions,
+        cards,
+        cardBudgetRows,
+        cardTransactions: cardTxRows,
+        variableEstimateMonthly,
+        unanchoredIncomeCount: unanchoredIncomeCount ?? 0,
+        unanchoredExpenseCount: unanchoredExpenseCount ?? 0,
+      });
+
+      plan = { months, variableEstimateMonthly, insufficientHistory };
+    }
+
+    return NextResponse.json(result.ok ? { ...result, unbalancedDays, plan } : result);
   } catch (error) {
     console.error('Timeline GET error:', error);
     return NextResponse.json({ error: 'Failed to load timeline' }, { status: 500 });

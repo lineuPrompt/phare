@@ -352,15 +352,6 @@
       "dipsBelow": "You dip to {amount} on {date}",
       "noDip": "No paycheque scheduled ahead in this view — balance shown through {date}."
     },
-    "projectedTile": {
-      "badge": "Projection",
-      "label": "Projected balance at month end (if card budgets are respected)",
-      "basis": "Includes {amount} carried in from before this month. This is your chequing balance — money moved to savings, goals, or debt still leaves chequing, but it's not spent.",
-      "note": "An estimate, not a real balance.",
-      "viewRealBalance": "See real balances on Timeline",
-      "unbudgeted": "Excludes {cards} — no envelope set and no spending recorded yet.",
-      "borrowedNote": "⚠ Includes {amount} borrowed — this balance is higher because you drew on credit."
-    },
     "snapshot": "Your financial snapshot",
     "income": "Monthly income",
     "expenses": "Monthly expenses",
@@ -595,6 +586,18 @@
     },
     "remainingCash": {
       "label": "Remaining cash — {month} closes at"
+    },
+    "plan": {
+      "badge": "Plan",
+      "label": "If the rest of {month} goes as budgeted",
+      "note": "An estimate — assumes remaining fixed bills, card budgets, and typical day-to-day spending land as planned. Distinct from the real balance above.",
+      "basisActual": "{card}: {amount} — actual",
+      "basisBudget": "{card}: {amount} — budget",
+      "basisMax": "{card}: {amount} — over budget, using actual",
+      "basisPosted": "{card}: already paid this month — included in today's balance",
+      "variableEstimate": "Includes about {amount}/month estimated for everyday spending not on a card, based on your last 3 months",
+      "insufficientHistory": "Still building history — this estimate is conservative until 3 full months of real data exist.",
+      "horizonEnd": "Plan horizon ends here — Phare plans 12 months ahead."
     }
   },
   "goals": {

@@ -9,8 +9,10 @@ import TimelineHeader from '@/components/timeline/TimelineHeader';
 import DayLedger from '@/components/timeline/DayLedger';
 import AnchorForm from '@/components/timeline/AnchorForm';
 import TimelineEntryForm from '@/components/timeline/TimelineEntryForm';
+import PlanChainCard from '@/components/timeline/PlanChainCard';
 import { buildMonthView, availableMonths, type UnbalancedDay } from '@/lib/timelineDisplayHelpers';
 import type { TimelineDay, DipInfo } from '@/lib/timelineHelpers';
+import type { PlanChainMonth } from '@/lib/planChainHelpers';
 import type { Account, ExpenseCategory } from '@/components/expenses/types';
 import { formatCurrency } from '@/components/expenses/types';
 import { useBusinessToday } from '@/lib/useBusinessToday';
@@ -49,6 +51,7 @@ type TimelineResponse =
       dip: DipInfo | null;
       nextIncomeDate: string | null;
       unbalancedDays: UnbalancedDay[];
+      plan: { months: PlanChainMonth[]; variableEstimateMonthly: number; insufficientHistory: boolean } | null;
     }
   | { ok: false; reason: 'no_anchor' };
 
@@ -129,8 +132,11 @@ export default function TimelinePage() {
 
         // pageView=1 marks this as a genuine Timeline page load (distinct
         // from the dashboard's own call to this endpoint for the dip tile)
-        // — see eventLogger.ts's FUNNEL INSTRUMENTATION note.
-        return fetch(`/api/timeline?account=${chequingId}${windowStartParam}&pageView=1`)
+        // — see eventLogger.ts's FUNNEL INSTRUMENTATION note. includePlan=1
+        // additionally requests the chained 12-month plan (planChainHelpers.ts)
+        // — Timeline is the one page that owns both the real balance and the
+        // plan, side by side, per month.
+        return fetch(`/api/timeline?account=${chequingId}${windowStartParam}&pageView=1&includePlan=1`)
           .then((r) => (r.status === 401 ? null : r.ok ? r.json() : null));
       })
       .then((d: TimelineResponse | null) => { if (d) setData(d); })
@@ -193,6 +199,10 @@ export default function TimelinePage() {
   const months = availableMonths(data.balancesStartDate, windowEndDate);
   const monthIdx = months.indexOf(selectedMonth);
   const monthView = buildMonthView(data.days, data.unbalancedDays, data.openingBalance, data.balancesStartDate, selectedMonth);
+  // data.plan.months only ever spans the current month's remainder through
+  // the 12-month cap (buildPlanChain, planChainHelpers.ts) — a past month
+  // simply has no entry, which is exactly "no chain figure for past months."
+  const planMonth = data.plan?.months.find((m) => m.month === selectedMonth) ?? null;
 
   const goPrev = () => { if (monthIdx > 0) setSelectedMonth(months[monthIdx - 1]); };
   const goNext = () => { if (monthIdx >= 0 && monthIdx < months.length - 1) setSelectedMonth(months[monthIdx + 1]); };
@@ -273,6 +283,21 @@ export default function TimelinePage() {
           amount={monthView.closesAt}
           label={t('remainingCash.label', { month: monthLabel })}
           locale={locale}
+        />
+      )}
+
+      {/* The chained plan — only ever shown for the current month's remainder
+          through the 12-month cap (data.plan.months never contains a past
+          month), right beside the real balance above, never replacing it. */}
+      {planMonth && (
+        <PlanChainCard
+          month={planMonth}
+          monthLabel={monthLabel}
+          isHorizonEnd={data.plan!.months[data.plan!.months.length - 1].month === planMonth.month}
+          variableEstimateMonthly={data.plan!.variableEstimateMonthly}
+          insufficientHistory={data.plan!.insufficientHistory}
+          locale={locale}
+          recurringHref={`/${locale}/recurring`}
         />
       )}
 
