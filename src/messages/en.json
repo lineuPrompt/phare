@@ -586,18 +586,6 @@
     },
     "remainingCash": {
       "label": "Remaining cash — {month} closes at"
-    },
-    "plan": {
-      "badge": "Plan",
-      "label": "If the rest of {month} goes as budgeted",
-      "note": "An estimate — assumes remaining fixed bills, card budgets, and typical day-to-day spending land as planned. Distinct from the real balance above.",
-      "basisActual": "{card}: {amount} — actual",
-      "basisBudget": "{card}: {amount} — budget",
-      "basisMax": "{card}: {amount} — over budget, using actual",
-      "basisPosted": "{card}: already paid this month — included in today's balance",
-      "variableEstimate": "Includes about {amount}/month estimated for everyday spending not on a card, based on your last 3 months",
-      "insufficientHistory": "Still building history — this estimate is conservative until 3 full months of real data exist.",
-      "horizonEnd": "Plan horizon ends here — Phare plans 12 months ahead."
     }
   },
   "goals": {
