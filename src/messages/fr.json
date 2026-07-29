@@ -362,6 +362,23 @@
     "borrowedNote": "⚠ {amount} emprunté ce mois-ci — non compté dans ce surplus.",
     "monthOnlyNote": "Ceci reflète uniquement le flux de trésorerie de ce mois, pas votre solde réel.",
     "viewRealBalance": "Voir votre solde réel dans la Chronologie",
+    "plan": {
+      "badge": "Plan",
+      "carriedIn": "Solde réel reporté d'avant {month} : {amount}",
+      "pastMonth": "Le plan se projette à partir de {currentMonth} — {month} est déjà passé.",
+      "labelRemainder": "Si le reste de {month} respecte le budget",
+      "labelFull": "Si {month} respecte le budget",
+      "basisActual": "{card} : {amount} — réel",
+      "basisBudget": "{card} : {amount} — budget",
+      "basisMax": "{card} : {amount} — dépassement de budget, montant réel utilisé",
+      "basisPosted": "{card} : déjà payé — inclus dans le solde d'aujourd'hui",
+      "borrowedNote": "⚠ Comprend {amount} emprunté — ce solde est plus élevé parce que vous avez puisé dans votre crédit.",
+      "variableEstimate": "Inclut environ {amount}/mois estimé pour les dépenses courantes hors carte, basé sur vos 3 derniers mois",
+      "insufficientHistory": "Historique encore limité — cette estimation reste prudente tant que 3 mois complets de données réelles ne sont pas disponibles.",
+      "horizonEnd": "L'horizon du plan s'arrête ici — Phare planifie 12 mois à l'avance.",
+      "note": "Une estimation, pas un solde réel.",
+      "viewRealBalance": "Voir les soldes réels sur la Chronologie"
+    },
     "topPriority": "Votre priorité #1",
     "sinkingFunds": "Fonds de prévoyance",
     "perMonth": "/mois",
@@ -586,18 +603,6 @@
     },
     "remainingCash": {
       "label": "Trésorerie restante — {month} ferme à"
-    },
-    "plan": {
-      "badge": "Plan",
-      "label": "Si le reste de {month} respecte le budget",
-      "note": "Une estimation — suppose que les factures fixes restantes, les budgets de carte et les dépenses courantes typiques se déroulent comme prévu. Distinct du solde réel ci-dessus.",
-      "basisActual": "{card} : {amount} — réel",
-      "basisBudget": "{card} : {amount} — budget",
-      "basisMax": "{card} : {amount} — dépassement de budget, montant réel utilisé",
-      "basisPosted": "{card} : déjà payé ce mois-ci — inclus dans le solde d'aujourd'hui",
-      "variableEstimate": "Inclut environ {amount}/mois estimé pour les dépenses courantes hors carte, basé sur vos 3 derniers mois",
-      "insufficientHistory": "Historique encore limité — cette estimation reste prudente tant que 3 mois complets de données réelles ne sont pas disponibles.",
-      "horizonEnd": "L'horizon du plan s'arrête ici — Phare planifie 12 mois à l'avance."
     }
   },
   "goals": {

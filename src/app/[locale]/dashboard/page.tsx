@@ -15,14 +15,21 @@ import { DashboardData } from '@/components/dashboard/types';
 import Sidebar from '@/components/dashboard/Sidebar';
 import { addMonthsToMonth } from '@/lib/goalHelpers';
 import type { DipInfo, TimelineDay } from '@/lib/timelineHelpers';
+import { buildMonthView, type UnbalancedDay } from '@/lib/timelineDisplayHelpers';
+import type { PlanChainMonth } from '@/lib/planChainHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
+
+type PlanResponse = { months: PlanChainMonth[]; variableEstimateMonthly: number | null; insufficientHistory: boolean };
 
 type TimelineDipResponse =
   | {
       ok: true;
       dip: DipInfo | null;
       balancesStartDate: string;
+      openingBalance: number;
       days: TimelineDay[];
+      unbalancedDays: UnbalancedDay[];
+      plan: PlanResponse | null;
     }
   | { ok: false; reason: 'no_anchor' };
 
@@ -52,21 +59,52 @@ export default function DashboardPage() {
   const [dipWindowEnd, setDipWindowEnd] = useState<string | null>(null);
   const [hasAnchor, setHasAnchor] = useState(true);
 
+  // Plan tile (replaces the retired single-month "Projected month-end" tile)
+  // — slices the SAME single /api/timeline fetch above (real balance walk,
+  // via buildMonthView, for the truthful carriedIn caption) plus its
+  // includePlan=1 addition (the chained 12-month plan). One fetch, two uses.
+  const [timelineDays, setTimelineDays] = useState<TimelineDay[]>([]);
+  const [timelineUnbalancedDays, setTimelineUnbalancedDays] = useState<UnbalancedDay[]>([]);
+  const [timelineOpeningBalance, setTimelineOpeningBalance] = useState(0);
+  const [timelineBalancesStartDate, setTimelineBalancesStartDate] = useState<string | null>(null);
+  const [plan, setPlan] = useState<PlanResponse | null>(null);
+
   useEffect(() => {
     fetch('/api/accounts')
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { accounts: { id: string; type: string }[] } | null) => {
         const chequing = d?.accounts.find((a) => a.type === 'chequing');
         if (!chequing) return null;
-        return fetch(`/api/timeline?account=${chequing.id}`).then((r) => (r.ok ? r.json() : null));
+        return fetch(`/api/timeline?account=${chequing.id}&includePlan=1`).then((r) => (r.ok ? r.json() : null));
       })
       .then((d: TimelineDipResponse | null) => {
         if (!d || !d.ok) { setHasAnchor(false); return; }
         setDip(d.dip);
         setDipWindowEnd(d.days.length > 0 ? d.days[d.days.length - 1].date : d.balancesStartDate);
+        setTimelineDays(d.days);
+        setTimelineUnbalancedDays(d.unbalancedDays ?? []);
+        setTimelineOpeningBalance(d.openingBalance);
+        setTimelineBalancesStartDate(d.balancesStartDate);
+        setPlan(d.plan ?? null);
       })
       .catch(() => {});
   }, []);
+
+  // Real carried-in balance for the viewed month — pure re-slice, not a
+  // recompute (same buildCashTimeline walk already fetched above). null
+  // whenever displayMonth falls outside the fetched window (e.g. a past
+  // month — this fetch only covers currentMonth..currentMonth+11).
+  const monthView = timelineBalancesStartDate
+    ? buildMonthView(timelineDays, timelineUnbalancedDays, timelineOpeningBalance, timelineBalancesStartDate, displayMonth)
+    : null;
+  const carriedInAmount = monthView?.opensAt ?? null;
+
+  // The chain entry for the viewed month — plan.months only ever spans
+  // currentMonth..currentMonth+11 (buildPlanChain, planChainHelpers.ts), so
+  // a past displayMonth simply has no entry here.
+  const planMonth = plan?.months.find((m) => m.month === displayMonth) ?? null;
+  const isHorizonEnd = !!(planMonth && plan && plan.months[plan.months.length - 1].month === planMonth.month);
+  const isPastMonth = displayMonth < calendarMonth;
 
   const loadDashboard = useCallback((month: string) => {
     setLoading(true);
@@ -224,6 +262,13 @@ export default function DashboardPage() {
                   loading={snapshotLoading}
                   unanchoredIncomeCount={data.unanchoredIncomeCount}
                   unanchoredExpenseCount={data.unanchoredExpenseCount}
+                  currentMonth={calendarMonth}
+                  isPastMonth={isPastMonth}
+                  carriedInAmount={carriedInAmount}
+                  planMonth={planMonth}
+                  isHorizonEnd={isHorizonEnd}
+                  variableEstimateMonthly={plan?.variableEstimateMonthly ?? null}
+                  insufficientHistory={plan?.insufficientHistory ?? false}
                 />
               )}
             </div>

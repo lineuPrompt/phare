@@ -304,8 +304,10 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
     expect(json.plan.months).toHaveLength(12);
     expect(json.plan.months[0].month).toBe('2026-07');
     expect(json.plan.months[0].isPartialMonth).toBe(true);
-    // No fixed rows, no card cost, no variable history → the anchor never moves.
+    // No dated rows, no card cost, no variable history → the anchor never moves.
     expect(json.plan.months.every((m: { balance: number }) => m.balance === 1000)).toBe(true);
-    expect(json.plan.variableEstimateMonthly).toBe(0);
+    // Zero trailing months have any real data — unavailable, not a fabricated 0 (Bug 2 fix).
+    expect(json.plan.variableEstimateMonthly).toBeNull();
+    expect(json.plan.insufficientHistory).toBe(true);
   });
 });

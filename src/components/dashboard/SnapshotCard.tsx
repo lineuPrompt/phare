@@ -1,7 +1,17 @@
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
+import PlanChainTile from './PlanChainTile';
+import type { PlanChainMonth } from '@/lib/planChainHelpers';
 import { DashboardSummary, formatCurrency } from './types';
+
+function monthLabelFor(month: string, locale: string): string {
+  const [y, m] = month.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(
+    locale === 'fr' ? 'fr-CA' : 'en-CA',
+    { month: 'long', year: 'numeric' }
+  );
+}
 
 export default function SnapshotCard({
   summary,
@@ -14,6 +24,13 @@ export default function SnapshotCard({
   loading,
   unanchoredIncomeCount,
   unanchoredExpenseCount,
+  currentMonth,
+  isPastMonth,
+  carriedInAmount,
+  planMonth,
+  isHorizonEnd,
+  variableEstimateMonthly,
+  insufficientHistory,
 }: {
   summary: DashboardSummary;
   locale: string;
@@ -34,16 +51,22 @@ export default function SnapshotCard({
   loading?: boolean;
   unanchoredIncomeCount?: number;
   unanchoredExpenseCount?: number;
+  // Plan tile (below) — month-scoped to the SAME `month` this card already
+  // navigates. undefined hides the section entirely — see PlanChainTile.
+  currentMonth?: string;
+  isPastMonth?: boolean;
+  carriedInAmount?: number | null;
+  planMonth?: PlanChainMonth | null;
+  isHorizonEnd?: boolean;
+  variableEstimateMonthly?: number | null;
+  insufficientHistory?: boolean;
 }) {
   const t = useTranslations('dashboard');
   const tNav = useTranslations('dashboard.snapshotNav');
   const surplus = summary.netCashFlow >= 0;
 
-  const [y, m] = month.split('-').map(Number);
-  const monthLabel = new Date(y, m - 1, 1).toLocaleDateString(
-    locale === 'fr' ? 'fr-CA' : 'en-CA',
-    { month: 'long', year: 'numeric' }
-  );
+  const monthLabel = monthLabelFor(month, locale);
+  const showPlanTile = currentMonth !== undefined && isPastMonth !== undefined;
 
   return (
     <div className="rounded-2xl bg-white p-4 sm:p-8" style={{ border: '1px solid #E5E7EB', opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s' }}>
@@ -167,6 +190,23 @@ export default function SnapshotCard({
           {t('viewRealBalance')}
         </Link>
       </p>
+
+      {showPlanTile && (
+        <PlanChainTile
+          monthLabel={monthLabel}
+          currentMonthLabel={monthLabelFor(currentMonth as string, locale)}
+          isPastMonth={isPastMonth as boolean}
+          planMonth={planMonth ?? null}
+          isHorizonEnd={isHorizonEnd ?? false}
+          carriedInAmount={carriedInAmount ?? null}
+          variableEstimateMonthly={variableEstimateMonthly ?? null}
+          insufficientHistory={insufficientHistory ?? false}
+          totalBorrowed={summary.totalBorrowed}
+          locale={locale}
+          recurringHref={`/${locale}/recurring`}
+          timelineHref={`/${locale}/timeline?month=${month}`}
+        />
+      )}
     </div>
   );
 }

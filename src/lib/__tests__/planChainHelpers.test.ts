@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  computeFixedRangeTotals,
+  computeDatedRangeTotals,
+  computeVariableRangeTotal,
   computeTrailingVariableMonthlyTotal,
   computeTrailingVariableAverage,
   computeMonthCardCost,
@@ -17,50 +18,51 @@ function tx(overrides: Partial<ChequingChainTx> & { date: string; amount: number
   return { account_id: CHEQUING, recurring_item_id: null, is_bridge: false, ...overrides };
 }
 
-// ── computeFixedRangeTotals ──────────────────────────────────────────────────
+// ── computeDatedRangeTotals (BUG 1 FIX: dated, not fixed) ───────────────────
 
-describe('computeFixedRangeTotals', () => {
-  it('sums only recurring-linked chequing rows inside the range', () => {
+describe('computeDatedRangeTotals', () => {
+  it('sums every dated chequing row in the range, recurring-linked or not', () => {
     const rows: ChequingChainTx[] = [
       tx({ date: '2026-09-10', amount: 3000, type: 'income', recurring_item_id: 'ri-1' }),
       tx({ date: '2026-09-01', amount: 1500, type: 'expense', recurring_item_id: 'ri-2' }),
-      // Manual, non-recurring — never fixed.
+      // Manual, non-recurring — BUG 1: this used to be dropped. It's a real
+      // dated fact and must count now, same as a recurring row.
       tx({ date: '2026-09-05', amount: 80, type: 'expense', recurring_item_id: null }),
     ];
-    const { income, fixedExpenses } = computeFixedRangeTotals(rows, CHEQUING, { start: '2026-09-01', end: '2026-09-30' });
+    const { income, expenses } = computeDatedRangeTotals(rows, CHEQUING, { start: '2026-09-01', end: '2026-09-30' });
     expect(income).toBe(3000);
-    expect(fixedExpenses).toBe(1500);
+    expect(expenses).toBe(1580); // 1500 + 80, not just 1500
   });
 
-  it('excludes bridge rows structurally, even one that happens to carry no recurring_item_id (the only way it could appear)', () => {
+  it('excludes bridge rows structurally regardless of recurring_item_id', () => {
     const rows: ChequingChainTx[] = [
       tx({ date: '2026-09-15', amount: 200, type: 'expense', recurring_item_id: null, is_bridge: true }),
     ];
-    const { fixedExpenses } = computeFixedRangeTotals(rows, CHEQUING, { start: '2026-09-01', end: '2026-09-30' });
-    expect(fixedExpenses).toBe(0);
+    const { expenses } = computeDatedRangeTotals(rows, CHEQUING, { start: '2026-09-01', end: '2026-09-30' });
+    expect(expenses).toBe(0);
   });
 
   it('excludes rows on other accounts (e.g. a card-charged recurring subscription)', () => {
     const rows: ChequingChainTx[] = [
       tx({ date: '2026-09-10', amount: 15, type: 'expense', recurring_item_id: 'ri-sub', account_id: CARD_A }),
     ];
-    const { fixedExpenses } = computeFixedRangeTotals(rows, CHEQUING, { start: '2026-09-01', end: '2026-09-30' });
-    expect(fixedExpenses).toBe(0);
+    const { expenses } = computeDatedRangeTotals(rows, CHEQUING, { start: '2026-09-01', end: '2026-09-30' });
+    expect(expenses).toBe(0);
   });
 
   it('an empty range (start after end) yields zeros, not an error', () => {
     const rows: ChequingChainTx[] = [
       tx({ date: '2026-09-15', amount: 999, type: 'income', recurring_item_id: 'ri-1' }),
     ];
-    const { income, fixedExpenses } = computeFixedRangeTotals(rows, CHEQUING, { start: '2026-09-30', end: '2026-09-29' });
+    const { income, expenses } = computeDatedRangeTotals(rows, CHEQUING, { start: '2026-09-30', end: '2026-09-29' });
     expect(income).toBe(0);
-    expect(fixedExpenses).toBe(0);
+    expect(expenses).toBe(0);
   });
 });
 
-// ── Trailing variable spend (Option B) ───────────────────────────────────────
+// ── Variable spend: range total, trailing monthly total, trailing average ──
 
-describe('computeTrailingVariableMonthlyTotal / computeTrailingVariableAverage', () => {
+describe('computeVariableRangeTotal / computeTrailingVariableMonthlyTotal', () => {
   it('sums chequing expense rows with no recurring link and no bridge flag', () => {
     const rows: ChequingChainTx[] = [
       tx({ date: '2026-06-03', amount: 120, type: 'expense' }),
@@ -72,24 +74,50 @@ describe('computeTrailingVariableMonthlyTotal / computeTrailingVariableAverage',
     ];
     const total = computeTrailingVariableMonthlyTotal(rows, CHEQUING, '2026-06');
     expect(total).toBe(165);
+    // Same result via the underlying range function directly.
+    expect(computeVariableRangeTotal(rows, CHEQUING, { start: '2026-06-01', end: '2026-06-30' })).toBe(165);
+  });
+});
+
+describe('computeTrailingVariableAverage (BUG 2 FIX: no dilution by empty months)', () => {
+  it('averages only months with real data — 1 real month + 2 empty ones gives the real figure, not a third', () => {
+    const months = [
+      { month: '2026-04', total: 0, hasRealData: false },
+      { month: '2026-05', total: 0, hasRealData: false },
+      { month: '2026-06', total: 300, hasRealData: true },
+    ];
+    expect(computeTrailingVariableAverage(months)).toBe(300); // not 100
   });
 
-  it('a household with zero real chequing-side variable spend gets an average of exactly 0 (zero-impact invariant)', () => {
-    const rows: ChequingChainTx[] = [
-      tx({ date: '2026-06-05', amount: 2000, type: 'expense', recurring_item_id: 'ri-rent' }),
-      tx({ date: '2026-06-20', amount: 3000, type: 'income', recurring_item_id: 'ri-pay' }),
+  it('averages plainly across months that all have real data', () => {
+    const months = [
+      { month: '2026-04', total: 100, hasRealData: true },
+      { month: '2026-05', total: 200, hasRealData: true },
+      { month: '2026-06', total: 300, hasRealData: true },
     ];
-    const months = ['2026-04', '2026-05', '2026-06'].map((m) => computeTrailingVariableMonthlyTotal(rows, CHEQUING, m));
-    expect(months).toEqual([0, 0, 0]);
+    expect(computeTrailingVariableAverage(months)).toBe(200);
+  });
+
+  it('returns null (unavailable) when zero trailing months have real data — never a fabricated 0', () => {
+    const months = [
+      { month: '2026-04', total: 0, hasRealData: false },
+      { month: '2026-05', total: 0, hasRealData: false },
+      { month: '2026-06', total: 0, hasRealData: false },
+    ];
+    expect(computeTrailingVariableAverage(months)).toBeNull();
+  });
+
+  it('a household with real data but genuinely zero variable spend correctly averages to 0 (a real measurement, not dilution)', () => {
+    const months = [
+      { month: '2026-04', total: 0, hasRealData: true },
+      { month: '2026-05', total: 0, hasRealData: true },
+      { month: '2026-06', total: 0, hasRealData: true },
+    ];
     expect(computeTrailingVariableAverage(months)).toBe(0);
   });
 
-  it('averages plainly across the given trailing months', () => {
-    expect(computeTrailingVariableAverage([100, 200, 300])).toBe(200);
-  });
-
-  it('an empty trailing window averages to 0, never invents a figure', () => {
-    expect(computeTrailingVariableAverage([])).toBe(0);
+  it('an empty list averages to null, never invents a figure', () => {
+    expect(computeTrailingVariableAverage([])).toBeNull();
   });
 });
 
@@ -223,14 +251,14 @@ describe('resolveCardBudgetsForCycle', () => {
 // ── buildPlanChain — the full chain, including the recurrence invariant ─────
 
 describe('buildPlanChain', () => {
-  const fixedTransactions: ChequingChainTx[] = [];
+  const datedTransactions: ChequingChainTx[] = [];
   // Materialize a simple monthly salary + rent for 12 months from July 2026.
   for (let i = 0; i < 12; i++) {
     const m = 7 + i;
     const year = 2026 + Math.floor((m - 1) / 12);
     const month = String(((m - 1) % 12) + 1).padStart(2, '0');
-    fixedTransactions.push(tx({ date: `${year}-${month}-01`, amount: 4000, type: 'income', recurring_item_id: 'ri-pay' }));
-    fixedTransactions.push(tx({ date: `${year}-${month}-03`, amount: 1500, type: 'expense', recurring_item_id: 'ri-rent' }));
+    datedTransactions.push(tx({ date: `${year}-${month}-01`, amount: 4000, type: 'income', recurring_item_id: 'ri-pay' }));
+    datedTransactions.push(tx({ date: `${year}-${month}-03`, amount: 1500, type: 'expense', recurring_item_id: 'ri-rent' }));
   }
 
   const baseParams = {
@@ -239,11 +267,11 @@ describe('buildPlanChain', () => {
     currentMonth: '2026-07',
     monthsAhead: 12,
     chequingId: CHEQUING,
-    fixedTransactions,
+    datedTransactions,
     cards: [],
     cardBudgetRows: [],
     cardTransactions: [],
-    variableEstimateMonthly: 0,
+    variableEstimateMonthly: null as number | null,
     unanchoredIncomeCount: 0,
     unanchoredExpenseCount: 0,
   };
@@ -263,43 +291,90 @@ describe('buildPlanChain', () => {
     const months = buildPlanChain(baseParams);
     let running = baseParams.anchorBalance;
     for (const m of months) {
-      const expected = Math.round((running + m.income - m.fixedExpenses - m.cardCostTotal - m.variableEstimate) * 100) / 100;
+      const expected = Math.round((running + m.income - m.datedExpenses - m.cardCostTotal - m.variableEstimate) * 100) / 100;
       expect(m.balance).toBe(expected);
       running = m.balance;
     }
   });
 
-  it('month 1 only counts fixed rows strictly after today (July 1 rent already happened, excluded)', () => {
+  it('month 1 only counts dated rows strictly after today (July 1 rent already happened, excluded)', () => {
     const months = buildPlanChain(baseParams);
     // Rent posted July 3, before today (July 15) — must not appear in month 1.
     // Salary posted July 1, also before today — excluded too.
     expect(months[0].income).toBe(0);
-    expect(months[0].fixedExpenses).toBe(0);
+    expect(months[0].datedExpenses).toBe(0);
     // August is a full future month — both terms present.
     expect(months[1].income).toBe(4000);
-    expect(months[1].fixedExpenses).toBe(1500);
+    expect(months[1].datedExpenses).toBe(1500);
   });
 
-  it('a bridge row inside the fixed-transactions basis never leaks into fixedExpenses (structural exclusion)', () => {
+  it('BUG 1 REGRESSION: a dated non-recurring expense in the remainder of the current month is counted, not dropped', () => {
+    const withManualExpense: ChequingChainTx[] = [
+      ...datedTransactions,
+      tx({ date: '2026-07-20', amount: 350, type: 'expense', recurring_item_id: null }), // exact shape of the real bug
+    ];
+    const months = buildPlanChain({ ...baseParams, datedTransactions: withManualExpense });
+    expect(months[0].datedExpenses).toBe(350);
+  });
+
+  it('a bridge row inside the dated-transactions basis never leaks into datedExpenses (structural exclusion)', () => {
     const withBridge: ChequingChainTx[] = [
-      ...fixedTransactions,
+      ...datedTransactions,
       tx({ date: '2026-08-10', amount: 2249.79, type: 'expense', is_bridge: true }),
     ];
-    const months = buildPlanChain({ ...baseParams, fixedTransactions: withBridge });
-    // August's fixedExpenses is still just the 1500 rent — the bridge amount never entered the sum.
-    expect(months[1].fixedExpenses).toBe(1500);
+    const months = buildPlanChain({ ...baseParams, datedTransactions: withBridge });
+    // August's datedExpenses is still just the 1500 rent — the bridge amount never entered the sum.
+    expect(months[1].datedExpenses).toBe(1500);
   });
 
-  it('zero-impact invariant: a household with no card-cost and no variable spend chains purely off fixed income/expense', () => {
+  it('zero-impact invariant: a household with no card-cost and no variable spend chains purely off dated income/expense', () => {
     const months = buildPlanChain(baseParams);
     expect(months.every((m) => m.cardCostTotal === 0)).toBe(true);
     expect(months.every((m) => m.variableEstimate === 0)).toBe(true);
   });
 
-  it('variable estimate is prorated for the partial first month, flat for later months', () => {
+  it('null variableEstimateMonthly (unavailable) applies as 0, never fabricates a figure', () => {
+    const months = buildPlanChain({ ...baseParams, variableEstimateMonthly: null });
+    expect(months.every((m) => m.variableEstimate === 0)).toBe(true);
+  });
+
+  it('variable estimate is prorated for the partial first month, flat for later months, when nothing is already dated', () => {
     const months = buildPlanChain({ ...baseParams, variableEstimateMonthly: 310 });
     // July 2026 has 31 days; today=2026-07-15, so remaining days = 16 (16..31 inclusive).
     expect(months[0].variableEstimate).toBe(Math.round((310 * 16 / 31) * 100) / 100);
+    expect(months[1].variableEstimate).toBe(310);
+  });
+
+  // ── NETTING — narrower rule: month 1 nets, months 2-12 never do ──────────
+  it('month 1 nets the prorated estimate against dated non-recurring spend in the same window', () => {
+    const withDatedVariable: ChequingChainTx[] = [
+      ...datedTransactions,
+      tx({ date: '2026-07-20', amount: 100, type: 'expense', recurring_item_id: null }), // dated "groceries"-style spend
+    ];
+    const months = buildPlanChain({ ...baseParams, datedTransactions: withDatedVariable, variableEstimateMonthly: 310 });
+    const prorated = Math.round((310 * 16 / 31) * 100) / 100; // ~160.00
+    expect(months[0].variableEstimate).toBe(Math.round(Math.max(0, prorated - 100) * 100) / 100);
+    expect(months[0].variableEstimate).toBeLessThan(prorated);
+  });
+
+  it('month 1 netting floors at 0 — a dated expense larger than the prorated estimate never goes negative', () => {
+    const withLargeDatedVariable: ChequingChainTx[] = [
+      ...datedTransactions,
+      tx({ date: '2026-07-20', amount: 5000, type: 'expense', recurring_item_id: null }),
+    ];
+    const months = buildPlanChain({ ...baseParams, datedTransactions: withLargeDatedVariable, variableEstimateMonthly: 310 });
+    expect(months[0].variableEstimate).toBe(0);
+  });
+
+  it('months 2-12 do NOT net a dated one-off against the flat estimate — an installment is additional, not a substitute (founder example)', () => {
+    const withFutureInstallment: ChequingChainTx[] = [
+      ...datedTransactions,
+      tx({ date: '2026-08-15', amount: 500, type: 'expense', recurring_item_id: null }), // a dated $500 installment in August
+    ];
+    const months = buildPlanChain({ ...baseParams, datedTransactions: withFutureInstallment, variableEstimateMonthly: 310 });
+    // August's datedExpenses now includes the installment (1500 rent + 500 installment)...
+    expect(months[1].datedExpenses).toBe(2000);
+    // ...AND the full flat variable estimate is still subtracted on top, unnetted.
     expect(months[1].variableEstimate).toBe(310);
   });
 
@@ -328,5 +403,74 @@ describe('buildPlanChain', () => {
   it('unanchored recurring counts are disclosed on every month of the chain, not a single global badge', () => {
     const months = buildPlanChain({ ...baseParams, unanchoredIncomeCount: 2, unanchoredExpenseCount: 1 });
     expect(months.every((m) => m.unanchoredIncomeCount === 2 && m.unanchoredExpenseCount === 1)).toBe(true);
+  });
+});
+
+// ── THE INVARIANT — month 1 must never exceed the real close ────────────────
+
+describe('THE INVARIANT: month 1 never exceeds the real ledger close', () => {
+  const anchorBalance = 1000;
+  const today = '2026-07-15';
+
+  it('equals the real close exactly when nothing is left to assume (no cards, no variable estimate)', () => {
+    const rows: ChequingChainTx[] = [
+      tx({ date: '2026-07-16', amount: 4000, type: 'income', recurring_item_id: 'ri-pay' }),
+      tx({ date: '2026-07-20', amount: 500, type: 'expense', recurring_item_id: null }), // dated, manual
+      tx({ date: '2026-07-25', amount: 1200, type: 'expense', recurring_item_id: 'ri-rent' }),
+    ];
+    // The real ledger walk would sum every one of these the same way.
+    const realClose = anchorBalance + 4000 - 500 - 1200;
+
+    const months = buildPlanChain({
+      anchorBalance, today, currentMonth: '2026-07', monthsAhead: 1, chequingId: CHEQUING,
+      datedTransactions: rows, cards: [], cardBudgetRows: [], cardTransactions: [],
+      variableEstimateMonthly: null, unanchoredIncomeCount: 0, unanchoredExpenseCount: 0,
+    });
+
+    expect(months[0].cardCostTotal + months[0].variableEstimate).toBe(0);
+    expect(months[0].balance).toBe(realClose);
+  });
+
+  it('BUG 1 REGRESSION (the exact July shape): a dated non-recurring expense must not make the plan exceed the real close', () => {
+    const rows: ChequingChainTx[] = [
+      tx({ date: '2026-07-20', amount: 350, type: 'expense', recurring_item_id: null }),
+    ];
+    const realClose = anchorBalance - 350;
+
+    const months = buildPlanChain({
+      anchorBalance, today, currentMonth: '2026-07', monthsAhead: 1, chequingId: CHEQUING,
+      datedTransactions: rows, cards: [], cardBudgetRows: [], cardTransactions: [],
+      variableEstimateMonthly: null, unanchoredIncomeCount: 0, unanchoredExpenseCount: 0,
+    });
+
+    expect(months[0].balance).toBe(realClose); // 650, not 1000 — the bug would have produced 1000
+    expect(months[0].balance).toBeLessThanOrEqual(anchorBalance);
+  });
+
+  it('falls strictly below the dated-only total when a legitimate forward assumption applies (closed cycle, not yet posted)', () => {
+    // Month 1's relevant cycle (currentMonth − 1) is always entirely within
+    // the PREVIOUS calendar month, so by the time "today" is in the current
+    // month it can never still be open (statementCycleWindow's end always
+    // falls inside that prior month) — it's either 'posted' (already inside
+    // the anchor) or 'actual' with a real, not-yet-posted amount. This tests
+    // the latter: real June spend, payment_day (25) still ahead of today
+    // (15), so it hasn't posted yet and must still reduce the plan.
+    const rows: ChequingChainTx[] = [];
+    const datedOnlyClose = anchorBalance; // nothing dated at all in the remainder
+
+    const months = buildPlanChain({
+      anchorBalance, today, currentMonth: '2026-07', monthsAhead: 1, chequingId: CHEQUING,
+      datedTransactions: rows,
+      cards: [{ id: CARD_A, name: 'Visa', statement_close_day: null, payment_day: 25 }], // not yet posted
+      cardBudgetRows: [],
+      cardTransactions: [{ account_id: CARD_A, date: '2026-06-10', type: 'expense', amount: 150 }],
+      variableEstimateMonthly: null, unanchoredIncomeCount: 0, unanchoredExpenseCount: 0,
+    });
+
+    expect(months[0].cardCost[0].basis).toBe('actual');
+    expect(months[0].cardCostTotal).toBe(150);
+    // A legitimate, not-yet-anchored real cost only ever pulls the plan DOWN
+    // relative to the dated-only figure — never above it.
+    expect(months[0].balance).toBeLessThan(datedOnlyClose);
   });
 });

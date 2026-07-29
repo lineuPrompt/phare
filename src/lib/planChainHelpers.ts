@@ -3,51 +3,47 @@
  * month goes as budgeted, where do I land" — 12 months compounding forward
  * from today's real balance. Deliberately different from the real ledger
  * walk (buildCashTimeline/buildMonthView), which answers "given everything
- * actually dated, where do I land." Both are valid; they diverge on purpose.
+ * actually dated, where do I land." Both are valid; they diverge on purpose
+ * — but only where the plan is genuinely estimating something, never because
+ * a real dated fact got dropped. See INVARIANT below.
  *
  * TERMS PER MONTH
  * -----------------
- *   balance(M) = balance(M-1) + income(M) − fixedExpenses(M) − cardCost(M)
+ *   balance(M) = balance(M-1) + income(M) − datedExpenses(M) − cardCost(M)
  *                − variableEstimate(M)
  * balance(month 0) chains off `anchorBalance` (today's real chequing
  * balance — buildCashTimeline's own `todayBalance`, never recomputed here).
  *
- * WHY NOT computeMonthTotals — no today-cutoff allowed here
- * ------------------------------------------------------------
+ * DATED, NOT FIXED — computeDatedRangeTotals (BUG FIX, was computeFixedRangeTotals)
+ * ------------------------------------------------------------------------------
  * Every existing actuals helper (categorySpendHelpers.computeSignedSpendRows,
  * dashboardHelpers.computeMonthTotals) is built to answer "actual spend so
- * far," and drops or never expects rows dated after today. Applied to a
- * future month that would return nothing — this file's fixed-income/expense
- * aggregator (computeFixedRangeTotals) is the one place in the app that
- * deliberately reads already-materialized FUTURE-dated rows as the plan
- * itself, not history to be capped.
+ * far," and drops or never expects rows dated after today. This function is
+ * the one place in the app that deliberately reads already-materialized
+ * FUTURE-dated rows as the plan itself, not history to be capped.
  *
- * FIXED = recurring-engine rows only, CHEQUING only
- * ---------------------------------------------------
- * recurring_item_id != null is the same fixed/variable split
- * categorySpendHelpers.ts already proved correct against a real household.
- * Scoped to chequing specifically (not "any spending account") because a
- * recurring item CAN target a credit card (e.g. a subscription charged to a
- * card) — that spend is already inside computeCardEnvelopeRemainders' cycle
- * totals via netCycleSpend, which sums every transaction on the card
- * regardless of recurring_item_id. Counting it again here under "fixed
- * expenses" would double it.
+ * It WAS scoped to recurring_item_id != null rows only ("fixed" bills), on
+ * the theory that a manually-entered future expense was covered by the
+ * variable-spend estimate instead. That was wrong and caused a real,
+ * measured bug: a manually-entered, already-dated chequing expense is a
+ * FACT — the real ledger walk counts it (it's just a transaction row), so a
+ * plan that skips it reads higher than the real close for no legitimate
+ * reason. The fix: sum EVERY dated chequing income/expense row in the
+ * range, recurring-linked or not. is_bridge is the only structural
+ * exclusion left (a card's cost is its own explicit term below — see NO
+ * DOUBLE-COUNTING). The function and its terms are named DATED, not FIXED,
+ * so the next reader doesn't reintroduce the recurring-only filter.
  *
- * BRIDGE EXCLUSION IS STRUCTURAL, NOT INCIDENTAL
- * ------------------------------------------------
- * A bridge row never carries recurring_item_id, so the recurring_item_id
- * filter alone would already exclude it — but is_bridge is checked
- * explicitly anyway, the same defensive pattern categorySpendHelpers.ts and
- * envelopeHelpers.ts already use, so this file's bridge exclusion doesn't
- * quietly depend on a coincidence of two unrelated columns.
+ * Applies identically to months 2–12: a row already dated for a future
+ * month — however it got there — is a fact, not a guess.
  *
  * CARD COST REPLACES THE BRIDGE, IT DOESN'T SIT BESIDE IT
  * -----------------------------------------------------------
  * The real ledger's bridge rows only ever reflect actual-to-date spend
  * (bridgeHelpers.ts) — worthless as a forward planning figure for a cycle
- * that's mostly still ahead. This file's basis is is_bridge-excluded
- * entirely (see above), and computeMonthCardCost adds its own explicit
- * card-cost term per month instead, reusing computeCardEnvelopeRemainders
+ * that's mostly still ahead. This file's dated basis excludes is_bridge
+ * entirely, and computeMonthCardCost adds its own explicit card-cost term
+ * per month instead, reusing computeCardEnvelopeRemainders
  * (projectionHelpers.ts) UNCHANGED for the closed/open/max rule.
  *
  * THE MONTH-1 BOUNDARY — the one seam where a double-count can appear
@@ -62,8 +58,7 @@
  * still shows up in the per-card disclosure, just labeled as already
  * reflected in the starting balance rather than vanishing. From month 2
  * onward every card's payment date for that month is still in the future,
- * so this condition can never fire there — it isn't a special case that
- * persists, it's a boundary condition that only binds at the seam.
+ * so this condition can never fire there.
  *
  * VARIABLE SPEND — an estimate, not a dated term (Option B, founder-approved)
  * -------------------------------------------------------------------------
@@ -71,24 +66,47 @@
  * dated to sum for a future month (unlike fixed bills, cash groceries next
  * month don't materialize as real rows). computeTrailingVariableAverage
  * uses the exact trailing-3-month, current-month-excluded window
- * coachingHelpers.computeTypicalSurplus already established and the founder
- * already trusts elsewhere in the app. Thin-history disclosure reuses
- * coachingHelpers.computeInsufficientHistory directly (the caller builds
- * the MonthHistoryAvailability[] and calls it) rather than a new signal.
- * Cleanly separable from card cost by construction: card-account
- * transactions are never read by this aggregator at all, so there is no
- * data-model overlap to bound (unlike a `budgets` row, which covers a
- * category's spend on ANY account and would double the card-cost term for
- * a mostly-card-spent category).
- * A household with zero real chequing-side variable spend gets monthlyTotals
- * of all zeros, so the average — and therefore every month's
- * variableEstimate term — is exactly 0. No false deduction is invented.
- * For the partial first month, the flat monthly average is prorated by the
- * fraction of the month still ahead (days remaining ÷ days in month) — the
- * same "don't assume a full month's worth of spend lands in a partial
- * window" treatment the fixed-income/expense side gets for free from its
- * date range, applied explicitly here since there's no dated row to do it
- * automatically.
+ * coachingHelpers.computeTypicalSurplus already established.
+ *
+ * BUG FIX — an empty trailing month is not a $0 measurement
+ * ------------------------------------------------------------
+ * computeTrailingVariableAverage used to divide by the full requested
+ * window size regardless of how many months actually had data, so a
+ * household with 1 real month and 2 unpopulated ones got roughly a third of
+ * its true typical spend — "real months, never averaged" violated by
+ * silently treating "no data yet" as "measured zero." Fixed: the average is
+ * taken only over months carrying `hasRealData: true` (any real transaction
+ * that month — the same signal coachingHelpers.computeInsufficientHistory
+ * already consumes, so both read one shared per-month fact rather than two
+ * independent guesses). Zero qualifying months → the estimate is
+ * UNAVAILABLE (`null`), never a fabricated 0. A household with genuinely
+ * zero real chequing-side variable spend across populated months still
+ * correctly averages to 0 — that's a real measurement, not dilution.
+ *
+ * NETTING — narrower than "always net," and only for month 1
+ * ------------------------------------------------------------
+ * A dated non-recurring expense and the variable-spend estimate can
+ * legitimately overlap only when they cover the SAME days. That is true for
+ * month 1's prorated remainder (the estimate is explicitly "typical spend
+ * for the days left in this month," and a dated one-off on one of those
+ * same days is drawn from the same pool) — so month 1 nets
+ * max(0, proratedEstimate − alreadyDatedVariableSpendInThatWindow). It is
+ * NOT true for months 2–12: a dated $500 installment payment next spring is
+ * additional to that month's typical day-to-day spending, not a
+ * substitute for it — a family that already knows about an installment
+ * still buys groceries. Months 2–12 subtract both terms in full, unnetted.
+ *
+ * INVARIANT (pinned in planChainHelpers.test.ts)
+ * ------------------------------------------------
+ * For month 1 only (the current, partial month — months 2–12 have no
+ * comparable real close to bound against, since most of what they'd sum
+ * legitimately isn't dated yet): the plan must never exceed the real
+ * ledger's close for that same month, and must equal it exactly whenever
+ * cardCostTotal + the applied variableEstimate is 0. Every dollar between
+ * today and month-end is either a dated fact (now counted identically by
+ * both) or a forward assumption that only ever subtracts further
+ * anticipated spending — never a reason for the plan to read healthier
+ * than a ledger that already contains every transaction through month-end.
  */
 
 import { addMonthsToMonth } from './goalHelpers';
@@ -123,7 +141,7 @@ function daysBetweenInclusive(start: string, end: string): number {
   return Math.round((e - s) / 86400000) + 1;
 }
 
-// ── Fixed income/expense (dated, real, no today-cutoff) ────────────────────
+// ── Dated income/expense (real, no today-cutoff, no recurring-only filter) ─
 
 export type ChequingChainTx = {
   account_id: string;
@@ -134,54 +152,84 @@ export type ChequingChainTx = {
   is_bridge?: boolean | null;
 };
 
-export function computeFixedRangeTotals(
+/**
+ * Every dated chequing income/expense row in the range — recurring-linked
+ * or manually entered, all counted alike. is_bridge is the only structural
+ * exclusion (a card's cost is its own term — computeMonthCardCost). See the
+ * file header's DATED, NOT FIXED note for why this isn't scoped to
+ * recurring_item_id rows.
+ */
+export function computeDatedRangeTotals(
   transactions: ChequingChainTx[],
   chequingId: string,
   range: { start: string; end: string } // inclusive both ends; start > end = empty range = zeros
-): { income: number; fixedExpenses: number } {
+): { income: number; expenses: number } {
   let income = 0;
-  let fixedExpenses = 0;
+  let expenses = 0;
   for (const t of transactions) {
     if (t.account_id !== chequingId) continue;
     if (t.is_bridge) continue;
-    if (t.recurring_item_id == null) continue;
     if (t.date < range.start || t.date > range.end) continue;
     const amt = Number(t.amount);
     if (t.type === 'income') income += amt;
-    else if (t.type === 'expense') fixedExpenses += amt;
+    else if (t.type === 'expense') expenses += amt;
   }
-  return { income: r2(income), fixedExpenses: r2(fixedExpenses) };
+  return { income: r2(income), expenses: r2(expenses) };
 }
 
-// ── Trailing variable-spend estimate (Option B) ─────────────────────────────
+// ── Variable spend: dated-in-range (for netting) and trailing estimate ─────
 
 /**
- * One trailing month's real chequing variable spend: expense-type,
- * chequing-only, never fixed (recurring_item_id set) or a bridge row.
+ * Chequing expense rows in the range that are neither recurring-linked nor
+ * a bridge — "day-to-day" spend by exclusion. Used two ways: summed per
+ * historical month for the trailing average, and summed against the
+ * current month's own remaining days for month 1's netting (see file
+ * header's NETTING note).
  */
-export function computeTrailingVariableMonthlyTotal(
+export function computeVariableRangeTotal(
   transactions: ChequingChainTx[],
   chequingId: string,
-  month: string // YYYY-MM
+  range: { start: string; end: string }
 ): number {
-  const start = `${month}-01`;
-  const end = lastDayOfMonth(month);
   let total = 0;
   for (const t of transactions) {
     if (t.account_id !== chequingId) continue;
     if (t.is_bridge) continue;
     if (t.recurring_item_id != null) continue;
     if (t.type !== 'expense') continue;
-    if (t.date < start || t.date > end) continue;
+    if (t.date < range.start || t.date > range.end) continue;
     total += Number(t.amount);
   }
   return r2(total);
 }
 
-/** Plain average of already-computed trailing monthly totals. 0 for an empty list. */
-export function computeTrailingVariableAverage(monthlyTotals: number[]): number {
-  if (monthlyTotals.length === 0) return 0;
-  return r2(monthlyTotals.reduce((sum, v) => sum + v, 0) / monthlyTotals.length);
+export function computeTrailingVariableMonthlyTotal(
+  transactions: ChequingChainTx[],
+  chequingId: string,
+  month: string // YYYY-MM
+): number {
+  return computeVariableRangeTotal(transactions, chequingId, { start: `${month}-01`, end: lastDayOfMonth(month) });
+}
+
+export type TrailingVariableMonth = {
+  month: string;
+  total: number; // computeTrailingVariableMonthlyTotal's result for this month
+  // Any real transaction existing for this month at all (any type/account —
+  // the same fact coachingHelpers.computeInsufficientHistory consumes).
+  // false means "no data," never "zero spend" — see file header BUG FIX note.
+  hasRealData: boolean;
+};
+
+/**
+ * Average of ONLY the trailing months that actually have real data. null
+ * when none do — "unavailable," never a fabricated 0. A month with real
+ * data but genuinely $0 variable spend still counts (that's a real
+ * measurement); a month with no transactions at all does not.
+ */
+export function computeTrailingVariableAverage(months: TrailingVariableMonth[]): number | null {
+  const withData = months.filter((m) => m.hasRealData);
+  if (withData.length === 0) return null;
+  return r2(withData.reduce((sum, m) => sum + m.total, 0) / withData.length);
 }
 
 // ── Per-month card cost (reuses computeCardEnvelopeRemainders unchanged) ───
@@ -279,10 +327,10 @@ export type PlanChainMonth = {
   rangeEnd: string; // YYYY-MM-DD, inclusive
   isPartialMonth: boolean; // true only for the chain's first entry
   income: number;
-  fixedExpenses: number;
+  datedExpenses: number; // was fixedExpenses — see file header DATED, NOT FIXED
   cardCost: CardCostTerm[];
   cardCostTotal: number;
-  variableEstimate: number;
+  variableEstimate: number; // 0 when variableEstimateMonthly was null (unavailable)
   balance: number; // running plan balance at the end of this range
   unanchoredIncomeCount: number;
   unanchoredExpenseCount: number;
@@ -292,7 +340,7 @@ export type PlanChainMonth = {
  * Builds the 12-month (or fewer, if monthsAhead is smaller) chained plan.
  * Pure — every input is already fetched/aggregated by the caller. The
  * chain-recurrence invariant (balance(M) === balance(M-1) + income(M) −
- * fixedExpenses(M) − cardCostTotal(M) − variableEstimate(M)) holds by
+ * datedExpenses(M) − cardCostTotal(M) − variableEstimate(M)) holds by
  * construction: each entry is computed directly from the previous one in a
  * single forward pass, never independently re-derived.
  */
@@ -302,17 +350,17 @@ export function buildPlanChain(params: {
   currentMonth: string; // YYYY-MM — today's month, the chain's first entry
   monthsAhead: number; // e.g. 12, matching the recurring-materialization horizon
   chequingId: string;
-  fixedTransactions: ChequingChainTx[]; // chequing income/expense rows across the whole window
+  datedTransactions: ChequingChainTx[]; // chequing income/expense rows across the whole window
   cards: { id: string; name: string; statement_close_day: number | null; payment_day: number | null }[];
   cardBudgetRows: { account_id: string; card_goal: number; month: string }[];
   cardTransactions: { account_id: string; date: string; type: string; amount: number }[];
-  variableEstimateMonthly: number; // flat trailing-average figure (computeTrailingVariableAverage)
+  variableEstimateMonthly: number | null; // computeTrailingVariableAverage's result; null = unavailable
   unanchoredIncomeCount: number;
   unanchoredExpenseCount: number;
 }): PlanChainMonth[] {
   const {
     anchorBalance, today, currentMonth, monthsAhead, chequingId,
-    fixedTransactions, cards, cardBudgetRows, cardTransactions,
+    datedTransactions, cards, cardBudgetRows, cardTransactions,
     variableEstimateMonthly, unanchoredIncomeCount, unanchoredExpenseCount,
   } = params;
 
@@ -325,7 +373,7 @@ export function buildPlanChain(params: {
     const rangeStart = isPartialMonth ? nextDay(today) : `${month}-01`;
     const rangeEnd = lastDayOfMonth(month);
 
-    const fixed = computeFixedRangeTotals(fixedTransactions, chequingId, { start: rangeStart, end: rangeEnd });
+    const dated = computeDatedRangeTotals(datedTransactions, chequingId, { start: rangeStart, end: rangeEnd });
 
     const cycleMonth = addMonthsToMonth(month, -1);
     const cardBudgets = resolveCardBudgetsForCycle(cardBudgetRows, cycleMonth);
@@ -338,17 +386,26 @@ export function buildPlanChain(params: {
     if (isPartialMonth) {
       const daysRemaining = daysBetweenInclusive(rangeStart, rangeEnd);
       const daysInMonth = daysInCalendarMonth(month);
-      variableEstimate = r2(variableEstimateMonthly * daysRemaining / daysInMonth);
+      const prorated = variableEstimateMonthly !== null
+        ? r2(variableEstimateMonthly * daysRemaining / daysInMonth)
+        : 0;
+      // NETTING — month 1 only, see file header. A dated non-recurring
+      // expense already inside this same partial window is drawn from the
+      // same "typical day-to-day spend" pool the prorated estimate covers.
+      const alreadyDatedVariable = computeVariableRangeTotal(datedTransactions, chequingId, { start: rangeStart, end: rangeEnd });
+      variableEstimate = r2(Math.max(0, prorated - alreadyDatedVariable));
     } else {
-      variableEstimate = variableEstimateMonthly;
+      // Months 2–12: no netting. A dated future one-off is additional to
+      // that month's typical spending, not a substitute for it.
+      variableEstimate = variableEstimateMonthly ?? 0;
     }
 
-    balance = r2(balance + fixed.income - fixed.fixedExpenses - cardCostResult.total - variableEstimate);
+    balance = r2(balance + dated.income - dated.expenses - cardCostResult.total - variableEstimate);
 
     months.push({
       month, rangeStart, rangeEnd, isPartialMonth,
-      income: fixed.income,
-      fixedExpenses: fixed.fixedExpenses,
+      income: dated.income,
+      datedExpenses: dated.expenses,
       cardCost: cardCostResult.terms,
       cardCostTotal: cardCostResult.total,
       variableEstimate,
