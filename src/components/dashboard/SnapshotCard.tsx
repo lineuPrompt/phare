@@ -27,6 +27,7 @@ export default function SnapshotCard({
   currentMonth,
   isPastMonth,
   carriedInAmount,
+  realCloseAmount,
   planMonth,
   isHorizonEnd,
   variableEstimateMonthly,
@@ -56,6 +57,9 @@ export default function SnapshotCard({
   currentMonth?: string;
   isPastMonth?: boolean;
   carriedInAmount?: number | null;
+  // THE figure the plan must be read against (plan <= realCloseAmount) —
+  // see PlanChainTile.
+  realCloseAmount?: number | null;
   planMonth?: PlanChainMonth | null;
   isHorizonEnd?: boolean;
   variableEstimateMonthly?: number | null;
@@ -199,6 +203,7 @@ export default function SnapshotCard({
           planMonth={planMonth ?? null}
           isHorizonEnd={isHorizonEnd ?? false}
           carriedInAmount={carriedInAmount ?? null}
+          realCloseAmount={realCloseAmount ?? null}
           variableEstimateMonthly={variableEstimateMonthly ?? null}
           insufficientHistory={insufficientHistory ?? false}
           totalBorrowed={summary.totalBorrowed}

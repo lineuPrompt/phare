@@ -28,6 +28,7 @@ export default function PlanChainTile({
   planMonth,
   isHorizonEnd,
   carriedInAmount,
+  realCloseAmount,
   variableEstimateMonthly,
   insufficientHistory,
   totalBorrowed,
@@ -42,9 +43,14 @@ export default function PlanChainTile({
   // plan window (currentMonth..currentMonth+11) — never fabricated.
   planMonth: PlanChainMonth | null;
   isHorizonEnd: boolean;
-  // The real balance carried in from before `month` (buildMonthView's own
-  // opensAt) — truthful, independent of the chain, shown for comparison.
+  // The real OPENING balance for `month` (buildMonthView's opensAt) —
+  // context only, kept for continuity with the running walk.
   carriedInAmount: number | null;
+  // THE figure the plan must be read against (buildMonthView's closesAt).
+  // planChainHelpers.ts's INVARIANT: for the current, partial month, the
+  // plan must never exceed this — never carriedInAmount, which is the
+  // wrong end of the month for that comparison.
+  realCloseAmount: number | null;
   variableEstimateMonthly: number | null;
   insufficientHistory: boolean;
   totalBorrowed: number;

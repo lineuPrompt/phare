@@ -98,6 +98,10 @@ export default function DashboardPage() {
     ? buildMonthView(timelineDays, timelineUnbalancedDays, timelineOpeningBalance, timelineBalancesStartDate, displayMonth)
     : null;
   const carriedInAmount = monthView?.opensAt ?? null;
+  // THE comparison figure for the plan invariant (plan <= real close,
+  // planChainHelpers.ts's INVARIANT note) — opensAt alone left that
+  // comparison invisible on screen. Same object, already computed.
+  const realCloseAmount = monthView?.closesAt ?? null;
 
   // The chain entry for the viewed month — plan.months only ever spans
   // currentMonth..currentMonth+11 (buildPlanChain, planChainHelpers.ts), so
@@ -265,6 +269,7 @@ export default function DashboardPage() {
                   currentMonth={calendarMonth}
                   isPastMonth={isPastMonth}
                   carriedInAmount={carriedInAmount}
+                  realCloseAmount={realCloseAmount}
                   planMonth={planMonth}
                   isHorizonEnd={isHorizonEnd}
                   variableEstimateMonthly={plan?.variableEstimateMonthly ?? null}
