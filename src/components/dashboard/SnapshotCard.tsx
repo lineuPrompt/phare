@@ -30,8 +30,6 @@ export default function SnapshotCard({
   realCloseAmount,
   planMonth,
   isHorizonEnd,
-  variableEstimateMonthly,
-  insufficientHistory,
 }: {
   summary: DashboardSummary;
   locale: string;
@@ -62,8 +60,6 @@ export default function SnapshotCard({
   realCloseAmount?: number | null;
   planMonth?: PlanChainMonth | null;
   isHorizonEnd?: boolean;
-  variableEstimateMonthly?: number | null;
-  insufficientHistory?: boolean;
 }) {
   const t = useTranslations('dashboard');
   const tNav = useTranslations('dashboard.snapshotNav');
@@ -204,8 +200,6 @@ export default function SnapshotCard({
           isHorizonEnd={isHorizonEnd ?? false}
           carriedInAmount={carriedInAmount ?? null}
           realCloseAmount={realCloseAmount ?? null}
-          variableEstimateMonthly={variableEstimateMonthly ?? null}
-          insufficientHistory={insufficientHistory ?? false}
           totalBorrowed={summary.totalBorrowed}
           locale={locale}
           recurringHref={`/${locale}/recurring`}

@@ -161,10 +161,24 @@ function r2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function signAmount(tx: TimelineTx): number {
+/**
+ * The one canonical opinion about what a transaction row does to a running
+ * chequing balance: income adds, expense and transfer both subtract at face
+ * value. A debt draw is a transfer stored with a NEGATIVE amount (see
+ * TRANSFER DIRECTION NOTE above) — `-tx.amount` therefore yields a positive
+ * balance increase for a draw for free, no type-based special case needed.
+ *
+ * Exported so planChainHelpers.ts's dated-range totals can reuse the exact
+ * same rule the real ledger walk uses below, rather than a second opinion
+ * about transfer direction (a draw is an inflow, a contribution is an
+ * outflow — hardcoding "transfer = outflow" anywhere else silently
+ * understates any household with a draw). Parameter type is intentionally
+ * looser than TimelineTx — only `type`/`amount` are read — so any row shape
+ * carrying those two fields can reuse it without adopting TimelineTx's full
+ * shape.
+ */
+export function signAmount(tx: { type: string; amount: number }): number {
   if (tx.type === 'income') return tx.amount;
-  // expense and transfer are both outflows from chequing.
-  // See TRANSFER DIRECTION NOTE in file header.
   return -tx.amount;
 }
 

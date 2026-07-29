@@ -19,7 +19,7 @@ import { buildMonthView, type UnbalancedDay } from '@/lib/timelineDisplayHelpers
 import type { PlanChainMonth } from '@/lib/planChainHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 
-type PlanResponse = { months: PlanChainMonth[]; variableEstimateMonthly: number | null; insufficientHistory: boolean };
+type PlanResponse = { months: PlanChainMonth[] };
 
 type TimelineDipResponse =
   | {
@@ -272,8 +272,6 @@ export default function DashboardPage() {
                   realCloseAmount={realCloseAmount}
                   planMonth={planMonth}
                   isHorizonEnd={isHorizonEnd}
-                  variableEstimateMonthly={plan?.variableEstimateMonthly ?? null}
-                  insufficientHistory={plan?.insufficientHistory ?? false}
                 />
               )}
             </div>

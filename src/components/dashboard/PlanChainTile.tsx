@@ -17,10 +17,13 @@ function basisKey(basis: CardCostBasis): 'basisActual' | 'basisBudget' | 'basisM
 
 // Replaces the retired single-month "Projected month-end" tile. Lives on
 // the dashboard snapshot, follows the SAME month nav as the rest of the
-// card. The real carriedIn figure is shown first, as its own truthful
-// caption — the chain figure sits below it, clearly labeled by the
-// question it answers, never stacked as if carriedIn + flow = chain (see
-// planChainHelpers.ts's INVARIANT note for why they're allowed to diverge).
+// card. realCloseAmount is shown first — it's THE figure the chain must be
+// read against (planChainHelpers.ts's INVARIANT: for the current month,
+// plan <= real close, and equals it exactly once every card cycle has
+// closed). carriedInAmount (the month's opening balance) is kept only as
+// secondary context. Neither is stacked as if it arithmetically resolves
+// into the chain figure below it — each is labeled by the question it
+// answers.
 export default function PlanChainTile({
   monthLabel,
   currentMonthLabel,
@@ -29,8 +32,6 @@ export default function PlanChainTile({
   isHorizonEnd,
   carriedInAmount,
   realCloseAmount,
-  variableEstimateMonthly,
-  insufficientHistory,
   totalBorrowed,
   locale,
   recurringHref,
@@ -44,15 +45,10 @@ export default function PlanChainTile({
   planMonth: PlanChainMonth | null;
   isHorizonEnd: boolean;
   // The real OPENING balance for `month` (buildMonthView's opensAt) —
-  // context only, kept for continuity with the running walk.
+  // secondary context only.
   carriedInAmount: number | null;
   // THE figure the plan must be read against (buildMonthView's closesAt).
-  // planChainHelpers.ts's INVARIANT: for the current, partial month, the
-  // plan must never exceed this — never carriedInAmount, which is the
-  // wrong end of the month for that comparison.
   realCloseAmount: number | null;
-  variableEstimateMonthly: number | null;
-  insufficientHistory: boolean;
   totalBorrowed: number;
   locale: string;
   recurringHref: string;
@@ -91,6 +87,11 @@ export default function PlanChainTile({
         {t('badge')}
       </span>
 
+      {realCloseAmount !== null && (
+        <p className="text-xs" style={{ color: '#6B7280' }}>
+          {t('closesAt', { month: monthLabel, amount: formatCurrency(realCloseAmount, locale) })}
+        </p>
+      )}
       {carriedInAmount !== null && (
         <p className="text-xs mb-2" style={{ color: '#9CA3AF' }}>
           {t('carriedIn', { month: monthLabel, amount: formatCurrency(carriedInAmount, locale) })}
@@ -126,16 +127,6 @@ export default function PlanChainTile({
             {t('borrowedNote', { amount: formatCurrency(totalBorrowed, locale) })}
           </p>
         </div>
-      )}
-
-      {variableEstimateMonthly !== null && (
-        <p className="text-xs mt-2" style={{ color: '#6D28D9' }}>
-          {t('variableEstimate', { amount: formatCurrency(variableEstimateMonthly, locale) })}
-        </p>
-      )}
-
-      {insufficientHistory && (
-        <p className="text-xs mt-2" style={{ color: '#92400E' }}>{t('insufficientHistory')}</p>
       )}
 
       <AwaitingDatesNotice

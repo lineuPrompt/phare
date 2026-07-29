@@ -267,8 +267,7 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
     household_members: [{ data: { id: 'mem-1' } }],
     account_balance_anchors: [{ data: [{ anchor_date: '2026-07-01', balance: 1000 }] }],
     transactions: [
-      { data: [] }, // main real-walk fetch
-      { data: [] }, // trailing variable-spend window fetch
+      { data: [] }, // main real-walk fetch (also reused as the plan's dated basis)
     ],
     recurring_items: [
       { count: 0, data: [] }, // unanchored income count
@@ -304,10 +303,42 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
     expect(json.plan.months).toHaveLength(12);
     expect(json.plan.months[0].month).toBe('2026-07');
     expect(json.plan.months[0].isPartialMonth).toBe(true);
-    // No dated rows, no card cost, no variable history → the anchor never moves.
+    // No dated rows, no card cost → the anchor never moves.
     expect(json.plan.months.every((m: { balance: number }) => m.balance === 1000)).toBe(true);
-    // Zero trailing months have any real data — unavailable, not a fabricated 0 (Bug 2 fix).
-    expect(json.plan.variableEstimateMonthly).toBeNull();
-    expect(json.plan.insufficientHistory).toBe(true);
+  });
+
+  // THE REAL SEAM: Supabase select → toTimelineTxs → the transactions.map
+  // that builds datedTransactions → buildPlanChain. The pure-function tests
+  // (planChainHelpers.test.ts) hand-build correctly-shaped fixtures and
+  // never exercise this path — this is what actually caught nothing, twice,
+  // while the underlying math was already fixed. A raw DB row shaped
+  // exactly like the real household's — a recurring, dated TRANSFER
+  // contribution in the remainder of the current month — must survive the
+  // whole trip and land in the returned chain.
+  it('a real DB row (recurring transfer contribution, dated in the remainder of the month) survives select -> toTimelineTxs -> datedTransactions -> buildPlanChain', async () => {
+    const { client } = makeSupabaseMock({
+      ...baseScript,
+      transactions: [
+        {
+          data: [
+            {
+              id: 'tx-1', date: '2026-07-30', description: 'Savings Bigode', amount: 350, type: 'transfer',
+              recurring_item_id: 'ri-savings', recurrence_id: null, installment_label: null,
+              transfer_peer_id: 'peer-1', is_bridge: false, bridge_source_account: null, bridge_source_month: null,
+            },
+          ],
+        },
+      ],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const res = await getTimeline('account=acc-1&includePlan=1');
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    // A transfer contribution is an outflow — same rule the real ledger
+    // walk (todayBalance itself) already applies via signAmount.
+    expect(json.plan.months[0].balance).toBe(650); // 1000 - 350, not 1000
   });
 });

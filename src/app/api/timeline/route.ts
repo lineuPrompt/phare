@@ -12,11 +12,8 @@ import { businessToday } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { logEvent } from '@/lib/eventLogger';
 import { addMonthsToMonth } from '@/lib/goalHelpers';
-import { computeInsufficientHistory } from '@/lib/coachingHelpers';
 import {
   buildPlanChain,
-  computeTrailingVariableMonthlyTotal,
-  computeTrailingVariableAverage,
   type ChequingChainTx,
   type PlanChainMonth,
 } from '@/lib/planChainHelpers';
@@ -237,20 +234,18 @@ export async function GET(request: Request) {
 
     // ── The chained 12-month plan (opt-in, planChainHelpers.ts) ─────────────────
     // Anchors at result.todayBalance (real balance as of today — never
-    // recomputed here) and chains forward using every DATED chequing income/
-    // expense row (recurring-linked or not — see planChainHelpers.ts's DATED,
-    // NOT FIXED note), per-card cost (closed/open/max, reusing
-    // computeCardEnvelopeRemainders unchanged), and a trailing-average
-    // variable-spend estimate. See planChainHelpers.ts's file header for the
-    // full design.
-    let plan: { months: PlanChainMonth[]; variableEstimateMonthly: number | null; insufficientHistory: boolean } | null = null;
+    // recomputed here) and chains forward using exactly two inputs: every
+    // dated chequing row at its real signed value (income/expense/transfer
+    // alike — see planChainHelpers.ts's THE MODEL note), and per-card cost
+    // (closed/open/max, reusing computeCardEnvelopeRemainders unchanged).
+    let plan: { months: PlanChainMonth[] } | null = null;
 
     if (includePlan && result.ok && result.todayBalance !== null) {
       const currentMonth = today.slice(0, 7);
 
-      // Dated income/expense basis: the SAME chequing transactions already
-      // fetched for the real walk above (fetchStart..windowEnd) — no second
-      // query. planChainHelpers excludes only is_bridge itself.
+      // Dated basis: the SAME chequing transactions already fetched for the
+      // real walk above (fetchStart..windowEnd) — no second query.
+      // planChainHelpers excludes only is_bridge itself.
       const datedTransactions: ChequingChainTx[] = transactions.map((t) => ({
         account_id: chequingId,
         date: t.date,
@@ -259,41 +254,6 @@ export async function GET(request: Request) {
         recurring_item_id: t.recurringItemId,
         is_bridge: t.isBridge,
       }));
-
-      // Trailing variable-spend window: the 3 complete calendar months before
-      // this one, same convention as coachingHelpers.computeTypicalSurplus
-      // (regenerate-plan/route.ts). Fetched separately — the real-walk fetch
-      // above starts at the earliest anchor, which may postdate this window
-      // for a recently-anchored household.
-      const trailingMonths = [3, 2, 1].map((n) => addMonthsToMonth(currentMonth, -n));
-      const { data: trailingRows } = await supabase
-        .from('transactions')
-        .select('date, type, amount, recurring_item_id, is_bridge')
-        .eq('household_id', householdId)
-        .eq('account_id', chequingId)
-        .gte('date', `${trailingMonths[0]}-01`)
-        .lt('date', `${currentMonth}-01`);
-
-      const trailingChequingTx: ChequingChainTx[] = (trailingRows ?? []).map((t) => ({
-        account_id: chequingId,
-        date: t.date as string,
-        type: t.type as string,
-        amount: Number(t.amount),
-        recurring_item_id: (t.recurring_item_id ?? null) as string | null,
-        is_bridge: Boolean(t.is_bridge),
-      }));
-
-      // hasRealData (any real transaction that month, any type) feeds BOTH
-      // the average's denominator and the insufficient-history disclosure —
-      // one shared per-month fact, never two independent guesses about the
-      // same thing.
-      const trailingMonthFacts = trailingMonths.map((m) => ({
-        month: m,
-        total: computeTrailingVariableMonthlyTotal(trailingChequingTx, chequingId, m),
-        hasRealData: trailingChequingTx.some((t) => t.date.startsWith(m)),
-      }));
-      const variableEstimateMonthly = computeTrailingVariableAverage(trailingMonthFacts);
-      const insufficientHistory = computeInsufficientHistory(trailingMonthFacts);
 
       // Card budgets/actuals across the whole 12-month plan horizon. Cards
       // were already resolved above for bridge-ensuring; reused as-is.
@@ -352,12 +312,11 @@ export async function GET(request: Request) {
         cards,
         cardBudgetRows,
         cardTransactions: cardTxRows,
-        variableEstimateMonthly,
         unanchoredIncomeCount: unanchoredIncomeCount ?? 0,
         unanchoredExpenseCount: unanchoredExpenseCount ?? 0,
       });
 
-      plan = { months, variableEstimateMonthly, insufficientHistory };
+      plan = { months };
     }
 
     return NextResponse.json(result.ok ? { ...result, unbalancedDays, plan } : result);

@@ -364,6 +364,7 @@
     "viewRealBalance": "Voir votre solde réel dans la Chronologie",
     "plan": {
       "badge": "Plan",
+      "closesAt": "Solde réel à la fermeture de {month} : {amount} — le plan ci-dessous est comparé à ce montant",
       "carriedIn": "Solde réel reporté d'avant {month} : {amount}",
       "pastMonth": "Le plan se projette à partir de {currentMonth} — {month} est déjà passé.",
       "labelRemainder": "Si le reste de {month} respecte le budget",
@@ -373,10 +374,8 @@
       "basisMax": "{card} : {amount} — dépassement de budget, montant réel utilisé",
       "basisPosted": "{card} : déjà payé — inclus dans le solde d'aujourd'hui",
       "borrowedNote": "⚠ Comprend {amount} emprunté — ce solde est plus élevé parce que vous avez puisé dans votre crédit.",
-      "variableEstimate": "Inclut environ {amount}/mois estimé pour les dépenses courantes hors carte, basé sur vos 3 derniers mois",
-      "insufficientHistory": "Historique encore limité — cette estimation reste prudente tant que 3 mois complets de données réelles ne sont pas disponibles.",
       "horizonEnd": "L'horizon du plan s'arrête ici — Phare planifie 12 mois à l'avance.",
-      "note": "Une estimation, pas un solde réel.",
+      "note": "Une estimation — suppose que les factures fixes, les transferts et les budgets de carte se déroulent comme prévu.",
       "viewRealBalance": "Voir les soldes réels sur la Chronologie"
     },
     "topPriority": "Votre priorité #1",
