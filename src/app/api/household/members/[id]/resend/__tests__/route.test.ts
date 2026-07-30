@@ -22,7 +22,7 @@ function makeResultChain(resolution: Resolution) {
 type Call = { table: string; method: string; args: unknown[] };
 
 function makeSupabaseMock(
-  userRow: { household_id: string; role: string } | null,
+  userRow: { household_id: string; role: string; households?: unknown } | null,
   script: Record<string, Resolution[]>
 ) {
   const cursors: Record<string, number> = {};
@@ -201,6 +201,34 @@ describe('POST /api/household/members/[id]/resend', () => {
 
     const updateCall = calls.find((c) => c.table === 'household_members' && c.method === 'update');
     expect(updateCall?.args[0]).toHaveProperty('last_resend_at');
+  });
+
+  // Resend used to hardcode next=/en/dashboard, so re-inviting a French
+  // member re-sent them to an English set-password page. The 'en' case is a
+  // regression pin — that exact string is the allow-listed, proven one.
+  it.each([
+    ['fr' as const, { locale: 'fr' }, 'http://localhost/auth/callback?next=/fr/dashboard'],
+    ['en' as const, { locale: 'en' }, 'http://localhost/auth/callback?next=/en/dashboard'],
+    ['missing embed', undefined, 'http://localhost/auth/callback?next=/en/dashboard'],
+  ])('resends with the household locale (%s)', async (_label, households, expectedRedirect) => {
+    const { client } = makeSupabaseMock({ household_id: 'hh1', role: 'owner', households }, {
+      household_members: [
+        { data: { id: 'mem-1', household_id: 'hh1', user_id: 'u1', last_resend_at: null }, error: null },
+        { error: null },
+      ],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    getUserByIdMock.mockResolvedValue({
+      data: { user: { email: 'julia@example.com', last_sign_in_at: null } },
+      error: null,
+    });
+    resetPasswordMock.mockResolvedValue({ error: null });
+
+    const res = await postResend('mem-1');
+    expect(res.status).toBe(200);
+    expect(resetPasswordMock).toHaveBeenCalledWith('julia@example.com', { redirectTo: expectedRedirect });
   });
 
   it('a member older than the 60s window can resend again', async () => {

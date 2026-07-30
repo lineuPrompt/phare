@@ -1,4 +1,36 @@
 {
+  "exportData": {
+    "title": "Exporter vos données",
+    "description": "Téléchargez toutes les transactions de votre ménage dans un fichier CSV que vous pouvez ouvrir dans Excel ou Google Sheets.",
+    "button": "Exporter les transactions (CSV)",
+    "preparing": "Préparation de votre export...",
+    "failed": "L'export n'a pas pu être créé. Veuillez réessayer.",
+    "yes": "Oui",
+    "no": "Non",
+    "columns": {
+      "date": "Date",
+      "account": "Compte",
+      "type": "Type",
+      "category": "Catégorie",
+      "description": "Description",
+      "amount": "Montant",
+      "source": "Saisie par",
+      "isBridge": "Paiement de carte",
+      "isRecurring": "Issue d'un élément récurrent"
+    },
+    "types": {
+      "expense": "Dépense",
+      "income": "Revenu",
+      "transfer": "Transfert"
+    },
+    "sources": {
+      "manual": "Saisie à la main",
+      "screenshot": "Capture d'écran",
+      "csv": "Import CSV",
+      "excel": "Import Excel",
+      "bridge": "Créée par Phare"
+    }
+  },
   "support": {
     "needHelp": "Besoin d'aide?"
   },

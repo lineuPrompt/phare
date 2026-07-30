@@ -220,3 +220,87 @@ describe('POST /api/household/members — match-before-create', () => {
     expect(calls.filter((c) => c.table === 'household_members')).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Invite email locale. Both send-sites in this route used to hardcode
+// next=/en/dashboard, so a French family's invitee met Phare in English on
+// their very first screen. The locale now rides on the household row.
+//
+// The 'en' cases are regression pins: the redirectTo they produce must be
+// byte-identical to what shipped before, because that exact string is the one
+// allow-listed in Supabase and proven to deliver.
+// ---------------------------------------------------------------------------
+describe('POST /api/household/members — invite email locale', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createUserMock.mockReset();
+    resetPasswordMock.mockReset();
+  });
+
+  async function inviteInto(households: unknown) {
+    createUserMock.mockResolvedValue({ data: { user: { id: 'new-auth-user' } }, error: null });
+    resetPasswordMock.mockResolvedValue({ error: null });
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1', role: 'owner', households }, error: null }],
+      household_members: [{ data: [], error: null }], // no name-only candidates
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    return postMembers({ email: 'marc@example.com', fullName: 'Marc Nobody', role: 'member' });
+  }
+
+  it('a fr household sends the invitee to the French set-password page', async () => {
+    const res = await inviteInto({ locale: 'fr' });
+    expect(res.status).toBe(200);
+    expect(resetPasswordMock).toHaveBeenCalledWith('marc@example.com', {
+      redirectTo: 'http://localhost/auth/callback?next=/fr/dashboard',
+    });
+  });
+
+  it('an en household produces exactly the string that shipped before', async () => {
+    const res = await inviteInto({ locale: 'en' });
+    expect(res.status).toBe(200);
+    expect(resetPasswordMock).toHaveBeenCalledWith('marc@example.com', {
+      redirectTo: 'http://localhost/auth/callback?next=/en/dashboard',
+    });
+  });
+
+  it('tolerates the embed arriving as a single-element array', async () => {
+    await inviteInto([{ locale: 'fr' }]);
+    expect(resetPasswordMock).toHaveBeenCalledWith('marc@example.com', {
+      redirectTo: 'http://localhost/auth/callback?next=/fr/dashboard',
+    });
+  });
+
+  it('falls back to en when the embed is missing entirely — an invite still sends', async () => {
+    const res = await inviteInto(undefined);
+    expect(res.status).toBe(200);
+    expect(resetPasswordMock).toHaveBeenCalledWith('marc@example.com', {
+      redirectTo: 'http://localhost/auth/callback?next=/en/dashboard',
+    });
+  });
+
+  it('carries the locale on the duplicate-email resend path too', async () => {
+    createUserMock.mockResolvedValue({ data: null, error: { message: 'User already registered', status: 422 } });
+    resetPasswordMock.mockResolvedValue({ error: null });
+
+    const { client } = makeSupabaseMock({
+      users: [
+        { data: { household_id: 'hh1', role: 'owner', households: { locale: 'fr' } }, error: null },
+        { data: { household_id: 'hh1' }, error: null }, // existing row — same household → resend
+      ],
+      household_members: [{ data: [], error: null }],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const res = await postMembers({ email: 'julia@example.com', fullName: 'Julia Alff', role: 'member' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, resent: true });
+    expect(resetPasswordMock).toHaveBeenCalledWith('julia@example.com', {
+      redirectTo: 'http://localhost/auth/callback?next=/fr/dashboard',
+    });
+  });
+});

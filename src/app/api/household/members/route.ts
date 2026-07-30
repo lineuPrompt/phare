@@ -2,18 +2,22 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { findMemberNameCandidates } from '@/lib/incomeHelpers';
-import { isPendingMember } from '@/lib/memberProvisioningHelpers';
+import { isPendingMember, householdLocaleFrom } from '@/lib/memberProvisioningHelpers';
 
 // ---------------------------------------------------------------------------
 // Auth guard — exported for unit testing
 //
-// Returns the caller's { userId, householdId, role } if authenticated.
+// Returns the caller's { userId, householdId, role, locale } if authenticated.
 // Returns null if unauthenticated or if the users row is missing.
+//
+// locale is the HOUSEHOLD's locale (embedded from households), not a per-user
+// setting — it decides which language an invitee's set-password page opens in.
 // ---------------------------------------------------------------------------
 export interface CallerInfo {
   userId: string;
   householdId: string;
   role: string;
+  locale: 'en' | 'fr';
 }
 
 export async function getCallerInfo(
@@ -24,13 +28,18 @@ export async function getCallerInfo(
 
   const { data: userRow } = await supabase
     .from('users')
-    .select('household_id, role')
+    .select('household_id, role, households(locale)')
     .eq('id', user.id)
     .single();
 
   if (!userRow?.household_id) return null;
 
-  return { userId: user.id, householdId: userRow.household_id, role: userRow.role };
+  return {
+    userId: user.id,
+    householdId: userRow.household_id,
+    role: userRow.role,
+    locale: householdLocaleFrom((userRow as { households?: unknown }).households),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +231,7 @@ export async function POST(request: Request) {
         if (existingRow?.household_id === caller.householdId) {
           const appOrigin = new URL(request.url).origin;
           await admin.auth.resetPasswordForEmail(email.trim(), {
-            redirectTo: `${appOrigin}/auth/callback?next=/en/dashboard`,
+            redirectTo: `${appOrigin}/auth/callback?next=/${caller.locale}/dashboard`,
           });
           return NextResponse.json({ success: true, resent: true });
         }
@@ -303,7 +312,7 @@ export async function POST(request: Request) {
     const appOrigin = new URL(request.url).origin;
     const { error: emailError } = await admin.auth.resetPasswordForEmail(
       email.trim(),
-      { redirectTo: `${appOrigin}/auth/callback?next=/en/dashboard` }
+      { redirectTo: `${appOrigin}/auth/callback?next=/${caller.locale}/dashboard` }
     );
 
     if (emailError) {

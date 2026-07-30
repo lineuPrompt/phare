@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import SupportLine from '@/components/shared/SupportLine';
+import ExportDataSection from '@/components/shared/ExportDataSection';
 
 type Member = {
   id: string;
@@ -359,6 +360,8 @@ export default function HouseholdPage() {
                 </button>
               )}
             </section>
+
+            <ExportDataSection locale={locale} />
           </div>
         </div>
       </div>

@@ -74,7 +74,7 @@ export async function POST(
 
     const appOrigin = new URL(request.url).origin;
     const { error: emailError } = await admin.auth.resetPasswordForEmail(authUser.user.email, {
-      redirectTo: `${appOrigin}/auth/callback?next=/en/dashboard`,
+      redirectTo: `${appOrigin}/auth/callback?next=/${caller.locale}/dashboard`,
     });
 
     if (emailError) {

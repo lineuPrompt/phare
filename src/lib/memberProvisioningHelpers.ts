@@ -21,3 +21,22 @@ export function isPendingMember(userId: string | null, lastSignInAt: string | nu
   if (!userId) return false;
   return lastSignInAt === null || lastSignInAt === undefined;
 }
+
+// Locale for a provisioning email's set-password landing page.
+//
+// The invite/resend routes used to hardcode next=/en/dashboard, so a French
+// family's invitee met Phare for the first time in English. households.locale
+// is the household's own setting ('en'|'fr', NOT NULL, CHECK-constrained), so
+// it's the honest source — an invitee has no preference of their own yet.
+//
+// The argument is whatever PostgREST returned for an embedded households(locale)
+// select. That embed is typed loosely and can arrive as an object or a
+// single-element array depending on how the relationship is detected, so both
+// are accepted. Anything unrecognized falls back to 'en' rather than throwing:
+// this decides which language an email's landing page is in, and a wrong guess
+// must never be the reason an invite fails to send.
+export function householdLocaleFrom(embedded: unknown): 'en' | 'fr' {
+  const row = Array.isArray(embedded) ? embedded[0] : embedded;
+  const locale = (row as { locale?: unknown } | null | undefined)?.locale;
+  return locale === 'fr' ? 'fr' : 'en';
+}

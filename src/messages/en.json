@@ -1,4 +1,36 @@
 {
+  "exportData": {
+    "title": "Export your data",
+    "description": "Download every transaction in your household as a CSV file you can open in Excel or Google Sheets.",
+    "button": "Export transactions (CSV)",
+    "preparing": "Preparing your export...",
+    "failed": "Could not build the export. Please try again.",
+    "yes": "Yes",
+    "no": "No",
+    "columns": {
+      "date": "Date",
+      "account": "Account",
+      "type": "Type",
+      "category": "Category",
+      "description": "Description",
+      "amount": "Amount",
+      "source": "Entered by",
+      "isBridge": "Card payment",
+      "isRecurring": "From a recurring item"
+    },
+    "types": {
+      "expense": "Expense",
+      "income": "Income",
+      "transfer": "Transfer"
+    },
+    "sources": {
+      "manual": "Entered by hand",
+      "screenshot": "Screenshot",
+      "csv": "CSV import",
+      "excel": "Excel import",
+      "bridge": "Created by Phare"
+    }
+  },
   "support": {
     "needHelp": "Need help?"
   },
