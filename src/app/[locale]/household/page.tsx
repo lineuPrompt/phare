@@ -42,6 +42,12 @@ export default function HouseholdPage() {
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [resendError, setResendError] = useState<{ id: string; message: string } | null>(null);
 
+  const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [promoteError, setPromoteError] = useState<{ id: string; message: string } | null>(null);
+  // Two-step: the first click asks, the second commits. Promotion can't be
+  // undone from the UI (there is no demote), so it shouldn't be one click away.
+  const [confirmPromoteId, setConfirmPromoteId] = useState<string | null>(null);
+
   useEffect(() => {
     Promise.all([
       fetch('/api/me').then((r) => r.json()),
@@ -92,6 +98,30 @@ export default function HouseholdPage() {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePromote = async (id: string) => {
+    setPromotingId(id);
+    setPromoteError(null);
+    try {
+      const res = await fetch(`/api/household/members/${id}/promote`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        // Surface the server's reason — "they haven't set their password yet"
+        // is the whole point of the guard and useless if hidden.
+        setPromoteError({ id, message: data.error ?? t('promoteFailed') });
+        return;
+      }
+
+      setConfirmPromoteId(null);
+      fetch('/api/household/members')
+        .then((r) => r.json())
+        .then((d) => setMembers(d.members ?? []));
+    } catch (err) {
+      setPromoteError({ id, message: err instanceof Error ? err.message : t('promoteFailed') });
+    } finally {
+      setPromotingId(null);
     }
   };
 
@@ -208,6 +238,48 @@ export default function HouseholdPage() {
                             </span>
                           </div>
                         </div>
+
+                        {/* Promote to owner. Only for an active member — a
+                            pending person would hold the role without being
+                            able to sign in and use it. The server enforces
+                            this too; hiding the button is not the guard. */}
+                        {!m.pending && memberRole !== 'owner' && m.user_id && (
+                          <div className="mt-2">
+                            {confirmPromoteId === m.id ? (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs" style={{ color: '#6B7280' }}>
+                                  {t('promoteConfirm', { name: m.name })}
+                                </span>
+                                <button
+                                  onClick={() => handlePromote(m.id)}
+                                  disabled={promotingId === m.id}
+                                  className="text-xs font-medium px-3 py-1.5 rounded-full text-white cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
+                                  style={{ background: '#0F2044' }}
+                                >
+                                  {promotingId === m.id ? t('promoting') : t('promoteYes')}
+                                </button>
+                                <button
+                                  onClick={() => { setConfirmPromoteId(null); setPromoteError(null); }}
+                                  className="text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-90 transition-all"
+                                  style={{ border: '1.5px solid #D1D5DB', color: '#0F2044', background: 'white' }}
+                                >
+                                  {t('promoteCancel')}
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setConfirmPromoteId(m.id); setPromoteError(null); }}
+                                className="text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-90 transition-all"
+                                style={{ border: '1.5px solid #D1D5DB', color: '#0F2044', background: 'white' }}
+                              >
+                                {t('promoteToOwner')}
+                              </button>
+                            )}
+                            {promoteError?.id === m.id && (
+                              <p className="text-xs mt-1" style={{ color: '#DC2626' }}>{promoteError.message}</p>
+                            )}
+                          </div>
+                        )}
 
                         {m.pending && (
                           <div className="mt-2">

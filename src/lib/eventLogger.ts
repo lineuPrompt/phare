@@ -55,7 +55,16 @@ export type EventType =
   // (month navigation re-slices client-side, no refetch), so this is
   // already "once per real load, never per nav" by construction on the
   // client side, not by a dedup check here.
-  | 'timeline_opened';
+  | 'timeline_opened'
+  // A member was given the owner role after the fact (POST
+  // /api/household/members/[id]/promote). Role was previously assignable only
+  // at invite time and immutable thereafter, so every one of these rows is a
+  // deliberate administrative act by an existing owner — worth a trail both
+  // for support ("who made them an owner?") and because it is the step that
+  // unblocks the last owner deleting their account. metadata carries the
+  // household_members id and the promoted user's id; user_id on the row is
+  // the OWNER who performed it, not the person promoted.
+  | 'member_promoted_to_owner';
 
 /**
  * Insert one event row.

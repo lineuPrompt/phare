@@ -965,6 +965,12 @@
     "resendFailed": "Couldn't resend the invite.",
     "resendRateLimited": "Please wait {seconds}s before resending.",
     "notOwner": "Only the household owner can manage members.",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "promoteToOwner": "Make owner",
+    "promoteConfirm": "Make {name} an owner? This can't be undone here.",
+    "promoteYes": "Yes, make owner",
+    "promoteCancel": "Cancel",
+    "promoting": "Making owner...",
+    "promoteFailed": "Could not make this member an owner. Please try again."
   }
 }

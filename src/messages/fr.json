@@ -965,6 +965,12 @@
     "resendFailed": "Impossible de renvoyer l'invitation.",
     "resendRateLimited": "Veuillez patienter {seconds} s avant de renvoyer.",
     "notOwner": "Seul le propriétaire du foyer peut gérer les membres.",
-    "loading": "Chargement..."
+    "loading": "Chargement...",
+    "promoteToOwner": "Nommer propriétaire",
+    "promoteConfirm": "Nommer {name} propriétaire? Cette action ne peut pas être annulée ici.",
+    "promoteYes": "Oui, nommer propriétaire",
+    "promoteCancel": "Annuler",
+    "promoting": "Nomination en cours...",
+    "promoteFailed": "Impossible de nommer ce membre propriétaire. Veuillez réessayer."
   }
 }
