@@ -56,6 +56,25 @@ describe('cascade invariants for account deletion', () => {
   });
 
   // ---------------------------------------------------------------------
+  // "Household content survives the member who generated it"
+  // ---------------------------------------------------------------------
+  it('conversations.user_id is SET NULL, never CASCADE', () => {
+    // conversations rows are assistant-authored household content (onboarding
+    // plans and monthly reviews) read by the dashboard scoped to household_id
+    // alone. user_id records who triggered generation, not authorship. Under
+    // CASCADE, the member who last regenerated the plan deleting their account
+    // would wipe the family's review history from everyone's dashboard.
+    expect(deleteRuleFor(foreignKeys, 'conversations', 'user_id')).toBe('SET NULL');
+  });
+
+  it('conversations still cascade on whole-household deletion', () => {
+    // The SET NULL above must not be mistaken for "conversations survive
+    // everything" — deleting the household still purges them, and that is the
+    // path that satisfies erasure.
+    expect(deleteRuleFor(foreignKeys, 'conversations', 'household_id')).toBe('CASCADE');
+  });
+
+  // ---------------------------------------------------------------------
   // "Household ledger preserved"
   // ---------------------------------------------------------------------
   it('deleting a member detaches their identity but keeps their member row', () => {
@@ -118,13 +137,16 @@ describe('cascade invariants for account deletion', () => {
   it('the rule lookup and the cascade walk actually discriminate', () => {
     const fake: ForeignKey[] = [
       { table: 'file_imports', column: 'uploaded_by', target: 'users', onDelete: 'CASCADE' },
+      { table: 'conversations', column: 'user_id', target: 'users', onDelete: 'CASCADE' },
       { table: 'child', column: 'parent_id', target: 'users', onDelete: 'SET NULL' },
       { table: 'grandchild', column: 'child_id', target: 'child', onDelete: 'CASCADE' },
     ];
 
-    // The pre-migration state must read as CASCADE, proving these tests would
-    // have failed before the fix rather than being written to match it.
+    // Both fixes read as CASCADE in the pre-migration state, proving the
+    // assertions above would have FAILED before the migrations rather than
+    // being written to match whatever the schema happens to say now.
     expect(deleteRuleFor(fake, 'file_imports', 'uploaded_by')).toBe('CASCADE');
+    expect(deleteRuleFor(fake, 'conversations', 'user_id')).toBe('CASCADE');
     expect(deleteRuleFor(fake, 'file_imports', 'no_such_column')).toBeNull();
 
     // A SET NULL edge terminates the walk: `child` rows survive, so
