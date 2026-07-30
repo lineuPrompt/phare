@@ -15,7 +15,7 @@ export default function SignInPage() {
   const searchParams = useSearchParams();
   const callbackError = searchParams.get('error');
 
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [mode, setMode] = useState<'signin' | 'signup' | 'reset'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -23,7 +23,49 @@ export default function SignInPage() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
 
+  const switchMode = (next: 'signin' | 'signup' | 'reset') => {
+    setMode(next);
+    setError('');
+    setInfo('');
+  };
+
+  // Self-service reset. The response is deliberately the same whether or not
+  // the address has an account, so the copy confirms the send without ever
+  // confirming the account — don't "improve" this into a not-found message.
+  const handleReset = async () => {
+    setLoading(true);
+    setError('');
+    setInfo('');
+
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, locale }),
+      });
+
+      if (res.status === 429) {
+        // Localize from retryAfterSeconds rather than showing the route's
+        // English `error` prose — this page is bilingual, the API isn't.
+        const json = await res.json().catch(() => ({}));
+        setError(t('resetTooSoon', { seconds: json.retryAfterSeconds ?? 60 }));
+        return;
+      }
+
+      setInfo(t('resetSent'));
+    } catch {
+      setError(t('resetFailed'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
+    if (mode === 'reset') {
+      await handleReset();
+      return;
+    }
+
     setLoading(true);
     setError('');
     setInfo('');
@@ -59,10 +101,10 @@ export default function SignInPage() {
 
       <div className="max-w-md mx-auto px-6 py-16">
         <h1 className="text-3xl font-bold mb-2 text-center" style={{ color: '#0F2044' }}>
-          {mode === 'signin' ? t('signinTitle') : t('signupTitle')}
+          {mode === 'signin' ? t('signinTitle') : mode === 'signup' ? t('signupTitle') : t('resetTitle')}
         </h1>
         <p className="text-center mb-10" style={{ color: '#6B7280' }}>
-          {mode === 'signin' ? t('signinSubtitle') : t('signupSubtitle')}
+          {mode === 'signin' ? t('signinSubtitle') : mode === 'signup' ? t('signupSubtitle') : t('resetSubtitle')}
         </p>
 
         {callbackError && (
@@ -99,49 +141,89 @@ export default function SignInPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
-              style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: '#0F2044' }}>
-              {t('password')}
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && email && password && !loading) handleSubmit();
+                if (e.key === 'Enter' && mode === 'reset' && email && !loading) handleSubmit();
               }}
               className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
               style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
             />
           </div>
 
+          {mode !== 'reset' && (
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: '#0F2044' }}>
+                {t('password')}
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && email && password && !loading) handleSubmit();
+                }}
+                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
+                style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
+              />
+            </div>
+          )}
+
+          {mode === 'signin' && (
+            <p className="text-sm text-right">
+              <button
+                onClick={() => switchMode('reset')}
+                className="font-medium underline cursor-pointer"
+                style={{ color: '#2ABFBF' }}
+              >
+                {t('forgotPassword')}
+              </button>
+            </p>
+          )}
+
           {error && <p className="text-sm text-red-600">{error}</p>}
           {info && <p className="text-sm" style={{ color: '#16A34A' }}>{info}</p>}
 
           <button
             onClick={handleSubmit}
-            disabled={loading || !email || !password || (mode === 'signup' && !fullName)}
+            disabled={
+              loading ||
+              !email ||
+              (mode !== 'reset' && !password) ||
+              (mode === 'signup' && !fullName)
+            }
             className="w-full py-3 rounded-full text-white font-semibold cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
             style={{ background: '#0F2044' }}
           >
-            {loading ? t('loading') : mode === 'signin' ? t('signinBtn') : t('signupBtn')}
+            {loading
+              ? t('loading')
+              : mode === 'signin'
+              ? t('signinBtn')
+              : mode === 'signup'
+              ? t('signupBtn')
+              : t('resetBtn')}
           </button>
 
-          <p className="text-sm text-center" style={{ color: '#6B7280' }}>
-            {mode === 'signin' ? t('noAccount') : t('hasAccount')}{' '}
-            <button
-              onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setInfo(''); }}
-              className="font-medium underline cursor-pointer"
-              style={{ color: '#2ABFBF' }}
-            >
-              {mode === 'signin' ? t('signupLink') : t('signinLink')}
-            </button>
-          </p>
+          {mode === 'reset' ? (
+            <p className="text-sm text-center" style={{ color: '#6B7280' }}>
+              <button
+                onClick={() => switchMode('signin')}
+                className="font-medium underline cursor-pointer"
+                style={{ color: '#2ABFBF' }}
+              >
+                {t('backToSignin')}
+              </button>
+            </p>
+          ) : (
+            <p className="text-sm text-center" style={{ color: '#6B7280' }}>
+              {mode === 'signin' ? t('noAccount') : t('hasAccount')}{' '}
+              <button
+                onClick={() => switchMode(mode === 'signin' ? 'signup' : 'signin')}
+                className="font-medium underline cursor-pointer"
+                style={{ color: '#2ABFBF' }}
+              >
+                {mode === 'signin' ? t('signupLink') : t('signinLink')}
+              </button>
+            </p>
+          )}
         </div>
       </div>
     </main>
