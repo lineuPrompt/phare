@@ -48,8 +48,12 @@ describe('PostgREST embed ambiguity', () => {
     // Sanity guard: if parsing silently breaks, every assertion below passes
     // vacuously and this file becomes decoration.
     expect(foreignKeys.length).toBeGreaterThan(20);
-    expect(foreignKeys).toContainEqual({ table: 'transactions', column: 'account_id', target: 'accounts' });
-    expect(foreignKeys).toContainEqual({ table: 'transactions', column: 'bridge_source_account', target: 'accounts' });
+    expect(foreignKeys).toContainEqual(
+      expect.objectContaining({ table: 'transactions', column: 'account_id', target: 'accounts' })
+    );
+    expect(foreignKeys).toContainEqual(
+      expect.objectContaining({ table: 'transactions', column: 'bridge_source_account', target: 'accounts' })
+    );
   });
 
   it('knows transactions → accounts is the ambiguous pair that broke the export', () => {

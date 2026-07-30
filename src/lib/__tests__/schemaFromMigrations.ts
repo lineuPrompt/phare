@@ -14,6 +14,21 @@ import path from 'node:path';
  * broken (PGRST201, transactions → accounts via both account_id and
  * bridge_source_account).
  *
+ * It also parses ON DELETE rules, because the second class of invisible bug is
+ * a cascade nobody enumerated: file_imports.uploaded_by was ON DELETE CASCADE
+ * from users, so deleting one member would have destroyed the household's
+ * import provenance. Reading delete rules statically turns "discover the blast
+ * radius one bug at a time" into one list.
+ *
+ * PARSING IS STATEMENT-BASED, not line-based. A foreign key can be declared
+ * three ways, and the third spans multiple lines:
+ *   1. inline in CREATE TABLE      — `col uuid REFERENCES t(id) ON DELETE …`
+ *   2. ALTER TABLE ADD COLUMN      — `ADD COLUMN col uuid REFERENCES t(id) …`
+ *   3. ALTER TABLE ADD CONSTRAINT  — `FOREIGN KEY (col) REFERENCES t(id) …`
+ * Migrations replay in filename order, so a later declaration for the same
+ * (table, column, target) overwrites an earlier one — which is how the
+ * uploaded_by CASCADE → SET NULL swap is picked up.
+ *
  * Not a .test.ts file, so vitest's default include pattern doesn't collect it,
  * and both source scanners skip __tests__ so it never scans itself.
  */
@@ -22,11 +37,22 @@ const REPO_ROOT = path.resolve(process.cwd());
 const MIGRATIONS_DIR = path.join(REPO_ROOT, 'supabase', 'migrations');
 const SRC_DIR = path.join(REPO_ROOT, 'src');
 
-/** Column types that mark a line as a real column definition, not a constraint. */
 const COLUMN_TYPE =
   /^(uuid|text|numeric|int|int4|int8|integer|bigint|smallint|boolean|bool|date|timestamptz|timestamp|jsonb|json|serial|bigserial|real|double|char|varchar|time|interval)\b/i;
 
-export type ForeignKey = { table: string; column: string; target: string };
+/** Table-level definitions inside CREATE TABLE that are not columns. */
+const NOT_A_COLUMN = /^(UNIQUE|CHECK|PRIMARY\s+KEY|FOREIGN\s+KEY|CONSTRAINT|EXCLUDE|LIKE)\b/i;
+
+export type OnDelete = 'CASCADE' | 'SET NULL' | 'SET DEFAULT' | 'RESTRICT' | 'NO ACTION';
+
+export type ForeignKey = {
+  table: string;
+  column: string;
+  target: string;
+  /** Postgres defaults to NO ACTION when the clause is omitted. */
+  onDelete: OnDelete;
+};
+
 export type Schema = {
   foreignKeys: ForeignKey[];
   /** table → set of column names */
@@ -34,13 +60,86 @@ export type Schema = {
 };
 
 /**
- * Replay every migration in filename order, tracking which table each
- * statement applies to. Handles inline CREATE TABLE columns, ALTER TABLE ADD
- * COLUMN, and DROP TABLE (the legacy `goals` table is dropped this way).
+ * Split SQL into statements, ignoring semicolons inside $$-quoted function
+ * bodies and single-quoted literals, and stripping `--` comments.
+ */
+function splitStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let inDollar = false;
+  let inQuote = false;
+  let inComment = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    const next2 = sql.slice(i, i + 2);
+
+    if (inComment) {
+      if (ch === '\n') { inComment = false; current += ch; }
+      continue;
+    }
+    if (!inDollar && !inQuote && next2 === '--') { inComment = true; i++; continue; }
+    if (!inQuote && next2 === '$$') { inDollar = !inDollar; current += next2; i++; continue; }
+    if (!inDollar && ch === "'") { inQuote = !inQuote; current += ch; continue; }
+
+    if (ch === ';' && !inDollar && !inQuote) {
+      statements.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) statements.push(current);
+
+  return statements.map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
+}
+
+/** Split on top-level commas, leaving parenthesised groups intact. */
+export function topLevelParts(input: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+
+  for (const ch of input) {
+    if (ch === '(') { depth++; current += ch; }
+    else if (ch === ')') { depth--; current += ch; }
+    else if (ch === ',' && depth === 0) { parts.push(current); current = ''; }
+    else current += ch;
+  }
+  if (current.trim()) parts.push(current);
+
+  return parts.map((p) => p.trim()).filter(Boolean);
+}
+
+function readOnDelete(fragment: string): OnDelete {
+  const m = fragment.match(/ON DELETE (CASCADE|SET NULL|SET DEFAULT|RESTRICT|NO ACTION)/i);
+  return (m ? m[1].toUpperCase() : 'NO ACTION') as OnDelete;
+}
+
+/** The parenthesised body of `CREATE TABLE x ( … )`. */
+function createTableBody(statement: string): string | null {
+  const open = statement.indexOf('(');
+  if (open === -1) return null;
+
+  let depth = 0;
+  for (let i = open; i < statement.length; i++) {
+    if (statement[i] === '(') depth++;
+    else if (statement[i] === ')') {
+      depth--;
+      if (depth === 0) return statement.slice(open + 1, i);
+    }
+  }
+  return null;
+}
+
+/**
+ * Replay every migration in filename order.
  *
- * No migration in this repo uses DROP COLUMN or RENAME COLUMN; if one ever
- * does, this parser will silently keep the stale name and the checks built on
- * it will go quiet. That's the known limit of reading DDL as text.
+ * Known limit, unchanged: no migration in this repo uses DROP COLUMN or
+ * RENAME COLUMN. If one ever does, this parser keeps the stale name and the
+ * checks built on it go quiet. Dropping a CONSTRAINT by a name computed at
+ * runtime (the DO block in the uploaded_by migration) is likewise invisible —
+ * that migration's subsequent ADD CONSTRAINT is what this reads.
  */
 export function parseSchema(): Schema {
   const files = fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort();
@@ -53,62 +152,88 @@ export function parseSchema(): Schema {
     columns.get(table)!.add(column);
   };
 
+  const addForeignKey = (fk: ForeignKey) => {
+    // Keyed so a re-run CREATE TABLE IF NOT EXISTS doesn't double-count, and
+    // so a later ADD CONSTRAINT supersedes the original inline declaration.
+    foreignKeys.set(`${fk.table}.${fk.column}->${fk.target}`, fk);
+  };
+
   for (const file of files) {
     const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
-    let currentTable: string | null = null;
-    let inCreateTable = false;
 
-    for (const raw of sql.split(/\r?\n/)) {
-      const line = raw.replace(/--.*$/, '');
-
-      const create = line.match(/CREATE TABLE(?:\s+IF NOT EXISTS)?\s+(\w+)\s*\(/i);
-      if (create) {
-        currentTable = create[1];
-        inCreateTable = true;
-        continue;
-      }
-
-      const drop = line.match(/DROP TABLE(?:\s+IF EXISTS)?\s+(\w+)/i);
-      if (drop) {
-        columns.delete(drop[1]);
+    for (const statement of splitStatements(sql)) {
+      const dropTable = statement.match(/^DROP TABLE(?: IF EXISTS)? (\w+)/i);
+      if (dropTable) {
+        columns.delete(dropTable[1]);
         for (const [key, fk] of foreignKeys) {
-          if (fk.table === drop[1]) foreignKeys.delete(key);
+          if (fk.table === dropTable[1]) foreignKeys.delete(key);
         }
-        currentTable = null;
-        inCreateTable = false;
         continue;
       }
 
-      const alter = line.match(/ALTER TABLE\s+(?:IF EXISTS\s+)?(\w+)/i);
-      if (alter) {
-        currentTable = alter[1];
-        inCreateTable = false;
-      }
+      const createTable = statement.match(/^CREATE TABLE(?: IF NOT EXISTS)? (\w+)\s*\(/i);
+      if (createTable) {
+        const table = createTable[1];
+        const body = createTableBody(statement);
+        if (!body) continue;
 
-      if (inCreateTable && /^\s*\)\s*;/.test(line)) {
-        inCreateTable = false;
-        currentTable = null;
+        for (const definition of topLevelParts(body)) {
+          const tableLevelFk = definition.match(
+            /^FOREIGN KEY \(\s*(\w+)\s*\)\s* REFERENCES ((?:\w+\.)?\w+)\s*\(/i
+          );
+          if (tableLevelFk) {
+            addForeignKey({
+              table,
+              column: tableLevelFk[1],
+              target: tableLevelFk[2],
+              onDelete: readOnDelete(definition),
+            });
+            continue;
+          }
+
+          if (NOT_A_COLUMN.test(definition)) continue;
+
+          const column = definition.match(/^(\w+)\s+(\w+)/);
+          if (!column || !COLUMN_TYPE.test(column[2])) continue;
+          addColumn(table, column[1]);
+
+          const ref = definition.match(/REFERENCES ((?:\w+\.)?\w+)\s*\(/i);
+          if (ref) {
+            addForeignKey({ table, column: column[1], target: ref[1], onDelete: readOnDelete(definition) });
+          }
+        }
         continue;
       }
 
-      if (currentTable) {
-        const added = line.match(/ADD COLUMN(?:\s+IF NOT EXISTS)?\s+(\w+)\s+(\w+)/i);
-        if (added && COLUMN_TYPE.test(added[2])) {
-          addColumn(currentTable, added[1]);
-        } else if (inCreateTable) {
-          const inline = line.match(/^\s*(\w+)\s+(\w+)/);
-          if (inline && COLUMN_TYPE.test(inline[2])) addColumn(currentTable, inline[1]);
-        }
+      const alter = statement.match(/^ALTER TABLE(?: IF EXISTS)? (\w+) (.*)$/i);
+      if (!alter) continue;
+      const table = alter[1];
+      const rest = alter[2];
 
-        const ref = line.match(
-          /(?:ADD COLUMN(?:\s+IF NOT EXISTS)?\s+)?(\w+)\s+uuid\b[^,]*?REFERENCES\s+(\w+)\s*\(/i
-        );
+      const addConstraint = rest.match(
+        /ADD CONSTRAINT \w+ FOREIGN KEY \(\s*(\w+)\s*\) REFERENCES ((?:\w+\.)?\w+)\s*\(/i
+      );
+      if (addConstraint) {
+        addForeignKey({
+          table,
+          column: addConstraint[1],
+          target: addConstraint[2],
+          onDelete: readOnDelete(rest),
+        });
+        continue;
+      }
+
+      const addColumnStatement = rest.match(/ADD COLUMN(?: IF NOT EXISTS)? (\w+) (\w+)/i);
+      if (addColumnStatement && COLUMN_TYPE.test(addColumnStatement[2])) {
+        addColumn(table, addColumnStatement[1]);
+
+        const ref = rest.match(/REFERENCES ((?:\w+\.)?\w+)\s*\(/i);
         if (ref) {
-          // Keyed so a re-run CREATE TABLE IF NOT EXISTS doesn't double-count.
-          foreignKeys.set(`${currentTable}.${ref[1]}->${ref[2]}`, {
-            table: currentTable,
-            column: ref[1],
-            target: ref[2],
+          addForeignKey({
+            table,
+            column: addColumnStatement[1],
+            target: ref[1],
+            onDelete: readOnDelete(rest),
           });
         }
       }
@@ -134,21 +259,56 @@ export function buildAmbiguousPairs(foreignKeys: ForeignKey[]): Map<string, stri
   return ambiguous;
 }
 
-/** Split a select string on top-level commas, leaving embeds intact. */
-export function topLevelParts(select: string): string[] {
-  const parts: string[] = [];
-  let depth = 0;
-  let current = '';
+/** Look up one FK's delete rule. Returns null when the FK doesn't exist. */
+export function deleteRuleFor(
+  foreignKeys: ForeignKey[],
+  table: string,
+  column: string
+): OnDelete | null {
+  return foreignKeys.find((fk) => fk.table === table && fk.column === column)?.onDelete ?? null;
+}
 
-  for (const ch of select) {
-    if (ch === '(') { depth++; current += ch; }
-    else if (ch === ')') { depth--; current += ch; }
-    else if (ch === ',' && depth === 0) { parts.push(current); current = ''; }
-    else current += ch;
+/**
+ * Every FK pointing (directly or transitively) at one of the given root
+ * tables, breadth-first, so a deletion's blast radius can be read as one list
+ * instead of discovered one bug at a time.
+ *
+ * A CASCADE edge continues the walk — deleting the parent deletes the child,
+ * so the child's own children are in radius too. SET NULL / RESTRICT /
+ * NO ACTION edges terminate: the child row survives, so nothing below it is
+ * reached by this deletion.
+ */
+export function cascadePathsFrom(
+  foreignKeys: ForeignKey[],
+  roots: string[]
+): { fk: ForeignKey; depth: number; via: string }[] {
+  const results: { fk: ForeignKey; depth: number; via: string }[] = [];
+  const seen = new Set<string>();
+  let frontier = roots.map((table) => ({ table, depth: 0, via: table }));
+
+  while (frontier.length > 0) {
+    const next: typeof frontier = [];
+
+    for (const node of frontier) {
+      for (const fk of foreignKeys) {
+        if (fk.target !== node.table) continue;
+
+        const key = `${fk.table}.${fk.column}->${fk.target}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const via = `${node.via} → ${fk.table}.${fk.column}`;
+        results.push({ fk, depth: node.depth + 1, via });
+
+        if (fk.onDelete === 'CASCADE') {
+          next.push({ table: fk.table, depth: node.depth + 1, via });
+        }
+      }
+    }
+    frontier = next;
   }
-  if (current.trim()) parts.push(current);
 
-  return parts.map((p) => p.trim()).filter(Boolean);
+  return results;
 }
 
 export type Embed = { alias: string | null; table: string; disambiguator: string | null };
