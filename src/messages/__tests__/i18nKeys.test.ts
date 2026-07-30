@@ -29,6 +29,15 @@ import fr from '../fr.json';
  *     key as present unless two same-named t-instances in one file
  *     coincidentally share a resolvable key, which would itself mean the
  *     copy in that file is highly ambiguous and worth a human look anyway.
+ *   - SERVER-SIDE next-intl is not scanned. Only `useTranslations(...)` is
+ *     matched, not `getTranslations(...)` from 'next-intl/server'. As of the
+ *     CSV export fix there are ZERO getTranslations callers in src/ (the
+ *     export route resolved its labels that way, then stopped — see
+ *     csvExportHelpers.exportLabels), so a detector would guard nothing
+ *     today. If server-side translation comes back, extend
+ *     extractDeclarations to match it — the namespace is an argument there
+ *     too (`getTranslations({ locale, namespace })`), so it needs its own
+ *     pattern, not just an extra alternation on the existing regex.
  */
 
 const SRC_DIR = path.resolve(process.cwd(), 'src');

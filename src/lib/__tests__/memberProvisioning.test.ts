@@ -106,6 +106,24 @@ function simulateTrigger(
 // B. Endpoint auth guard — mock the Supabase client chain
 // ---------------------------------------------------------------------------
 
+// INTENTIONALLY PARTIAL COPY of the real getCallerInfo in
+// src/app/api/household/members/route.ts. It exists to exercise the auth/owner
+// GATE in isolation — "is there a user, does a users row exist, is the role
+// owner" — without importing a route module and its Supabase clients.
+//
+// What it deliberately does NOT cover, and where to look instead:
+//   - `locale`. The real CallerInfo also carries the household's locale,
+//     embedded via `users … households(locale)` and normalized by
+//     householdLocaleFrom, so invite emails land on a set-password page in the
+//     right language. None of that affects the gate, so it is omitted here.
+//     It is covered by the real route tests
+//     (api/household/members/__tests__/route.test.ts — "invite email locale"
+//     and the resend route's locale cases) and by householdLocaleFrom's own
+//     unit tests in memberProvisioningHelpers.test.ts.
+//
+// If a future change makes the GATE itself depend on locale or on any other
+// field, this double stops being a valid stand-in — sync it or delete it in
+// favour of the route tests.
 interface CallerInfo {
   userId: string;
   householdId: string;
