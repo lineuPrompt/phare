@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter, usePathname } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
+import SupportLine from '@/components/shared/SupportLine';
 
 type Member = {
   id: string;
@@ -340,7 +341,12 @@ export default function HouseholdPage() {
                 </div>
               </div>
 
-              {error && <p className="text-sm text-red-600">{error}</p>}
+              {error && (
+                <>
+                  <p className="text-sm text-red-600">{error}</p>
+                  <SupportLine className="text-xs" />
+                </>
+              )}
 
               {!disambiguation && (
                 <button

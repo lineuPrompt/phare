@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import Navbar from '@/components/brand/Navbar';
+import SupportLine from '@/components/shared/SupportLine';
 
 export default function SignInPage() {
   const t = useTranslations('auth');
@@ -225,6 +226,11 @@ export default function SignInPage() {
             </p>
           )}
         </div>
+
+        {/* Outside the card, always visible — someone locked out needs this
+            before they've triggered any error, and can't reach the footer of
+            an authenticated page. */}
+        <SupportLine className="text-xs text-center mt-6" />
       </div>
     </main>
   );

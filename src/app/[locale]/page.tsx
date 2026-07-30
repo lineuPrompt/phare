@@ -226,6 +226,12 @@ export default function Home() {
       <footer className="px-6 py-8" style={{background: '#0A1628', borderTop: '1px solid rgba(255,255,255,0.1)'}}>
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-sm" style={{color: '#94A3B8'}}>{t('footer.builtFor')}</p>
+          <p className="text-sm" style={{color: '#94A3B8'}}>
+            {t('footer.contact')}{' '}
+            <a href="mailto:support@phare.money" className="underline" style={{color: '#94A3B8'}}>
+              support@phare.money
+            </a>
+          </p>
           <p className="text-sm" style={{color: '#94A3B8'}}>{t('footer.copyright')}</p>
         </div>
       </footer>

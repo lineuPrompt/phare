@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
+import { localeFromNext } from '@/lib/authCallbackHelpers';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -18,6 +19,10 @@ export default function AuthCallbackPage() {
 
     const next = searchParams.get('next') ?? '/en/dashboard';
 
+    // The set-password interstitial follows the locale of wherever `next` is
+    // taking them, so a French recovery link no longer detours through English.
+    const setPasswordLocale = localeFromNext(next);
+
     if (!accessToken || !refreshToken) {
       router.replace('/en/signin?error=no_tokens');
       return;
@@ -32,7 +37,7 @@ export default function AuthCallbackPage() {
       if (session) {
         // Client already established a session from the hash — just redirect.
         if (tokenType === 'recovery') {
-          router.replace(`/en/set-password?next=${encodeURIComponent(next)}`);
+          router.replace(`/${setPasswordLocale}/set-password?next=${encodeURIComponent(next)}`);
         } else {
           router.replace(next);
         }
@@ -53,7 +58,7 @@ export default function AuthCallbackPage() {
       }
 
       if (tokenType === 'recovery') {
-        router.replace(`/en/set-password?next=${encodeURIComponent(next)}`);
+        router.replace(`/${setPasswordLocale}/set-password?next=${encodeURIComponent(next)}`);
       } else {
         router.replace(next);
       }

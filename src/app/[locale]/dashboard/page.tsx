@@ -18,6 +18,7 @@ import type { DipInfo, TimelineDay } from '@/lib/timelineHelpers';
 import { buildMonthView, type UnbalancedDay } from '@/lib/timelineDisplayHelpers';
 import type { PlanChainMonth } from '@/lib/planChainHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
+import SupportLine from '@/components/shared/SupportLine';
 
 type PlanResponse = { months: PlanChainMonth[] };
 
@@ -302,7 +303,10 @@ export default function DashboardPage() {
                 {regenerating ? t('regenerating') : t('regeneratePlan')}
               </button>
               {regenerateError && (
-                <p className="text-sm" style={{ color: '#DC2626' }}>{regenerateError}</p>
+                <>
+                  <p className="text-sm" style={{ color: '#DC2626' }}>{regenerateError}</p>
+                  <SupportLine className="text-xs" />
+                </>
               )}
             </div>
           </div>

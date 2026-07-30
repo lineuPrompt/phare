@@ -1,4 +1,7 @@
 {
+  "support": {
+    "needHelp": "Besoin d'aide?"
+  },
   "common": {
     "appName": "Phare",
     "tagline": "Votre phare financier",
@@ -126,6 +129,7 @@
       "ctaNote": "Pas encore ouvert — revenez bientôt."
     },
     "footer": {
+      "contact": "Nous joindre :",
       "builtFor": "Conçu pour les familles canadiennes",
       "copyright": "© 2026 Phare. Tous droits réservés."
     }

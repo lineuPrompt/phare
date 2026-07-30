@@ -17,6 +17,7 @@ import { dropResolvedItems } from '@/lib/anchorDateHelpers';
 import { runPlausibilityGuard, PlausibilityResult } from '@/lib/plausibilityGuard';
 import { TemplateParseResult } from '@/lib/templateParser';
 import { formatCAD } from '@/components/onboarding/types';
+import SupportLine from '@/components/shared/SupportLine';
 
 type Status = 'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form' | 'accounts' | 'plausibility_check' | 'member_confirm' | 'anchor_dates';
 
@@ -513,6 +514,7 @@ export default function UploadPage() {
               style={{ background: '#0F2044', color: 'white' }}>
               {t('tryAgain')}
             </button>
+            <SupportLine className="text-sm mt-4" />
           </div>
         )}
 

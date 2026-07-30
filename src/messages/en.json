@@ -1,4 +1,7 @@
 {
+  "support": {
+    "needHelp": "Need help?"
+  },
   "common": {
     "appName": "Phare",
     "tagline": "Your financial lighthouse",
@@ -126,6 +129,7 @@
       "ctaNote": "Not open yet — check back soon."
     },
     "footer": {
+      "contact": "Contact:",
       "builtFor": "Built for Canadian families",
       "copyright": "© 2026 Phare. All rights reserved."
     }
