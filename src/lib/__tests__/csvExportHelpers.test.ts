@@ -6,6 +6,7 @@ import {
   buildCsvLine,
   escapeCsvCell,
   exportFilename,
+  exportLabels,
   COLUMN_ORDER,
   UTF8_BOM,
   type CsvLabels,
@@ -220,5 +221,36 @@ describe('exportData i18n keys resolve in both locales', () => {
     expect(resolve(fr, 'exportData.columns.category')).toBe('Catégorie');
     expect(resolve(fr, 'exportData.types.expense')).toBe('Dépense');
     expect(resolve(fr, 'exportData.yes')).toBe('Oui');
+  });
+});
+
+// exportLabels replaced next-intl's getTranslations in the route. That call
+// needed a Next request context, could not be exercised here, and was one of
+// the two live-failure suspects. Reading the message files directly makes the
+// labels provably correct in plain unit tests.
+describe('exportLabels', () => {
+  it('returns one header per column, in column order, for both locales', () => {
+    for (const locale of ['en', 'fr']) {
+      const labels = exportLabels(locale);
+      expect(labels.headers).toHaveLength(COLUMN_ORDER.length);
+      expect(labels.headers.every((h) => typeof h === 'string' && h.length > 0)).toBe(true);
+    }
+  });
+
+  it('is genuinely localized, not the English strings twice', () => {
+    expect(exportLabels('en').yes).toBe('Yes');
+    expect(exportLabels('fr').yes).toBe('Oui');
+    expect(exportLabels('fr').types.expense).toBe('Dépense');
+    expect(exportLabels('fr').headers).not.toEqual(exportLabels('en').headers);
+  });
+
+  it('falls back to en for an unknown locale rather than returning blank headers', () => {
+    expect(exportLabels('es')).toEqual(exportLabels('en'));
+  });
+
+  it('produces a CSV that buildTransactionsCsv accepts — the header-count guard passes', () => {
+    for (const locale of ['en', 'fr']) {
+      expect(() => buildTransactionsCsv([], locale, exportLabels(locale))).not.toThrow();
+    }
   });
 });

@@ -1,5 +1,7 @@
 import { signAmount } from './timelineHelpers';
 import { categoryDisplayName } from './categoryTranslations';
+import enMessages from '../messages/en.json';
+import frMessages from '../messages/fr.json';
 
 /**
  * CSV assembly for "export my data". Pure string work — the route does the
@@ -40,6 +42,19 @@ export type CsvLabels = {
 
 /** Written as an escape, not a literal, so it survives editors and diffs. */
 export const UTF8_BOM = '\uFEFF';
+
+/**
+ * The export's PostgREST select, kept here so a test can assert on it.
+ *
+ * `accounts!account_id` is NOT decoration. transactions has TWO foreign keys
+ * into accounts \u2014 account_id and bridge_source_account (added with the card
+ * bridge feature) \u2014 so a bare `accounts(name)` is ambiguous and PostgREST
+ * rejects the whole query with PGRST201, exporting nothing. The bridge account
+ * is provenance we already expose via the is_bridge flag; the account column
+ * means the account the money actually moved in, which is account_id.
+ */
+export const TRANSACTIONS_EXPORT_SELECT =
+  'date, amount, type, description, is_bridge, recurring_item_id, source, accounts!account_id(name), categories(name, name_fr)';
 
 export const COLUMN_ORDER = [
   'date',
@@ -142,4 +157,26 @@ export function buildTransactionsCsv(
 /** e.g. phare-transactions-2026-07-30.csv */
 export function exportFilename(today: string): string {
   return `phare-transactions-${today}.csv`;
+}
+
+/**
+ * The localized CSV labels, read straight from the message files.
+ *
+ * Deliberately NOT next-intl's getTranslations: this runs in a route handler
+ * under /api, outside the [locale] segment, so there is no request locale to
+ * inherit and the locale has to be passed explicitly anyway. Importing the
+ * messages directly removes a request-context dependency from the one code
+ * path that has to work while someone is trying to get their data out, and
+ * makes the labels unit-testable without a Next runtime.
+ */
+export function exportLabels(locale: string): CsvLabels {
+  const messages = (locale === 'fr' ? frMessages : enMessages).exportData;
+
+  return {
+    headers: COLUMN_ORDER.map((column) => messages.columns[column]),
+    yes: messages.yes,
+    no: messages.no,
+    types: messages.types,
+    sources: messages.sources,
+  };
 }

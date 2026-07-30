@@ -22,7 +22,20 @@ export default function ExportDataSection({ locale }: { locale: string }) {
 
     try {
       const res = await fetch(`/api/export/transactions?locale=${locale}`);
-      if (!res.ok) throw new Error(String(res.status));
+
+      if (!res.ok) {
+        // Show the server's actual reason. A generic "please try again" hid a
+        // PostgREST embed error through a whole build-and-ship cycle — neither
+        // the family nor whoever they email can act on a message that omits
+        // why. The localized string is only the fallback for a body we can't
+        // read (network drop, non-JSON response).
+        const reason = await res
+          .json()
+          .then((body) => body?.error as string | undefined)
+          .catch(() => undefined);
+        setError(reason ?? t('failed'));
+        return;
+      }
 
       const blob = await res.blob();
 
