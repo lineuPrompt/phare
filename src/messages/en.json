@@ -971,6 +971,9 @@
     "promoteYes": "Yes, make owner",
     "promoteCancel": "Cancel",
     "promoting": "Making owner...",
-    "promoteFailed": "Could not make this member an owner. Please try again."
+    "promoteFailed": "Could not make this member an owner. Please try again.",
+    "roleUnknownBadge": "Role unavailable",
+    "notInvitedBadge": "Not invited yet",
+    "detailsUnavailable": "Account details unavailable"
   }
 }

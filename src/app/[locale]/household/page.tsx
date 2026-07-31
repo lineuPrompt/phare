@@ -7,6 +7,7 @@ import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import SupportLine from '@/components/shared/SupportLine';
 import ExportDataSection from '@/components/shared/ExportDataSection';
+import { memberRoleView, canPromoteToOwner } from '@/lib/memberProvisioningHelpers';
 
 type Member = {
   id: string;
@@ -201,7 +202,10 @@ export default function HouseholdPage() {
                 <ul className="divide-y" style={{ borderColor: '#F3F4F6' }}>
                   {members.map((m) => {
                     const isMe = m.user_id === myUserId;
-                    const memberRole = m.users?.role ?? 'member';
+                    // Never `?? 'member'`. An unreadable or missing role is
+                    // 'unknown' — defaulting it to a real role is what made
+                    // two owners render as one owner and one member.
+                    const roleView = memberRoleView(m);
                     return (
                       <li key={m.id} className="py-3">
                         <div className="flex items-center justify-between">
@@ -214,9 +218,16 @@ export default function HouseholdPage() {
                                 </span>
                               )}
                             </p>
-                            {m.users?.email && (
+                            {m.users?.email ? (
                               <p className="text-xs" style={{ color: '#6B7280' }}>{m.users.email}</p>
-                            )}
+                            ) : m.user_id ? (
+                              // Has an account, but we couldn't read its row.
+                              // Say that, rather than rendering nothing and
+                              // letting it look like the person has no email.
+                              <p className="text-xs italic" style={{ color: '#9CA3AF' }}>
+                                {t('detailsUnavailable')}
+                              </p>
+                            ) : null}
                           </div>
                           <div className="flex items-center gap-2">
                             {m.pending && (
@@ -229,12 +240,16 @@ export default function HouseholdPage() {
                             )}
                             <span
                               className="text-xs font-medium px-2 py-0.5 rounded-full"
-                              style={{
-                                background: memberRole === 'owner' ? '#EEF2FF' : '#F0FDFD',
-                                color:      memberRole === 'owner' ? '#4F46E5' : '#0F766E',
-                              }}
+                              style={
+                                roleView === 'owner'  ? { background: '#EEF2FF', color: '#4F46E5' } :
+                                roleView === 'member' ? { background: '#F0FDFD', color: '#0F766E' } :
+                                                        { background: '#F3F4F6', color: '#6B7280' }
+                              }
                             >
-                              {memberRole === 'owner' ? t('ownerBadge') : t('memberBadge')}
+                              {roleView === 'owner'       ? t('ownerBadge')
+                                : roleView === 'member'   ? t('memberBadge')
+                                : roleView === 'not_invited' ? t('notInvitedBadge')
+                                : t('roleUnknownBadge')}
                             </span>
                           </div>
                         </div>
@@ -243,7 +258,7 @@ export default function HouseholdPage() {
                             pending person would hold the role without being
                             able to sign in and use it. The server enforces
                             this too; hiding the button is not the guard. */}
-                        {!m.pending && memberRole !== 'owner' && m.user_id && (
+                        {canPromoteToOwner(m) && (
                           <div className="mt-2">
                             {confirmPromoteId === m.id ? (
                               <div className="flex flex-wrap items-center gap-2">

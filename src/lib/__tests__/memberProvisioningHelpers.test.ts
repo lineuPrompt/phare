@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { isPendingMember, householdLocaleFrom } from '../memberProvisioningHelpers';
+import {
+  isPendingMember,
+  householdLocaleFrom,
+  memberRoleView,
+  canPromoteToOwner,
+} from '../memberProvisioningHelpers';
 
 describe('isPendingMember', () => {
   it('a name-only member (no user_id) is never pending — no account exists to resend to', () => {
@@ -42,5 +47,55 @@ describe('householdLocaleFrom', () => {
     // invite email that fails to send.
     expect(householdLocaleFrom({ locale: 'es' })).toBe('en');
     expect(householdLocaleFrom({ locale: 'FR' })).toBe('en');
+  });
+});
+
+// The bug these encode: the household page read roles from a `users(...)`
+// embed fetched with the caller's own session client. RLS (`id = auth.uid()`)
+// returned NULL for every member but the caller, and a `?? 'member'` default
+// rendered that as a real role — two owners displayed as one owner and one
+// member, and "Make owner" appeared for someone already an owner.
+describe('memberRoleView', () => {
+  it('reports the real role when it is readable', () => {
+    expect(memberRoleView({ user_id: 'u1', users: { role: 'owner' } })).toBe('owner');
+    expect(memberRoleView({ user_id: 'u1', users: { role: 'member' } })).toBe('member');
+  });
+
+  // THE REGRESSION. An unreadable users row must never render as 'member'.
+  it('an unreadable or missing users row is unknown, NOT member', () => {
+    expect(memberRoleView({ user_id: 'u1', users: null })).toBe('unknown');
+    expect(memberRoleView({ user_id: 'u1' })).toBe('unknown');
+    expect(memberRoleView({ user_id: 'u1', users: { role: null } })).toBe('unknown');
+  });
+
+  it('a role outside the CHECK constraint is unknown rather than guessed', () => {
+    expect(memberRoleView({ user_id: 'u1', users: { role: 'admin' } })).toBe('unknown');
+    expect(memberRoleView({ user_id: 'u1', users: { role: 'Owner' } })).toBe('unknown');
+  });
+
+  it('a name-only member has no role at all, which is not the same as unknown', () => {
+    expect(memberRoleView({ user_id: null, users: null })).toBe('not_invited');
+  });
+});
+
+describe('canPromoteToOwner', () => {
+  it('offers promotion only for a known, active member', () => {
+    expect(canPromoteToOwner({ user_id: 'u1', users: { role: 'member' }, pending: false })).toBe(true);
+    expect(canPromoteToOwner({ user_id: 'u1', users: { role: 'member' } })).toBe(true);
+  });
+
+  // The button must not appear for an actual owner — the live symptom that
+  // started this: clicking it returned 400 "already an owner".
+  it('never offers promotion to someone who is already an owner', () => {
+    expect(canPromoteToOwner({ user_id: 'u1', users: { role: 'owner' }, pending: false })).toBe(false);
+  });
+
+  it('never offers promotion when the role could not be read', () => {
+    expect(canPromoteToOwner({ user_id: 'u1', users: null })).toBe(false);
+  });
+
+  it('never offers promotion to a pending member or a name-only row', () => {
+    expect(canPromoteToOwner({ user_id: 'u1', users: { role: 'member' }, pending: true })).toBe(false);
+    expect(canPromoteToOwner({ user_id: null, users: null })).toBe(false);
   });
 });

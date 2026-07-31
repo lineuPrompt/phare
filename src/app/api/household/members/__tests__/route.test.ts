@@ -61,12 +61,25 @@ vi.mock('@/lib/supabase-server', () => ({
 
 const createUserMock = vi.fn();
 const resetPasswordMock = vi.fn();
+const getUserByIdMock = vi.fn();
+const adminUsersSelectMock = vi.fn();
+const adminFromCalls: { table: string; args: unknown[] }[] = [];
+
 vi.mock('@/lib/supabase-admin', () => ({
   createAdminClient: () => ({
     auth: {
-      admin: { createUser: (...args: unknown[]) => createUserMock(...args) },
+      admin: {
+        createUser: (...args: unknown[]) => createUserMock(...args),
+        getUserById: (...args: unknown[]) => getUserByIdMock(...args),
+      },
       resetPasswordForEmail: (...args: unknown[]) => resetPasswordMock(...args),
     },
+    from: (table: string) => ({
+      select: (...args: unknown[]) => {
+        adminFromCalls.push({ table, args });
+        return adminUsersSelectMock(...args);
+      },
+    }),
   }),
 }));
 
@@ -302,5 +315,147 @@ describe('POST /api/household/members — invite email locale', () => {
     expect(resetPasswordMock).toHaveBeenCalledWith('julia@example.com', {
       redirectTo: 'http://localhost/auth/callback?next=/fr/dashboard',
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET — roles must come from the service-role client, not from an embedded
+// users(...) relation on the caller's own client.
+//
+// THE BUG: users RLS is `users_all USING (id = auth.uid())`. Embedding
+// `users(email, role)` through the session client therefore returned NULL for
+// every member EXCEPT the caller. Nothing errored — the rows just came back
+// role-less, and the page's `?? 'member'` default rendered that as a real
+// "member". A household with two owners displayed as one owner and one member,
+// and "Make owner" appeared for someone who already was one.
+//
+// The regression these pin is silent by nature: it produces plausible data,
+// not an error, so only asserting the ACTUAL role catches it.
+// ---------------------------------------------------------------------------
+describe('GET /api/household/members — roles are read with service role', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    getUserByIdMock.mockReset();
+    adminUsersSelectMock.mockReset();
+    adminFromCalls.length = 0;
+    getUserByIdMock.mockResolvedValue({ data: { user: { last_sign_in_at: '2026-07-01T00:00:00Z' } }, error: null });
+  });
+
+  async function getMembers() {
+    const { GET } = await import('../route');
+    return GET();
+  }
+
+  function scriptSession(callerRole: string, memberRows: unknown[]) {
+    return makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1', role: callerRole }, error: null }],
+      household_members: [{ data: memberRows, error: null }],
+    });
+  }
+
+  it('reports a second owner as owner — the exact case that rendered as member', async () => {
+    const { client } = scriptSession('owner', [
+      { id: 'mem-me', name: 'Lineu', user_id: 'u-me' },
+      { id: 'mem-julia', name: 'Julia', user_id: 'u-julia' },
+    ]);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    // Service role sees both rows; the session client would have seen only
+    // the caller's own.
+    adminUsersSelectMock.mockReturnValue(
+      makeResultChain({
+        data: [
+          { id: 'u-me', email: 'lineu@example.com', role: 'owner' },
+          { id: 'u-julia', email: 'julia@example.com', role: 'owner' },
+        ],
+        error: null,
+      })
+    );
+
+    const res = await getMembers();
+    expect(res.status).toBe(200);
+    const { members } = await res.json();
+
+    const julia = members.find((m: { id: string }) => m.id === 'mem-julia');
+    expect(julia.users).toEqual({ email: 'julia@example.com', role: 'owner' });
+    expect(julia.users.role).not.toBe('member');
+  });
+
+  it('does not embed users(...) on the session client at all', async () => {
+    const { client, calls } = scriptSession('owner', [{ id: 'mem-1', name: 'Julia', user_id: 'u-julia' }]);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    adminUsersSelectMock.mockReturnValue(makeResultChain({ data: [], error: null }));
+
+    await getMembers();
+
+    const memberSelect = calls.find((c) => c.table === 'household_members' && c.method === 'select');
+    expect(String(memberSelect?.args[0])).not.toContain('users(');
+  });
+
+  it('leaves users null — never a fabricated role — when the row is missing', async () => {
+    const { client } = scriptSession('owner', [
+      { id: 'mem-ghost', name: 'Ghost', user_id: 'u-missing' },
+      { id: 'mem-nameonly', name: 'Name Only', user_id: null },
+    ]);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    adminUsersSelectMock.mockReturnValue(makeResultChain({ data: [], error: null }));
+
+    const { members } = await (await getMembers()).json();
+    expect(members.find((m: { id: string }) => m.id === 'mem-ghost').users).toBeNull();
+    expect(members.find((m: { id: string }) => m.id === 'mem-nameonly').users).toBeNull();
+  });
+
+  it('scopes the service-role role lookup to the household', async () => {
+    const { client } = scriptSession('owner', [{ id: 'mem-1', name: 'Julia', user_id: 'u-julia' }]);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    // makeResultChain here takes no recorder, so use a local chain that does.
+    const eqCalls: unknown[][] = [];
+    const recordingChain = (): unknown =>
+      new Proxy({}, {
+        get(_, prop) {
+          if (prop === 'then') {
+            return (resolve: (v: unknown) => unknown) =>
+              Promise.resolve({ data: [], error: null }).then(resolve);
+          }
+          return (...args: unknown[]) => {
+            if (prop === 'eq') eqCalls.push(args);
+            return recordingChain();
+          };
+        },
+      });
+    adminUsersSelectMock.mockImplementation(() => recordingChain());
+
+    await getMembers();
+    expect(adminFromCalls[0].table).toBe('users');
+    expect(eqCalls).toContainEqual(['household_id', 'hh1']);
+  });
+
+  it('a member-role caller still gets real roles, without per-user Admin API calls', async () => {
+    const { client } = scriptSession('member', [{ id: 'mem-1', name: 'Julia', user_id: 'u-julia' }]);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    adminUsersSelectMock.mockReturnValue(
+      makeResultChain({ data: [{ id: 'u-julia', email: 'julia@example.com', role: 'owner' }], error: null })
+    );
+
+    const { members } = await (await getMembers()).json();
+    expect(members[0].users.role).toBe('owner');
+    expect(members[0].pending).toBeUndefined();
+    expect(getUserByIdMock).not.toHaveBeenCalled();
+  });
+
+  it('500s rather than returning role-less rows when the lookup fails', async () => {
+    const { client } = scriptSession('owner', [{ id: 'mem-1', name: 'Julia', user_id: 'u-julia' }]);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    adminUsersSelectMock.mockReturnValue(makeResultChain({ data: null, error: { message: 'nope' } }));
+
+    const res = await getMembers();
+    expect(res.status).toBe(500);
   });
 });

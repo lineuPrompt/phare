@@ -52,9 +52,22 @@ export async function GET() {
     const caller = await getCallerInfo(supabase);
     if (!caller) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
+    // NOTE: `users(email, role)` is deliberately NOT embedded here.
+    //
+    // The users RLS policy is `users_all USING (id = auth.uid())`, so through
+    // the caller's own client that embed returns NULL for every member except
+    // the caller. It looked like it worked — the page just rendered everyone
+    // else as a role-less row, and a `?? 'member'` default on the client made
+    // that indistinguishable from a real "member". Two owners displayed as one
+    // owner and one member.
+    //
+    // Roles and emails now come from the service-role client below instead.
+    // RLS is untouched: the policy stays as tight as it was, and this route
+    // (which already built an admin client to compute `pending`) does the
+    // household-scoped read explicitly.
     const { data: members, error } = await supabase
       .from('household_members')
-      .select('id, name, user_id, users(email, role)')
+      .select('id, name, user_id')
       .eq('household_id', caller.householdId)
       .order('created_at', { ascending: true });
 
@@ -63,14 +76,43 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    if (!members || members.length === 0) {
+      return NextResponse.json({ members: [] });
+    }
+
+    const admin = createAdminClient();
+
+    // One query for the whole household rather than one per member. Scoped by
+    // household_id — the service-role client can see every household, so that
+    // filter is a real tenant check, not a formality.
+    const { data: userRows, error: usersError } = await admin
+      .from('users')
+      .select('id, email, role')
+      .eq('household_id', caller.householdId);
+
+    if (usersError) {
+      console.error('Members GET — role lookup failed:', usersError);
+      return NextResponse.json({ error: 'Could not read household roles' }, { status: 500 });
+    }
+
+    const byUserId = new Map((userRows ?? []).map((u) => [u.id, u]));
+
+    // `users` stays null when there is no account (a name-only member) or when
+    // no row came back for one that should exist. The client renders null as
+    // "unknown", never as a role — see memberRoleView.
+    const withRoles = members.map((m) => {
+      const row = m.user_id ? byUserId.get(m.user_id) : undefined;
+      return { ...m, users: row ? { email: row.email, role: row.role } : null };
+    });
+
     // Pending status comes from the auth user's last_sign_in_at, which only
-    // the service-role client can read — computed here (owner-only) so a
-    // member-role caller never triggers Admin API calls for a page they
-    // can't act on anyway (the household page is owner-only client-side).
-    if (caller.role === 'owner' && members && members.length > 0) {
-      const admin = createAdminClient();
+    // the Admin API can read — computed owner-only so a member-role caller
+    // never triggers per-user Admin API calls for a page they can't act on
+    // anyway (the household page is owner-only client-side). The role lookup
+    // above is a single household-scoped DB read, so it runs for everyone.
+    if (caller.role === 'owner') {
       const withPending = await Promise.all(
-        members.map(async (m) => {
+        withRoles.map(async (m) => {
           if (!m.user_id) return { ...m, pending: false };
           const { data: authUser } = await admin.auth.admin.getUserById(m.user_id);
           return { ...m, pending: isPendingMember(m.user_id, authUser?.user?.last_sign_in_at ?? null) };
@@ -79,7 +121,7 @@ export async function GET() {
       return NextResponse.json({ members: withPending });
     }
 
-    return NextResponse.json({ members: members ?? [] });
+    return NextResponse.json({ members: withRoles });
   } catch (err) {
     console.error('Members GET threw:', err);
     return NextResponse.json({ error: 'Failed to list members' }, { status: 500 });

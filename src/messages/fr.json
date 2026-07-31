@@ -971,6 +971,9 @@
     "promoteYes": "Oui, nommer propriétaire",
     "promoteCancel": "Annuler",
     "promoting": "Nomination en cours...",
-    "promoteFailed": "Impossible de nommer ce membre propriétaire. Veuillez réessayer."
+    "promoteFailed": "Impossible de nommer ce membre propriétaire. Veuillez réessayer.",
+    "roleUnknownBadge": "Rôle indisponible",
+    "notInvitedBadge": "Pas encore invité",
+    "detailsUnavailable": "Détails du compte indisponibles"
   }
 }
