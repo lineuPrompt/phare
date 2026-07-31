@@ -367,3 +367,215 @@ export function findLiteralQueries(): LiteralQuery[] {
   }
   return results;
 }
+
+// ---------------------------------------------------------------------------
+// ROW LEVEL SECURITY POLICIES
+//
+// Parsed so a test can ask the question that has now cost this project five
+// bugs: does this read return what the code assumes it returns? RLS silently
+// TRUNCATES a result — no error, just fewer rows — so a query written against
+// a policy it does not satisfy looks like working code and passes any mock
+// whose fixture was shaped by the author's expectation.
+// ---------------------------------------------------------------------------
+
+export type PolicyShape =
+  /** `id = auth.uid()` — the caller's OWN row and nothing else. */
+  | { kind: 'own_user_row'; column: string }
+  /** `id = auth_household_id()` — the caller's own household row. */
+  | { kind: 'own_household_row'; column: string }
+  /** `household_id = auth_household_id()`, or its inlined SELECT equivalent. */
+  | { kind: 'household_scoped'; column: string }
+  /** Anything this classifier does not recognise — never treated as safe. */
+  | { kind: 'unclassified' };
+
+export type RlsPolicy = {
+  name: string;
+  table: string;
+  command: string;
+  usingExpr: string;
+  shape: PolicyShape;
+};
+
+/**
+ * Strip wrapping parentheses, but ONLY when the opening paren's match is the
+ * final character. A naive `replace(/\)$/)` eats the closer of `auth.uid()`
+ * and turns a recognisable policy into an unclassified one — which is exactly
+ * the kind of quiet mis-parse that makes a detector stop detecting.
+ */
+function stripWrappingParens(input: string): string {
+  let s = input.trim();
+
+  while (s.startsWith('(')) {
+    let depth = 0;
+    let matchedAtEnd = false;
+
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === '(') depth++;
+      else if (s[i] === ')') {
+        depth--;
+        if (depth === 0) {
+          matchedAtEnd = i === s.length - 1;
+          break;
+        }
+      }
+    }
+    if (!matchedAtEnd) break;
+    s = s.slice(1, -1).trim();
+  }
+
+  return s;
+}
+
+export function classifyPolicy(expr: string): PolicyShape {
+  const normalized = stripWrappingParens(expr.replace(/\s+/g, ' ').trim());
+
+  if (/^id\s*=\s*auth\.uid\(\)$/i.test(normalized)) return { kind: 'own_user_row', column: 'id' };
+  if (/^id\s*=\s*auth_household_id\(\)$/i.test(normalized)) return { kind: 'own_household_row', column: 'id' };
+  if (/^household_id\s*=\s*auth_household_id\(\)$/i.test(normalized)) {
+    return { kind: 'household_scoped', column: 'household_id' };
+  }
+  // The inlined form the later migrations use — semantically identical.
+  if (/^household_id\s*=\s*\(\s*SELECT household_id FROM (?:public\.)?users WHERE id = auth\.uid\(\)\s*\)$/i.test(normalized)) {
+    return { kind: 'household_scoped', column: 'household_id' };
+  }
+  return { kind: 'unclassified' };
+}
+
+export function parsePolicies(): RlsPolicy[] {
+  const files = fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort();
+  const policies = new Map<string, RlsPolicy>();
+
+  for (const file of files) {
+    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+
+    for (const statement of splitStatements(sql)) {
+      const m = statement.match(
+        /^CREATE POLICY "?([\w ]+)"? ON (\w+)(?: AS \w+)?(?: FOR (ALL|SELECT|INSERT|UPDATE|DELETE))?(?: TO [\w, ]+)? USING (.+?)(?: WITH CHECK .*)?$/i
+      );
+      if (!m) continue;
+
+      const [, name, table, command, usingExpr] = m;
+      // A later migration may redefine a policy; last definition wins.
+      policies.set(`${table}.${name}`, {
+        name,
+        table,
+        command: (command ?? 'ALL').toUpperCase(),
+        // Stored stripped so failure messages read `(id = auth.uid())` rather
+        // than `((id = auth.uid()))`.
+        usingExpr: stripWrappingParens(usingExpr.replace(/\s+/g, ' ').trim()),
+        shape: classifyPolicy(usingExpr),
+      });
+    }
+  }
+
+  return [...policies.values()];
+}
+
+/** The read-relevant policy for a table, if one exists. */
+export function readPolicyFor(policies: RlsPolicy[], table: string): RlsPolicy | null {
+  return policies.find((p) => p.table === table && (p.command === 'ALL' || p.command === 'SELECT')) ?? null;
+}
+
+export type ClientRead = {
+  file: string;
+  /** The identifier the query was built on — `supabase` vs `admin`. */
+  clientVar: string;
+  table: string;
+  select: string;
+  /** Columns passed to .eq(...) on this query. */
+  filterColumns: string[];
+  /** Set when this read is an embedded relation rather than the .from() table. */
+  embeddedFrom?: string;
+};
+
+/**
+ * Whether a client identifier denotes the SERVICE-ROLE client.
+ *
+ * THIS IS THE HEURISTIC in the whole check, and it is naming-convention based:
+ * every service-role client in this codebase is assigned to `admin` (from
+ * createAdminClient()), every RLS-scoped one to `supabase`. It is reliable
+ * here only because that convention is uniform.
+ *
+ * It fails in the SAFE direction: a service-role client under some other name
+ * would be treated as a session client and produce a false positive — a noisy
+ * test, not a missed bug. The reverse (a session client named `admin…`) would
+ * be a false negative, which is why the name is checked rather than inferred.
+ */
+export function isServiceRoleClient(clientVar: string): boolean {
+  return /^admin/i.test(clientVar);
+}
+
+/**
+ * Every literal `<client>.from('x') … .select('…')` read in src/, with the
+ * client identifier and the .eq() filter columns that follow it.
+ */
+export function findClientReads(): ClientRead[] {
+  const reads: ClientRead[] = [];
+  const re =
+    /(\w+)\s*\.from\(\s*['"](\w+)['"]\s*\)(?:(?!\.from\(|\.rpc\()[\s\S]){0,600}?\.select\(\s*['"]([^'"]*)['"][\s\S]{0,400}/g;
+
+  for (const file of listSourceFiles(SRC_DIR)) {
+    const src = fs.readFileSync(file, 'utf8');
+    const rel = path.relative(REPO_ROOT, file).split(path.sep).join('/');
+
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(src))) {
+      const [full, clientVar, table, select] = m;
+
+      // Filters belong to this statement only — stop at the first `;`.
+      const tail = full.slice(full.indexOf(select) + select.length);
+      const filterColumns = [...tail.split(';')[0].matchAll(/\.eq\(\s*['"](\w+)['"]/g)].map((f) => f[1]);
+
+      reads.push({ file: rel, clientVar, table, select, filterColumns });
+
+      // An embedded relation is a read of THAT table too, and carries no
+      // filters of its own — exactly how the users(email, role) embed slipped
+      // past RLS unnoticed for as long as it did.
+      for (const embed of parseEmbeds(select)) {
+        reads.push({ file: rel, clientVar, table: embed.table, select, filterColumns: [], embeddedFrom: table });
+      }
+    }
+  }
+
+  return reads;
+}
+
+/**
+ * Reads that RLS will truncate relative to what the code appears to expect.
+ *
+ * Only `own_user_row` policies (`id = auth.uid()`) are checked. That shape
+ * resolves to exactly ONE row — the caller's — so any session-client read of
+ * such a table not filtered by that column is asking for rows the database
+ * will never return.
+ *
+ * `household_scoped` and `own_household_row` are deliberately NOT flagged:
+ * they resolve to the caller's own household, which is precisely the scope
+ * application code reads at, so an unfiltered read there returns exactly what
+ * the code wants. Flagging those would be noise, and noise is how a detector
+ * gets muted.
+ */
+export function findRlsTruncatedReads(
+  reads: ClientRead[],
+  policies: RlsPolicy[]
+): { read: ClientRead; reason: string }[] {
+  const findings: { read: ClientRead; reason: string }[] = [];
+
+  for (const read of reads) {
+    if (isServiceRoleClient(read.clientVar)) continue;
+
+    const policy = readPolicyFor(policies, read.table);
+    if (!policy || policy.shape.kind !== 'own_user_row') continue;
+
+    const { column } = policy.shape;
+    if (read.filterColumns.includes(column)) continue;
+
+    findings.push({
+      read,
+      reason: read.embeddedFrom
+        ? `${read.file}: embeds ${read.table}(...) from ${read.embeddedFrom} on session client '${read.clientVar}' — policy "${policy.name}" is (${policy.usingExpr}), so this resolves to the caller's own row ONLY and is null for everyone else. Read it with the service-role client instead.`
+        : `${read.file}: .from('${read.table}') on session client '${read.clientVar}' filtered by [${read.filterColumns.join(', ') || 'nothing'}] — policy "${policy.name}" is (${policy.usingExpr}), so a read not filtered by '${column}' returns the caller's own row ONLY. Read it with the service-role client instead.`,
+    });
+  }
+
+  return findings;
+}
