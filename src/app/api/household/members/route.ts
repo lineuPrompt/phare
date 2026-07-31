@@ -264,10 +264,27 @@ export async function POST(request: Request) {
         // Check if this email is already a member of the caller's own household.
         // If yes: the previous invite email likely expired — resend it.
         // If no:  the email belongs to a different household → 409.
-        const { data: existingRow } = await supabase
+        //
+        // MUST use the admin client. This looks up SOMEBODY ELSE'S row by
+        // email, and the users RLS policy is `id = auth.uid()` — through the
+        // caller's own client this returned null every time, so the comparison
+        // below was always false and the resend branch was unreachable.
+        // Re-inviting an existing member of your own household (an expired
+        // invite — the common case) fell through to the 409 telling you they
+        // belong to another household.
+        //
+        // The household comparison is what keeps this safe: the admin client
+        // can see every household, so the returned row is only acted on when
+        // it belongs to the caller's own.
+        //
+        // Lowercased because Supabase Auth normalizes emails, so the stored
+        // row is lowercase while the invite form's input may not be. NOT
+        // `ilike` — emails legitimately contain `_`, which is a LIKE wildcard
+        // and would match a different address.
+        const { data: existingRow } = await admin
           .from('users')
           .select('household_id')
-          .eq('email', email.trim())
+          .eq('email', email.trim().toLowerCase())
           .single();
 
         if (existingRow?.household_id === caller.householdId) {

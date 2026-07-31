@@ -295,15 +295,28 @@ describe('POST /api/household/members — invite email locale', () => {
     });
   });
 
-  it('carries the locale on the duplicate-email resend path too', async () => {
+  // The duplicate-email lookup reads SOMEBODY ELSE'S users row by email, so it
+  // must go through the admin client — users RLS is `id = auth.uid()`.
+  //
+  // WHAT THIS TEST USED TO DO: it scripted a SECOND `users` response on the
+  // SESSION client, i.e. a row RLS would never have returned. That made the
+  // resend path look reachable when in production it never was: the lookup
+  // always came back null, the household comparison was always false, and
+  // re-inviting an existing member of your own household returned the 409
+  // telling you they belong to a different household.
+  //
+  // WHAT IT DOES NOW: the session client is scripted with ONLY the caller's
+  // own row (all RLS would permit). If the route regresses to using the
+  // session client for this lookup, the mock throws "No scripted response for
+  // table users call #2" and the test fails loudly rather than passing on a
+  // fiction.
+  it('looks the duplicate up with the ADMIN client, and resends with the household locale', async () => {
     createUserMock.mockResolvedValue({ data: null, error: { message: 'User already registered', status: 422 } });
     resetPasswordMock.mockResolvedValue({ error: null });
+    adminUsersSelectMock.mockReturnValue(makeResultChain({ data: { household_id: 'hh1' }, error: null }));
 
     const { client } = makeSupabaseMock({
-      users: [
-        { data: { household_id: 'hh1', role: 'owner', households: { locale: 'fr' } }, error: null },
-        { data: { household_id: 'hh1' }, error: null }, // existing row — same household → resend
-      ],
+      users: [{ data: { household_id: 'hh1', role: 'owner', households: { locale: 'fr' } }, error: null }],
       household_members: [{ data: [], error: null }],
     });
     const { createClient } = await import('@/lib/supabase-server');
@@ -312,9 +325,60 @@ describe('POST /api/household/members — invite email locale', () => {
     const res = await postMembers({ email: 'julia@example.com', fullName: 'Julia Alff', role: 'member' });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ success: true, resent: true });
+    expect(adminFromCalls.some((c) => c.table === 'users')).toBe(true);
     expect(resetPasswordMock).toHaveBeenCalledWith('julia@example.com', {
       redirectTo: 'http://localhost/auth/callback?next=/fr/dashboard',
     });
+  });
+
+  it('normalizes the email before the lookup, since Auth stores it lowercased', async () => {
+    createUserMock.mockResolvedValue({ data: null, error: { message: 'User already registered', status: 422 } });
+    resetPasswordMock.mockResolvedValue({ error: null });
+
+    const eqCalls: unknown[][] = [];
+    const chain = (): unknown =>
+      new Proxy({}, {
+        get(_, prop) {
+          if (prop === 'then') {
+            return (resolve: (v: unknown) => unknown) =>
+              Promise.resolve({ data: { household_id: 'hh1' }, error: null }).then(resolve);
+          }
+          return (...args: unknown[]) => {
+            if (prop === 'eq') eqCalls.push(args);
+            return chain();
+          };
+        },
+      });
+    adminUsersSelectMock.mockImplementation(() => chain());
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
+      household_members: [{ data: [], error: null }],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    await postMembers({ email: '  Julia@Example.COM  ', fullName: 'Julia Alff', role: 'member' });
+    expect(eqCalls).toContainEqual(['email', 'julia@example.com']);
+  });
+
+  // The household comparison is the guard that makes an admin-client lookup
+  // safe: service role can see every household, so a row from another one
+  // must never trigger a resend.
+  it('409s without resending when the email belongs to a different household', async () => {
+    createUserMock.mockResolvedValue({ data: null, error: { message: 'User already registered', status: 422 } });
+    adminUsersSelectMock.mockReturnValue(makeResultChain({ data: { household_id: 'hh-other' }, error: null }));
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
+      household_members: [{ data: [], error: null }],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const res = await postMembers({ email: 'someone@example.com', fullName: 'Some One', role: 'member' });
+    expect(res.status).toBe(409);
+    expect(resetPasswordMock).not.toHaveBeenCalled();
   });
 });
 
