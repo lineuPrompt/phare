@@ -224,6 +224,7 @@ export default function CardsPage() {
                         month={selectedMonth}
                         statementCloseDay={envelopeData.card.statement_close_day ?? null}
                         paymentDay={envelopeData.card.payment_day ?? null}
+                        categories={envelopeData.categories}
                       />
                     )}
 

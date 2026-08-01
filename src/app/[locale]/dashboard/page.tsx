@@ -10,11 +10,10 @@ import SinkingFundsCard from '@/components/dashboard/SinkingFundsCard';
 import GoalsCard from '@/components/dashboard/GoalsCard';
 import ReviewCard from '@/components/dashboard/ReviewCard';
 import EmptyState from '@/components/dashboard/EmptyState';
-import DipTile from '@/components/dashboard/DipTile';
 import { DashboardData } from '@/components/dashboard/types';
 import Sidebar from '@/components/dashboard/Sidebar';
 import { addMonthsToMonth } from '@/lib/goalHelpers';
-import type { DipInfo, TimelineDay } from '@/lib/timelineHelpers';
+import type { TimelineDay } from '@/lib/timelineHelpers';
 import { buildMonthView, type UnbalancedDay } from '@/lib/timelineDisplayHelpers';
 import type { PlanChainMonth } from '@/lib/planChainHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
@@ -25,7 +24,6 @@ type PlanResponse = { months: PlanChainMonth[] };
 type TimelineDipResponse =
   | {
       ok: true;
-      dip: DipInfo | null;
       balancesStartDate: string;
       openingBalance: number;
       days: TimelineDay[];
@@ -52,12 +50,6 @@ export default function DashboardPage() {
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState('');
 
-  // Dip tile — reads the SAME /api/timeline response (and therefore the
-  // same buildCashTimeline-computed `dip`) the Timeline page itself renders.
-  // No parallel calculation: this is a second call site for one source of
-  // truth, not a second implementation of it.
-  const [dip, setDip] = useState<DipInfo | null>(null);
-  const [dipWindowEnd, setDipWindowEnd] = useState<string | null>(null);
   const [hasAnchor, setHasAnchor] = useState(true);
 
   // Plan tile (replaces the retired single-month "Projected month-end" tile)
@@ -80,8 +72,6 @@ export default function DashboardPage() {
       })
       .then((d: TimelineDipResponse | null) => {
         if (!d || !d.ok) { setHasAnchor(false); return; }
-        setDip(d.dip);
-        setDipWindowEnd(d.days.length > 0 ? d.days[d.days.length - 1].date : d.balancesStartDate);
         setTimelineDays(d.days);
         setTimelineUnbalancedDays(d.unbalancedDays ?? []);
         setTimelineOpeningBalance(d.openingBalance);
@@ -251,8 +241,13 @@ export default function DashboardPage() {
               {t('welcome', { name: data.firstName || '' })}
             </h1>
 
-            {dipWindowEnd && <DipTile dip={dip} windowEndDate={dipWindowEnd} locale={locale} />}
-
+            {/* The dip tile used to sit here, above everything. Removed
+                2026-08-01: opening on "lowest point before your next
+                paycheque" leads with a warning about a number, not with what
+                to do about it. The dashboard now opens on the #1 priority.
+                The dip itself is unchanged and still shown on Timeline
+                (TimelineHeader), which is where a running-balance figure
+                belongs — this was a second display of it, not its home. */}
             <div className="space-y-6">
               {data.topRecommendation && <TopPriorityCard text={data.topRecommendation} />}
               {data.summary && (

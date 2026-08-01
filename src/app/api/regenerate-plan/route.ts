@@ -501,7 +501,7 @@ export async function POST(request: Request) {
       `Net cash flow: $${netCashFlow}/month ` +
       `(income $${incomeTotal}, expenses $${expenseTotal}, savings $${totalSavings}, debt payments $${totalDebtPayments})\n` +
       `Accounting model: net = income − expenses − savings − debt payments (savings = transfers to a ` +
-      `savings/TFSA/RRSP/sinking-fund account; debt payments = transfers to a debt account — paying down a ` +
+      `savings/TFSA/RRSP/reserve-fund account; debt payments = transfers to a debt account — paying down a ` +
       `credit line is not saving, keep the two separate in the narration)\n` +
       (totalBorrowed > 0
         ? `Borrowed this month: $${totalBorrowed}, drawn from a credit line. This is debt, NOT income and NOT ` +
@@ -545,7 +545,7 @@ export async function POST(request: Request) {
       `  - "category": which ONE of these fits best: ${categoryList}. Use the English category name exactly as written here.\n` +
       `  - "isFixed": true if it is a fixed recurring bill paid every month; false if variable day-to-day spending.\n` +
       `- Classify income lines too: category "Income", isFixed true.\n` +
-      `- Do NOT output any sinking funds, goals, or debt payoff as structured data — there is no field for them in the JSON above. If you want to suggest one, put it in topRecommendation as a suggestion phrased as a suggestion ("Consider…"), never as a fund/goal/debt-plan they already have and never with a monthly amount presented as theirs.\n` +
+      `- Do NOT output any reserve funds, goals, or debt payoff as structured data — there is no field for them in the JSON above. If you want to suggest one, put it in topRecommendation as a suggestion phrased as a suggestion ("Consider…"), never as a fund/goal/debt-plan they already have and never with a monthly amount presented as theirs.\n` +
       `- Their goals (if any) are already evaluated (contribution, on-track verdict, and dates are all real, verified numbers) — do not invent or restate any of those figures anywhere.\n` +
       `- DEBT PAYOFF: if topRecommendation mentions the debt's own required monthly payment amount, you MUST write the literal placeholder ${DEBT_PAYMENT_PLACEHOLDER} in its place — never type a dollar figure for it yourself, under any circumstance, in any language or currency format. You may still describe timing/urgency around it in your own words (e.g. "with the credit line's ${DEBT_PAYMENT_PLACEHOLDER}/month payment, this month's extra room could go toward it").\n` +
       `- Their recurring contributions and debt payments (if any) are already subtracted from the net cash flow figure above — if you mention one, say it's already accounted for (e.g. "your $500/mo RRSP contribution is already counted"), never present it as new discretionary room and never double-count it against a separate suggestion.\n` +
@@ -675,11 +675,12 @@ export async function POST(request: Request) {
     const reviewPrompt =
       `You are Phare, an AI financial coach for Canadian families. Write this family's monthly review in ${lang}.\n\n` +
       `Their plan:\n${JSON.stringify(buildReviewPayload(plan))}\n\n` +
-      `Write four paragraphs maximum. Specific numbers. One clear recommendation. Plain language. ` +
+      `Write THREE paragraphs maximum. Specific numbers. One clear recommendation. Plain language. ` +
       `It must feel like a letter from a trusted financial advisor, not a report.\n\n` +
       `Good tone: "${reviewMonthName} was a solid month overall. You stayed within budget in four of five categories..."\n` +
       `Bad tone: "Based on a comprehensive analysis of your financial data..."\n\n` +
-      `Start with what is going well, then what to watch, then the one thing to do this month. ` +
+      `Start with what is going well, then what to watch, then the one thing to do this month — `+
+      `one paragraph each, and do not add a fourth. ` +
       `Write ONLY the review text, no preamble, no headings.\n\n` +
       `Hard rules — every one of these caused a real, published mistake before, do not repeat any of them:\n` +
       `- The reviewed month is "reviewMonth" above: ${reviewMonthName}. Refer to it by exactly this name. ` +
@@ -697,7 +698,7 @@ export async function POST(request: Request) {
       `forward-looking — e.g. "once your $X/month contribution begins" — never as if saving is already underway, ` +
       `even when "onTrack" is true (onTrack only means the required contribution fits their capacity, not that ` +
       `any money has moved yet).\n` +
-      `- SINKING FUNDS: every entry in "sinkingFunds" shares ONE cash buffer — "sinkingFundBuffer.fundedAlready" is ` +
+      `- RESERVE FUNDS: every entry in "sinkingFunds" shares ONE cash buffer — "sinkingFundBuffer.fundedAlready" is ` +
       `the single real signal for ALL of them (never treat one fund as funded and another as not; there is only one ` +
       `account). When fundedAlready is false — meaning the buffer hasn't been started yet — describe each fund as a ` +
       `plan or recommendation only: "your plan sets aside $X/month for {name}" or "recommended: $X/month toward ` +
@@ -721,9 +722,9 @@ export async function POST(request: Request) {
       `money-source suggestion. Its "rankedNeeds" is already in the correct priority order — restate that order, ` +
       `never re-rank it yourself and never suggest funding anything not in this list. SCOPE OF THE CAP: ` +
       `"coaching.startingContribution" bounds only a DISCRETIONARY "extra"/"additional" amount YOU might suggest ` +
-      `directing toward a need ON TOP OF what the plan already calls for — it does NOT cap restating a sinking ` +
+      `directing toward a need ON TOP OF what the plan already calls for — it does NOT cap restating a reserve ` +
       `fund's own "monthlyProvision" or a goal's own "monthlyContribution" verbatim (those are the plan's existing, ` +
-      `already-established figures, governed by the SINKING FUNDS and ON-TRACK CLAIMS rules above, not by this ` +
+      `already-established figures, governed by the RESERVE FUNDS and ON-TRACK CLAIMS rules above, not by this ` +
       `cap; e.g. "your plan calls for $300/month toward Property Tax" is always fine to state even when ` +
       `startingContribution is $0 — that number is not a new suggestion). What the cap DOES bound: ` +
       `"coaching.startingContribution" is the most you may ever propose applying as NEW, additional, on-top-of-` +

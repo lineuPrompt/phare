@@ -390,11 +390,31 @@ export default function DayLedger({
       )}
 
       <div className="space-y-2">
-        {visibleDays.map((day) => {
+        {visibleDays.map((day, i) => {
           const isToday = day.date === today;
+          // First day strictly after today = the boundary between what has
+          // happened and what is only planned. Future rows were already drawn
+          // muted, but muted reads as "less important", not as "not real yet"
+          // — a future row and a past row were otherwise identical in kind.
+          // One divider, once, at the transition.
+          const isFirstFutureDay =
+            day.date > today && (i === 0 || visibleDays[i - 1].date <= today);
           return (
+            <div key={day.date}>
+            {isFirstFutureDay && (
+              <div className="flex items-center gap-2 pt-3 pb-1">
+                <span
+                  className="text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0"
+                  style={{ background: '#EFF6FF', color: '#1D4ED8' }}
+                >
+                  {t('projectionBadge')}
+                </span>
+                <span className="text-xs" style={{ color: '#6B7280' }}>
+                  {t('projectionNote')}
+                </span>
+              </div>
+            )}
             <div
-              key={day.date}
               ref={isToday ? todayRef : undefined}
               className="rounded-xl p-3"
               style={{
@@ -431,6 +451,7 @@ export default function DayLedger({
                   {formatCurrency(day.endOfDayBalance, locale)}
                 </span>
               </div>
+            </div>
             </div>
           );
         })}

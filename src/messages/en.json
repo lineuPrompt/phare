@@ -106,7 +106,7 @@
         "description": "Individual spending limits within a shared household budget. Both spouses see the same dashboard. Alerts at 80% and 100%."
       },
       "sinkingFunds": {
-        "title": "Sinking funds",
+        "title": "Reserve Fund",
         "description": "Annual expenses provisioned monthly so they never hit the credit line again. Property taxes, car registration, back to school — all covered."
       },
       "goalTracking": {
@@ -132,7 +132,7 @@
           "spending": "Spending tracking",
           "family": "Family sharing",
           "goals": "Goal tracking",
-          "sinking": "Sinking funds",
+          "sinking": "Reserve Fund",
           "bilingual": "English & French",
           "reviewPreview": "Monthly review — locked preview"
         }
@@ -225,7 +225,7 @@
       "months": "months of data",
       "categories": "Categories Detected",
       "insights": "Insights",
-      "sinkingFunds": "Suggested Sinking Funds",
+      "sinkingFunds": "Suggested Reserve Funds",
       "questions": "We need a few answers",
       "perMonth": "/month",
       "perYear": "/year",
@@ -240,7 +240,7 @@
       "income": "Income",
       "expenses": "Expenses",
       "savings": "Savings",
-      "sinkingFunds": "Sinking Funds",
+      "sinkingFunds": "Reserve Funds",
       "perMonth": "/month",
       "perYear": "/year",
       "dueIn": "Due in",
@@ -253,7 +253,7 @@
       "monthlyEquivalent": "≈ {amount}/mo equivalent",
       "goalFunded": "Funded",
       "goalsEmpty": "You haven't set any goals yet — add them on the Goals page.",
-      "sinkingFundsEmpty": "You haven't set up any sinking funds yet — you can add them anytime as annual expenses come up.",
+      "sinkingFundsEmpty": "You haven't set up any reserve funds yet — you can add them anytime as annual expenses come up.",
       "noTargetDate": "No target date set yet",
       "notAchievable": "{statedDate} needs {amount}/mo — at your current capacity, {estimatedDate} is realistic.",
       "monthlyReview": "Your First Monthly Review",
@@ -423,11 +423,11 @@
       "question": "Cash you'll actually have"
     },
     "topPriority": "Your #1 priority",
-    "sinkingFunds": "Sinking funds",
+    "sinkingFunds": "Reserve funds",
     "perMonth": "/month",
     "perYear": "/year",
     "fundBalance": "Balance",
-    "startFunding": "Start your sinking fund — {amount}/month",
+    "startFunding": "Start your reserve fund — {amount}/month",
     "startingFunding": "Starting…",
     "startFundingError": "Couldn't start funding this — try again.",
     "payFromFund": "Pay this bill",
@@ -463,9 +463,9 @@
       "recurring": "Recurring",
       "reconcile": "Audit",
       "goals": "Goals",
-      "sinkingFunds": "Sinking Funds",
+      "sinkingFunds": "Reserve Fund",
       "household": "Household",
-      "cards": "Cards",
+      "cards": "Credit Cards",
       "menu": "Menu",
       "openMenu": "Open menu",
       "closeMenu": "Close menu"
@@ -507,8 +507,11 @@
         "save": "Save",
         "saving": "Saving...",
         "cancel": "Cancel",
-        "confirmDelete": "Delete this entry?"
-      }
+        "confirmDelete": "Delete this entry?",
+        "noCategory": "No category"
+      },
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all"
     },
     "editor": {
       "title": "Edit envelope",
@@ -596,7 +599,9 @@
       "detachHint": "This is part of a recurring rule. Saving edits only this occurrence — the rule itself is unchanged.",
       "moneyOut": "Money out",
       "moneyIn": "Money in",
-      "categoryUnchanged": "Category..."
+      "categoryUnchanged": "Category...",
+      "projectionBadge": "Projection",
+      "projectionNote": "Everything below hasn't happened yet"
     },
     "nav": {
       "prev": "Previous",
@@ -649,7 +654,7 @@
       "kindDraw": "Draw"
     },
     "remainingCash": {
-      "label": "Remaining cash — {month} closes at"
+      "label": "{month} is closing at"
     }
   },
   "goals": {
@@ -771,12 +776,12 @@
     }
   },
   "sinkingFundsPage": {
-    "title": "Sinking Funds",
+    "title": "Reserve Fund",
     "manage": "Manage",
-    "loading": "Loading your sinking funds...",
-    "noFunds": "No sinking funds set up yet.",
+    "loading": "Loading your reserve funds...",
+    "noFunds": "No reserve funds set up yet.",
     "notStarted": "This buffer hasn't been started yet — no account or contribution exists.",
-    "startFunding": "Start your sinking fund — {amount}/month",
+    "startFunding": "Start your reserve fund — {amount}/month",
     "startingFunding": "Starting…",
     "startFundingError": "Couldn't start funding this — try again.",
     "currentBalance": "current balance",
@@ -823,7 +828,7 @@
     "upcoming": "Upcoming",
     "billsPaid": "Bills paid from this fund",
     "noBillsPaid": "No bills paid from this fund yet.",
-    "confirmDeleteTitle": "Stop and remove your sinking fund?",
+    "confirmDeleteTitle": "Stop and remove your reserve fund?",
     "confirmDeleteStops": "This stops the {amount}/month contribution and removes the fund account.",
     "confirmDeleteUpcoming": "It cancels {count} upcoming contributions.",
     "confirmDeleteMoneyKept": "Money already contributed ({amount}) stays on record as a completed transfer — it isn't reversed.",

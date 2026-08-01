@@ -115,7 +115,7 @@ Expense lines: ${JSON.stringify([...p.fixedExpenses.lines, ...p.variableExpenses
 Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts; none exist yet)
 Income lines: ${JSON.stringify(c.income.lines)}
 Expense lines: ${JSON.stringify(c.expenses.lines)}
-This family entered ONLY these income and expense lines. They have NOT set any savings goals or sinking funds. Do not invent any — you may suggest one or two in your topRecommendation prose, framed explicitly as a suggestion ("Consider a property-tax fund — Quebec bills land in March and June"), but never as a fund or goal they already have, and never with a specific monthly amount presented as theirs.`;
+This family entered ONLY these income and expense lines. They have NOT set any savings goals or reserve funds. Do not invent any — you may suggest one or two in your topRecommendation prose, framed explicitly as a suggestion ("Consider a property-tax fund — Quebec bills land in March and June"), but never as a fund or goal they already have, and never with a specific monthly amount presented as theirs.`;
     } else {
       return NextResponse.json({ error: 'Unknown plan source' }, { status: 400 });
     }
@@ -152,10 +152,10 @@ Rules:
   - "category": which ONE of these fits best: ${categoryList}. Use the English category name exactly as written here.
   - "isFixed": true if it is a fixed recurring bill paid every month (mortgage, rent, loan payment, insurance, daycare, utilities, phone, subscriptions); false if it is variable day-to-day spending (groceries, restaurants, gas, shopping).
 - Classify income lines too: category "Income", isFixed true.
-- Do NOT output any sinking funds, goals, or debt payoff as structured data — there is no field for them in the JSON above. If you want to suggest one, put it in topRecommendation as a suggestion phrased as a suggestion ("Consider…"), never as a fund/goal/debt-plan they already have and never with a monthly amount presented as theirs.
+- Do NOT output any reserve funds, goals, or debt payoff as structured data — there is no field for them in the JSON above. If you want to suggest one, put it in topRecommendation as a suggestion phrased as a suggestion ("Consider…"), never as a fund/goal/debt-plan they already have and never with a monthly amount presented as theirs.
 ${isTemplate ? '- Their goals and debt payoff are already evaluated (contribution, on-track verdict, and dates are all real, verified numbers) — do not invent or restate any of those figures anywhere; if you reference one in topRecommendation, use the exact numbers given.' : ''}
 - Vocabulary: never write "code", "computed in code", or similar internal/technical phrasing — a reader must never see the word "code". An estimated date or figure reads as a plain estimate (e.g. "estimated: March 2027"), never "code-estimated". Never call a figure "budgeted" unless the family actually set that budget themselves — a computed or projected amount (including a card/bridge payment total) reads as "expected", not "budgeted".
-- Canadian context: RRSP reduces taxable income (flag Quebec resident + Ontario employer tax gap if household info shows it). RESP gives $500/yr CESG per child on $2,500 contributed. TFSA is ideal for sinking funds.
+- Canadian context: RRSP reduces taxable income (flag Quebec resident + Ontario employer tax gap if household info shows it). RESP gives $500/yr CESG per child on $2,500 contributed. TFSA is ideal for reserve funds.
 - If net cash flow is negative, topRecommendation must address that first.
 - topRecommendation: one specific sentence with a dollar amount.`;
 

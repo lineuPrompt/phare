@@ -43,17 +43,26 @@ export type DecisionViewProps = {
   month: string;
   statementCloseDay: number | null;
   paymentDay: number | null;
+  // For the inline edit's category select. The full household list, not just
+  // the categories that happen to have an envelope — the whole point is
+  // moving an entry OUT of the category it was wrongly filed under, and the
+  // right destination often has no envelope of its own.
+  categories: { id: string; name: string }[];
 };
 
 // One entry line inside a category's accordion — view mode, or an inline
 // edit form (date/description/amount), plus delete with a confirm step.
-function EntryLine({ entry, locale, onChanged }: { entry: CategoryEntryLine; locale: string; onChanged: () => void }) {
+function EntryLine({ entry, locale, onChanged, categoryId: initialCategoryId, categories }: { entry: CategoryEntryLine; locale: string; onChanged: () => void; categoryId: string | null; categories: { id: string; name: string }[] }) {
   const t = useTranslations('cards.decision.entries');
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [date, setDate] = useState(entry.date);
   const [description, setDescription] = useState(entry.description ?? '');
   const [amount, setAmount] = useState(String(entry.amount));
+  // Miscategorized card entries are the known gap that feeds the coaching
+  // layer's over-target detection: a wrong category makes the monthly review
+  // name the wrong category to the family. Editable here for that reason.
+  const [categoryId, setCategoryId] = useState(initialCategoryId ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -66,7 +75,7 @@ function EntryLine({ entry, locale, onChanged }: { entry: CategoryEntryLine; loc
       const res = await fetch(`/api/expenses/${entry.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, description: description.trim(), amount: parseFloat(amount) }),
+        body: JSON.stringify({ date, description: description.trim(), amount: parseFloat(amount), categoryId: categoryId || null }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Failed');
       setEditing(false);
@@ -99,6 +108,13 @@ function EntryLine({ entry, locale, onChanged }: { entry: CategoryEntryLine; loc
           className="flex-1 min-w-0 px-2 py-1 rounded text-xs outline-none" style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }} />
         <input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)}
           className="w-24 px-2 py-1 rounded text-xs outline-none" style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }} />
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}
+          className="px-2 py-1 rounded text-xs outline-none cursor-pointer" style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}>
+          <option value="">{t('noCategory')}</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
         <button onClick={save} disabled={saving} className="text-xs font-semibold px-2 py-1 rounded cursor-pointer disabled:opacity-50" style={{ background: '#2ABFBF', color: '#0F2044' }}>
           {saving ? t('saving') : t('save')}
         </button>
@@ -136,7 +152,7 @@ function EntryLine({ entry, locale, onChanged }: { entry: CategoryEntryLine; loc
   );
 }
 
-function CategoryEntries({ entries, locale, onChanged }: { entries: CategoryEntryLine[]; locale: string; onChanged: () => void }) {
+function CategoryEntries({entries, locale, onChanged, categoryId, categories}: {entries: CategoryEntryLine[]; locale: string; onChanged: () => void; categoryId: string | null; categories: { id: string; name: string }[] }) {
   const t = useTranslations('cards.decision.entries');
   if (entries.length === 0) {
     return <p className="text-xs py-2 px-2 italic" style={{ color: '#9CA3AF' }}>{t('noEntries')}</p>;
@@ -144,7 +160,7 @@ function CategoryEntries({ entries, locale, onChanged }: { entries: CategoryEntr
   return (
     <div className="divide-y" style={{ borderColor: '#F3F4F6' }}>
       {entries.map((entry) => (
-        <EntryLine key={entry.id} entry={entry} locale={locale} onChanged={onChanged} />
+        <EntryLine key={entry.id} entry={entry} locale={locale} onChanged={onChanged} categoryId={categoryId} categories={categories} />
       ))}
     </div>
   );
@@ -163,6 +179,7 @@ export default function CardDecisionView({
   month,
   statementCloseDay,
   paymentDay,
+  categories,
 }: DecisionViewProps) {
   const t = useTranslations('cards');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -181,6 +198,16 @@ export default function CardDecisionView({
   // DB. A category-less entry never lands in envelopeItems (it's not tied
   // to any category), so it must be checked separately here.
   const hasEnvelope = envelopeItems.length > 0 || uncategorized > 0;
+
+  const expandableRowIds = [
+    ...envelopeItems.map((r) => r.categoryId),
+    ...(uncategorized > 0 ? [UNCATEGORIZED_ROW_ID] : []),
+  ];
+  const allExpanded = expandableRowIds.length > 0 && expandableRowIds.every((id) => expanded.has(id));
+
+  const toggleAll = () => {
+    setExpanded(allExpanded ? new Set() : new Set(expandableRowIds));
+  };
 
   const toggle = (id: string) => {
     setExpanded((prev) => {
@@ -284,13 +311,24 @@ export default function CardDecisionView({
               <h3 className="text-base font-bold" style={{ color: '#0F2044' }}>
                 {t('decision.category')}
               </h3>
-              <button
-                onClick={onEditEnvelope}
-                className="text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-80"
-                style={{ border: '1.5px solid #2ABFBF', color: '#2ABFBF' }}
-              >
-                {t('editor.title')}
-              </button>
+              <div className="flex items-center gap-2">
+                {expandableRowIds.length > 0 && (
+                  <button
+                    onClick={toggleAll}
+                    className="text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-80"
+                    style={{ border: '1.5px solid #D1D5DB', color: '#6B7280' }}
+                  >
+                    {allExpanded ? t('decision.collapseAll') : t('decision.expandAll')}
+                  </button>
+                )}
+                <button
+                  onClick={onEditEnvelope}
+                  className="text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-80"
+                  style={{ border: '1.5px solid #2ABFBF', color: '#2ABFBF' }}
+                >
+                  {t('editor.title')}
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -350,6 +388,8 @@ export default function CardDecisionView({
                               entries={entriesByCategory[row.categoryId] ?? []}
                               locale={locale}
                               onChanged={onEntryChanged}
+                              categoryId={row.categoryId}
+                              categories={categories}
                             />
                           </td>
                         </tr>
@@ -388,6 +428,8 @@ export default function CardDecisionView({
                             entries={uncategorizedEntries}
                             locale={locale}
                             onChanged={onEntryChanged}
+                            categoryId={null}
+                            categories={categories}
                           />
                         </td>
                       </tr>

@@ -106,7 +106,7 @@
         "description": "Des limites de dépenses individuelles dans un budget familial partagé. Les deux conjoints voient le même tableau de bord. Alertes à 80 % et 100 %."
       },
       "sinkingFunds": {
-        "title": "Fonds de prévoyance",
+        "title": "Fonds de réserve",
         "description": "Les dépenses annuelles provisionnées mensuellement pour qu'elles ne touchent plus jamais la marge de crédit. Taxes municipales, immatriculation, rentrée — tout est couvert."
       },
       "goalTracking": {
@@ -132,7 +132,7 @@
           "spending": "Suivi des dépenses",
           "family": "Partage familial",
           "goals": "Suivi des objectifs",
-          "sinking": "Fonds de prévoyance",
+          "sinking": "Fonds de réserve",
           "bilingual": "English & Français",
           "reviewPreview": "Revue mensuelle — aperçu verrouillé"
         }
@@ -225,7 +225,7 @@
       "months": "mois de données",
       "categories": "Catégories détectées",
       "insights": "Observations",
-      "sinkingFunds": "Fonds de prévoyance suggérés",
+      "sinkingFunds": "Fonds de réserve suggérés",
       "questions": "Nous avons besoin de quelques réponses",
       "perMonth": "/mois",
       "perYear": "/an",
@@ -240,7 +240,7 @@
       "income": "Revenus",
       "expenses": "Dépenses",
       "savings": "Épargne",
-      "sinkingFunds": "Fonds de prévoyance",
+      "sinkingFunds": "Fonds de réserve",
       "perMonth": "/mois",
       "perYear": "/an",
       "dueIn": "Dû en",
@@ -253,7 +253,7 @@
       "monthlyEquivalent": "≈ {amount}/mois équivalent",
       "goalFunded": "Atteint",
       "goalsEmpty": "Vous n'avez pas encore défini d'objectifs — ajoutez-les sur la page Objectifs.",
-      "sinkingFundsEmpty": "Vous n'avez pas encore de fonds de prévoyance — vous pouvez en ajouter à tout moment, au fil des dépenses annuelles.",
+      "sinkingFundsEmpty": "Vous n'avez pas encore de fonds de réserve — vous pouvez en ajouter à tout moment, au fil des dépenses annuelles.",
       "noTargetDate": "Aucune date cible définie",
       "notAchievable": "{statedDate} nécessite {amount}/mois — à votre capacité actuelle, {estimatedDate} est réaliste.",
       "monthlyReview": "Votre première revue mensuelle",
@@ -423,11 +423,11 @@
       "question": "L'argent que vous aurez réellement"
     },
     "topPriority": "Votre priorité #1",
-    "sinkingFunds": "Fonds de prévoyance",
+    "sinkingFunds": "Fonds de réserve",
     "perMonth": "/mois",
     "perYear": "/an",
     "fundBalance": "Solde",
-    "startFunding": "Démarrer votre fonds de prévoyance — {amount}/mois",
+    "startFunding": "Démarrer votre fonds de réserve — {amount}/mois",
     "startingFunding": "Démarrage…",
     "startFundingError": "Impossible de démarrer ce fonds — réessayez.",
     "payFromFund": "Payer cette facture",
@@ -463,9 +463,9 @@
       "recurring": "Récurrents",
       "reconcile": "Audit",
       "goals": "Objectifs",
-      "sinkingFunds": "Fonds de prévoyance",
+      "sinkingFunds": "Fonds de réserve",
       "household": "Foyer",
-      "cards": "Cartes",
+      "cards": "Cartes de crédit",
       "menu": "Menu",
       "openMenu": "Ouvrir le menu",
       "closeMenu": "Fermer le menu"
@@ -507,8 +507,11 @@
         "save": "Enregistrer",
         "saving": "Enregistrement...",
         "cancel": "Annuler",
-        "confirmDelete": "Supprimer cette entrée?"
-      }
+        "confirmDelete": "Supprimer cette entrée?",
+        "noCategory": "Aucune catégorie"
+      },
+      "expandAll": "Tout déplier",
+      "collapseAll": "Tout replier"
     },
     "editor": {
       "title": "Modifier l'enveloppe",
@@ -596,7 +599,9 @@
       "detachHint": "Cette entrée fait partie d'une règle récurrente. Enregistrer ne modifie que cette occurrence — la règle elle-même reste inchangée.",
       "moneyOut": "Sortie d'argent",
       "moneyIn": "Entrée d'argent",
-      "categoryUnchanged": "Catégorie..."
+      "categoryUnchanged": "Catégorie...",
+      "projectionBadge": "Projection",
+      "projectionNote": "Tout ce qui suit ne s'est pas encore produit"
     },
     "nav": {
       "prev": "Précédent",
@@ -649,7 +654,7 @@
       "kindDraw": "Prélèvement"
     },
     "remainingCash": {
-      "label": "Trésorerie restante — {month} ferme à"
+      "label": "{month} se termine à"
     }
   },
   "goals": {
@@ -771,12 +776,12 @@
     }
   },
   "sinkingFundsPage": {
-    "title": "Fonds de prévoyance",
+    "title": "Fonds de réserve",
     "manage": "Gérer",
-    "loading": "Chargement de vos fonds de prévoyance...",
-    "noFunds": "Aucun fonds de prévoyance configuré pour l'instant.",
+    "loading": "Chargement de vos fonds de réserve...",
+    "noFunds": "Aucun fonds de réserve configuré pour l'instant.",
     "notStarted": "Ce fonds n'a pas encore été démarré — aucun compte ni contribution n'existe.",
-    "startFunding": "Démarrer votre fonds de prévoyance — {amount}/mois",
+    "startFunding": "Démarrer votre fonds de réserve — {amount}/mois",
     "startingFunding": "Démarrage…",
     "startFundingError": "Impossible de démarrer ce fonds — réessayez.",
     "currentBalance": "solde actuel",
@@ -823,7 +828,7 @@
     "upcoming": "À venir",
     "billsPaid": "Factures payées à partir de ce fonds",
     "noBillsPaid": "Aucune facture payée à partir de ce fonds pour l'instant.",
-    "confirmDeleteTitle": "Arrêter et supprimer votre fonds de prévoyance ?",
+    "confirmDeleteTitle": "Arrêter et supprimer votre fonds de réserve ?",
     "confirmDeleteStops": "Ceci arrête la contribution de {amount}/mois et supprime le compte du fonds.",
     "confirmDeleteUpcoming": "Ceci annule {count} contributions à venir.",
     "confirmDeleteMoneyKept": "L'argent déjà contribué ({amount}) reste enregistré comme un transfert complété — il n'est pas annulé.",

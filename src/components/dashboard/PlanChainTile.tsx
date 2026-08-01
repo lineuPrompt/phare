@@ -58,14 +58,16 @@ export default function PlanChainTile({
 
   if (isPastMonth) {
     return (
-      <div className="mt-4 pt-4" style={{ borderTop: '1px solid #E5E7EB' }}>
+      // Same dark treatment as the live state below — otherwise stepping back
+      // a month flips this section from a dark card to plain text on white.
+      <div className="mt-4 rounded-2xl p-4 sm:p-6" style={{ background: '#0F2044' }}>
         <span
           className="inline-block text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full mb-2"
-          style={{ background: '#EDE9FE', color: '#6D28D9' }}
+          style={{ background: 'rgba(42,191,191,0.15)', color: '#2ABFBF' }}
         >
           {t('badge')}
         </span>
-        <p className="text-sm" style={{ color: '#6B7280' }}>
+        <p className="text-sm" style={{ color: '#94A3B8' }}>
           {t('pastMonth', { currentMonth: currentMonthLabel, month: monthLabel })}
         </p>
       </div>
@@ -79,21 +81,27 @@ export default function PlanChainTile({
   const positive = planMonth.balance >= 0;
 
   return (
-    <div className="mt-4 pt-4" style={{ borderTop: '1px solid #E5E7EB' }}>
+    // Same treatment as TopPriorityCard (#0F2044 ground, #2ABFBF label, white
+    // figure) — this is the dashboard's other "here is the number that
+    // matters" card, and it read as a footnote to the snapshot while it sat on
+    // white. Every colour below is the on-dark counterpart of what it replaced,
+    // NOT a new palette: the muted greys become slate, the purples become the
+    // light violet that survives on navy.
+    <div className="mt-4 rounded-2xl p-4 sm:p-6" style={{ background: '#0F2044' }}>
       <span
         className="inline-block text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full mb-2"
-        style={{ background: '#EDE9FE', color: '#6D28D9' }}
+        style={{ background: 'rgba(42,191,191,0.15)', color: '#2ABFBF' }}
       >
         {t('badge')}
       </span>
 
       {realCloseAmount !== null && (
-        <p className="text-xs" style={{ color: '#6B7280' }}>
+        <p className="text-xs" style={{ color: '#94A3B8' }}>
           {t('closesAt', { month: monthLabel, amount: formatCurrency(realCloseAmount, locale) })}
         </p>
       )}
       {carriedInAmount !== null && (
-        <p className="text-xs mb-2" style={{ color: '#9CA3AF' }}>
+        <p className="text-xs mb-2" style={{ color: '#64748B' }}>
           {t('carriedIn', { month: monthLabel, amount: formatCurrency(carriedInAmount, locale) })}
         </p>
       )}
@@ -102,20 +110,22 @@ export default function PlanChainTile({
           will actually be there"), so borrowed cash IS counted: it really is
           in chequing. Saying which question this answers is what stops the
           different treatment reading as an inconsistency. */}
-      <p className="text-xs font-medium" style={{ color: '#6B7280' }}>
+      <p className="text-sm font-medium" style={{ color: '#2ABFBF' }}>
         {t('question')}
       </p>
-      <p className="text-sm mb-1" style={{ color: '#6B7280' }}>
+      <p className="text-sm mb-1" style={{ color: '#94A3B8' }}>
         {t(planMonth.isPartialMonth ? 'labelRemainder' : 'labelFull', { month: monthLabel })}
       </p>
-      <p className="text-2xl font-bold" style={{ color: positive ? '#4C1D95' : '#B91C1C' }}>
+      {/* A negative projection must still read as bad on a dark ground — white
+          would flatten it into just another figure. */}
+      <p className="text-2xl font-bold" style={{ color: positive ? '#FFFFFF' : '#FCA5A5' }}>
         {formatCurrency(planMonth.balance, locale)}
       </p>
 
       {planMonth.cardCost.length > 0 && (
         <ul className="mt-3 space-y-1">
           {planMonth.cardCost.map((c) => (
-            <li key={c.cardId} className="text-xs" style={{ color: '#6D28D9' }}>
+            <li key={c.cardId} className="text-xs" style={{ color: '#C4B5FD' }}>
               {t(basisKey(c.basis), { card: c.cardName, amount: formatCurrency(c.amount, locale) })}
             </li>
           ))}
@@ -142,7 +152,7 @@ export default function PlanChainTile({
           Do not restore the red box without also removing the snapshot's —
           two alarms for one dollar amount is what caused the confusion. */}
       {totalBorrowed > 0 && (
-        <p className="text-sm font-semibold mt-2" style={{ color: '#6D28D9' }}>
+        <p className="text-sm font-semibold mt-2" style={{ color: '#C4B5FD' }}>
           {t('borrowedNote', { amount: formatCurrency(totalBorrowed, locale) })}
         </p>
       )}
@@ -152,10 +162,10 @@ export default function PlanChainTile({
         expenseCount={planMonth.unanchoredExpenseCount}
         href={recurringHref}
         className="block text-xs mt-2 hover:underline"
-        style={{ color: '#92400E' }}
+        style={{ color: '#FCD34D' }}
       />
 
-      <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>
+      <p className="text-xs mt-2" style={{ color: '#94A3B8' }}>
         {t('note')}{' '}
         <Link href={timelineHref} className="underline hover:no-underline">
           {t('viewRealBalance')}
@@ -163,7 +173,7 @@ export default function PlanChainTile({
       </p>
 
       {isHorizonEnd && (
-        <p className="text-xs mt-2 font-medium" style={{ color: '#6D28D9' }}>{t('horizonEnd')}</p>
+        <p className="text-xs mt-2 font-medium" style={{ color: '#C4B5FD' }}>{t('horizonEnd')}</p>
       )}
     </div>
   );

@@ -21,7 +21,7 @@ ${JSON.stringify(slim)}
 Return ONLY valid JSON:
 {"summary":{"monthsDetected":0,"totalIncome":0,"totalExpenses":0,"netCashFlow":0,"currency":"CAD"},"categories":[{"name":"","name_fr":"","type":"expense","monthlyAverage":0,"confidence":"high"}],"insights":[{"type":"warning","title":"","title_fr":"","description":"","description_fr":""}],"suggestedSinkingFunds":[{"name":"","name_fr":"","annualAmount":0,"monthlyProvision":0,"reason":"","reason_fr":""}],"questions":[{"question":"","question_fr":"","reason":""}]}
 
-Rules: Use Canadian context (RRSP, RESP, TFSA, CESG). Flag Quebec patterns. Suggest sinking funds for annual expenses. Be specific with numbers. If data is ambiguous, ask a question. Max 3 insights, 3 sinking funds, 5 questions.`;
+Rules: Use Canadian context (RRSP, RESP, TFSA, CESG). Flag Quebec patterns. Suggest reserve funds for annual expenses. Be specific with numbers. If data is ambiguous, ask a question. Max 3 insights, 3 reserve funds, 5 questions.`;
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',

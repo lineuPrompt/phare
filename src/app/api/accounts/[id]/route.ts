@@ -198,7 +198,7 @@ export async function DELETE(
       });
       if (rpcErr) {
         console.error('delete_sinking_fund_buffer RPC error:', rpcErr);
-        return NextResponse.json({ error: rpcErr.message || 'Failed to delete sinking fund' }, { status: 500 });
+        return NextResponse.json({ error: rpcErr.message || 'Failed to delete reserve fund' }, { status: 500 });
       }
       return NextResponse.json({ deleted: true, ...result });
     }

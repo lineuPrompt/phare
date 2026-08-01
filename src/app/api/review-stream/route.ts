@@ -22,7 +22,7 @@ Key context:
 ${JSON.stringify(analysis?.insights || [])}
 
 Write four paragraphs maximum. Specific numbers. One clear recommendation. Plain language. It must feel like a letter from a trusted financial advisor, not a report.
-${isManual ? '\nThis family entered ONLY their income and expenses. They have NOT set any savings goals or sinking funds. Do NOT state or imply they have any, and do NOT total up contributions to funds/goals that do not exist. You MAY suggest one or two to consider (e.g. a property-tax fund for Quebec\'s March/June bills), but phrase them explicitly as suggestions ("you might consider…"), never as amounts they already set aside.\n' : ''}
+${isManual ? '\nThis family entered ONLY their income and expenses. They have NOT set any savings goals or reserve funds. Do NOT state or imply they have any, and do NOT total up contributions to funds/goals that do not exist. You MAY suggest one or two to consider (e.g. a property-tax fund for Quebec\'s March/June bills), but phrase them explicitly as suggestions ("you might consider…"), never as amounts they already set aside.\n' : ''}
 Good tone: "June was a solid month overall. You stayed within budget in four of five categories..."
 Bad tone: "Based on a comprehensive analysis of your financial data..."
 

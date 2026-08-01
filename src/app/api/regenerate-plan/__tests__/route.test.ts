@@ -475,7 +475,9 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
     const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
     expect(reviewPromptSent).toContain('"fundedAlready":false');
     expect(reviewPromptSent).toContain('"totalMonthlyProvision":558'); // 300 + 258, summed once, never by the AI
-    expect(reviewPromptSent).toContain('SINKING FUNDS');
+    // Renamed from SINKING FUNDS (2026-08-01): the prompt writes prose the
+    // family reads, so its vocabulary tracks the UI's.
+    expect(reviewPromptSent).toContain('RESERVE FUNDS');
     expect(reviewPromptSent).toContain('ZERO-BALANCE GOALS');
   });
 
@@ -1094,7 +1096,7 @@ describe('POST /api/regenerate-plan — Fix 2: coaching.insufficientHistory', ()
   });
 });
 
-// Adversarial-review Fix 2 (2026-07-28): the SINKING FUNDS rule (real, since
+// Adversarial-review Fix 2 (2026-07-28): the RESERVE FUNDS rule (real, since
 // before the Coaching Layer) and the COACHING cap rule were never reconciled
 // — confirmed live: with startingContribution:0, reviewText reliably (3/3
 // live runs) recommended the fund's own $300 monthlyProvision, because the
@@ -1137,7 +1139,7 @@ describe('POST /api/regenerate-plan — Adversarial Fix 2: sinking-funds rule re
     expect(res.status).toBe(200);
 
     const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
-    // The SINKING FUNDS rule now cross-references the cap explicitly.
+    // The RESERVE FUNDS rule now cross-references the cap explicitly.
     expect(reviewPromptSent).toContain('regardless of');
     expect(reviewPromptSent).toContain('"coaching.startingContribution"');
     // The COACHING rule now states the scope boundary explicitly.

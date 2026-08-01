@@ -132,6 +132,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Sinking funds GET error:', error);
-    return NextResponse.json({ error: 'Failed to load sinking funds' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to load reserve funds' }, { status: 500 });
   }
 }

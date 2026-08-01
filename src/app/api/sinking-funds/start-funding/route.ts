@@ -43,10 +43,10 @@ export async function POST() {
       .select('id, monthly_provision, linked_account_id, active')
       .eq('household_id', householdId);
     if (!funds || funds.length === 0) {
-      return NextResponse.json({ error: 'No sinking funds to fund' }, { status: 400 });
+      return NextResponse.json({ error: 'No reserve funds to fund' }, { status: 400 });
     }
     if (funds.some((f) => f.linked_account_id)) {
-      return NextResponse.json({ error: 'Your sinking fund is already being funded' }, { status: 400 });
+      return NextResponse.json({ error: 'Your reserve fund is already being funded' }, { status: 400 });
     }
 
     // Excluded allocations (active=false) never count toward what gets funded.
