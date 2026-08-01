@@ -511,7 +511,15 @@
         "noCategory": "No category"
       },
       "expandAll": "Expand all",
-      "collapseAll": "Collapse all"
+      "collapseAll": "Collapse all",
+      "filterPlaceholder": "Filter entries…",
+      "sortDate": "Date",
+      "sortDescription": "Description",
+      "sortAmount": "Amount",
+      "sortAsc": "Ascending — click for descending",
+      "sortDesc": "Descending — click for ascending",
+      "filterMatches": "{count, plural, one {1 entry matches} other {# entries match}} \"{filter}\"",
+      "filterNoMatches": "No entries match \"{filter}\""
     },
     "editor": {
       "title": "Edit envelope",

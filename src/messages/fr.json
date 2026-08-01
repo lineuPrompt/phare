@@ -511,7 +511,15 @@
         "noCategory": "Aucune catégorie"
       },
       "expandAll": "Tout déplier",
-      "collapseAll": "Tout replier"
+      "collapseAll": "Tout replier",
+      "filterPlaceholder": "Filtrer les entrées…",
+      "sortDate": "Date",
+      "sortDescription": "Description",
+      "sortAmount": "Montant",
+      "sortAsc": "Croissant — cliquez pour décroissant",
+      "sortDesc": "Décroissant — cliquez pour croissant",
+      "filterMatches": "{count, plural, one {1 entrée correspond} other {# entrées correspondent}} à « {filter} »",
+      "filterNoMatches": "Aucune entrée ne correspond à « {filter} »"
     },
     "editor": {
       "title": "Modifier l'enveloppe",

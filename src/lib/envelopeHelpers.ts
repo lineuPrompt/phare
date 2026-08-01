@@ -325,3 +325,67 @@ export function buildGrid(
 // per-category rows on the Cards page (decision table, and its per-category
 // entry accordion).
 export const UNCATEGORIZED_ROW_ID = 'uncategorized';
+
+// ---------------------------------------------------------------------------
+// ENTRY FILTER + SORT (Cards page, per-category accordions)
+//
+// The stated need was "see all the Amazon rows together". A sort alone doesn't
+// deliver that — it clusters them but still leaves you scrolling to find the
+// cluster — so filtering is the primary tool and sorting is the secondary one.
+// Both are applied across EVERY category group, not within one accordion, so a
+// search reaches entries the family hasn't expanded yet.
+//
+// Pure and exported so the behaviour is testable without a DOM: the ordering
+// rules below (nulls last, case-insensitive, ties broken by date) are the kind
+// of thing that silently regresses when it lives inline in a component.
+// ---------------------------------------------------------------------------
+export type EntrySortKey = 'date' | 'description' | 'amount';
+export type SortDirection = 'asc' | 'desc';
+
+/** Case-insensitive substring match on description or installment label. */
+export function entryMatchesFilter(entry: CategoryEntryLine, filter: string): boolean {
+  const needle = filter.trim().toLowerCase();
+  if (needle === '') return true;
+
+  const haystack = [entry.description ?? '', entry.installmentLabel ?? '']
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(needle);
+}
+
+export function filterAndSortEntries(
+  entries: CategoryEntryLine[],
+  filter: string,
+  sortKey: EntrySortKey,
+  sortDir: SortDirection
+): CategoryEntryLine[] {
+  const filtered = entries.filter((e) => entryMatchesFilter(e, filter));
+  const factor = sortDir === 'asc' ? 1 : -1;
+
+  // Sorts a COPY — the caller's array (straight from the API response) must
+  // not be reordered underneath it.
+  return [...filtered].sort((a, b) => {
+    if (sortKey === 'amount') {
+      // By magnitude: an expense and an income of the same size belong next to
+      // each other when scanning for "the big ones". Sign is already carried
+      // by the row's colour and formatting.
+      const diff = Math.abs(a.amount) - Math.abs(b.amount);
+      return diff !== 0 ? diff * factor : a.date.localeCompare(b.date);
+    }
+
+    if (sortKey === 'description') {
+      const an = (a.description ?? '').trim().toLowerCase();
+      const bn = (b.description ?? '').trim().toLowerCase();
+      // Entries with no description sort last in BOTH directions — a blank is
+      // absence of data, not a value that belongs at one end of the range.
+      if (an === '' && bn !== '') return 1;
+      if (bn === '' && an !== '') return -1;
+      const diff = an.localeCompare(bn);
+      return diff !== 0 ? diff * factor : a.date.localeCompare(b.date);
+    }
+
+    // Dates are ISO (YYYY-MM-DD), so a string compare is a date compare.
+    const diff = a.date.localeCompare(b.date);
+    return diff !== 0 ? diff * factor : (a.description ?? '').localeCompare(b.description ?? '');
+  });
+}

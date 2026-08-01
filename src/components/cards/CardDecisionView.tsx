@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { filterAndSortEntries, type EntrySortKey, type SortDirection } from '@/lib/envelopeHelpers';
 import { formatCurrency, formatSignedAmount } from '@/components/expenses/types';
 import { EnvelopeStatus, envelopeStatus, sumWarning, CategoryEntryLine, UNCATEGORIZED_ROW_ID } from '@/lib/envelopeHelpers';
 import { cardCycleContext } from '@/lib/dateHelpers';
@@ -199,6 +200,23 @@ export default function CardDecisionView({
   // to any category), so it must be checked separately here.
   const hasEnvelope = envelopeItems.length > 0 || uncategorized > 0;
 
+  const [filter, setFilter] = useState('');
+  const [sortKey, setSortKey] = useState<EntrySortKey>('date');
+  const [sortDir, setSortDir] = useState<SortDirection>('asc');
+  const filtering = filter.trim() !== '';
+
+  // Filter and sort every group up front, so the toolbar can report how many
+  // entries actually matched and which groups to open. Doing it inside each
+  // accordion would leave a search unable to see into unexpanded groups —
+  // which is the whole point of searching.
+  const visibleEntriesFor = (categoryId: string): CategoryEntryLine[] =>
+    filterAndSortEntries(entriesByCategory[categoryId] ?? [], filter, sortKey, sortDir);
+  const visibleUncategorized = filterAndSortEntries(uncategorizedEntries, filter, sortKey, sortDir);
+
+  const matchCount =
+    envelopeItems.reduce((n, r) => n + visibleEntriesFor(r.categoryId).length, 0) +
+    visibleUncategorized.length;
+
   const expandableRowIds = [
     ...envelopeItems.map((r) => r.categoryId),
     ...(uncategorized > 0 ? [UNCATEGORIZED_ROW_ID] : []),
@@ -208,6 +226,9 @@ export default function CardDecisionView({
   const toggleAll = () => {
     setExpanded(allExpanded ? new Set() : new Set(expandableRowIds));
   };
+
+  const isRowOpen = (id: string, entryCount: number) =>
+    filtering ? entryCount > 0 : expanded.has(id);
 
   const toggle = (id: string) => {
     setExpanded((prev) => {
@@ -311,8 +332,36 @@ export default function CardDecisionView({
               <h3 className="text-base font-bold" style={{ color: '#0F2044' }}>
                 {t('decision.category')}
               </h3>
-              <div className="flex items-center gap-2">
-                {expandableRowIds.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="search"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder={t('decision.filterPlaceholder')}
+                  className="px-3 py-1.5 rounded-full text-xs outline-none w-40"
+                  style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
+                />
+                <select
+                  value={sortKey}
+                  onChange={(e) => setSortKey(e.target.value as EntrySortKey)}
+                  className="px-2 py-1.5 rounded-full text-xs outline-none cursor-pointer"
+                  style={{ border: '1.5px solid #D1D5DB', color: '#6B7280' }}
+                >
+                  <option value="date">{t('decision.sortDate')}</option>
+                  <option value="description">{t('decision.sortDescription')}</option>
+                  <option value="amount">{t('decision.sortAmount')}</option>
+                </select>
+                <button
+                  onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
+                  title={sortDir === 'asc' ? t('decision.sortAsc') : t('decision.sortDesc')}
+                  className="px-2 py-1.5 rounded-full text-xs cursor-pointer hover:opacity-80"
+                  style={{ border: '1.5px solid #D1D5DB', color: '#6B7280' }}
+                >
+                  {sortDir === 'asc' ? '↑' : '↓'}
+                </button>
+                {/* While filtering, every matching group is forced open, so an
+                    expand/collapse toggle would fight the search. */}
+                {!filtering && expandableRowIds.length > 0 && (
                   <button
                     onClick={toggleAll}
                     className="text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-80"
@@ -331,6 +380,16 @@ export default function CardDecisionView({
               </div>
             </div>
 
+            {/* A filter that hides everything must say so — an empty table
+                after typing reads as a broken page, not as "no matches". */}
+            {filtering && (
+              <p className="text-xs mb-2" style={{ color: matchCount === 0 ? '#DC2626' : '#6B7280' }}>
+                {matchCount === 0
+                  ? t('decision.filterNoMatches', { filter: filter.trim() })
+                  : t('decision.filterMatches', { count: matchCount, filter: filter.trim() })}
+              </p>
+            )}
+
             <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[520px]">
               <thead>
@@ -344,7 +403,8 @@ export default function CardDecisionView({
               </thead>
               <tbody>
                 {envelopeItems.map((row) => {
-                  const isOpen = expanded.has(row.categoryId);
+                  const rowEntries = visibleEntriesFor(row.categoryId);
+                  const isOpen = isRowOpen(row.categoryId, rowEntries.length);
                   return (
                     <Fragment key={row.categoryId}>
                       <tr
@@ -385,7 +445,7 @@ export default function CardDecisionView({
                         <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
                           <td colSpan={5} className="pb-2.5" style={{ background: '#FAFAFA' }}>
                             <CategoryEntries
-                              entries={entriesByCategory[row.categoryId] ?? []}
+                              entries={rowEntries}
                               locale={locale}
                               onChanged={onEntryChanged}
                               categoryId={row.categoryId}
@@ -404,10 +464,10 @@ export default function CardDecisionView({
                     <tr
                       onClick={() => toggle(UNCATEGORIZED_ROW_ID)}
                       className="cursor-pointer hover:opacity-80"
-                      style={{ borderBottom: expanded.has(UNCATEGORIZED_ROW_ID) ? 'none' : '1px solid #F3F4F6' }}
+                      style={{ borderBottom: isRowOpen(UNCATEGORIZED_ROW_ID, visibleUncategorized.length) ? 'none' : '1px solid #F3F4F6' }}
                     >
                       <td className="py-2.5 italic" style={{ color: '#9CA3AF' }}>
-                        <span className="mr-1.5 text-xs">{expanded.has(UNCATEGORIZED_ROW_ID) ? '▾' : '▸'}</span>
+                        <span className="mr-1.5 text-xs">{isRowOpen(UNCATEGORIZED_ROW_ID, visibleUncategorized.length) ? '▾' : '▸'}</span>
                         {t('decision.uncategorized')}
                       </td>
                       <td className="py-2.5 text-right" style={{ color: '#9CA3AF' }}>—</td>
@@ -421,11 +481,11 @@ export default function CardDecisionView({
                         </span>
                       </td>
                     </tr>
-                    {expanded.has(UNCATEGORIZED_ROW_ID) && (
+                    {isRowOpen(UNCATEGORIZED_ROW_ID, visibleUncategorized.length) && (
                       <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
                         <td colSpan={5} className="pb-2.5" style={{ background: '#FAFAFA' }}>
                           <CategoryEntries
-                            entries={uncategorizedEntries}
+                            entries={visibleUncategorized}
                             locale={locale}
                             onChanged={onEntryChanged}
                             categoryId={null}
