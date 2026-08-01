@@ -516,10 +516,14 @@
       "sortDate": "Date",
       "sortDescription": "Description",
       "sortAmount": "Amount",
-      "sortAsc": "Ascending — click for descending",
-      "sortDesc": "Descending — click for ascending",
       "filterMatches": "{count, plural, one {1 entry matches} other {# entries match}} \"{filter}\"",
-      "filterNoMatches": "No entries match \"{filter}\""
+      "filterNoMatches": "No entries match \"{filter}\"",
+      "sortDateAsc": "Oldest first — click to reverse",
+      "sortDateDesc": "Newest first — click to reverse",
+      "sortDescriptionAsc": "A to Z — click to reverse",
+      "sortDescriptionDesc": "Z to A — click to reverse",
+      "sortAmountAsc": "Smallest first — click to reverse",
+      "sortAmountDesc": "Largest first — click to reverse"
     },
     "editor": {
       "title": "Edit envelope",

@@ -353,11 +353,27 @@ export default function CardDecisionView({
                 </select>
                 <button
                   onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
-                  title={sortDir === 'asc' ? t('decision.sortAsc') : t('decision.sortDesc')}
+                  // "Ascending" is the abstraction that made the arrow
+                  // ambiguous in the first place. Say what it actually does
+                  // for the chosen key instead. Literal keys, not a template,
+                  // so i18nKeys.test.ts can verify every one resolves.
+                  title={
+                    sortKey === 'date'
+                      ? (sortDir === 'asc' ? t('decision.sortDateAsc') : t('decision.sortDateDesc'))
+                      : sortKey === 'description'
+                      ? (sortDir === 'asc' ? t('decision.sortDescriptionAsc') : t('decision.sortDescriptionDesc'))
+                      : (sortDir === 'asc' ? t('decision.sortAmountAsc') : t('decision.sortAmountDesc'))
+                  }
                   className="px-2 py-1.5 rounded-full text-xs cursor-pointer hover:opacity-80"
                   style={{ border: '1.5px solid #D1D5DB', color: '#6B7280' }}
                 >
-                  {sortDir === 'asc' ? '↑' : '↓'}
+                  {/* ARROW CONVENTION: the arrow describes the direction
+                      values move as you read DOWN the list, which is how a
+                      table is actually scanned. Ascending (oldest first,
+                      A→Z, smallest first) therefore points DOWN, descending
+                      points UP. Do not "fix" this to match the state name —
+                      it read backwards that way. */}
+                  {sortDir === 'asc' ? '↓' : '↑'}
                 </button>
                 {/* While filtering, every matching group is forced open, so an
                     expand/collapse toggle would fight the search. */}

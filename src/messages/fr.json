@@ -516,10 +516,14 @@
       "sortDate": "Date",
       "sortDescription": "Description",
       "sortAmount": "Montant",
-      "sortAsc": "Croissant — cliquez pour décroissant",
-      "sortDesc": "Décroissant — cliquez pour croissant",
       "filterMatches": "{count, plural, one {1 entrée correspond} other {# entrées correspondent}} à « {filter} »",
-      "filterNoMatches": "Aucune entrée ne correspond à « {filter} »"
+      "filterNoMatches": "Aucune entrée ne correspond à « {filter} »",
+      "sortDateAsc": "Plus ancien d'abord — cliquez pour inverser",
+      "sortDateDesc": "Plus récent d'abord — cliquez pour inverser",
+      "sortDescriptionAsc": "De A à Z — cliquez pour inverser",
+      "sortDescriptionDesc": "De Z à A — cliquez pour inverser",
+      "sortAmountAsc": "Plus petit d'abord — cliquez pour inverser",
+      "sortAmountDesc": "Plus grand d'abord — cliquez pour inverser"
     },
     "editor": {
       "title": "Modifier l'enveloppe",
