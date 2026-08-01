@@ -403,7 +403,7 @@
     "surplus": "Surplus mensuel",
     "deficit": "Déficit mensuel",
     "debtPaymentsNote": "Comprend {amount} versé sur une dette — non compté comme épargne.",
-    "borrowedNote": "⚠ {amount} emprunté ce mois-ci — non compté dans ce surplus.",
+    "borrowedNote": "⚠ {amount} de l'encaisse de ce mois-ci a été emprunté. Cet argent est dans votre compte, mais vous ne l'avez pas gagné — il n'est donc pas inclus dans le montant ci-dessus.",
     "monthOnlyNote": "Ceci reflète uniquement le flux de trésorerie de ce mois, pas votre solde réel.",
     "viewRealBalance": "Voir votre solde réel dans la Chronologie",
     "plan": {
@@ -417,10 +417,11 @@
       "basisBudget": "{card} : {amount} — budget",
       "basisMax": "{card} : {amount} — dépassement de budget, montant réel utilisé",
       "basisPosted": "{card} : déjà payé — inclus dans le solde d'aujourd'hui",
-      "borrowedNote": "⚠ Comprend {amount} emprunté — ce solde est plus élevé parce que vous avez puisé dans votre crédit.",
+      "borrowedNote": "{amount} de ce solde est emprunté — de l'argent réel que vous pouvez dépenser, et que vous devrez rembourser.",
       "horizonEnd": "L'horizon du plan s'arrête ici — Phare planifie 12 mois à l'avance.",
       "note": "Une estimation — suppose que les factures fixes, les transferts et les budgets de carte se déroulent comme prévu.",
-      "viewRealBalance": "Voir les soldes réels sur la Chronologie"
+      "viewRealBalance": "Voir les soldes réels sur la Chronologie",
+      "question": "L'argent que vous aurez réellement"
     },
     "topPriority": "Votre priorité #1",
     "sinkingFunds": "Fonds de prévoyance",
@@ -469,7 +470,8 @@
       "menu": "Menu",
       "openMenu": "Ouvrir le menu",
       "closeMenu": "Fermer le menu"
-    }
+    },
+    "surplusQuestion": "Ce mois s'est-il autofinancé?"
   },
   "cards": {
     "title": "Enveloppes de cartes",

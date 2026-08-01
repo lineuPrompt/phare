@@ -403,7 +403,7 @@
     "surplus": "Monthly surplus",
     "deficit": "Monthly deficit",
     "debtPaymentsNote": "Includes {amount} paid toward debt — not counted as savings.",
-    "borrowedNote": "⚠ {amount} borrowed this month — not counted in this surplus.",
+    "borrowedNote": "⚠ {amount} of this month's cash was borrowed. It's in your account, but you didn't earn it — so it's not in the figure above.",
     "monthOnlyNote": "This reflects this month's cash flow only, not your running balance.",
     "viewRealBalance": "View your real balance in Timeline",
     "plan": {
@@ -417,10 +417,11 @@
       "basisBudget": "{card}: {amount} — budget",
       "basisMax": "{card}: {amount} — over budget, using actual",
       "basisPosted": "{card}: already paid — included in today's balance",
-      "borrowedNote": "⚠ Includes {amount} borrowed — this balance is higher because you drew on credit.",
+      "borrowedNote": "{amount} of this is borrowed — real cash you can spend, and you'll owe it back.",
       "horizonEnd": "Plan horizon ends here — Phare plans 12 months ahead.",
       "note": "An estimate — assumes fixed bills, transfers, and card budgets land as dated.",
-      "viewRealBalance": "See real balances on Timeline"
+      "viewRealBalance": "See real balances on Timeline",
+      "question": "Cash you'll actually have"
     },
     "topPriority": "Your #1 priority",
     "sinkingFunds": "Sinking funds",
@@ -469,7 +470,8 @@
       "menu": "Menu",
       "openMenu": "Open menu",
       "closeMenu": "Close menu"
-    }
+    },
+    "surplusQuestion": "Did this month cover itself?"
   },
   "cards": {
     "title": "Card Envelopes",

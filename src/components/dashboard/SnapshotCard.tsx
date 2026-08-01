@@ -156,6 +156,15 @@ export default function SnapshotCard({
           the number must not be able to miss that it was propped up by
           borrowing. Same treatment, same prominence, as the projection
           tile's own disclosure below. */}
+      {/* Subject line. This tile and the projection tile below treat the same
+          borrowed dollars in opposite ways, which reads as a contradiction
+          until each one says which question it answers. This is a FLOW —
+          "did the month pay for itself" — so borrowed cash is excluded by
+          definition. The projection tile is a STOCK and includes it. */}
+      <p className="text-xs font-medium mb-1.5" style={{ color: '#6B7280' }}>
+        {t('surplusQuestion')}
+      </p>
+
       <div
         className="rounded-xl p-3 sm:p-4"
         style={{ background: surplus ? '#F0FDF4' : '#FEF2F2' }}

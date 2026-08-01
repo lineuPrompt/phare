@@ -98,6 +98,13 @@ export default function PlanChainTile({
         </p>
       )}
 
+      {/* Subject line — see SnapshotCard's. This is a STOCK ("how much money
+          will actually be there"), so borrowed cash IS counted: it really is
+          in chequing. Saying which question this answers is what stops the
+          different treatment reading as an inconsistency. */}
+      <p className="text-xs font-medium" style={{ color: '#6B7280' }}>
+        {t('question')}
+      </p>
       <p className="text-sm mb-1" style={{ color: '#6B7280' }}>
         {t(planMonth.isPartialMonth ? 'labelRemainder' : 'labelFull', { month: monthLabel })}
       </p>
@@ -115,18 +122,29 @@ export default function PlanChainTile({
         </ul>
       )}
 
-      {/* Same prominence as the surplus box above (SnapshotCard) — the cash
-          really is in chequing (that's why it's still counted here), but
-          the reader needs the identical "this was borrowed" signal. */}
+      {/* BORROWED DISCLOSURE — deliberately a caption here, not a red alarm.
+          Superseded decision (founder call, 2026-08-01): this used to be a red
+          box at "the same prominence as the surplus box above", on the
+          reasoning that the reader needs an identical "this was borrowed"
+          signal. In use that backfired. The same $2,000 appeared twice on one
+          screen in two identical red boxes with opposite verbs — "NOT counted
+          in this surplus" here vs "Includes ... borrowed" there — and read as
+          a contradiction rather than a warning. ("o que nao fecha pra mim.")
+
+          The SIGNAL stays and is unconditional; only its alarm level changes.
+          A warning that gets read as noise protects nobody, and the two tiles
+          are not in conflict — they answer different questions, which the
+          subject lines now say out loud. One alarm, on the snapshot, where
+          borrowing genuinely qualifies the month. Here it qualifies a balance
+          that really is in chequing, so it sits in the tile's own colour,
+          subordinate to the number it describes.
+
+          Do not restore the red box without also removing the snapshot's —
+          two alarms for one dollar amount is what caused the confusion. */}
       {totalBorrowed > 0 && (
-        <div
-          className="rounded-xl px-3 py-2.5 mt-2"
-          style={{ background: '#FEF2F2', border: '1.5px solid #FECACA' }}
-        >
-          <p className="text-sm font-semibold" style={{ color: '#B91C1C' }}>
-            {t('borrowedNote', { amount: formatCurrency(totalBorrowed, locale) })}
-          </p>
-        </div>
+        <p className="text-sm font-semibold mt-2" style={{ color: '#6D28D9' }}>
+          {t('borrowedNote', { amount: formatCurrency(totalBorrowed, locale) })}
+        </p>
       )}
 
       <AwaitingDatesNotice
