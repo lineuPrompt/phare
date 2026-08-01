@@ -77,7 +77,20 @@ vi.mock('@/lib/supabase-admin', () => ({
     from: (table: string) => ({
       select: (...args: unknown[]) => {
         adminFromCalls.push({ table, args });
-        return adminUsersSelectMock(...args);
+        // Fall back to an empty result so a test that doesn't care about the
+        // admin lookup doesn't have to script it. Inlined rather than reusing
+        // makeResultChain: vi.mock factories are hoisted above it.
+        const nullChain = (): unknown =>
+          new Proxy({}, {
+            get(_, prop) {
+              if (prop === 'then') {
+                return (resolve: (v: unknown) => unknown) =>
+                  Promise.resolve({ data: null, error: null }).then(resolve);
+              }
+              return () => nullChain();
+            },
+          });
+        return adminUsersSelectMock(...args) ?? nullChain();
       },
     }),
   }),
@@ -105,6 +118,7 @@ describe('POST /api/household/members — match-before-create', () => {
     const { client, calls } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
       household_members: [
+        { count: 0, error: null },     // member-cap count (route reads this first)
         { data: [{ id: 'mem-julia', name: 'Julia' }], error: null }, // name-only candidates
         { data: { name: 'Julia' }, error: null },                    // existing row's current name
         { error: null },                                             // update (attach)
@@ -144,6 +158,7 @@ describe('POST /api/household/members — match-before-create', () => {
     const { client, calls } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
       household_members: [
+        { count: 0, error: null },     // member-cap count (route reads this first)
         { data: [], error: null }, // no name-only members at all
       ],
     });
@@ -157,17 +172,18 @@ describe('POST /api/household/members — match-before-create', () => {
     expect(res.status).toBe(200);
     expect(json).toEqual({ success: true, attached: false, attachedTo: null });
 
-    // Exactly one household_members call total — the candidate lookup.
-    // No update, no delete: nothing to attach or clean up.
+    // Reads only (the cap count, then the candidate lookup) — no update and
+    // no delete, because there is nothing to attach or clean up.
     const memberCalls = calls.filter((c) => c.table === 'household_members');
-    expect(memberCalls).toHaveLength(1);
-    expect(memberCalls[0].method).toBe('select');
+    expect(memberCalls.every((c) => c.method === 'select')).toBe(true);
+    expect(memberCalls.some((c) => c.method === 'update' || c.method === 'delete')).toBe(false);
   });
 
   it('two name-only members with the same matching name never guess — returns candidates, creates nothing', async () => {
     const { client, calls } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
       household_members: [
+        { count: 0, error: null },     // member-cap count (route reads this first)
         { data: [{ id: 'm5', name: 'Julia' }, { id: 'm6', name: 'Julia' }], error: null },
       ],
     });
@@ -195,6 +211,7 @@ describe('POST /api/household/members — match-before-create', () => {
     const { client, calls } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
       household_members: [
+        { count: 0, error: null },     // member-cap count (route reads this first)
         { data: { id: 'm5', user_id: null, household_id: 'hh1' }, error: null }, // attachToMemberId validation
         { data: { name: 'Julia' }, error: null },                                // existing row's name
         { error: null },                                                        // update
@@ -219,7 +236,7 @@ describe('POST /api/household/members — match-before-create', () => {
 
     const { client, calls } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
-      household_members: [], // no lookups at all — forceNew bypasses matching entirely
+      household_members: [{ count: 0, error: null }], // cap count only — forceNew bypasses matching
     });
 
     const { createClient } = await import('@/lib/supabase-server');
@@ -230,7 +247,11 @@ describe('POST /api/household/members — match-before-create', () => {
 
     expect(res.status).toBe(200);
     expect(json).toEqual({ success: true, attached: false, attachedTo: null });
-    expect(calls.filter((c) => c.table === 'household_members')).toHaveLength(0);
+    // The cap count still runs; what forceNew skips is the candidate
+    // matching, and it must never attach or delete a member row.
+    const memberCalls = calls.filter((c) => c.table === 'household_members');
+    expect(memberCalls.some((c) => c.method === 'update' || c.method === 'delete')).toBe(false);
+    expect(memberCalls).toHaveLength(1); // the cap count only
   });
 });
 
@@ -256,7 +277,9 @@ describe('POST /api/household/members — invite email locale', () => {
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', role: 'owner', households }, error: null }],
-      household_members: [{ data: [], error: null }], // no name-only candidates
+      household_members: [
+        { count: 0, error: null },     // member-cap count (route reads this first)
+       { data: [], error: null }], // no name-only candidates
     });
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
@@ -317,7 +340,9 @@ describe('POST /api/household/members — invite email locale', () => {
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', role: 'owner', households: { locale: 'fr' } }, error: null }],
-      household_members: [{ data: [], error: null }],
+      household_members: [
+        { count: 0, error: null },     // member-cap count (route reads this first)
+       { data: [], error: null }],
     });
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
@@ -353,7 +378,9 @@ describe('POST /api/household/members — invite email locale', () => {
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
-      household_members: [{ data: [], error: null }],
+      household_members: [
+        { count: 0, error: null },     // member-cap count (route reads this first)
+       { data: [], error: null }],
     });
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
@@ -371,7 +398,9 @@ describe('POST /api/household/members — invite email locale', () => {
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
-      household_members: [{ data: [], error: null }],
+      household_members: [
+        { count: 0, error: null },     // member-cap count (route reads this first)
+       { data: [], error: null }],
     });
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
@@ -521,5 +550,86 @@ describe('GET /api/household/members — roles are read with service role', () =
 
     const res = await getMembers();
     expect(res.status).toBe(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HARD MEMBER CAP — server-side. The UI hides the invite form at capacity, but
+// that is presentation. This route is the enforcement, and these pin that it
+// rejects a third member whether or not any UI asked it to.
+// ---------------------------------------------------------------------------
+describe('POST /api/household/members — hard member cap', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createUserMock.mockReset();
+    resetPasswordMock.mockReset();
+    adminUsersSelectMock.mockReset();
+    adminFromCalls.length = 0;
+  });
+
+  /** Scripts the cap count on the session client's household_members read. */
+  function scriptCap(accessCount: number, emailAlreadyOurs: boolean) {
+    adminUsersSelectMock.mockReturnValue(
+      // Must carry household_id: the same admin lookup feeds BOTH the cap
+      // exemption and the duplicate-email resend branch, and the latter
+      // compares household_id against the caller's.
+      makeResultChain({ data: emailAlreadyOurs ? { id: 'u-existing', household_id: 'hh1' } : null, error: null })
+    );
+    return makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
+      household_members: emailAlreadyOurs
+        // Already ours = a resend: the cap check short-circuits before
+        // counting, so no cap read happens and only candidates are looked up.
+        ? [{ data: [], error: null }]
+        : [
+            { count: accessCount, error: null }, // the cap count
+            { data: [], error: null },           // match-before-create candidates
+          ],
+    });
+  }
+
+  it('rejects a third member with a clear, coded error and creates nothing', async () => {
+    const { client } = scriptCap(2, false);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const res = await postMembers({ email: 'third@example.com', fullName: 'Third Person', role: 'member' });
+    expect(res.status).toBe(409);
+
+    const json = await res.json();
+    expect(json.code).toBe('member_cap_reached');
+    expect(json.cap).toBe(2);
+    expect(json.error).toContain('limited to 2 members');
+
+    // Nothing was provisioned — the rejection happens before any auth write.
+    expect(createUserMock).not.toHaveBeenCalled();
+    expect(resetPasswordMock).not.toHaveBeenCalled();
+  });
+
+  it('allows an invite when below capacity', async () => {
+    const { client } = scriptCap(1, false);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    createUserMock.mockResolvedValue({ data: { user: { id: 'new-user' } }, error: null });
+    resetPasswordMock.mockResolvedValue({ error: null });
+
+    const res = await postMembers({ email: 'second@example.com', fullName: 'Second Person', role: 'member' });
+    expect(res.status).toBe(200);
+    expect(createUserMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Re-inviting an existing member is a RESEND of an expired invite, not a new
+  // member. A household at capacity must still be able to do it, or it can
+  // never recover its own member's lapsed invite.
+  it('does not block a resend to an email already in this household', async () => {
+    const { client } = scriptCap(2, true);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    createUserMock.mockResolvedValue({ data: null, error: { message: 'User already registered', status: 422 } });
+    resetPasswordMock.mockResolvedValue({ error: null });
+
+    const res = await postMembers({ email: 'julia@example.com', fullName: 'Julia Alff', role: 'member' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, resent: true });
   });
 });

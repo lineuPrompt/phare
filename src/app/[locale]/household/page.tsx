@@ -7,7 +7,13 @@ import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import SupportLine from '@/components/shared/SupportLine';
 import ExportDataSection from '@/components/shared/ExportDataSection';
-import { memberRoleView, canPromoteToOwner } from '@/lib/memberProvisioningHelpers';
+import {
+  memberRoleView,
+  canPromoteToOwner,
+  countAccessHoldingMembers,
+  isAtMemberCap,
+  HOUSEHOLD_MEMBER_CAP,
+} from '@/lib/memberProvisioningHelpers';
 
 type Member = {
   id: string;
@@ -42,6 +48,14 @@ export default function HouseholdPage() {
 
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [resendError, setResendError] = useState<{ id: string; message: string } | null>(null);
+
+  // Capacity is derived from the same helper the route enforces with, so the
+  // form and the API can't disagree about the number.
+  const atCapacity = isAtMemberCap(countAccessHoldingMembers(members));
+
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<{ id: string; message: string } | null>(null);
+  const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
 
   const [promotingId, setPromotingId] = useState<string | null>(null);
   const [promoteError, setPromoteError] = useState<{ id: string; message: string } | null>(null);
@@ -99,6 +113,27 @@ export default function HouseholdPage() {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRevoke = async (id: string) => {
+    setRevokingId(id);
+    setRevokeError(null);
+    try {
+      const res = await fetch(`/api/household/members/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) {
+        setRevokeError({ id, message: data.error ?? t('revokeFailed') });
+        return;
+      }
+      setConfirmRevokeId(null);
+      fetch('/api/household/members')
+        .then((r) => r.json())
+        .then((d) => setMembers(d.members ?? []));
+    } catch (err) {
+      setRevokeError({ id, message: err instanceof Error ? err.message : t('revokeFailed') });
+    } finally {
+      setRevokingId(null);
     }
   };
 
@@ -306,8 +341,44 @@ export default function HouseholdPage() {
                             >
                               {resendingId === m.id ? t('resending') : t('resendInvite')}
                             </button>
+                            {/* Revoke a never-activated invite. Frees the
+                                capped slot — without this a typo'd email
+                                would consume one of two slots for good. */}
+                            {confirmRevokeId === m.id ? (
+                              <span className="inline-flex flex-wrap items-center gap-2 ml-2">
+                                <span className="text-xs" style={{ color: '#6B7280' }}>
+                                  {t('revokeConfirm', { name: m.name })}
+                                </span>
+                                <button
+                                  onClick={() => handleRevoke(m.id)}
+                                  disabled={revokingId === m.id}
+                                  className="text-xs font-medium px-3 py-1.5 rounded-full text-white cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
+                                  style={{ background: '#B91C1C' }}
+                                >
+                                  {revokingId === m.id ? t('revoking') : t('revokeYes')}
+                                </button>
+                                <button
+                                  onClick={() => { setConfirmRevokeId(null); setRevokeError(null); }}
+                                  className="text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-90 transition-all"
+                                  style={{ border: '1.5px solid #D1D5DB', color: '#0F2044', background: 'white' }}
+                                >
+                                  {t('promoteCancel')}
+                                </button>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => { setConfirmRevokeId(m.id); setRevokeError(null); }}
+                                className="text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-90 transition-all ml-2"
+                                style={{ border: '1.5px solid #FECACA', color: '#B91C1C', background: 'white' }}
+                              >
+                                {t('revokeInvite')}
+                              </button>
+                            )}
                             {resendError?.id === m.id && (
                               <p className="text-xs mt-1" style={{ color: '#DC2626' }}>{resendError.message}</p>
+                            )}
+                            {revokeError?.id === m.id && (
+                              <p className="text-xs mt-1" style={{ color: '#DC2626' }}>{revokeError.message}</p>
                             )}
                           </div>
                         )}
@@ -371,7 +442,18 @@ export default function HouseholdPage() {
               </section>
             )}
 
-            {/* Add member form */}
+            {/* At capacity: say so. A form that silently disappears reads as
+                a bug, and the server rejects a third invite regardless — this
+                only explains why the form isn't there. */}
+            {atCapacity ? (
+              <section className="rounded-2xl p-6" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                <h2 className="font-semibold mb-1" style={{ color: '#0F2044' }}>{t('addTitle')}</h2>
+                <p className="text-sm" style={{ color: '#6B7280' }}>
+                  {t('memberCapReached', { cap: HOUSEHOLD_MEMBER_CAP })}
+                </p>
+              </section>
+            ) : (
+            /* Add member form */
             <section className="rounded-2xl bg-white p-6 space-y-4" style={{ border: '1px solid #E5E7EB' }}>
               <h2 className="font-semibold" style={{ color: '#0F2044' }}>{t('addTitle')}</h2>
 
@@ -447,6 +529,7 @@ export default function HouseholdPage() {
                 </button>
               )}
             </section>
+            )}
 
             <ExportDataSection locale={locale} />
           </div>

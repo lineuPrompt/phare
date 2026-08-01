@@ -974,6 +974,12 @@
     "promoteFailed": "Impossible de nommer ce membre propriétaire. Veuillez réessayer.",
     "roleUnknownBadge": "Rôle indisponible",
     "notInvitedBadge": "Pas encore invité",
-    "detailsUnavailable": "Détails du compte indisponibles"
+    "detailsUnavailable": "Détails du compte indisponibles",
+    "memberCapReached": "Les ménages sont limités à {cap} membres. Pour inviter quelqu'un d'autre, retirez d'abord un membre existant.",
+    "revokeInvite": "Révoquer l'invitation",
+    "revokeConfirm": "Révoquer l'invitation de {name}? Son accès est retiré; ce qui lui est attribué demeure inchangé.",
+    "revokeYes": "Oui, révoquer",
+    "revoking": "Révocation...",
+    "revokeFailed": "Impossible de révoquer cette invitation. Veuillez réessayer."
   }
 }

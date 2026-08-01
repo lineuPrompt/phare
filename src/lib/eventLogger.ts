@@ -64,7 +64,14 @@ export type EventType =
   // unblocks the last owner deleting their account. metadata carries the
   // household_members id and the promoted user's id; user_id on the row is
   // the OWNER who performed it, not the person promoted.
-  | 'member_promoted_to_owner';
+  | 'member_promoted_to_owner'
+  // A pending invite was revoked (DELETE /api/household/members/[id]) — the
+  // auth user is deleted and the household_members row reverts to name-only,
+  // freeing one of the household's capped slots. Only ever fires for someone
+  // who never signed in; removing an active member is account deletion and
+  // will have its own event. metadata carries the household_members id and
+  // the deleted user's id; user_id on the row is the OWNER who did it.
+  | 'pending_member_removed';
 
 /**
  * Insert one event row.

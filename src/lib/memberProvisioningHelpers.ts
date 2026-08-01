@@ -90,3 +90,42 @@ export function memberRoleView(member: MemberRoleInput): MemberRoleView {
 export function canPromoteToOwner(member: MemberRoleInput & { pending?: boolean }): boolean {
   return memberRoleView(member) === 'member' && member.pending !== true;
 }
+
+// ---------------------------------------------------------------------------
+// HOUSEHOLD MEMBER CAP
+//
+// A hard product rule: a household may hold at most this many members with
+// account access. Not a tier limit — it does not move with a subscription.
+//
+// The single source of the number. The route enforces it and the UI hides the
+// invite form with it; neither may hardcode a 2 of its own, because a UI and
+// an API disagreeing about a limit is how you get a form that submits into a
+// rejection (or worse, a button that hides an action the server would allow).
+//
+// WHAT COUNTS: a household_members row with a user_id — someone who can sign
+// in, or who has been invited and simply hasn't set a password yet. A PENDING
+// invite therefore occupies a slot, which is the point: otherwise a household
+// could invite unlimited people so long as none of them accepted.
+//
+// WHAT DOES NOT COUNT: name-only rows (user_id null). Those are created by
+// onboarding discovery and quick-add to attribute income and expenses to
+// people in the family — a spreadsheet naming three people creates three of
+// them — and they carry no login. Counting them would cap a family's ability
+// to attribute a child's expenses, and would block a household of three named
+// people from ever inviting the second spouse. See the handoff: this is the
+// one judgement call in the cap, and it is deliberately narrower than "count
+// every household_members row".
+// ---------------------------------------------------------------------------
+export const HOUSEHOLD_MEMBER_CAP = 2;
+
+/** True when the household already holds the maximum number of access-holding members. */
+export function isAtMemberCap(accessHoldingMemberCount: number): boolean {
+  return accessHoldingMemberCount >= HOUSEHOLD_MEMBER_CAP;
+}
+
+/** Members that occupy a cap slot: anyone with an account, pending or active. */
+export function countAccessHoldingMembers(
+  members: { user_id: string | null }[]
+): number {
+  return members.filter((m) => m.user_id !== null && m.user_id !== undefined).length;
+}

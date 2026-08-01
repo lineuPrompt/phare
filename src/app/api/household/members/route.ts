@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { findMemberNameCandidates } from '@/lib/incomeHelpers';
-import { isPendingMember, householdLocaleFrom } from '@/lib/memberProvisioningHelpers';
+import {
+  isPendingMember,
+  householdLocaleFrom,
+  isAtMemberCap,
+  HOUSEHOLD_MEMBER_CAP,
+} from '@/lib/memberProvisioningHelpers';
 
 // ---------------------------------------------------------------------------
 // Auth guard — exported for unit testing
@@ -180,6 +185,55 @@ export async function POST(request: Request) {
     }
 
     // -----------------------------------------------------------------------
+    // 2a. HARD MEMBER CAP — enforced here, on the server, before anything is
+    // created. The UI hides the invite form at capacity, but that is
+    // presentation: this route is the enforcement, and it must reject a third
+    // member whether or not any UI asked it to.
+    //
+    // Counts rows with a user_id — an account holder OR a pending invite.
+    // A pending invite occupies a slot deliberately; otherwise a household
+    // could invite unlimited people so long as none of them accepted.
+    //
+    // EXEMPTION: re-inviting an email that already belongs to THIS household
+    // is a resend of an expired invite, not a new member, and must not be
+    // blocked at capacity — a household at the cap would otherwise be unable
+    // to resend to its own existing member.
+    // -----------------------------------------------------------------------
+    const normalizedEmail = email.trim().toLowerCase();
+    const admin = createAdminClient();
+
+    const { data: alreadyOurs } = await admin
+      .from('users')
+      .select('id')
+      .eq('email', normalizedEmail)
+      .eq('household_id', caller.householdId)
+      .maybeSingle();
+
+    if (!alreadyOurs) {
+      const { count: accessHoldingCount, error: countError } = await supabase
+        .from('household_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('household_id', caller.householdId)
+        .not('user_id', 'is', null);
+
+      if (countError) {
+        console.error('Member cap count failed:', countError);
+        return NextResponse.json({ error: 'Could not verify household capacity' }, { status: 500 });
+      }
+
+      if (isAtMemberCap(accessHoldingCount ?? 0)) {
+        return NextResponse.json(
+          {
+            error: `Households are limited to ${HOUSEHOLD_MEMBER_CAP} members.`,
+            code: 'member_cap_reached',
+            cap: HOUSEHOLD_MEMBER_CAP,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // -----------------------------------------------------------------------
     // 2b. Match-before-create — same rule accounts already follow. A
     // name-only member created during onboarding discovery (user_id null,
     // e.g. quick-add's "Julia") must be ATTACHED when later invited by name,
@@ -241,8 +295,9 @@ export async function POST(request: Request) {
     // email_confirm: true so the member doesn't need a separate verify step;
     // they set their password via the recovery link instead.
     // -----------------------------------------------------------------------
-    const admin = createAdminClient();
-
+    // `admin` is already in scope from the member-cap check above — one
+    // service-role client per request, and one consistent name, which is what
+    // the RLS read-compatibility check keys off.
     const { data: newUser, error: createError } = await admin.auth.admin.createUser({
       email: email.trim(),
       email_confirm: true,

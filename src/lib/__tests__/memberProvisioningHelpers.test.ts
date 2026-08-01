@@ -4,6 +4,9 @@ import {
   householdLocaleFrom,
   memberRoleView,
   canPromoteToOwner,
+  countAccessHoldingMembers,
+  isAtMemberCap,
+  HOUSEHOLD_MEMBER_CAP,
 } from '../memberProvisioningHelpers';
 
 describe('isPendingMember', () => {
@@ -97,5 +100,54 @@ describe('canPromoteToOwner', () => {
   it('never offers promotion to a pending member or a name-only row', () => {
     expect(canPromoteToOwner({ user_id: 'u1', users: { role: 'member' }, pending: true })).toBe(false);
     expect(canPromoteToOwner({ user_id: null, users: null })).toBe(false);
+  });
+});
+
+// The cap is a hard product rule, not a tier limit. The number lives in ONE
+// place so the route and the UI can never disagree about it.
+describe('household member cap', () => {
+  it('is a single named constant, not a literal repeated at call sites', () => {
+    expect(HOUSEHOLD_MEMBER_CAP).toBe(2);
+  });
+
+  // A pending invite occupies a slot on purpose — otherwise a household could
+  // invite unlimited people so long as none of them accepted.
+  it('counts a pending invite (user_id set, never signed in) as occupying a slot', () => {
+    const members = [
+      { user_id: 'u1' },                       // active
+      { user_id: 'u2' },                       // invited, never set a password
+    ];
+    expect(countAccessHoldingMembers(members)).toBe(2);
+    expect(isAtMemberCap(countAccessHoldingMembers(members))).toBe(true);
+  });
+
+  // Name-only rows are attribution labels created by onboarding discovery and
+  // quick-add (a spreadsheet naming three people creates three of them). They
+  // carry no login, and counting them would cap a family's ability to
+  // attribute a child's expenses.
+  it('does NOT count name-only members toward the cap', () => {
+    const members = [
+      { user_id: 'u1' },
+      { user_id: null },
+      { user_id: null },
+      { user_id: null },
+    ];
+    expect(countAccessHoldingMembers(members)).toBe(1);
+    expect(isAtMemberCap(countAccessHoldingMembers(members))).toBe(false);
+  });
+
+  it('is at capacity only at or above the cap', () => {
+    expect(isAtMemberCap(0)).toBe(false);
+    expect(isAtMemberCap(1)).toBe(false);
+    expect(isAtMemberCap(2)).toBe(true);
+    // A household that somehow exceeded the cap stays capped, never wraps.
+    expect(isAtMemberCap(3)).toBe(true);
+  });
+
+  it('derives capacity from the constant, so raising the cap moves both sides at once', () => {
+    const justUnder = Array.from({ length: HOUSEHOLD_MEMBER_CAP - 1 }, (_, i) => ({ user_id: `u${i}` }));
+    const atCap = Array.from({ length: HOUSEHOLD_MEMBER_CAP }, (_, i) => ({ user_id: `u${i}` }));
+    expect(isAtMemberCap(countAccessHoldingMembers(justUnder))).toBe(false);
+    expect(isAtMemberCap(countAccessHoldingMembers(atCap))).toBe(true);
   });
 });

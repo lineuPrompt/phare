@@ -974,6 +974,12 @@
     "promoteFailed": "Could not make this member an owner. Please try again.",
     "roleUnknownBadge": "Role unavailable",
     "notInvitedBadge": "Not invited yet",
-    "detailsUnavailable": "Account details unavailable"
+    "detailsUnavailable": "Account details unavailable",
+    "memberCapReached": "Households are limited to {cap} members. To invite someone else, remove an existing member first.",
+    "revokeInvite": "Revoke invite",
+    "revokeConfirm": "Revoke {name}'s invite? Their access is removed; nothing they were attributed keeps changing.",
+    "revokeYes": "Yes, revoke",
+    "revoking": "Revoking...",
+    "revokeFailed": "Could not revoke this invite. Please try again."
   }
 }
