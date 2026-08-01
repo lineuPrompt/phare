@@ -99,3 +99,69 @@ describe('filterAndSortEntries', () => {
     expect(filterAndSortEntries(all, 'zzzz', 'date', 'asc')).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Decision-table column sort — the category ROWS, not the entries inside them.
+// ---------------------------------------------------------------------------
+import { sortEnvelopeRows, type SortableEnvelopeRow } from '../envelopeHelpers';
+
+function row(over: Partial<SortableEnvelopeRow> = {}): SortableEnvelopeRow {
+  return {
+    categoryName: 'Groceries',
+    monthlyAmount: 100,
+    actual: 50,
+    remaining: 50,
+    status: 'ok',
+    ...over,
+  };
+}
+
+describe('sortEnvelopeRows', () => {
+  const rows = [
+    row({ categoryName: 'Restaurants', monthlyAmount: 250, actual: 75.58, remaining: 174.42, status: 'ok' }),
+    row({ categoryName: 'Installments', monthlyAmount: 560, actual: 551.54, remaining: 8.46, status: 'watch' }),
+    row({ categoryName: 'Groceries & Pharmacy', monthlyAmount: 650, actual: 261.5, remaining: 388.5, status: 'ok' }),
+    row({ categoryName: 'Shopping', monthlyAmount: 350, actual: 124.86, remaining: 225.14, status: 'over' }),
+  ];
+
+  it('never mutates or reorders the caller array', () => {
+    const original = [...rows];
+    sortEnvelopeRows(rows, 'spent', 'desc');
+    expect(rows).toEqual(original);
+  });
+
+  it('sorts by category name, case-insensitively, in both directions', () => {
+    expect(sortEnvelopeRows(rows, 'category', 'asc').map((r) => r.categoryName))
+      .toEqual(['Groceries & Pharmacy', 'Installments', 'Restaurants', 'Shopping']);
+    expect(sortEnvelopeRows(rows, 'category', 'desc').map((r) => r.categoryName))
+      .toEqual(['Shopping', 'Restaurants', 'Installments', 'Groceries & Pharmacy']);
+  });
+
+  it('sorts by the numeric columns', () => {
+    expect(sortEnvelopeRows(rows, 'envelope', 'desc').map((r) => r.monthlyAmount)).toEqual([650, 560, 350, 250]);
+    expect(sortEnvelopeRows(rows, 'spent', 'desc').map((r) => r.actual)).toEqual([551.54, 261.5, 124.86, 75.58]);
+    expect(sortEnvelopeRows(rows, 'left', 'asc').map((r) => r.remaining)).toEqual([8.46, 174.42, 225.14, 388.5]);
+  });
+
+  // The one ordering that is NOT alphabetical: a family scanning this table
+  // wants trouble first, so status sorts by urgency.
+  it('sorts status by urgency — over, then watch, then ok', () => {
+    expect(sortEnvelopeRows(rows, 'status', 'asc').map((r) => r.status))
+      .toEqual(['over', 'watch', 'ok', 'ok']);
+  });
+
+  it('puts unset last — no envelope is the absence of a status, not a healthy one', () => {
+    const withUnset = [...rows, row({ categoryName: 'Zebra', status: 'unset' })];
+    expect(sortEnvelopeRows(withUnset, 'status', 'asc').at(-1)!.status).toBe('unset');
+  });
+
+  it('breaks ties by category name so equal figures keep a stable order', () => {
+    const tied = [
+      row({ categoryName: 'Zebra', actual: 10 }),
+      row({ categoryName: 'Apple', actual: 10 }),
+    ];
+    expect(sortEnvelopeRows(tied, 'spent', 'asc').map((r) => r.categoryName)).toEqual(['Apple', 'Zebra']);
+    // Same tiebreak regardless of direction — the tiebreak is not reversed.
+    expect(sortEnvelopeRows(tied, 'spent', 'desc').map((r) => r.categoryName)).toEqual(['Apple', 'Zebra']);
+  });
+});

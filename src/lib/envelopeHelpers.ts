@@ -389,3 +389,71 @@ export function filterAndSortEntries(
     return diff !== 0 ? diff * factor : (a.description ?? '').localeCompare(b.description ?? '');
   });
 }
+
+// ---------------------------------------------------------------------------
+// DECISION TABLE COLUMN SORT (Cards page)
+//
+// Sorts the per-category rows of the decision table. Separate from
+// filterAndSortEntries above, which orders the individual entries INSIDE a
+// category's accordion — these are the category rows themselves.
+// ---------------------------------------------------------------------------
+export type EnvelopeSortKey = 'category' | 'envelope' | 'spent' | 'left' | 'status';
+
+export type SortableEnvelopeRow = {
+  categoryName: string;
+  monthlyAmount: number;
+  actual: number;
+  remaining: number;
+  status: EnvelopeStatus;
+};
+
+/**
+ * Status sorts by URGENCY, not alphabetically — "over" before "watch" before
+ * "ok" is the only ordering a family reading this table wants. `unset` (no
+ * envelope defined) is last: it is the absence of a status, not a healthier
+ * one than "ok".
+ */
+const STATUS_URGENCY: Record<EnvelopeStatus, number> = {
+  over: 0,
+  watch: 1,
+  ok: 2,
+  unset: 3,
+};
+
+export function sortEnvelopeRows<T extends SortableEnvelopeRow>(
+  rows: T[],
+  sortKey: EnvelopeSortKey,
+  sortDir: SortDirection
+): T[] {
+  const factor = sortDir === 'asc' ? 1 : -1;
+
+  // Copy — the caller's array comes straight from the API response and must
+  // not be reordered in place.
+  return [...rows].sort((a, b) => {
+    let diff: number;
+
+    switch (sortKey) {
+      case 'category':
+        diff = a.categoryName.trim().toLowerCase().localeCompare(b.categoryName.trim().toLowerCase());
+        break;
+      case 'envelope':
+        diff = a.monthlyAmount - b.monthlyAmount;
+        break;
+      case 'spent':
+        diff = a.actual - b.actual;
+        break;
+      case 'left':
+        diff = a.remaining - b.remaining;
+        break;
+      case 'status':
+        diff = STATUS_URGENCY[a.status] - STATUS_URGENCY[b.status];
+        break;
+    }
+
+    // Category name breaks every tie, so equal figures keep a stable,
+    // predictable order instead of whatever the source array happened to hold.
+    return diff !== 0
+      ? diff * factor
+      : a.categoryName.trim().toLowerCase().localeCompare(b.categoryName.trim().toLowerCase());
+  });
+}

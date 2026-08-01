@@ -2,7 +2,13 @@
 
 import { Fragment, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { filterAndSortEntries, type EntrySortKey, type SortDirection } from '@/lib/envelopeHelpers';
+import {
+  filterAndSortEntries,
+  sortEnvelopeRows,
+  type EntrySortKey,
+  type EnvelopeSortKey,
+  type SortDirection,
+} from '@/lib/envelopeHelpers';
 import { formatCurrency, formatSignedAmount } from '@/components/expenses/types';
 import { EnvelopeStatus, envelopeStatus, sumWarning, CategoryEntryLine, UNCATEGORIZED_ROW_ID } from '@/lib/envelopeHelpers';
 import { cardCycleContext } from '@/lib/dateHelpers';
@@ -50,6 +56,52 @@ export type DecisionViewProps = {
   // right destination often has no envelope of its own.
   categories: { id: string; name: string }[];
 };
+
+/**
+ * A clickable column header for the decision table.
+ *
+ * Only the ACTIVE column shows an arrow. Showing a neutral glyph on every
+ * header makes it ambiguous which one the table is actually ordered by — the
+ * thing a reader most needs to know at a glance.
+ *
+ * Arrow convention matches the entry sort control above it: the arrow points
+ * the way values move as you read DOWN the table, so ascending is a down
+ * arrow. Keeping the two consistent matters more than either choice does.
+ */
+function SortableHeader({
+  label,
+  column,
+  align,
+  activeKey,
+  dir,
+  onSort,
+}: {
+  label: string;
+  column: EnvelopeSortKey;
+  align: 'left' | 'right';
+  activeKey: EnvelopeSortKey;
+  dir: SortDirection;
+  onSort: (key: EnvelopeSortKey) => void;
+}) {
+  const active = activeKey === column;
+  return (
+    <th
+      className={`py-2 font-semibold cursor-pointer select-none hover:opacity-70 ${align === 'left' ? 'text-left' : 'text-right'}`}
+      style={{ color: '#0F2044' }}
+      onClick={() => onSort(column)}
+      aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      {label}
+      <span
+        aria-hidden="true"
+        className="ml-1 text-xs"
+        style={{ color: active ? '#2ABFBF' : 'transparent' }}
+      >
+        {active && dir === 'desc' ? '↑' : '↓'}
+      </span>
+    </th>
+  );
+}
 
 // One entry line inside a category's accordion — view mode, or an inline
 // edit form (date/description/amount), plus delete with a confirm step.
@@ -216,6 +268,26 @@ export default function CardDecisionView({
   const matchCount =
     envelopeItems.reduce((n, r) => n + visibleEntriesFor(r.categoryId).length, 0) +
     visibleUncategorized.length;
+
+  // Column sort for the decision table itself (the category rows), distinct
+  // from the entry sort inside each accordion. Default 'category' ascending
+  // preserves a stable, readable starting order.
+  const [tableSortKey, setTableSortKey] = useState<EnvelopeSortKey>('category');
+  const [tableSortDir, setTableSortDir] = useState<SortDirection>('asc');
+
+  const sortedRows = sortEnvelopeRows(envelopeItems, tableSortKey, tableSortDir);
+
+  // Clicking the active column reverses it; clicking a new one starts that
+  // column ascending rather than inheriting the previous direction, which is
+  // what people expect from a table header.
+  const sortByColumn = (key: EnvelopeSortKey) => {
+    if (key === tableSortKey) {
+      setTableSortDir(tableSortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setTableSortKey(key);
+      setTableSortDir('asc');
+    }
+  };
 
   const expandableRowIds = [
     ...envelopeItems.map((r) => r.categoryId),
@@ -410,15 +482,20 @@ export default function CardDecisionView({
             <table className="w-full text-sm min-w-[520px]">
               <thead>
                 <tr style={{ borderBottom: '2px solid #E5E7EB' }}>
-                  <th className="text-left py-2 font-semibold" style={{ color: '#0F2044' }}>{t('decision.category')}</th>
-                  <th className="text-right py-2 font-semibold" style={{ color: '#0F2044' }}>{t('decision.subBudget')}</th>
-                  <th className="text-right py-2 font-semibold" style={{ color: '#0F2044' }}>{t('decision.actual')}</th>
-                  <th className="text-right py-2 font-semibold" style={{ color: '#0F2044' }}>{t('decision.difference')}</th>
-                  <th className="text-right py-2 font-semibold" style={{ color: '#0F2044' }}>{t('decision.status')}</th>
+                  <SortableHeader label={t('decision.category')} column="category" align="left"
+                    activeKey={tableSortKey} dir={tableSortDir} onSort={sortByColumn} />
+                  <SortableHeader label={t('decision.subBudget')} column="envelope" align="right"
+                    activeKey={tableSortKey} dir={tableSortDir} onSort={sortByColumn} />
+                  <SortableHeader label={t('decision.actual')} column="spent" align="right"
+                    activeKey={tableSortKey} dir={tableSortDir} onSort={sortByColumn} />
+                  <SortableHeader label={t('decision.difference')} column="left" align="right"
+                    activeKey={tableSortKey} dir={tableSortDir} onSort={sortByColumn} />
+                  <SortableHeader label={t('decision.status')} column="status" align="right"
+                    activeKey={tableSortKey} dir={tableSortDir} onSort={sortByColumn} />
                 </tr>
               </thead>
               <tbody>
-                {envelopeItems.map((row) => {
+                {sortedRows.map((row) => {
                   const rowEntries = visibleEntriesFor(row.categoryId);
                   const isOpen = isRowOpen(row.categoryId, rowEntries.length);
                   return (
