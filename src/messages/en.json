@@ -476,7 +476,7 @@
     "actualsForMonth": "Actuals for {month} — not projections"
   },
   "cards": {
-    "title": "Card Envelopes",
+    "title": "Credit Card Envelopes",
     "loading": "Loading...",
     "noCards": "No credit cards set up yet.",
     "noCardsHint": "Credit cards are added when you set up your household.",

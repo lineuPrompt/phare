@@ -476,7 +476,7 @@
     "actualsForMonth": "Données réelles pour {month} — pas des projections"
   },
   "cards": {
-    "title": "Enveloppes de cartes",
+    "title": "Enveloppes de cartes de crédit",
     "loading": "Chargement...",
     "noCards": "Aucune carte de crédit configurée.",
     "noCardsHint": "Les cartes de crédit sont ajoutées lors de la configuration de votre foyer.",
