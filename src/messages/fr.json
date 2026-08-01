@@ -397,12 +397,11 @@
       "noDip": "Aucune paie prévue dans cette période — solde affiché jusqu'au {date}."
     },
     "snapshot": "Votre portrait financier",
-    "income": "Revenu mensuel",
-    "expenses": "Dépenses mensuelles",
-    "savings": "Épargne ce mois-ci",
+    "income": "Revenu",
+    "expenses": "Dépenses",
+    "savings": "Épargne mensuelle",
     "surplus": "Surplus mensuel",
     "deficit": "Déficit mensuel",
-    "debtPaymentsNote": "Comprend {amount} versé sur une dette — non compté comme épargne.",
     "borrowedNote": "⚠ {amount} de l'encaisse de ce mois-ci a été emprunté. Cet argent est dans votre compte, mais vous ne l'avez pas gagné — il n'est donc pas inclus dans le montant ci-dessus.",
     "monthOnlyNote": "Ceci reflète uniquement le flux de trésorerie de ce mois, pas votre solde réel.",
     "viewRealBalance": "Voir votre solde réel dans la Chronologie",
@@ -471,7 +470,10 @@
       "openMenu": "Ouvrir le menu",
       "closeMenu": "Fermer le menu"
     },
-    "surplusQuestion": "Ce mois s'est-il autofinancé?"
+    "surplusQuestion": "Ce mois s'est-il autofinancé?",
+    "debtPayments": "Paiements de dette",
+    "actualsToDate": "Données réelles à ce jour ce mois-ci — pas des projections",
+    "actualsForMonth": "Données réelles pour {month} — pas des projections"
   },
   "cards": {
     "title": "Enveloppes de cartes",

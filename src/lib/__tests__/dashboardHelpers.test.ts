@@ -1014,3 +1014,89 @@ describe('cross-view reconciliation invariant — dashboard = planner = reconcil
       .toEqual(computeMonthTotals(maySet, crossAccounts));
   });
 });
+
+// ---------------------------------------------------------------------------
+// THE SNAPSHOT MUST ADD UP.
+//
+// The dashboard renders income, expenses, savings and debt payments as a
+// visible subtraction ending in netCashFlow. That layout is only honest if the
+// four terms actually reconcile — and for a while they didn't on screen,
+// because debt payments had no row and lived in a footnote instead. In July
+// 2026 the three visible figures came to 5,330.94 against a displayed surplus
+// of 4,330.94: the missing $1,000 was the hidden term.
+//
+// These pin the contract the layout depends on. A fifth term added to
+// netCashFlow without a row of its own breaks this, which is the point.
+// ---------------------------------------------------------------------------
+describe('netCashFlow reconciles to exactly the terms the snapshot displays', () => {
+  function reconciles(t: {
+    totalIncome: number; totalExpenses: number; totalSavings: number;
+    totalDebtPayments: number; netCashFlow: number;
+  }) {
+    const shown = t.totalIncome - t.totalExpenses - t.totalSavings - t.totalDebtPayments;
+    return Math.round(shown * 100) / 100 === t.netCashFlow;
+  }
+
+  it('reconciles on the real July 2026 ledger, the month that exposed the gap', () => {
+    const accounts = [{ id: 'chq', type: 'chequing' }, { id: 'debt', type: 'debt' }];
+    const totals = computeMonthTotals(
+      [
+        { id: 'i1', account_id: 'chq', type: 'income', amount: 15719.84 },
+        { id: 'e1', account_id: 'chq', type: 'expense', amount: 9399.75 },
+        { id: 's1', account_id: 'chq', type: 'transfer', amount: 989.15, transfer_peer_id: 'sp' },
+        { id: 'sp', account_id: 'sav', type: 'transfer', amount: 989.15 },
+        { id: 'd1', account_id: 'chq', type: 'transfer', amount: 1000, transfer_peer_id: 'dp' },
+        { id: 'dp', account_id: 'debt', type: 'transfer', amount: 1000 },
+      ],
+      [...accounts, { id: 'sav', type: 'savings' }]
+    );
+
+    expect(totals.totalIncome).toBe(15719.84);
+    expect(totals.totalExpenses).toBe(9399.75);
+    expect(totals.totalSavings).toBe(989.15);
+    expect(totals.totalDebtPayments).toBe(1000);
+    expect(totals.netCashFlow).toBe(4330.94);
+
+    // Without the debt-payments row the reader lands on 5,330.94 — exactly the
+    // discrepancy Julia hit.
+    // toBeCloseTo, not toBe: the raw subtraction is 5330.9400000000005 in
+    // float — which is exactly why computeMonthTotals rounds its outputs.
+    expect(totals.totalIncome - totals.totalExpenses - totals.totalSavings).toBeCloseTo(5330.94, 2);
+    expect(reconciles(totals)).toBe(true);
+  });
+
+  it('reconciles when there are no debt payments, so hiding that row stays honest', () => {
+    const totals = computeMonthTotals(
+      [
+        { id: 'i1', account_id: 'chq', type: 'income', amount: 11549.8 },
+        { id: 'e1', account_id: 'chq', type: 'expense', amount: 12060.72 },
+        { id: 's1', account_id: 'chq', type: 'transfer', amount: 1164, transfer_peer_id: 'sp' },
+        { id: 'sp', account_id: 'sav', type: 'transfer', amount: 1164 },
+      ],
+      [{ id: 'chq', type: 'chequing' }, { id: 'sav', type: 'savings' }]
+    );
+
+    expect(totals.totalDebtPayments).toBe(0);
+    expect(totals.netCashFlow).toBe(-1674.92);
+    expect(reconciles(totals)).toBe(true);
+    // With no debt payments the three remaining rows resolve on their own.
+    expect(totals.totalIncome - totals.totalExpenses - totals.totalSavings).toBeCloseTo(-1674.92, 2);
+  });
+
+  it('borrowed cash is not a term — it must never appear in the subtraction', () => {
+    const totals = computeMonthTotals(
+      [
+        { id: 'i1', account_id: 'chq', type: 'income', amount: 1000 },
+        { id: 'e1', account_id: 'chq', type: 'expense', amount: 400 },
+        // A draw: chequing-side transfer with a negative amount.
+        { id: 'dr', account_id: 'chq', type: 'transfer', amount: -2000, transfer_peer_id: 'drp' },
+        { id: 'drp', account_id: 'debt', type: 'transfer', amount: -2000 },
+      ],
+      [{ id: 'chq', type: 'chequing' }, { id: 'debt', type: 'debt' }]
+    );
+
+    expect(totals.totalBorrowed).toBe(2000);
+    expect(totals.netCashFlow).toBe(600);
+    expect(reconciles(totals)).toBe(true);
+  });
+});

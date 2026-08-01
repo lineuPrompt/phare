@@ -397,12 +397,11 @@
       "noDip": "No paycheque scheduled ahead in this view — balance shown through {date}."
     },
     "snapshot": "Your financial snapshot",
-    "income": "Monthly income",
-    "expenses": "Monthly expenses",
-    "savings": "Saved this month",
+    "income": "Income",
+    "expenses": "Expenses",
+    "savings": "Monthly savings",
     "surplus": "Monthly surplus",
     "deficit": "Monthly deficit",
-    "debtPaymentsNote": "Includes {amount} paid toward debt — not counted as savings.",
     "borrowedNote": "⚠ {amount} of this month's cash was borrowed. It's in your account, but you didn't earn it — so it's not in the figure above.",
     "monthOnlyNote": "This reflects this month's cash flow only, not your running balance.",
     "viewRealBalance": "View your real balance in Timeline",
@@ -471,7 +470,10 @@
       "openMenu": "Open menu",
       "closeMenu": "Close menu"
     },
-    "surplusQuestion": "Did this month cover itself?"
+    "surplusQuestion": "Did this month cover itself?",
+    "debtPayments": "Debt payments",
+    "actualsToDate": "Actuals so far this month — not projections",
+    "actualsForMonth": "Actuals for {month} — not projections"
   },
   "cards": {
     "title": "Card Envelopes",

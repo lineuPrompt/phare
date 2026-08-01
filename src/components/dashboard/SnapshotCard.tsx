@@ -13,6 +13,60 @@ function monthLabelFor(month: string, locale: string): string {
   );
 }
 
+/**
+ * One line of the snapshot's subtraction: an operator, a label, an amount.
+ *
+ * The operator sits in a fixed-width column so the signs line up vertically —
+ * that alignment is what makes the block read as arithmetic rather than as a
+ * list of unrelated figures, which was the original complaint.
+ */
+function SubtractionRow({
+  label,
+  operator,
+  amount,
+  locale,
+  color,
+  emphasis = false,
+}: {
+  label: string;
+  operator: string;
+  amount: number;
+  locale: string;
+  color: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <div
+      className="flex items-center gap-2 px-3 sm:px-4 py-2.5"
+      style={
+        emphasis
+          ? { borderTop: '2px solid #E5E7EB', background: '#F9FAFB' }
+          : undefined
+      }
+    >
+      <span
+        aria-hidden="true"
+        className="w-3 shrink-0 text-sm font-semibold text-center"
+        style={{ color: '#9CA3AF' }}
+      >
+        {operator}
+      </span>
+      <p
+        className={`flex-1 min-w-0 truncate ${emphasis ? 'text-sm font-semibold' : 'text-sm'}`}
+        style={{ color: emphasis ? '#0F2044' : '#6B7280' }}
+      >
+        {label}
+      </p>
+      <p
+        className={`shrink-0 tabular-nums font-bold ${emphasis ? 'text-lg sm:text-xl' : 'text-sm sm:text-base'}`}
+        style={{ color }}
+      >
+        {formatCurrency(amount, locale)}
+      </p>
+    </div>
+  );
+}
+
 export default function SnapshotCard({
   summary,
   locale,
@@ -114,70 +168,72 @@ export default function SnapshotCard({
         style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E' }}
       />
 
-      {/* Three main buckets */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-3">
-        <div className="rounded-xl p-2 sm:p-4 min-w-0" style={{ background: '#F0FDFD' }}>
-          <p className="text-[11px] sm:text-xs truncate" style={{ color: '#6B7280' }}>{t('income')}</p>
-          <p className="text-sm sm:text-lg font-bold mt-1 truncate" style={{ color: '#16A34A' }}>
-            {formatCurrency(summary.totalIncome, locale)}
-          </p>
-        </div>
-        <div className="rounded-xl p-2 sm:p-4 min-w-0" style={{ background: '#FEF2F2' }}>
-          <p className="text-[11px] sm:text-xs truncate" style={{ color: '#6B7280' }}>{t('expenses')}</p>
-          <p className="text-sm sm:text-lg font-bold mt-1 truncate" style={{ color: '#DC2626' }}>
-            {formatCurrency(summary.totalExpenses, locale)}
-          </p>
-        </div>
-        <div className="rounded-xl p-2 sm:p-4 min-w-0" style={{ background: '#F0F9FF' }}>
-          <p className="text-[11px] sm:text-xs truncate" style={{ color: '#6B7280' }}>{t('savings')}</p>
-          <p className="text-sm sm:text-lg font-bold mt-1 truncate" style={{ color: '#0284C7' }}>
-            {formatCurrency(summary.totalSavings, locale)}
-          </p>
-        </div>
-      </div>
-
-      {/* Debt payments are no longer folded into "Saved this month" above
-          (2026-08-01) — paying down a credit line isn't saving, same
-          classification split as the reconcile screen's bucket breakdown.
-          Surfaced here so the now-smaller savings figure isn't read as money
-          that simply vanished. */}
-      {summary.totalDebtPayments > 0 && (
-        <p className="text-xs mb-3" style={{ color: '#7C3AED' }}>
-          {t('debtPaymentsNote', { amount: formatCurrency(summary.totalDebtPayments, locale) })}
-        </p>
-      )}
-
-      {/* Net cash flow — remaining after income − expenses − savings − debt
-          payments (netCashFlow already nets both; the split above is display
-          only). Borrowed cash (a debt draw) is deliberately excluded from this
-          figure — a month that only "balanced" by borrowing must never read
-          as a surplus month. Disclosed right beside it with real visual
-          weight (red warning box, not a muted caption) — a family scanning
-          the number must not be able to miss that it was propped up by
-          borrowing. Same treatment, same prominence, as the projection
-          tile's own disclosure below. */}
       {/* Subject line. This tile and the projection tile below treat the same
           borrowed dollars in opposite ways, which reads as a contradiction
           until each one says which question it answers. This is a FLOW —
           "did the month pay for itself" — so borrowed cash is excluded by
           definition. The projection tile is a STOCK and includes it. */}
-      <p className="text-xs font-medium mb-1.5" style={{ color: '#6B7280' }}>
+      <p className="text-xs font-medium" style={{ color: '#6B7280' }}>
         {t('surplusQuestion')}
       </p>
+      <p className="text-[11px] mb-2" style={{ color: '#9CA3AF' }}>
+        {isPastMonth ? t('actualsForMonth', { month: monthLabel }) : t('actualsToDate')}
+      </p>
 
-      <div
-        className="rounded-xl p-3 sm:p-4"
-        style={{ background: surplus ? '#F0FDF4' : '#FEF2F2' }}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm" style={{ color: '#6B7280' }}>
-            {surplus ? t('surplus') : t('deficit')}
-          </p>
-          <p className="text-lg sm:text-xl font-bold truncate" style={{ color: surplus ? '#16A34A' : '#DC2626' }}>
-            {formatCurrency(summary.netCashFlow, locale)}
-          </p>
-        </div>
+      {/* THE SUBTRACTION, shown as a subtraction.
+
+          Previously three tiles in a grid (income, expenses, savings) with
+          debt payments as a purple footnote below. That did not add up on
+          screen: netCashFlow subtracts FOUR terms, so in any month with a debt
+          payment the three visible figures missed the surplus by exactly that
+          amount — July 2026 showed 15,719.84 − 9,399.75 − 989.15 = 5,330.94
+          against a displayed surplus of 4,330.94. The missing $1,000 was the
+          footnote. Every term that the formula subtracts is now a row, in
+          formula order, with its operator, so the arithmetic resolves for a
+          reader.
+
+          Debt payments appear only when non-zero: at zero the remaining rows
+          already resolve exactly, so a permanent "− 0.00" would be noise
+          rather than clarity. Borrowed cash is deliberately NOT a row here —
+          it is not a term in this formula, which is precisely what the
+          disclosure below it says. */}
+      <div className="rounded-xl overflow-hidden mb-3" style={{ border: '1px solid #E5E7EB' }}>
+        <SubtractionRow
+          label={t('income')} operator="" amount={summary.totalIncome}
+          locale={locale} color="#16A34A"
+        />
+        <SubtractionRow
+          label={t('expenses')} operator="−" amount={summary.totalExpenses}
+          locale={locale} color="#DC2626"
+        />
+        <SubtractionRow
+          label={t('savings')} operator="−" amount={summary.totalSavings}
+          locale={locale} color="#0284C7"
+        />
+        {summary.totalDebtPayments > 0 && (
+          <SubtractionRow
+            label={t('debtPayments')} operator="−" amount={summary.totalDebtPayments}
+            locale={locale} color="#7C3AED"
+          />
+        )}
+        <SubtractionRow
+          label={surplus ? t('surplus') : t('deficit')}
+          operator="="
+          amount={summary.netCashFlow}
+          locale={locale}
+          color={surplus ? '#16A34A' : '#DC2626'}
+          emphasis
+        />
       </div>
+
+      {/* Borrowed cash (a debt draw) is deliberately NOT a term in the
+          subtraction above — a month that only "balanced" by borrowing must
+          never read as a surplus month. Disclosed here with real visual
+          weight (red, not a muted caption): a family scanning the number must
+          not be able to miss that it was propped up by borrowing. This is the
+          ONE alarm for these dollars — the projection tile states the same
+          fact as a plain caption, deliberately (founder call, 2026-08-01; see
+          PlanChainTile). */}
       {summary.totalBorrowed > 0 && (
         <div
           className="rounded-xl px-3 py-2.5 mt-2"
