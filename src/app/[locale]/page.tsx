@@ -1,8 +1,11 @@
-import {useTranslations} from 'next-intl';
+import {useTranslations, useLocale} from 'next-intl';
+import Link from 'next/link';
 import Navbar from '@/components/brand/Navbar';
 
 export default function Home() {
   const t = useTranslations('landing');
+  const tLegal = useTranslations('legal');
+  const locale = useLocale();
 
   return (
     <main className="min-h-screen" style={{background: '#FAFAF8'}}>
@@ -233,6 +236,22 @@ export default function Home() {
             </a>
           </p>
           <p className="text-sm" style={{color: '#94A3B8'}}>{t('footer.copyright')}</p>
+        </div>
+
+        {/* Legal links. Public pages, deliberately reachable without an account
+            — the consent checkbox links here, so gating them would deadlock
+            anyone who has not yet accepted. */}
+        <div className="max-w-4xl mx-auto mt-6 pt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2"
+             style={{borderTop: '1px solid rgba(255,255,255,0.1)'}}>
+          <Link href={`/${locale}/privacy`} className="text-sm underline" style={{color: '#94A3B8'}}>
+            {tLegal('privacyNav')}
+          </Link>
+          <Link href={`/${locale}/terms`} className="text-sm underline" style={{color: '#94A3B8'}}>
+            {tLegal('termsNav')}
+          </Link>
+          <Link href={`/${locale}/faq`} className="text-sm underline" style={{color: '#94A3B8'}}>
+            {tLegal('faqNav')}
+          </Link>
         </div>
       </footer>
     </main>

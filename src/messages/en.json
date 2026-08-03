@@ -1036,5 +1036,20 @@
     "blockedTitle": "You cannot delete your account yet",
     "blockedPromoteBody": "You are the only owner, and {names} still uses this household. Make them an owner using the button above, then delete your account.",
     "blockedNoPathBody": "Another member still has access, but we could not read their role, so ownership cannot be handed over safely. Please contact support before deleting."
+  },
+  "legal": {
+    "privacyNav": "Privacy Policy",
+    "termsNav": "Terms of Service",
+    "faqNav": "FAQ",
+    "lastUpdated": "Last updated: {date}",
+    "backHome": "Back to Phare",
+    "consentLabel": "I agree to the <terms>Terms of Service</terms> and the <privacy>Privacy Policy</privacy>.",
+    "consentRequired": "Please accept the Terms and Privacy Policy to continue.",
+    "acceptTitle": "Before you continue",
+    "acceptBodyNew": "Please review and accept our Terms of Service and Privacy Policy.",
+    "acceptBodyUpdated": "We have updated our Terms of Service and Privacy Policy. Please review and accept them to continue.",
+    "acceptButton": "I agree, continue",
+    "accepting": "Saving...",
+    "acceptFailed": "Could not record your acceptance. Please try again."
   }
 }

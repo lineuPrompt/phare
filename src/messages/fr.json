@@ -1036,5 +1036,20 @@
     "blockedTitle": "Vous ne pouvez pas encore supprimer votre compte",
     "blockedPromoteBody": "Vous êtes le seul propriétaire, et {names} utilise encore ce ménage. Nommez cette personne propriétaire à l'aide du bouton ci-dessus, puis supprimez votre compte.",
     "blockedNoPathBody": "Un autre membre a encore accès, mais son rôle n'a pas pu être lu, donc la propriété ne peut pas être transférée en toute sécurité. Veuillez contacter le soutien avant de supprimer."
+  },
+  "legal": {
+    "privacyNav": "Politique de confidentialité",
+    "termsNav": "Conditions d’utilisation",
+    "faqNav": "FAQ",
+    "lastUpdated": "Dernière mise à jour : {date}",
+    "backHome": "Retour à Phare",
+    "consentLabel": "J’accepte les <terms>conditions d’utilisation</terms> et la <privacy>politique de confidentialité</privacy>.",
+    "consentRequired": "Veuillez accepter les conditions et la politique de confidentialité pour continuer.",
+    "acceptTitle": "Avant de continuer",
+    "acceptBodyNew": "Veuillez lire et accepter nos conditions d’utilisation et notre politique de confidentialité.",
+    "acceptBodyUpdated": "Nous avons mis à jour nos conditions d’utilisation et notre politique de confidentialité. Veuillez les lire et les accepter pour continuer.",
+    "acceptButton": "J’accepte, continuer",
+    "accepting": "Enregistrement...",
+    "acceptFailed": "Impossible d’enregistrer votre acceptation. Veuillez réessayer."
   }
 }

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import Navbar from '@/components/brand/Navbar';
+import ConsentCheckbox from '@/components/legal/ConsentCheckbox';
+import { CURRENT_LEGAL_VERSION } from '@/lib/legalVersions';
 
 export default function SetPasswordPage() {
   const router = useRouter();
@@ -17,6 +19,9 @@ export default function SetPasswordPage() {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
   const [checking, setChecking]   = useState(true);
+  // Path B consent. An invited member never sees the signup form, so this is
+  // the ONLY point at which they can agree to anything.
+  const [consented, setConsented] = useState(false);
 
   // If there's no active session (user navigated here directly), send to sign-in.
   useEffect(() => {
@@ -50,6 +55,17 @@ export default function SetPasswordPage() {
       setLoading(false);
       return;
     }
+
+    // Recorded AFTER the password succeeds: a failed password update must not
+    // leave behind consent from someone who never actually got an account.
+    // A failure here is not fatal — the session is live, so TermsGuard will
+    // ask again on the next authenticated page rather than stranding the
+    // member on a screen they have already completed.
+    await fetch('/api/legal/accept', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version: CURRENT_LEGAL_VERSION }),
+    }).catch(() => { /* guard re-prompts */ });
 
     router.replace(next);
   };
@@ -97,16 +113,18 @@ export default function SetPasswordPage() {
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && password && confirm && !loading) handleSubmit();
+                if (e.key === 'Enter' && password && confirm && consented && !loading) handleSubmit();
               }}
               className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
               style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
             />
           </div>
+          <ConsentCheckbox checked={consented} onChange={setConsented} locale={locale} disabled={loading} />
+
           {error && <p className="text-sm" style={{ color: '#DC2626' }}>{error}</p>}
           <button
             onClick={handleSubmit}
-            disabled={loading || !password || !confirm}
+            disabled={loading || !password || !confirm || !consented}
             className="w-full py-3 rounded-full text-white font-semibold cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
             style={{ background: '#0F2044' }}
           >

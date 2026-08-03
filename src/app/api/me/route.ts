@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import { logEvent } from '@/lib/eventLogger';
 import { loadDeletionContext } from '@/lib/deletionContext';
 import { confirmationMatches } from '@/lib/accountDeletionHelpers';
+import { CURRENT_LEGAL_VERSION, hasAcceptedCurrent } from '@/lib/legalVersions';
 
 export async function GET() {
   try {
@@ -13,7 +14,7 @@ export async function GET() {
 
     const { data: userRow } = await supabase
       .from('users')
-      .select('household_id, role, full_name')
+      .select('household_id, role, full_name, terms_accepted_at, terms_version')
       .eq('id', user.id)
       .single();
 
@@ -25,6 +26,14 @@ export async function GET() {
       role: userRow.role,
       household_id: userRow.household_id,
       full_name: userRow.full_name,
+      // Consent state. `termsCurrent` is computed here rather than left to each
+      // caller: "has accepted" and "has accepted THE CURRENT VERSION" are
+      // different questions, and a guard that asks the first one silently stops
+      // re-prompting the moment the documents are revised.
+      terms_accepted_at: userRow.terms_accepted_at ?? null,
+      terms_version: userRow.terms_version ?? null,
+      termsCurrent: hasAcceptedCurrent(userRow.terms_accepted_at, userRow.terms_version),
+      currentLegalVersion: CURRENT_LEGAL_VERSION,
     });
   } catch {
     return NextResponse.json({ error: 'Failed to load user' }, { status: 500 });

@@ -34,15 +34,17 @@
 --   IPs allowlist rejecting Supabase's outbound mail servers. It took down
 --   every email path at once (signup, invites, resends, password resets).
 --
---   WHICH REMEDY WAS APPLIED IS UNCONFIRMED as of this line, and the two are
---   not equivalent:
---     - restriction DISABLED  → the failure mode is gone for good.
---     - one IP AUTHORIZED     → it works only until Supabase's sender rotates.
---       Supabase's auth mailer sends from an unpublished, rotating pool, so an
---       allowlisted address fails again later — and intermittently, which is
---       far worse to diagnose than the hard failure above.
---   Confirm at Brevo → Security → Authorised IPs before relying on this being
---   fixed. If a specific IP was authorized, disable the restriction instead.
+--   RESOLVED 2026-08-03, confirmed in the Brevo dashboard: IP restriction is
+--   DEACTIVATED for both API keys and SMTP keys — the restriction is off
+--   entirely, NOT an allowlist containing Supabase's address. That distinction
+--   was the whole risk: authorizing one IP would have worked only until
+--   Supabase's sender rotated out of its unpublished pool, then failed again
+--   intermittently. With the restriction off, this failure mode is gone rather
+--   than deferred.
+--
+--   If anyone ever re-enables it, this outage returns in full — every email
+--   path at once. Detection relies on Brevo's own block/quota alerts reaching a
+--   monitored inbox; there is deliberately no canary or health endpoint.
 --
 --   Superseded banner, kept as history — until 2026-08-03 this file read:
 --     "PENDING APPLICATION — do not apply to production without founder

@@ -6,6 +6,8 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import Navbar from '@/components/brand/Navbar';
 import SupportLine from '@/components/shared/SupportLine';
+import ConsentCheckbox from '@/components/legal/ConsentCheckbox';
+import { CURRENT_LEGAL_VERSION } from '@/lib/legalVersions';
 
 export default function SignInPage() {
   const t = useTranslations('auth');
@@ -23,11 +25,15 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  // Reset whenever the mode changes so switching signin -> signup can never
+  // inherit a tick the user made in another context.
+  const [consented, setConsented] = useState(false);
 
   const switchMode = (next: 'signin' | 'signup' | 'reset') => {
     setMode(next);
     setError('');
     setInfo('');
+    setConsented(false);
   };
 
   // Self-service reset. The response is deliberately the same whether or not
@@ -74,7 +80,7 @@ export default function SignInPage() {
 
     try {
       if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({
+        const { data: signUpData, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -82,6 +88,19 @@ export default function SignInPage() {
           },
         });
         if (error) throw error;
+
+        // Record consent now if signUp produced a session (email
+        // confirmation off). With confirmation ON there is no session yet,
+        // so nothing can be written against this user — the TermsGuard
+        // catches them on first authenticated load instead. Both paths end
+        // with a real users row; neither trusts the client's own claim.
+        if (signUpData?.session) {
+          await fetch('/api/legal/accept', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version: CURRENT_LEGAL_VERSION }),
+          }).catch(() => { /* guard will re-prompt; never block signup on this */ });
+        }
         setInfo(t('checkEmail'));
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -180,6 +199,10 @@ export default function SignInPage() {
             </p>
           )}
 
+          {mode === 'signup' && (
+            <ConsentCheckbox checked={consented} onChange={setConsented} locale={locale} disabled={loading} />
+          )}
+
           {error && <p className="text-sm text-red-600">{error}</p>}
           {info && <p className="text-sm" style={{ color: '#16A34A' }}>{info}</p>}
 
@@ -189,7 +212,8 @@ export default function SignInPage() {
               loading ||
               !email ||
               (mode !== 'reset' && !password) ||
-              (mode === 'signup' && !fullName)
+              (mode === 'signup' && !fullName) ||
+              (mode === 'signup' && !consented)
             }
             className="w-full py-3 rounded-full text-white font-semibold cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
             style={{ background: '#0F2044' }}
