@@ -12,15 +12,31 @@
 --     trail cannot self-destruct); all three functions present with exactly one
 --     overload each.
 --
---   SCOPE OF THAT VERIFICATION — read this before trusting it. It confirms the
---   SCHEMA is in place. It does NOT confirm the procedural code runs:
---   delete_household_member() and delete_household() were verified to EXIST,
---   not to EXECUTE. Their guards (PH404/PH409/PH412/PH425), the type='chat'
---   purge, the users.household_id access revocation and the household cascade
---   have never run against real data as of this line. The route tests that
---   cover them are mocked and prove nothing about any of it. First real
---   execution is the founder's end-to-end deletion pass on a throwaway
---   household; update this note once that has happened.
+--   PROCEDURAL CODE: first real execution confirmed by the founder on
+--   2026-08-03 — account deletion run end to end against a live household and
+--   reported working, after the mail path was unblocked (see below). Before
+--   that date none of this had ever executed; the route tests covering it are
+--   mocked and prove nothing about the plpgsql.
+--
+--   STILL NOT EXERCISED, because they are refusal paths a successful deletion
+--   never reaches: PH409 (last member), PH412 (sole owner) and PH425
+--   (identities still live). Nor has the re-invite-after-deletion path been
+--   walked live — the case where a tombstoned member's name is invited again
+--   and must NOT reattach. That one is covered by
+--   members/__tests__/reinviteAfterDeletion.test.ts, but a passing mocked test
+--   is not the live path.
+--
+--   UNRELATED BLOCKER FOUND WHILE TESTING, worth recording because it looked
+--   exactly like an app bug and was not one: signup returned HTTP 500
+--   "Error sending confirmation email", and Supabase rolled the new user back,
+--   so nothing appeared in auth.users. The GoTrue log gave the real cause —
+--   Brevo replying 525 "5.7.1 Unauthorized IP address", i.e. Brevo's Authorized
+--   IPs allowlist rejecting Supabase's outbound mail servers. It took down
+--   every email path at once (signup, invites, resends, password resets). Fixed
+--   by disabling the IP restriction in Brevo → Security → Authorized IPs.
+--   Do NOT allowlist individual IPs there: Supabase's mail senders rotate
+--   through an unpublished pool, so an allowlist entry works until it changes
+--   and then fails intermittently, which is far worse to diagnose.
 --
 --   Superseded banner, kept as history — until 2026-08-03 this file read:
 --     "PENDING APPLICATION — do not apply to production without founder
