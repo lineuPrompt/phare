@@ -32,11 +32,17 @@
 --   so nothing appeared in auth.users. The GoTrue log gave the real cause —
 --   Brevo replying 525 "5.7.1 Unauthorized IP address", i.e. Brevo's Authorized
 --   IPs allowlist rejecting Supabase's outbound mail servers. It took down
---   every email path at once (signup, invites, resends, password resets). Fixed
---   by disabling the IP restriction in Brevo → Security → Authorized IPs.
---   Do NOT allowlist individual IPs there: Supabase's mail senders rotate
---   through an unpublished pool, so an allowlist entry works until it changes
---   and then fails intermittently, which is far worse to diagnose.
+--   every email path at once (signup, invites, resends, password resets).
+--
+--   WHICH REMEDY WAS APPLIED IS UNCONFIRMED as of this line, and the two are
+--   not equivalent:
+--     - restriction DISABLED  → the failure mode is gone for good.
+--     - one IP AUTHORIZED     → it works only until Supabase's sender rotates.
+--       Supabase's auth mailer sends from an unpublished, rotating pool, so an
+--       allowlisted address fails again later — and intermittently, which is
+--       far worse to diagnose than the hard failure above.
+--   Confirm at Brevo → Security → Authorised IPs before relying on this being
+--   fixed. If a specific IP was authorized, disable the restriction instead.
 --
 --   Superseded banner, kept as history — until 2026-08-03 this file read:
 --     "PENDING APPLICATION — do not apply to production without founder
