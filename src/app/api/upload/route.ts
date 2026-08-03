@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { parseTemplate, isPhareTemplate, isValidV3Template } from '@/lib/templateParser';
+import { createRateLimiter, clientIp } from '@/lib/rateLimit';
+
+// Unauthenticated (pre-signup) and no Anthropic spend, but it does read and
+// parse an arbitrary uploaded workbook — real CPU per call. Limited loosely,
+// because this is the one onboarding route a legitimate user fires repeatedly:
+// a wrong-file or outdated-template response is a 200 that sends them back to
+// re-download and drop again, so 3–5 uploads in a few minutes is a normal
+// first-time session. 20 per 5 minutes leaves that ample room.
+const rateLimit = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 20 });
 
 /**
  * Onboarding accepts exactly two inputs: the Phare template and manual
@@ -12,6 +21,14 @@ import { parseTemplate, isPhareTemplate, isValidV3Template } from '@/lib/templat
  */
 export async function POST(request: NextRequest) {
   try {
+    const limit = rateLimit(clientIp(request));
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many uploads. Please wait a moment and try again.', retryAfterSeconds: limit.retryAfterSeconds },
+        { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 

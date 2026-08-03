@@ -2,7 +2,15 @@
 -- Phare — Build 3 Phase B: onboarding-import provenance
 -- Strictly additive. No table is dropped; no NOT NULL is added.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — verified live in production on 2026-08-03 by direct schema
+--   inspection (information_schema / pg_catalog), not by assumption.
+--   Evidence: file_import_id present on all five tables; storage_path and
+--   recurring_items.anchor_date both nullable; file_imports_file_type_check
+--   includes 'manual'; recurring_items_cadence_check includes 'semimonthly'.
+--
+--   Superseded banner, kept as history — until 2026-08-03 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 --
 -- Widens file_imports beyond literal file uploads: a row is now created on
 -- EVERY save-plan run (file upload OR manual-form onboarding). That is what

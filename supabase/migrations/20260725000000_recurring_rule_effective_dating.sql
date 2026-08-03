@@ -3,7 +3,14 @@
 -- (split-into-two-rules model, founder-approved 2026-07-21).
 -- Strictly additive. No ALTER on existing column types/constraints.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — verified live in production on 2026-08-03 by direct schema
+--   inspection (information_schema / pg_catalog), not by assumption.
+--   Evidence: recurring_items.effective_from and .predecessor_id both present
+--   and nullable; predecessor index in place.
+--
+--   Superseded banner, kept as history — until 2026-08-03 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 -- =============================================================================
 
 -- Editing a recurring rule's amount/cadence/anchor/second_day now splits the

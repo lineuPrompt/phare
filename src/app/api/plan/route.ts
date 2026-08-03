@@ -3,6 +3,14 @@ import { anthropic } from '@/lib/anthropic';
 import { dedupeSinkingFunds, assembleCalculatedBudget } from '@/lib/planHelpers';
 import { evaluateGoals, GoalResult, isDebtGoalName, computeDebtPayoff, DebtPayoffResult } from '@/lib/goalHelpers';
 import { businessToday, DEFAULT_HOUSEHOLD_TIMEZONE } from '@/lib/dateHelpers';
+import { createRateLimiter, clientIp } from '@/lib/rateLimit';
+
+// Unauthenticated by design — no household exists yet at this point in
+// onboarding — but it spends Anthropic tokens on every call, so it gets an
+// IP-keyed cap. A real session fires this exactly once (from confirmAccounts);
+// even a user who errors out and starts over lands at 2–3. 8 per 5 minutes is
+// far above any human path and still bounds a script to ~96 calls/hour/instance.
+const rateLimit = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 8 });
 
 const SEED_CATEGORIES = [
   'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
@@ -25,6 +33,14 @@ function round(n: number): number {
 
 export async function POST(request: NextRequest) {
   try {
+    const limit = rateLimit(clientIp(request));
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many plan requests. Please wait a moment and try again.', retryAfterSeconds: limit.retryAfterSeconds },
+        { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
+      );
+    }
+
     const body = await request.json();
     const locale = body.locale === 'fr' ? 'fr' : 'en';
     const lang = locale === 'fr' ? 'French (Quebec French, natural and native)' : 'English';

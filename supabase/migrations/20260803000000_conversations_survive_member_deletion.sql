@@ -2,7 +2,19 @@
 -- Phare — the household's reviews must survive the member who generated them
 -- Prerequisite for "delete my account", 2026-07-30.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — verified live in production on 2026-08-03 by direct schema
+--   inspection (information_schema / pg_catalog), not by assumption.
+--   Evidence: conversations.user_id reads is_nullable = 'YES' with FK
+--   delete_rule SET NULL, and conversations.household_id still reads CASCADE
+--   (whole-household deletion depends on that staying put).
+--
+--   The type='chat' purge obligation recorded below is now DISCHARGED — see
+--   20260804000000_member_self_deletion.sql, whose delete_household_member()
+--   performs that DELETE explicitly.
+--
+--   Superseded banner, kept as history — until 2026-08-03 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 --
 -- THE PROBLEM
 -- -----------

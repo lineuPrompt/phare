@@ -2,7 +2,24 @@
 -- Phare — drop the legacy `goals` table
 -- Housekeeping, 2026-07-22.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — confirmed on 2026-08-03. The table is absent in
+--   production: to_regclass('public.goals') returns NULL, and `SELECT count(*)
+--   FROM goals` errors with 'relation "goals" does not exist'.
+--
+--   Note the discrepancy: this file was believed staged-and-unapplied, but the
+--   table was in fact already gone when checked. Either this migration ran at
+--   some point without the header being updated, or the table was dropped by
+--   hand. Because the statement is DROP TABLE IF EXISTS, both paths converge on
+--   the same end state and re-running it would still be a harmless no-op.
+--
+--   The re-verified evidence below still holds as of 2026-08-03: `.from('goals')`
+--   has zero matches anywhere in src/, and the only remaining references to the
+--   table in the repo are its own CREATE TABLE / index / trigger / RLS-policy
+--   definitions in 20260618000000_initial_schema.sql.
+--
+--   Superseded banner, kept as history — until 2026-08-03 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 --
 -- The `goals` table (name, target_amount, current_amount, target_date,
 -- status) was the original savings-goal design from the initial schema.

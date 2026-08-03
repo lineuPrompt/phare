@@ -2,7 +2,14 @@
 -- Phare — import provenance must survive the person who uploaded the file
 -- Prerequisite for "delete my account", 2026-07-30.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — verified live in production on 2026-08-03 by direct schema
+--   inspection (information_schema / pg_catalog), not by assumption.
+--   Evidence: file_imports.uploaded_by reads is_nullable = 'YES' and its FK
+--   delete_rule reads SET NULL (was CASCADE).
+--
+--   Superseded banner, kept as history — until 2026-08-03 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 --
 -- THE PROBLEM
 -- -----------

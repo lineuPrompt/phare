@@ -2,7 +2,14 @@
 -- Phare — Sinking funds become fundable (Part 2, founder-approved 2026-07-21).
 -- Strictly additive.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — verified live in production on 2026-08-03 by direct schema
+--   inspection (information_schema / pg_catalog), not by assumption.
+--   Evidence: accounts.is_sinking_fund present, NOT NULL, default false;
+--   sinking_funds.linked_account_id present and nullable.
+--
+--   Superseded banner, kept as history — until 2026-08-03 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 --
 -- MODEL: a sinking fund reuses the existing 'savings' account type (no
 -- accounts_type_check / create_transfer destination-check change needed —

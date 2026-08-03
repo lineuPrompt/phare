@@ -2,7 +2,13 @@
 -- Phare — sinking fund allocations become editable (2026-07-22).
 -- Strictly additive.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — verified live in production on 2026-08-03 by direct schema
+--   inspection (information_schema / pg_catalog), not by assumption.
+--   Evidence: sinking_funds.active present, NOT NULL, default true.
+--
+--   Superseded banner, kept as history — until 2026-08-03 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 --
 -- Each sinking_funds row is one line the shared buffer covers (e.g.
 -- "Property tax", "Christmas"). `active` lets a household exclude a line

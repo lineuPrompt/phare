@@ -7,6 +7,7 @@ import Navbar from '@/components/brand/Navbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import SupportLine from '@/components/shared/SupportLine';
 import ExportDataSection from '@/components/shared/ExportDataSection';
+import DeleteAccountSection from '@/components/household/DeleteAccountSection';
 import {
   memberRoleView,
   canPromoteToOwner,
@@ -21,6 +22,10 @@ type Member = {
   user_id: string | null;
   users?: { email: string; role: string } | null;
   pending?: boolean;
+  // Set for someone who deleted their account. Their row survives because the
+  // ledger still points at it (transactions.member_id is NO ACTION), so it must
+  // render — but as an erased person, never under their real name.
+  former?: boolean;
 };
 
 export default function HouseholdPage() {
@@ -245,15 +250,24 @@ export default function HouseholdPage() {
                       <li key={m.id} className="py-3">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium" style={{ color: '#0F2044' }}>
-                              {m.name}
-                              {isMe && (
+                            <p
+                              className="text-sm font-medium"
+                              style={{ color: m.former ? '#9CA3AF' : '#0F2044' }}
+                            >
+                              {/* A tombstoned row's stored name is the neutral
+                                  placeholder written by the deletion function,
+                                  not a display string — the label comes from
+                                  the `former` flag so it is translated, and so
+                                  the erased person's real name is never shown
+                                  again. */}
+                              {m.former ? t('formerName') : m.name}
+                              {isMe && !m.former && (
                                 <span className="ml-2 text-xs" style={{ color: '#9CA3AF' }}>
                                   ({t('you')})
                                 </span>
                               )}
                             </p>
-                            {m.users?.email ? (
+                            {m.former ? null : m.users?.email ? (
                               <p className="text-xs" style={{ color: '#6B7280' }}>{m.users.email}</p>
                             ) : m.user_id ? (
                               // Has an account, but we couldn't read its row.
@@ -265,6 +279,14 @@ export default function HouseholdPage() {
                             ) : null}
                           </div>
                           <div className="flex items-center gap-2">
+                            {m.former && (
+                              <span
+                                className="text-xs font-medium px-2 py-0.5 rounded-full"
+                                style={{ background: '#F3F4F6', color: '#6B7280' }}
+                              >
+                                {t('formerBadge')}
+                              </span>
+                            )}
                             {m.pending && (
                               <span
                                 className="text-xs font-medium px-2 py-0.5 rounded-full"
@@ -273,19 +295,26 @@ export default function HouseholdPage() {
                                 {t('pendingBadge')}
                               </span>
                             )}
-                            <span
-                              className="text-xs font-medium px-2 py-0.5 rounded-full"
-                              style={
-                                roleView === 'owner'  ? { background: '#EEF2FF', color: '#4F46E5' } :
-                                roleView === 'member' ? { background: '#F0FDFD', color: '#0F766E' } :
-                                                        { background: '#F3F4F6', color: '#6B7280' }
-                              }
-                            >
-                              {roleView === 'owner'       ? t('ownerBadge')
-                                : roleView === 'member'   ? t('memberBadge')
-                                : roleView === 'not_invited' ? t('notInvitedBadge')
-                                : t('roleUnknownBadge')}
-                            </span>
+                            {/* No role badge for a former member. Their user_id
+                                is NULL, so roleView reads 'not_invited' — which
+                                is exactly backwards: they were invited, they
+                                signed in, and then they left. The Former badge
+                                above already says what happened. */}
+                            {!m.former && (
+                              <span
+                                className="text-xs font-medium px-2 py-0.5 rounded-full"
+                                style={
+                                  roleView === 'owner'  ? { background: '#EEF2FF', color: '#4F46E5' } :
+                                  roleView === 'member' ? { background: '#F0FDFD', color: '#0F766E' } :
+                                                          { background: '#F3F4F6', color: '#6B7280' }
+                                }
+                              >
+                                {roleView === 'owner'       ? t('ownerBadge')
+                                  : roleView === 'member'   ? t('memberBadge')
+                                  : roleView === 'not_invited' ? t('notInvitedBadge')
+                                  : t('roleUnknownBadge')}
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -532,6 +561,10 @@ export default function HouseholdPage() {
             )}
 
             <ExportDataSection locale={locale} />
+
+            {/* Last on the page, after the promote control it points at when
+                the last owner is blocked. */}
+            <DeleteAccountSection locale={locale} />
           </div>
         </div>
       </div>

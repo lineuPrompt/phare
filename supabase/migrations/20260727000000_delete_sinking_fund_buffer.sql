@@ -2,7 +2,16 @@
 -- Phare — delete/roll back the sinking-fund buffer, with honest consequences
 -- Build 4 Part A (management lifecycle), 2026-07-21.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — verified live in production on 2026-08-03 by direct schema
+--   inspection (information_schema / pg_catalog), not by assumption.
+--   Evidence: exactly ONE overload of delete_sinking_fund_buffer exists
+--   (p_household_id uuid, p_account_id uuid, p_today date), and its prosrc
+--   contains the bill-payment reassign step — i.e. it is this version, not an
+--   earlier one.
+--
+--   Superseded banner, kept as history — until 2026-08-03 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 --
 -- The sinking-fund buffer is a 'savings' account (accounts.is_sinking_fund =
 -- true) that, unlike a real goal/debt account, can carry TWO different kinds

@@ -2,7 +2,14 @@
 -- Phare — Build 3: Opening-balance anchor for the Cash Timeline
 -- Strictly additive. No ALTER on existing tables.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — verified live in production on 2026-08-03 by direct schema
+--   inspection (information_schema / pg_catalog), not by assumption.
+--   Evidence: table account_balance_anchors present, RLS enabled, policy and
+--   both indexes in place.
+--
+--   Superseded banner, kept as history — until 2026-08-03 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 -- =============================================================================
 
 -- A user states "my chequing had $X on date Y." Everything derives from there.

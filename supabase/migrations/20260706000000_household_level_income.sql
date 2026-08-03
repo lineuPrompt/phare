@@ -2,7 +2,13 @@
 -- Phare — Build 3 Phase C follow-up: household-level income attribution
 -- Strictly additive. No table is dropped; only a NOT NULL is relaxed.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — verified live in production on 2026-08-03 by direct schema
+--   inspection (information_schema / pg_catalog), not by assumption.
+--   Evidence: transactions.member_id reads is_nullable = 'YES'.
+--
+--   Superseded banner, kept as history — until 2026-08-03 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 --
 -- Some income (e.g. child benefits) belongs to the household as a whole, not
 -- to any one member. recurring_items.member_id was already nullable for this.

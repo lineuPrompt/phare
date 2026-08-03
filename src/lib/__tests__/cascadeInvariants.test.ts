@@ -121,6 +121,13 @@ describe('cascade invariants for account deletion', () => {
       'events',
       'file_imports',
       'household_members',
+      // Holds a departed member's email (subject_email), denormalized so the
+      // record survives their own erasure — so a WHOLE-household deletion must
+      // still reach it, or Case A would leave exactly the orphaned personal
+      // data this test exists to prevent. Its subject_user_id is deliberately
+      // NOT a foreign key (see 20260804000000_member_self_deletion.sql); this
+      // household_id cascade is what bounds its lifetime instead.
+      'member_deletion_requests',
       'monthly_goals',
       'recurring_items',
       'recurring_skipped_dates',

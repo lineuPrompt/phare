@@ -1,7 +1,25 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { anthropic } from '@/lib/anthropic';
+import { createRateLimiter, clientIp } from '@/lib/rateLimit';
+
+// Same posture as /api/plan: unauthenticated because onboarding has no
+// household yet, but it spends Anthropic tokens (streamed, 1500 max_tokens).
+// The client fires this exactly 1:1 with /api/plan, immediately after it
+// succeeds, and never retries it on its own — a failed stream falls back to
+// placeholder copy and proceeds to save. So the budget matches /api/plan's.
+const rateLimit = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 8 });
 
 export async function POST(request: NextRequest) {
+  const limit = rateLimit(clientIp(request));
+  if (!limit.allowed) {
+    // JSON here even though the success path streams text/plain — the caller
+    // checks res.ok before reading the body, so it never parses this as prose.
+    return NextResponse.json(
+      { error: 'Too many review requests. Please wait a moment and try again.', retryAfterSeconds: limit.retryAfterSeconds },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
+    );
+  }
+
   const { analysis, plan, locale } = await request.json();
 
   const lang = locale === 'fr' ? 'French' : 'English';

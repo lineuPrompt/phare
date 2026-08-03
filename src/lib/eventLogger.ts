@@ -71,7 +71,20 @@ export type EventType =
   // who never signed in; removing an active member is account deletion and
   // will have its own event. metadata carries the household_members id and
   // the deleted user's id; user_id on the row is the OWNER who did it.
-  | 'pending_member_removed';
+  | 'pending_member_removed'
+  // A member deleted their OWN account and the household survived — Case B
+  // (DELETE /api/me). Distinct from 'pending_member_removed', which is an
+  // owner revoking an invite for someone who never signed in.
+  //
+  // user_id on the row is the departing member, and it goes NULL the moment
+  // the auth step succeeds (events.user_id is ON DELETE SET NULL against
+  // auth.users) — which is correct: the event must outlive the identity, and
+  // the erasure is the point. metadata therefore carries the household_members
+  // id and the deletion-request id, which are what remain queryable
+  // afterwards; it deliberately does NOT carry the email, since
+  // member_deletion_requests already holds that under household-scoped RLS
+  // and duplicating it here would widen the erasure's own footprint.
+  | 'member_self_deleted';
 
 /**
  * Insert one event row.

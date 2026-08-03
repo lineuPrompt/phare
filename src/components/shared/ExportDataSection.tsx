@@ -1,63 +1,17 @@
 'use client';
 
-import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useTransactionExport } from '@/components/shared/useTransactionExport';
 
 /**
  * "Export your data" — downloads the household's transactions as CSV.
  *
- * Fetches rather than using a plain <a href>: the endpoint is authenticated
- * and can fail (401, query error), and a bare link would navigate the family
- * to a raw JSON error page instead of telling them something went wrong. The
- * blob round-trip keeps the failure inside this component.
+ * The download itself lives in useTransactionExport, because the deletion flow
+ * offers the same export as its primary action and the two must not drift.
  */
 export default function ExportDataSection({ locale }: { locale: string }) {
   const t = useTranslations('exportData');
-  const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleExport = async () => {
-    setDownloading(true);
-    setError('');
-
-    try {
-      const res = await fetch(`/api/export/transactions?locale=${locale}`);
-
-      if (!res.ok) {
-        // Show the server's actual reason. A generic "please try again" hid a
-        // PostgREST embed error through a whole build-and-ship cycle — neither
-        // the family nor whoever they email can act on a message that omits
-        // why. The localized string is only the fallback for a body we can't
-        // read (network drop, non-JSON response).
-        const reason = await res
-          .json()
-          .then((body) => body?.error as string | undefined)
-          .catch(() => undefined);
-        setError(reason ?? t('failed'));
-        return;
-      }
-
-      const blob = await res.blob();
-
-      // Prefer the filename the server chose so the date in it is the
-      // server's, not a second opinion from the browser's clock.
-      const disposition = res.headers.get('Content-Disposition') ?? '';
-      const match = disposition.match(/filename="([^"]+)"/);
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = match?.[1] ?? 'phare-transactions.csv';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch {
-      setError(t('failed'));
-    } finally {
-      setDownloading(false);
-    }
-  };
+  const { download, downloading, error } = useTransactionExport(locale);
 
   return (
     <section className="rounded-2xl bg-white p-6 space-y-3" style={{ border: '1px solid #E5E7EB' }}>
@@ -67,7 +21,7 @@ export default function ExportDataSection({ locale }: { locale: string }) {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <button
-        onClick={handleExport}
+        onClick={download}
         disabled={downloading}
         className="px-6 py-2.5 rounded-full text-sm font-medium cursor-pointer hover:opacity-80 transition-all disabled:opacity-50"
         style={{ border: '1.5px solid #0F2044', color: '#0F2044' }}

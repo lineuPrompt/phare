@@ -70,9 +70,13 @@ export async function GET() {
     // RLS is untouched: the policy stays as tight as it was, and this route
     // (which already built an admin client to compute `pending`) does the
     // household-scoped read explicitly.
+    // deleted_at is selected (and surfaced below as `former`) rather than
+    // filtered out: a tombstoned row still owns real ledger attribution, so an
+    // attribution UI must be able to render it. What it must NOT do is offer
+    // it as an invitable or attachable person — that is enforced in POST.
     const { data: members, error } = await supabase
       .from('household_members')
-      .select('id, name, user_id')
+      .select('id, name, user_id, deleted_at')
       .eq('household_id', caller.householdId)
       .order('created_at', { ascending: true });
 
@@ -105,9 +109,16 @@ export async function GET() {
     // `users` stays null when there is no account (a name-only member) or when
     // no row came back for one that should exist. The client renders null as
     // "unknown", never as a role — see memberRoleView.
+    // `former` is the flag the UI should render a translated label from — the
+    // stored name of a tombstoned row is the neutral placeholder written by
+    // delete_household_member(), not a display string.
     const withRoles = members.map((m) => {
       const row = m.user_id ? byUserId.get(m.user_id) : undefined;
-      return { ...m, users: row ? { email: row.email, role: row.role } : null };
+      return {
+        ...m,
+        users: row ? { email: row.email, role: row.role } : null,
+        former: m.deleted_at !== null,
+      };
     });
 
     // Pending status comes from the auth user's last_sign_in_at, which only
@@ -257,7 +268,7 @@ export async function POST(request: Request) {
     if (attachToMemberId) {
       const { data: target } = await supabase
         .from('household_members')
-        .select('id, user_id, household_id')
+        .select('id, user_id, household_id, deleted_at')
         .eq('id', attachToMemberId)
         .single();
       if (!target || target.household_id !== caller.householdId) {
@@ -266,13 +277,34 @@ export async function POST(request: Request) {
       if (target.user_id) {
         return NextResponse.json({ error: 'That member already has an account' }, { status: 409 });
       }
+      // RE-INVITE MUST NOT REATTACH. A tombstoned row is a member who deleted
+      // their account (Case B): user_id is NULL, so without this check it is
+      // indistinguishable from a name-only row and the explicit-attach path
+      // would bind a NEW person's login to the ERASED person's identity row,
+      // handing them that person's entire attribution history. This is the
+      // more dangerous of the two attach paths, because a chosen
+      // attachToMemberId skips name matching entirely.
+      if (target.deleted_at) {
+        return NextResponse.json(
+          {
+            error: 'That member deleted their account. Their record is kept for your household’s history and cannot be reused — invite them as a new person instead.',
+            code: 'member_deleted',
+          },
+          { status: 409 }
+        );
+      }
       attachTargetId = attachToMemberId;
     } else if (!forceNew) {
       const { data: nameOnlyMembers } = await supabase
         .from('household_members')
         .select('id, name')
         .eq('household_id', caller.householdId)
-        .is('user_id', null);
+        .is('user_id', null)
+        // Same rule on the matching path: a deleted member's tombstone must
+        // never become a match-before-create candidate. See
+        // 20260804000000_member_self_deletion.sql for why the row survives at
+        // all (transactions.member_id is NO ACTION).
+        .is('deleted_at', null);
 
       const candidates = findMemberNameCandidates(fullName.trim(), nameOnlyMembers ?? []);
       if (candidates.length > 1) {

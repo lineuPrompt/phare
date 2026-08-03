@@ -3,7 +3,14 @@
 -- recurring occurrences.
 -- Strictly additive. No ALTER on existing tables.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — verified live in production on 2026-08-03 by direct schema
+--   inspection (information_schema / pg_catalog), not by assumption.
+--   Evidence: table recurring_skipped_dates present, RLS enabled, policy and
+--   both indexes in place.
+--
+--   Superseded banner, kept as history — until 2026-08-03 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 -- =============================================================================
 
 -- When a single materialized occurrence of a recurring rule is edited or
