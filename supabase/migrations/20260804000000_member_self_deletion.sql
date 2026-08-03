@@ -1,7 +1,30 @@
 -- =============================================================================
 -- Phare — account deletion, BOTH cases. 2026-08-03.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — schema verified live in production on 2026-08-03 by direct
+--   inspection (information_schema / pg_catalog), not by assumption. All nine
+--   checks passed:
+--     household_members.deleted_at present and nullable; the
+--     idx_household_members_live and idx_member_deletion_requests_unfinished
+--     partial indexes present; member_deletion_requests present with RLS
+--     enabled and its household-scoped policy attached; kind column present
+--     defaulting to 'member'; subject_user_id carries NO foreign key (the audit
+--     trail cannot self-destruct); all three functions present with exactly one
+--     overload each.
+--
+--   SCOPE OF THAT VERIFICATION — read this before trusting it. It confirms the
+--   SCHEMA is in place. It does NOT confirm the procedural code runs:
+--   delete_household_member() and delete_household() were verified to EXIST,
+--   not to EXECUTE. Their guards (PH404/PH409/PH412/PH425), the type='chat'
+--   purge, the users.household_id access revocation and the household cascade
+--   have never run against real data as of this line. The route tests that
+--   cover them are mocked and prove nothing about any of it. First real
+--   execution is the founder's end-to-end deletion pass on a throwaway
+--   household; update this note once that has happened.
+--
+--   Superseded banner, kept as history — until 2026-08-03 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 --
 -- FILENAME NOTE: this file is still named ..._member_self_deletion.sql because
 -- it was already circulating under that name when Case A (step 4) was added to
