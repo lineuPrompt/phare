@@ -1,7 +1,14 @@
 -- =============================================================================
 -- Phare — record the Stripe cancellation on the deletion marker. 2026-08-04.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — verified live in production on 2026-08-04, 2/2 checks PASS.
+--   stripe_subscription_cancelled_at present as a nullable timestamptz, and no
+--   deletion request carries a stale stamp (nothing should, since no
+--   subscription has ever existed).
+--
+--   Superseded banner, kept as history — until 2026-08-04 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 --
 -- Piece 2 of the payment build. One nullable column.
 --
