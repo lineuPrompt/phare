@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Wrong-package-manager artifact. This repo is pnpm-only (see packageManager
+# and the preinstall guard in package.json); an npm lockfile here is what let a
+# wrong-tool install pass locally and break the Vercel build.
+package-lock.json
