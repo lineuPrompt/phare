@@ -244,13 +244,13 @@ export default function Home() {
         <div className="max-w-4xl mx-auto mt-6 pt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2"
              style={{borderTop: '1px solid rgba(255,255,255,0.1)'}}>
           <Link href={`/${locale}/privacy`} className="text-sm underline" style={{color: '#94A3B8'}}>
-            {tLegal('privacyNav')}
+            {tLegal('footerPrivacy')}
           </Link>
           <Link href={`/${locale}/terms`} className="text-sm underline" style={{color: '#94A3B8'}}>
-            {tLegal('termsNav')}
+            {tLegal('footerTerms')}
           </Link>
           <Link href={`/${locale}/faq`} className="text-sm underline" style={{color: '#94A3B8'}}>
-            {tLegal('faqNav')}
+            {tLegal('footerFaq')}
           </Link>
         </div>
       </footer>

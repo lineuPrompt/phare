@@ -1038,18 +1038,20 @@
     "blockedNoPathBody": "Un autre membre a encore accès, mais son rôle n'a pas pu être lu, donc la propriété ne peut pas être transférée en toute sécurité. Veuillez contacter le soutien avant de supprimer."
   },
   "legal": {
-    "privacyNav": "Politique de confidentialité",
-    "termsNav": "Conditions d’utilisation",
-    "faqNav": "FAQ",
+    "footerPrivacy": "Confidentialité",
+    "footerTerms": "Conditions",
+    "footerFaq": "FAQ",
     "lastUpdated": "Dernière mise à jour : {date}",
     "backHome": "Retour à Phare",
-    "consentLabel": "J’accepte les <terms>conditions d’utilisation</terms> et la <privacy>politique de confidentialité</privacy>.",
-    "consentRequired": "Veuillez accepter les conditions et la politique de confidentialité pour continuer.",
+    "consentCheckbox": "J'accepte les <terms>conditions d'utilisation</terms> et la <privacy>politique de confidentialité</privacy>.",
+    "consentAiNote": "Je comprends que les plans et bilans de Phare sont générés en partie par une IA, qu'ils ne constituent pas un conseil financier, et que les décisions que je prends avec eux m'appartiennent.",
+    "consentRequired": "Veuillez accepter les conditions pour continuer.",
     "acceptTitle": "Avant de continuer",
-    "acceptBodyNew": "Veuillez lire et accepter nos conditions d’utilisation et notre politique de confidentialité.",
-    "acceptBodyUpdated": "Nous avons mis à jour nos conditions d’utilisation et notre politique de confidentialité. Veuillez les lire et les accepter pour continuer.",
-    "acceptButton": "J’accepte, continuer",
+    "acceptBodyNew": "Nous avons publié les conditions d'utilisation et la politique de confidentialité de Phare. Prenez-en connaissance et acceptez-les pour poursuivre.",
+    "acceptTitleUpdated": "Nos conditions ont changé",
+    "acceptBodyUpdated": "Nos conditions d'utilisation et notre politique de confidentialité ont été mises à jour. Veuillez en prendre connaissance et les accepter pour poursuivre.",
+    "acceptButton": "Accepter et continuer",
     "accepting": "Enregistrement...",
-    "acceptFailed": "Impossible d’enregistrer votre acceptation. Veuillez réessayer."
+    "acceptFailed": "Impossible d'enregistrer votre acceptation. Veuillez réessayer."
   }
 }

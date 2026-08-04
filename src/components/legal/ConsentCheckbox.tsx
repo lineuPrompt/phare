@@ -57,10 +57,18 @@ export default function ConsentCheckbox({
         className="mt-0.5 cursor-pointer"
       />
       <span>
-        {t.rich('consentLabel', {
+        {t.rich('consentCheckbox', {
           terms: (chunks) => link(`/${locale}/terms`, chunks),
           privacy: (chunks) => link(`/${locale}/privacy`, chunks),
         })}
+        {/* The AI acknowledgement is deliberately part of the SAME label, not a
+            second checkbox. It is not a separate permission to grant — it is
+            what the person is confirming they understood when they ticked the
+            one box, and splitting it would imply the plan could be used without
+            it. */}
+        <span className="block mt-1.5 text-xs" style={{ color: '#6B7280' }}>
+          {t('consentAiNote')}
+        </span>
       </span>
     </label>
   );

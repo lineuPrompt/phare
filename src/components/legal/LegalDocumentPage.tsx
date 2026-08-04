@@ -18,6 +18,24 @@ import { getLegalDocument, type LegalDocumentKey } from '@/content/legal';
  * directly. legalContent.test.ts holds those ids identical across locales, which
  * is what lets an /en/... link survive being opened by a French reader.
  */
+/**
+ * Renders `**bold**` as <strong>, and nothing else.
+ *
+ * The copy uses emphasis where it carries weight — "This is the most important
+ * thing in this document", "We do not connect to your bank" — and shipping a
+ * legal document with the author's emphasis flattened into plain text loses
+ * something real. A full markdown renderer is more surface than these documents
+ * need, so this handles the one construct the copy actually uses. Anything else
+ * (links, lists, headings) must be expressed as plain prose in the content file.
+ */
+function renderBold(text: string, keyPrefix: string): React.ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((part, i) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={`${keyPrefix}-${i}`}>{part.slice(2, -2)}</strong>
+      : <span key={`${keyPrefix}-${i}`}>{part}</span>
+  );
+}
+
 export default function LegalDocumentPage({ doc }: { doc: LegalDocumentKey }) {
   const t = useTranslations('legal');
   const pathname = usePathname();
@@ -39,7 +57,9 @@ export default function LegalDocumentPage({ doc }: { doc: LegalDocumentKey }) {
         {document.intro && document.intro.length > 0 && (
           <div className="space-y-4 mb-10">
             {document.intro.map((p, i) => (
-              <p key={i} className="text-sm leading-relaxed" style={{ color: '#374151' }}>{p}</p>
+              <p key={i} className="text-sm leading-relaxed" style={{ color: '#374151' }}>
+                {renderBold(p, `intro-${i}`)}
+              </p>
             ))}
           </div>
         )}
@@ -52,7 +72,9 @@ export default function LegalDocumentPage({ doc }: { doc: LegalDocumentKey }) {
               </h2>
               <div className="space-y-3">
                 {section.body.map((p, i) => (
-                  <p key={i} className="text-sm leading-relaxed" style={{ color: '#374151' }}>{p}</p>
+                  <p key={i} className="text-sm leading-relaxed" style={{ color: '#374151' }}>
+                    {renderBold(p, `${section.id}-${i}`)}
+                  </p>
                 ))}
               </div>
             </section>

@@ -1038,17 +1038,19 @@
     "blockedNoPathBody": "Another member still has access, but we could not read their role, so ownership cannot be handed over safely. Please contact support before deleting."
   },
   "legal": {
-    "privacyNav": "Privacy Policy",
-    "termsNav": "Terms of Service",
-    "faqNav": "FAQ",
-    "lastUpdated": "Last updated: {date}",
+    "footerPrivacy": "Privacy",
+    "footerTerms": "Terms",
+    "footerFaq": "FAQ",
+    "lastUpdated": "Last updated {date}",
     "backHome": "Back to Phare",
-    "consentLabel": "I agree to the <terms>Terms of Service</terms> and the <privacy>Privacy Policy</privacy>.",
-    "consentRequired": "Please accept the Terms and Privacy Policy to continue.",
+    "consentCheckbox": "I agree to the <terms>Terms of Service</terms> and <privacy>Privacy Policy</privacy>.",
+    "consentAiNote": "I understand Phare's plans and reviews are generated in part by AI, that they are not financial advice, and that decisions I make with them are my own.",
+    "consentRequired": "Please accept the terms to continue.",
     "acceptTitle": "Before you continue",
-    "acceptBodyNew": "Please review and accept our Terms of Service and Privacy Policy.",
-    "acceptBodyUpdated": "We have updated our Terms of Service and Privacy Policy. Please review and accept them to continue.",
-    "acceptButton": "I agree, continue",
+    "acceptBodyNew": "We've published Phare's Terms of Service and Privacy Policy. Please have a look and accept them to carry on.",
+    "acceptTitleUpdated": "We've updated our terms",
+    "acceptBodyUpdated": "Our Terms of Service and Privacy Policy have changed. Please review and accept the updated versions to continue.",
+    "acceptButton": "Accept and continue",
     "accepting": "Saving...",
     "acceptFailed": "Could not record your acceptance. Please try again."
   }

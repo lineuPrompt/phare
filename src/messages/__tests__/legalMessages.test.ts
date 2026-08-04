@@ -23,8 +23,8 @@ describe('legal namespace', () => {
     describe(name, () => {
       const t = createTranslator({ locale: name, messages, namespace: 'legal' });
 
-      it('consentLabel formats with both link tags', () => {
-        const out = t.rich('consentLabel', {
+      it('consentCheckbox formats with both link tags', () => {
+        const out = t.rich('consentCheckbox', {
           terms: (c) => `[TERMS:${c}]`,
           privacy: (c) => `[PRIVACY:${c}]`,
         });
@@ -46,8 +46,9 @@ describe('legal namespace', () => {
       });
 
       it('every plain key the legal surfaces use is present and non-empty', () => {
-        const keys = ['privacyNav', 'termsNav', 'faqNav', 'backHome', 'consentRequired',
-                      'acceptTitle', 'acceptBodyNew', 'acceptBodyUpdated', 'acceptButton',
+        const keys = ['footerPrivacy', 'footerTerms', 'footerFaq', 'backHome',
+                      'consentAiNote', 'consentRequired', 'acceptTitle', 'acceptTitleUpdated',
+                      'acceptBodyNew', 'acceptBodyUpdated', 'acceptButton',
                       'accepting', 'acceptFailed'] as const;
         for (const key of keys) {
           expect(t(key).length, `${name}.${key}`).toBeGreaterThan(0);
@@ -60,7 +61,7 @@ describe('legal namespace', () => {
     const tEn = createTranslator({ locale: 'en', messages: en, namespace: 'legal' });
     const tFr = createTranslator({ locale: 'fr', messages: fr, namespace: 'legal' });
     // 'FAQ' is legitimately identical in both, so it is excluded.
-    for (const key of ['privacyNav', 'termsNav', 'acceptTitle', 'acceptButton'] as const) {
+    for (const key of ['footerPrivacy', 'footerTerms', 'acceptTitle', 'acceptButton'] as const) {
       expect(tFr(key), `${key} was never translated`).not.toBe(tEn(key));
     }
   });

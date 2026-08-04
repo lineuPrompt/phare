@@ -89,7 +89,7 @@ export default function AcceptTermsPage() {
       <Navbar />
       <div className="max-w-md mx-auto px-6 py-16">
         <h1 className="text-3xl font-bold mb-2 text-center" style={{ color: '#0F2044' }}>
-          {t('acceptTitle')}
+          {previouslyAccepted ? t('acceptTitleUpdated') : t('acceptTitle')}
         </h1>
         <p className="text-center mb-10 text-sm" style={{ color: '#6B7280' }}>
           {previouslyAccepted ? t('acceptBodyUpdated') : t('acceptBodyNew')}

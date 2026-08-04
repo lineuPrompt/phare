@@ -1,113 +1,152 @@
 import type { LegalDocument } from './types';
-import { PLACEHOLDER as P } from './types';
 
 /**
- * SECTION LIST IS THE DRAFTING CHECKLIST.
+ * Founder-written copy, 2026-08-03. Section ids are anchors and are asserted
+ * identical (and identically ordered) against privacy.fr.ts.
  *
- * Every section below exists because the application actually does the thing it
- * names — these are not generic policy headings. Deleting one means the policy
- * stops describing real behaviour. See the handoff for the code that motivates
- * each.
+ * `**bold**` is rendered as <strong> by LegalDocumentPage. No other markdown is
+ * supported — keep the prose plain.
  */
 const privacyEn: LegalDocument = {
   title: 'Privacy Policy',
   lastUpdated: '2026-08-03',
   intro: [
-    P + 'Introduction — who operates Phare, what this document covers, and the plain-language promise.',
+    'Phare is operated by **Lineu Prompt Graeff**, a sole proprietor based in Quebec, Canada.',
+    'This policy explains what we collect, where it lives, who else sees it, and what you can do about it. It is written to be read, not skimmed past. If anything here is unclear, write to **support@phare.money**.',
   ],
   sections: [
+    {
+      id: 'officer',
+      heading: 'Privacy officer',
+      body: [
+        'Under Quebec’s Act respecting the protection of personal information in the private sector (Law 25), we are required to name a person responsible for the protection of your personal information.',
+        'That person is **Lineu Prompt Graeff**, reachable at **support@phare.money**.',
+      ],
+    },
     {
       id: 'what-we-collect',
       heading: 'What we collect',
       body: [
-        P + 'Account details (name, email), household composition, and every financial figure entered or imported — income, expenses, accounts, balances, goals, reserve funds.',
-        P + 'NOTE FOR DRAFTING: IP addresses are processed transiently by the rate limiters on the unauthenticated onboarding routes. Short-lived and in-memory, but it is still personal data and should be named.',
+        '**Account information.** Your name, email address, and password (stored hashed — we never see it). Your preferred language.',
+        '**Financial information you enter.** Transactions, account balances, budgets, goals, reserve fund provisions, recurring bills, credit card statement dates, and income amounts and schedules. This is the substance of the product: Phare cannot help you without it.',
+        '**Household information.** Which household you belong to, your role in it (owner or member), and the names of people in your household — including people who have no login and exist only so expenses can be attributed to them.',
+        '**Usage information.** A record of significant actions — completing onboarding, opening your monthly review, creating a goal, viewing your timeline. We use this to understand whether Phare is actually useful, not to build a profile of you.',
+        '**Technical information.** Your IP address is processed briefly when you use the sign-up and plan-generation pages, to limit abuse of those pages. It is held in memory only, for a matter of minutes, and is not written to our database.',
       ],
     },
     {
-      id: 'uploaded-files',
-      heading: 'Files you upload',
+      id: 'what-we-dont-collect',
+      heading: 'What we don’t collect',
       body: [
-        P + 'The onboarding spreadsheet is parsed in memory and never written to storage — file_imports records that an import happened, not the file itself. This is a genuinely strong claim and worth stating plainly, because most products cannot make it.',
-      ],
-    },
-    {
-      id: 'ai-processing',
-      heading: 'How your information is used by AI',
-      body: [
-        P + 'Household financial figures are sent to Anthropic to generate the plan, the monthly review, and the top recommendation. This is the disclosure most likely to be missed and the one a reader most needs.',
-        P + 'State what is sent (aggregated figures and line labels), what is not, and that the AI never invents or alters the numbers — code owns the arithmetic.',
-      ],
-    },
-    {
-      id: 'sub-processors',
-      heading: 'Service providers',
-      body: [
-        P + 'Supabase (database, authentication), Vercel (hosting), Anthropic (AI), Brevo (transactional email). Name each and what it touches.',
+        '**We do not connect to your bank.** Phare has no access to your bank accounts, no read-only credentials, no aggregator. Everything in Phare is there because you or someone in your household entered it or uploaded it.',
+        '**We do not keep your uploaded files.** When you upload a spreadsheet during onboarding, it is read in memory and discarded. We record that an import happened and what it produced — we do not store the file. There is no copy of your spreadsheet sitting on our servers.',
+        '**We do not sell your data, and we do not advertise.** Phare has no advertisers, no data partners, and no analytics companies embedded in it.',
       ],
     },
     {
       id: 'data-location',
-      heading: 'Where your information is stored',
+      heading: 'Where your data lives',
       body: [
-        P + 'CONFIRM BEFORE PUBLISHING: the Supabase project region, and that AI processing happens outside Canada. Quebec Law 25 requires a privacy impact assessment for transfers outside Quebec — this section must be accurate, not aspirational.',
+        'Your data is stored with **Supabase**, our database and authentication provider, in the **AWS Canada (Central) region — ca-central-1, located in Montreal, Quebec**.',
+        'Your financial data is stored in Canada. This was a deliberate choice and we intend to keep it that way.',
       ],
     },
     {
-      id: 'activity-data',
-      heading: 'Usage and activity',
+      id: 'ai-processing',
+      heading: 'How the AI works, and what it sees',
       body: [
-        P + 'Phare records product events (onboarding completed, timeline opened, monthly review viewed) to understand whether the product helps. Household-scoped, and it SURVIVES an individual member deleting their account — events.user_id becomes null rather than the row being removed.',
+        'Phare’s monthly review and financial plan are generated by **Anthropic’s Claude**, an AI service operated by Anthropic PBC in the United States.',
+        '**This means your household’s financial information is sent outside Canada.** When a plan or review is generated, Phare sends Claude a summary of your household’s finances — income totals, expense totals, category spending, goal targets, debt payoff figures, reserve fund provisions, and similar. It is sent over an encrypted connection, used to produce your text, and Anthropic does not use it to train their models.',
+        'We want to be direct about this because it is the single most significant thing to know about how Phare works. If you are not comfortable with your financial summary being processed by an AI service in the United States, Phare is not the right product for you.',
+        '**What the AI does not do:** it does not calculate your numbers. Every dollar figure in your plan and review is computed by Phare’s own code from your ledger. The AI writes the words around numbers it is given — it is never asked to produce a goal, a reserve fund, or a payoff date as data, so it cannot introduce one. Its prose is additionally checked for specific known failure modes, and rejected and regenerated when one is detected.',
+      ],
+    },
+    {
+      id: 'household-visibility',
+      heading: 'Everyone in your household sees everything',
+      body: [
+        'Phare is built for families managing money together. **There is no private data inside a household.** Every member — owner or member — can see every transaction, every account, every goal, and every monthly review, regardless of who entered it or whose income it is.',
+        'Invite someone to your household only if you are comfortable with them seeing all of it.',
+      ],
+    },
+    {
+      id: 'sub-processors',
+      heading: 'Who else sees your data',
+      body: [
+        'We share your information only with the service providers that make Phare work:',
+        '**Supabase** — database, authentication, hosting of your data (Canada)',
+        '**Anthropic** — AI generation of plans and reviews, as described above (United States)',
+        '**Vercel** — application hosting (United States; your financial data is not stored there)',
+        '**Brevo** — sending account emails such as password resets and household invitations (European Union; receives your email address and name, not your financial data)',
+        '**Stripe** — payment processing, once paid subscriptions are available (receives your billing information; Phare does not store your card number)',
+        'We do not share your data with anyone else, except where we are legally required to.',
       ],
     },
     {
       id: 'retention-member-deletion',
-      heading: 'When one member deletes their account',
+      heading: 'If you leave a household that continues to exist',
       body: [
-        P + 'The honest account: the login is destroyed and the name is replaced, but the household keeps the financial records that member entered, because they are the household\'s records. The member row survives, relabelled.',
-        P + 'MUST STATE: a deletion request record retains the departing member\'s email address as an audit trail. Do not claim deletion removes everything — it does not, and the code will contradict you.',
+        'We keep your data for as long as your account exists. When you delete your account, what happens depends on whether you are the last person in your household. **These two cases have genuinely different outcomes and we want to be precise about them.**',
+        'If one spouse leaves and the other stays, we erase your identity but not the household’s financial records:',
+        'Your login, name, and email address are deleted.',
+        'Your entry in the household is kept but relabelled, with your name removed. This is necessary because transactions in the household are attributed to it; removing it would corrupt the remaining family’s records.',
+        'The household’s transactions, budgets, and recurring bills stay. These are equally the other members’ financial records, and they did not ask for them to be destroyed.',
+        'Monthly reviews and plans generated for the household stay, with your account no longer linked to them. Because these are written in plain language from your household’s figures, a first name may appear inside the text of an older review.',
+        'Your usage records stay, with your identity removed from them.',
+        '**We retain your email address in a deletion log**, recording that a deletion was requested and completed. This is an audit record, kept so that a deletion can be proven and so that a partially failed deletion can be found and finished. It is deleted if the household itself is later deleted.',
+        'So: if you leave a continuing household, the household still holds financial records that describe things you did — amounts, dates, categories — without your name, email, or login. We think this is the right balance between your right to be forgotten and the other members’ right to their own records, but you should know it before you decide.',
       ],
     },
     {
       id: 'retention-household-deletion',
-      heading: 'When the household is deleted',
+      heading: 'If you are the only person in your household',
       body: [
-        P + 'The other story: deleting the household destroys everything by cascade, including the deletion-request records and their retained emails. This is the branch where "everything is removed" is true.',
+        'Deleting your account deletes everything: your household, your accounts, your transactions, your goals, your reviews, your usage records, the deletion log described above, and your login. Nothing survives.',
       ],
     },
     {
       id: 'your-rights',
       heading: 'Your rights',
       body: [
-        P + 'Access, correction, deletion, portability. Portability is already real — the CSV export. Deletion is already real — both cases above. Name the response window.',
+        'Under Quebec’s Law 25 and Canada’s PIPEDA, you have the right to:',
+        '**Access** the personal information we hold about you.',
+        '**Correct** it if it is inaccurate. Most of it you can edit directly in the app.',
+        '**Delete** your account, from the Household page. See above for exactly what deletion does.',
+        '**Take your data with you.** The Household page has an export that downloads every transaction in your household as a CSV file you can open in Excel or Google Sheets.',
+        '**Withdraw your consent**, which in practice means deleting your account.',
+        '**Complain** to the Commission d’accès à l’information du Québec if you believe we have mishandled your information: cai.gouv.qc.ca',
+        'To exercise any of these, write to **support@phare.money**. We will respond within 30 days.',
       ],
     },
     {
       id: 'security',
-      heading: 'How we protect your information',
+      heading: 'Security',
       body: [
-        P + 'Encryption in transit and at rest, row-level security scoping every query to one household, and the member cap. Avoid absolute guarantees.',
+        'Your password is hashed and we never see it. Data is encrypted in transit and at rest. Access to your household’s data is enforced at the database level, so one household’s data cannot be read by another even if the application had a bug.',
+        'We do not yet offer two-factor authentication. We intend to add it.',
+        'No system is perfectly secure. If a breach occurs that presents a risk of serious injury, we will notify you and the Commission d’accès à l’information as Law 25 requires.',
       ],
     },
     {
-      id: 'cookies',
-      heading: 'Cookies',
+      id: 'children',
+      heading: 'Children',
       body: [
-        P + 'Authentication session cookies only. No advertising or third-party analytics cookies — state it plainly if it stays true.',
+        'Phare is for adults managing a household. You must be 18 or older to create an account. We do not knowingly collect information from children. Families often name their children in the app — for a child’s expenses, or an education savings goal — but a child has no account and no login.',
       ],
     },
     {
       id: 'changes',
       heading: 'Changes to this policy',
       body: [
-        P + 'How revisions are published, and that a substantive change requires accepting again before continuing to use Phare.',
+        'If we change this policy in a way that matters, we will ask you to review and accept it the next time you sign in. Minor corrections — a typo, a clarified sentence — will be made without asking.',
       ],
     },
     {
       id: 'contact',
-      heading: 'Contact us',
+      heading: 'Contact',
       body: [
-        P + 'support@phare.money, and the privacy officer required under Quebec Law 25.',
+        '**support@phare.money**',
+        'Lineu Prompt Graeff, sole proprietor — Quebec, Canada',
       ],
     },
   ],

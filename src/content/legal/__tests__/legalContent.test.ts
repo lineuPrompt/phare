@@ -108,7 +108,7 @@ describe('drafting progress', () => {
     expect(total).toBeGreaterThan(0);
   });
 
-  it.skip('NO placeholder copy remains — un-skip this when the real text lands', () => {
+  it('NO placeholder copy remains — the permanent tripwire against shipping drafts', () => {
     for (const doc of LEGAL_DOCUMENT_KEYS) {
       for (const locale of LOCALES) {
         const d = LEGAL_CONTENT[doc][locale];
