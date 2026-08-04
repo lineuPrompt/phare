@@ -47,6 +47,20 @@ let intentInsert: Resolution;
 let deleteHouseholdResult: Resolution;
 /** user ids whose auth deletion should fail. */
 let failingAuthIds: string[];
+/** The households row the route reads for billing state. */
+let householdRow: { stripe_subscription_id: string | null };
+let stripeIsConfigured: boolean;
+let cancelThrows: boolean;
+let cancelledSubscriptionIds: string[];
+
+vi.mock('@/lib/stripe', () => ({
+  stripeConfigured: () => stripeIsConfigured,
+  cancelSubscription: async (id: string) => {
+    if (cancelThrows) throw new Error('stripe unreachable');
+    cancelledSubscriptionIds.push(id);
+    return { cancelled: true, alreadyGone: false };
+  },
+}));
 
 vi.mock('@/lib/supabase-server', () => ({
   createClient: async () => ({
@@ -89,6 +103,7 @@ vi.mock('@/lib/supabase-admin', () => ({
         ops.push(`select:${table}`);
         if (table === 'household_members') return chain({ data: memberRows, error: null });
         if (table === 'users') return chain({ data: householdUserRows, error: null });
+        if (table === 'households') return chain({ data: householdRow, error: null });
         return chain({ data: null, error: null });
       },
       insert: (payload: unknown) => {
@@ -127,6 +142,12 @@ describe('DELETE /api/household — Case A', () => {
     intentInsert = { data: { id: 'req-1' }, error: null };
     deleteHouseholdResult = { data: { householdDeleted: true, householdName: 'The Test Household' }, error: null };
     failingAuthIds = [];
+    // Default: a FREE household — no subscription, nothing to cancel. This is
+    // the only shape that exists today and the common one forever.
+    householdRow = { stripe_subscription_id: null };
+    stripeIsConfigured = false;
+    cancelThrows = false;
+    cancelledSubscriptionIds = [];
   });
 
   it('deletes a sole-member household: intent, then auth, then the household row', async () => {
@@ -254,6 +275,126 @@ describe('DELETE /api/household — Case A', () => {
       (w) => (w.payload as { auth_completed_at?: string }).auth_completed_at !== undefined
     );
     expect(stamped).toBeTruthy();
+  });
+
+  // --- the Stripe step: money correctness ----------------------------------
+
+  it('cancels the subscription BEFORE erasing any identity or dropping the household', async () => {
+    // Most-reversible-first. A cancelled subscription can be resumed; a deleted
+    // auth user and a cascaded household cannot.
+    householdRow = { stripe_subscription_id: 'sub_123' };
+    stripeIsConfigured = true;
+
+    const res = await deleteHousehold();
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(cancelledSubscriptionIds).toEqual(['sub_123']);
+    expect(json.subscriptionCancelledAt).toBeTruthy();
+
+    // Ordering: the cancel is stamped on the marker before any deleteUser runs.
+    const stampAt = writes.findIndex(
+      (w) => w.table === 'member_deletion_requests' &&
+             (w.payload as { stripe_subscription_cancelled_at?: string }).stripe_subscription_cancelled_at !== undefined
+    );
+    expect(stampAt).toBeGreaterThanOrEqual(0);
+    expect(ops.indexOf('deleteUser')).toBeGreaterThan(-1);
+    // The stamp write happens while nothing has been destroyed yet.
+    expect(deletedUserIds.length).toBeGreaterThan(0); // deletion did proceed
+  });
+
+  it('reads the subscription id BEFORE anything is destroyed', async () => {
+    // The cascade destroys households.stripe_subscription_id permanently. If the
+    // read happened after, there would be no way to find the subscription still
+    // billing a real person for a household that no longer exists.
+    householdRow = { stripe_subscription_id: 'sub_123' };
+    stripeIsConfigured = true;
+
+    await deleteHousehold();
+
+    const readAt = ops.indexOf('select:households');
+    expect(readAt).toBeGreaterThanOrEqual(0);
+    expect(readAt).toBeLessThan(ops.indexOf('rpc:delete_household'));
+  });
+
+  it('REFUSES to delete when a subscription exists but Stripe is not configured', async () => {
+    // Fail-closed. Proceeding would trade "try again later" for "we bill someone
+    // forever for something that does not exist" — only one is recoverable.
+    householdRow = { stripe_subscription_id: 'sub_123' };
+    stripeIsConfigured = false;
+
+    const res = await deleteHousehold();
+    const json = await res.json();
+
+    expect(res.status).toBe(503);
+    expect(json.code).toBe('stripe_unavailable');
+    // NOTHING was destroyed.
+    expect(deletedUserIds).toEqual([]);
+    expect(ops).not.toContain('rpc:delete_household');
+
+    const errWrite = writes.find(
+      (w) => typeof (w.payload as { last_error?: string }).last_error === 'string'
+    );
+    expect((errWrite!.payload as { last_error: string }).last_error).toContain('stripe:');
+  });
+
+  it('REFUSES to delete when the cancel call fails', async () => {
+    householdRow = { stripe_subscription_id: 'sub_123' };
+    stripeIsConfigured = true;
+    cancelThrows = true;
+
+    const res = await deleteHousehold();
+    const json = await res.json();
+
+    expect(res.status).toBe(503);
+    expect(json.code).toBe('stripe_cancel_failed');
+    expect(deletedUserIds).toEqual([]);
+    expect(ops).not.toContain('rpc:delete_household');
+  });
+
+  it('a COMPED household deletes cleanly — no Stripe call, even with Stripe configured', async () => {
+    // The November cohort. A comped household is entitled via comp_until and has
+    // NO Stripe objects at all — that separation is the whole point of keeping
+    // comps out of Stripe, and it means the cancel step must no-op on the
+    // absence of a subscription id, NOT on whether Stripe happens to be
+    // configured. By November it will be configured, so a branch that keyed off
+    // configuration would start making a doomed API call for every comped
+    // family and fail their deletions.
+    householdRow = { stripe_subscription_id: null };
+    stripeIsConfigured = true;
+
+    const res = await deleteHousehold();
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.status).toBe('deleted');
+    expect(json.subscriptionCancelledAt).toBeNull();
+    // Never called — there is nothing to cancel.
+    expect(cancelledSubscriptionIds).toEqual([]);
+    // And nothing was stamped on the marker, because nothing happened.
+    const stamped = writes.find(
+      (w) => (w.payload as { stripe_subscription_cancelled_at?: string }).stripe_subscription_cancelled_at !== undefined
+    );
+    expect(stamped).toBeFalsy();
+    expect(ops).toContain('rpc:delete_household');
+  });
+
+  it('a FREE household deletes normally without Stripe configured', async () => {
+    // The only path that exists today, and the common one forever. Requiring a
+    // Stripe key to delete a household that never had a subscription would block
+    // deletion for a reason unrelated to the household.
+    householdRow = { stripe_subscription_id: null };
+    stripeIsConfigured = false;
+
+    const res = await deleteHousehold();
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.status).toBe('deleted');
+    // null is the honest value — there was nothing to cancel.
+    expect(json.subscriptionCancelledAt).toBeNull();
+    expect(cancelledSubscriptionIds).toEqual([]);
+    expect(ops).toContain('rpc:delete_household');
   });
 
   it('aborts with nothing mutated if the intent record cannot be written', async () => {

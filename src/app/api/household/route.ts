@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { loadDeletionContext } from '@/lib/deletionContext';
 import { confirmationMatches } from '@/lib/accountDeletionHelpers';
+import { stripeConfigured, cancelSubscription } from '@/lib/stripe';
 
 // ---------------------------------------------------------------------------
 // DELETE /api/household — Case A, whole-household deletion.
@@ -21,9 +22,16 @@ import { confirmationMatches } from '@/lib/accountDeletionHelpers';
 //
 // ORDER OF OPERATIONS — inverted relative to Case B, deliberately:
 //   1. Record of intent (kind='household').
-//   2. Erase every member's auth identity, retryable, CALLER LAST.
-//   3. Drop the household row; the cascade takes everything, including the
+//   2. Cancel the Stripe subscription, if any. FAIL-CLOSED: if there is one and
+//      it cannot be cancelled, nothing else happens.
+//   3. Erase every member's auth identity, retryable, CALLER LAST.
+//   4. Drop the household row; the cascade takes everything, including the
 //      marker row from step 1.
+//
+// The sequence runs MOST-REVERSIBLE FIRST. A cancelled subscription can be
+// resumed. A deleted auth user cannot. A cascaded household certainly cannot.
+// So the money step goes first: it is both the easiest to undo and the only one
+// whose omission keeps charging a real person after everything else is gone.
 //
 // Case B is DB-first because its DB step is what revokes access and the
 // household survives to hold the marker. Here the DB step DESTROYS the marker
@@ -114,6 +122,23 @@ export async function DELETE(request: Request) {
       );
     }
 
+    // The subscription id is read HERE, while the household still exists. The
+    // cascade in step 4 destroys it permanently, so this is the last moment
+    // anything can learn which subscription belongs to this household.
+    const { data: household, error: householdErr } = await admin
+      .from('households')
+      .select('stripe_subscription_id')
+      .eq('id', userRow.household_id)
+      .single();
+
+    if (householdErr || !household) {
+      console.error('Household deletion — could not read billing state, aborting before any mutation:', householdErr);
+      return NextResponse.json(
+        { error: 'Could not start deletion. Nothing has been changed.' },
+        { status: 500 }
+      );
+    }
+
     // ---- 1. Record of intent -----------------------------------------------
     const { data: reqRow, error: reqErr } = await admin
       .from('member_deletion_requests')
@@ -135,7 +160,77 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // ---- 2. Erase every identity, caller last ------------------------------
+    // ---- 2. Cancel the Stripe subscription — FIRST, and for a reason -------
+    //
+    // This runs before a single identity is touched because it is the most
+    // REVERSIBLE step in the sequence. A cancelled subscription can be
+    // resumed; a deleted auth user cannot be un-deleted, and a cascaded
+    // household cannot be un-cascaded. Ordering the recoverable action first
+    // means a failure here leaves the household completely intact.
+    //
+    // It must also happen before the cascade for a harder reason: the cascade
+    // destroys households.stripe_subscription_id. Afterwards there is no way to
+    // find the subscription, and Stripe keeps billing a real person every month
+    // for a household that no longer exists — with nothing in our database
+    // left to notice it.
+    //
+    // THE FAIL-CLOSED BRANCH. If this household HAS a subscription and we
+    // cannot cancel it — Stripe unreachable, key missing, API error — we abort
+    // the whole deletion. Proceeding would trade "the user has to try again"
+    // for "we bill someone forever for something that does not exist", and only
+    // one of those is recoverable.
+    let stripeCancelledAt: string | null = null;
+
+    if (household.stripe_subscription_id) {
+      if (!stripeConfigured()) {
+        console.error(
+          'Household deletion — household has a subscription but STRIPE_SECRET_KEY is unset; refusing to delete (requestId for ops):',
+          reqRow.id
+        );
+        await admin
+          .from('member_deletion_requests')
+          .update({ last_error: 'stripe: not configured — refused to delete a household with a live subscription' })
+          .eq('id', reqRow.id);
+        return NextResponse.json(
+          {
+            error: 'Your subscription could not be cancelled, so nothing has been deleted. Please contact support@phare.money.',
+            code: 'stripe_unavailable',
+            requestId: reqRow.id,
+          },
+          { status: 503 }
+        );
+      }
+
+      try {
+        await cancelSubscription(household.stripe_subscription_id);
+        stripeCancelledAt = new Date().toISOString();
+        await admin
+          .from('member_deletion_requests')
+          .update({ stripe_subscription_cancelled_at: stripeCancelledAt })
+          .eq('id', reqRow.id);
+      } catch (stripeErr) {
+        console.error('Household deletion — subscription cancel failed, nothing deleted (requestId for ops):', reqRow.id, stripeErr);
+        await admin
+          .from('member_deletion_requests')
+          .update({ last_error: `stripe: ${(stripeErr as Error).message ?? String(stripeErr)}` })
+          .eq('id', reqRow.id);
+        return NextResponse.json(
+          {
+            error: 'Your subscription could not be cancelled, so nothing has been deleted. Please try again, or contact support@phare.money.',
+            code: 'stripe_cancel_failed',
+            requestId: reqRow.id,
+          },
+          { status: 503 }
+        );
+      }
+    }
+    // A household with no stripe_subscription_id has nothing to cancel. That is
+    // the normal path for every free household — and the ONLY path today, since
+    // no subscription exists yet. Note this deliberately does NOT require
+    // Stripe to be configured: demanding a key to delete a free household would
+    // block deletion for a reason that has nothing to do with the household.
+
+    // ---- 3. Erase every identity, caller last ------------------------------
     const { data: householdUsers } = await admin
       .from('users')
       .select('id')
@@ -179,7 +274,7 @@ export async function DELETE(request: Request) {
       .update({ auth_completed_at: new Date().toISOString(), last_error: null })
       .eq('id', reqRow.id);
 
-    // ---- 3. Drop the household — cascade takes everything -------------------
+    // ---- 4. Drop the household — cascade takes everything -------------------
     const { data: result, error: rpcErr } = await admin.rpc('delete_household', {
       p_household_id: userRow.household_id,
       p_request_id: reqRow.id,
@@ -205,6 +300,8 @@ export async function DELETE(request: Request) {
     // absence is the success signal; see the ops query in the migration.
     return NextResponse.json({
       status: 'deleted',
+      // null is a legitimate value: a free household had nothing to cancel.
+      subscriptionCancelledAt: stripeCancelledAt,
       ...(result as Record<string, unknown> ?? {}),
     });
   } catch (err) {

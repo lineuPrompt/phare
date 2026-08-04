@@ -1,0 +1,71 @@
+-- =============================================================================
+-- Phare — record the Stripe cancellation on the deletion marker. 2026-08-04.
+--
+-- PENDING APPLICATION — do not apply to production without founder sign-off.
+--
+-- Piece 2 of the payment build. One nullable column.
+--
+-- WHY THIS NEEDS ITS OWN COLUMN RATHER THAN last_error.
+--
+-- Case A (whole-household deletion) now spans THREE external systems: Stripe,
+-- Supabase Auth, and Postgres. member_deletion_requests already answers "were
+-- the identities erased?" (auth_completed_at) and "did the household drop?"
+-- (the row's own disappearance). It could not answer the money question —
+-- "was the subscription cancelled?" — and that is the one where being wrong
+-- costs a real person real money every month.
+--
+-- Inferring it from last_error being NULL is not good enough: absence of a
+-- recorded failure is not evidence of a performed action. A deletion that died
+-- between the Stripe call and the auth loop would look identical to one that
+-- never reached Stripe at all.
+--
+-- The value is also meaningful when NULL for a legitimate reason — a free
+-- household has no subscription to cancel — so the ops query must read it
+-- together with households.stripe_subscription_id, not alone. By the time the
+-- household row is gone that id is gone too, which is precisely why the
+-- cancellation happens FIRST and is stamped here before anything is destroyed.
+-- =============================================================================
+
+ALTER TABLE member_deletion_requests
+  ADD COLUMN IF NOT EXISTS stripe_subscription_cancelled_at timestamptz;
+
+-- =============================================================================
+-- VERIFY — run after applying. Expect both PASS.
+-- =============================================================================
+--
+-- WITH checks AS (
+--   SELECT 'stripe_subscription_cancelled_at (timestamptz, nullable)' AS check_name,
+--          CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+--                WHERE table_schema='public'
+--                  AND table_name='member_deletion_requests'
+--                  AND column_name='stripe_subscription_cancelled_at'
+--                  AND data_type='timestamp with time zone'
+--                  AND is_nullable='YES')
+--               THEN 'PASS' ELSE 'FAIL' END AS status
+--   UNION ALL
+--   SELECT 'no deletion request has a stale cancellation stamp',
+--          CASE WHEN NOT EXISTS (SELECT 1 FROM member_deletion_requests
+--                WHERE stripe_subscription_cancelled_at IS NOT NULL)
+--               THEN 'PASS' ELSE 'FAIL — nothing should be stamped yet' END
+-- )
+-- SELECT * FROM checks ORDER BY status, check_name;
+--
+-- -- UPDATED OPS QUERY for unfinished deletions. Supersedes the one in
+-- -- 20260804000000_member_self_deletion.sql by adding the money column:
+-- --
+-- --   SELECT id, kind, subject_email, requested_at,
+-- --          stripe_subscription_cancelled_at,   -- NULL may be correct (free household)
+-- --          auth_completed_at,                  -- NULL = identities still live
+-- --          db_completed_at, last_error
+-- --     FROM member_deletion_requests
+-- --    WHERE requested_at < now() - interval '5 minutes'
+-- --      AND (auth_completed_at IS NULL OR kind = 'household')
+-- --    ORDER BY requested_at;
+-- --
+-- -- Reading a stuck kind='household' row:
+-- --   stripe NULL + auth NULL  → nothing happened; safe to retry from the top.
+-- --   stripe SET  + auth NULL  → subscription cancelled, identities not erased.
+-- --                              Retry: the cancel is idempotent.
+-- --   stripe SET  + auth SET   → only the household drop remains.
+-- --                              Call delete_household() again.
+-- =============================================================================
