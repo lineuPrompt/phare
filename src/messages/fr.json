@@ -471,7 +471,11 @@
     "surplusQuestion": "Ce mois s'est-il autofinancé?",
     "debtPayments": "Paiements de dette",
     "actualsToDate": "Données réelles à ce jour ce mois-ci — pas des projections",
-    "actualsForMonth": "Données réelles pour {month} — pas des projections"
+    "actualsForMonth": "Données réelles pour {month} — pas des projections",
+    "reviewLockedTitle": "Lisez la suite avec Phare Pro",
+    "reviewLockedBody": "Vous voyez le début du bilan de ce mois-ci. Phare Pro débloque la lettre complète chaque mois, ainsi qu’une projection sur 12 mois.",
+    "horizonLocked": "{count, plural, one {# mois de projection de plus} other {# mois de projection de plus}} avec Phare Pro",
+    "upgradeCta": "Découvrir Phare Pro"
   },
   "cards": {
     "title": "Enveloppes de cartes de crédit",

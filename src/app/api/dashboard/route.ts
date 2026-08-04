@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase-server';
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth } from '@/lib/goalHelpers';
 import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
+import { loadEntitlement } from '@/lib/entitlementServer';
+import { reviewForEntitlement } from '@/lib/reviewPreview';
 import { logEvent, isFirstReturnToday } from '@/lib/eventLogger';
 import { businessToday, businessMonth } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
@@ -334,8 +336,17 @@ export async function GET(request: Request) {
 
     type Message = { role: string; type: string; content: string; locale?: string };
     const messages = (convResult.data?.messages as Message[] | null) ?? [];
-    const review            = messages.find((msg) => msg.type === 'monthly_review')?.content ?? null;
+    const fullReview        = messages.find((msg) => msg.type === 'monthly_review')?.content ?? null;
+    // topRecommendation is DELIBERATELY NOT GATED. It is one sentence and it is
+    // the daily value of the free tier; paywalling it would leave a free
+    // household with a product that does nothing, which sells nothing.
     const topRecommendation = messages.find((msg) => msg.type === 'top_recommendation')?.content ?? null;
+
+    // The paywall, enforced HERE. A free household's response never contains
+    // the rest of the review — not hidden, not blurred, absent. Anything less
+    // is a CSS effect defeated from the network tab.
+    const entitlement = await loadEntitlement(supabase, householdId);
+    const { review, reviewLocked } = reviewForEntitlement(fullReview, entitlement.isPro);
 
     // Review-open instrumentation (Coaching Layer spec) — the strongest
     // available retention predictor. Gated on a real, non-empty review
@@ -392,6 +403,8 @@ export async function GET(request: Request) {
       sinkingFundBuffer,
       goalAccounts,
       review,
+      reviewLocked,
+      isPro: entitlement.isPro,
       topRecommendation,
       reviewDate:        convResult.data?.created_at ?? null,
       unanchoredIncomeCount: unanchoredIncomeResult.count ?? 0,

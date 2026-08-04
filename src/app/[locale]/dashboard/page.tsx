@@ -285,7 +285,7 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {data.review && <ReviewCard review={data.review} date={data.reviewDate ?? null} locale={locale} />}
+            {data.review && <ReviewCard review={data.review} date={data.reviewDate ?? null} locale={locale} locked={data.reviewLocked ?? false} />}
 
             {/* Regenerate plan */}
             <div className="flex flex-col items-center gap-2 pt-2">

@@ -8,6 +8,8 @@ import {
 } from '@/lib/timelineHelpers';
 import { groupUnbalancedTransactions } from '@/lib/timelineDisplayHelpers';
 import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
+import { loadEntitlement } from '@/lib/entitlementServer';
+import { HORIZON_MONTHS_FREE, HORIZON_MONTHS_PRO } from '@/lib/entitlement';
 import { businessToday } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { logEvent } from '@/lib/eventLogger';
@@ -238,7 +240,15 @@ export async function GET(request: Request) {
     // dated chequing row at its real signed value (income/expense/transfer
     // alike — see planChainHelpers.ts's THE MODEL note), and per-card cost
     // (closed/open/max, reusing computeCardEnvelopeRemainders unchanged).
-    let plan: { months: PlanChainMonth[] } | null = null;
+    // horizonAvailable is what was COMPUTED (always 12); horizonMonths is what
+    // is RETURNED. They differ only for a free household, and the gap is what
+    // the lock UI reports honestly rather than guessing at.
+    let plan: {
+      months: PlanChainMonth[];
+      horizonMonths: number;
+      horizonLocked: boolean;
+      horizonAvailable: number;
+    } | null = null;
 
     if (includePlan && result.ok && result.todayBalance !== null) {
       const currentMonth = today.slice(0, 7);
@@ -316,7 +326,28 @@ export async function GET(request: Request) {
         unanchoredExpenseCount: unanchoredExpenseCount ?? 0,
       });
 
-      plan = { months };
+      // ── Horizon gate ─────────────────────────────────────────────────────
+      // buildPlanChain ALWAYS computes the full 12 months above, and the
+      // bridge materialisation window above is likewise never shortened. Only
+      // what is RETURNED is trimmed.
+      //
+      // That separation is deliberate and load-bearing. ensureBridgesForWindow
+      // creates real transaction rows, and the dashboard materialises the same
+      // 12-month window independently — shrinking the computation for free
+      // households would change which bridge rows exist in the database, so a
+      // free household's ledger would differ from a Pro one's. A paywall must
+      // change what someone SEES, never what their data IS.
+      //
+      // Computing all 12 and slicing also lets the lock state say honestly how
+      // many further months exist, without a second pass.
+      const entitlement = await loadEntitlement(supabase, householdId);
+      const allowedMonths = entitlement.isPro ? HORIZON_MONTHS_PRO : HORIZON_MONTHS_FREE;
+      plan = {
+        months: months.slice(0, allowedMonths),
+        horizonMonths: allowedMonths,
+        horizonLocked: months.length > allowedMonths,
+        horizonAvailable: months.length,
+      };
     }
 
     return NextResponse.json(result.ok ? { ...result, unbalancedDays, plan } : result);

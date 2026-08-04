@@ -259,7 +259,11 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
 
   const baseScript = {
     users: [{ data: { household_id: 'hh1' } }],
-    households: [{ data: { timezone: 'America/Toronto' } }],
+    // Read TWICE now: getHouseholdTimezone, then loadEntitlement.
+    households: [
+      { data: { timezone: 'America/Toronto' } },
+      { data: { subscription_status: null, subscription_current_period_end: null, comp_until: null } },
+    ],
     accounts: [
       { data: { id: 'acc-1', type: 'chequing' } },
       { data: [] }, // no credit cards — skips the monthly_goals/card-transactions queries
@@ -288,8 +292,17 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
     expect(calls.filter((c) => c.table === 'recurring_items')).toHaveLength(0);
   });
 
-  it('includePlan=1 returns a 12-month chain anchored at todayBalance', async () => {
-    const { client } = makeSupabaseMock(baseScript);
+  /** baseScript with the entitlement read replaced by a Pro household. */
+  const proScript = {
+    ...baseScript,
+    households: [
+      { data: { timezone: 'America/Toronto' } },
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null } },
+    ],
+  };
+
+  it('includePlan=1 returns a 12-month chain to a PRO household, anchored at todayBalance', async () => {
+    const { client } = makeSupabaseMock(proScript);
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
@@ -301,10 +314,51 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
     expect(json.todayBalance).toBe(1000);
     expect(json.plan).not.toBeNull();
     expect(json.plan.months).toHaveLength(12);
+    expect(json.plan.horizonMonths).toBe(12);
+    expect(json.plan.horizonLocked).toBe(false);
     expect(json.plan.months[0].month).toBe('2026-07');
     expect(json.plan.months[0].isPartialMonth).toBe(true);
     // No dated rows, no card cost → the anchor never moves.
     expect(json.plan.months.every((m: { balance: number }) => m.balance === 1000)).toBe(true);
+  });
+
+  it('a FREE household receives only 3 months — the rest is not in the payload', async () => {
+    const { client } = makeSupabaseMock(baseScript);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const res = await getTimeline('account=acc-1&includePlan=1');
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.plan.months).toHaveLength(3);
+    expect(json.plan.horizonMonths).toBe(3);
+    expect(json.plan.horizonLocked).toBe(true);
+    // Computed 12, returned 3 — the gap is reported honestly rather than guessed.
+    expect(json.plan.horizonAvailable).toBe(12);
+    // The months beyond the horizon are ABSENT, not flagged. A client cannot
+    // read what was never sent.
+    expect(json.plan.months[json.plan.months.length - 1].month).toBe('2026-09');
+  });
+
+  it('an unreadable household row fails CLOSED to the free horizon', async () => {
+    // Defaulting to Pro on a database hiccup would give the product away on
+    // exactly the errors nobody notices.
+    const { client } = makeSupabaseMock({
+      ...baseScript,
+      households: [
+        { data: { timezone: 'America/Toronto' } },
+        { data: null, error: { message: 'boom' } },
+      ],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const res = await getTimeline('account=acc-1&includePlan=1');
+    const json = await res.json();
+
+    expect(json.plan.months).toHaveLength(3);
+    expect(json.plan.horizonLocked).toBe(true);
   });
 
   // THE REAL SEAM: Supabase select → toTimelineTxs → the transactions.map

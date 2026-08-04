@@ -104,6 +104,11 @@ export type DashboardData = {
   sinkingFundBuffer?: SinkingFundBuffer;
   goalAccounts?: GoalAccount[];
   review?: string | null;
+  // True when `review` above is only the free-tier preview. The rest of the
+  // text is NOT in this payload — it was dropped server-side — so this flag
+  // drives the upgrade UI, it does not hide anything.
+  reviewLocked?: boolean;
+  isPro?: boolean;
   topRecommendation?: string | null;
   reviewDate?: string | null;
   // Recurring items (income and expense) with a real cadence/amount but no
