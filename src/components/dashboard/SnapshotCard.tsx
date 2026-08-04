@@ -84,6 +84,8 @@ export default function SnapshotCard({
   realCloseAmount,
   planMonth,
   isHorizonEnd,
+  horizonLocked,
+  horizonRemainingMonths,
 }: {
   summary: DashboardSummary;
   locale: string;
@@ -114,6 +116,10 @@ export default function SnapshotCard({
   realCloseAmount?: number | null;
   planMonth?: PlanChainMonth | null;
   isHorizonEnd?: boolean;
+  // Pure pass-through to PlanChainTile — SnapshotCard makes no tier decision
+  // of its own; the server already decided what this household receives.
+  horizonLocked?: boolean;
+  horizonRemainingMonths?: number;
 }) {
   const t = useTranslations('dashboard');
   const tNav = useTranslations('dashboard.snapshotNav');
@@ -258,6 +264,8 @@ export default function SnapshotCard({
 
       {showPlanTile && (
         <PlanChainTile
+          horizonLocked={horizonLocked}
+          horizonRemainingMonths={horizonRemainingMonths}
           monthLabel={monthLabel}
           currentMonthLabel={monthLabelFor(currentMonth as string, locale)}
           isPastMonth={isPastMonth as boolean}

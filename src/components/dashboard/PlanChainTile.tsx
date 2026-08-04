@@ -30,6 +30,8 @@ export default function PlanChainTile({
   isPastMonth,
   planMonth,
   isHorizonEnd,
+  horizonLocked = false,
+  horizonRemainingMonths = 0,
   carriedInAmount,
   realCloseAmount,
   totalBorrowed,
@@ -44,6 +46,11 @@ export default function PlanChainTile({
   // plan window (currentMonth..currentMonth+11) — never fabricated.
   planMonth: PlanChainMonth | null;
   isHorizonEnd: boolean;
+  // Set when this month EXISTS in the computed window but was withheld from
+  // a free household. Distinct from planMonth being null for the ordinary
+  // reason (genuinely outside the window), which must still render nothing.
+  horizonLocked?: boolean;
+  horizonRemainingMonths?: number;
   // The real OPENING balance for `month` (buildMonthView's opensAt) —
   // secondary context only.
   carriedInAmount: number | null;
@@ -55,6 +62,9 @@ export default function PlanChainTile({
   timelineHref: string;
 }) {
   const t = useTranslations('dashboard.plan');
+  // Second instance for the CTA, which is shared with ReviewCard and so lives
+  // one level up rather than being duplicated into two namespaces that drift.
+  const tDash = useTranslations('dashboard');
 
   if (isPastMonth) {
     return (
@@ -70,6 +80,34 @@ export default function PlanChainTile({
         <p className="text-sm" style={{ color: '#94A3B8' }}>
           {t('pastMonth', { currentMonth: currentMonthLabel, month: monthLabel })}
         </p>
+      </div>
+    );
+  }
+
+  // Withheld by the tier, not absent. Navigating forward and finding the
+  // projection silently gone reads as a bug; saying what is behind it reads as
+  // a tier. Deliberately an invitation and not a wall — it names the thing
+  // ("9 more months of projection") and links to the plan. No countdown, no
+  // urgency, nothing that pressures a family looking at their own money.
+  if (!planMonth && horizonLocked) {
+    return (
+      <div className="mt-4 rounded-2xl p-4 sm:p-6" style={{ background: '#0F2044' }}>
+        <span
+          className="inline-block text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full mb-2"
+          style={{ background: 'rgba(42,191,191,0.15)', color: '#2ABFBF' }}
+        >
+          {t('badge')}
+        </span>
+        <p className="text-sm mb-4" style={{ color: '#94A3B8' }}>
+          {t('horizonLocked', { count: horizonRemainingMonths })}
+        </p>
+        <Link
+          href={`/${locale}#pricing`}
+          className="inline-block px-5 py-2 rounded-full text-sm font-medium cursor-pointer hover:opacity-90 transition-all"
+          style={{ background: '#2ABFBF', color: '#0F2044' }}
+        >
+          {tDash('upgradeCta')}
+        </Link>
       </div>
     );
   }

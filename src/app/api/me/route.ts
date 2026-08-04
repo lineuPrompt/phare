@@ -5,6 +5,7 @@ import { logEvent } from '@/lib/eventLogger';
 import { loadDeletionContext } from '@/lib/deletionContext';
 import { confirmationMatches } from '@/lib/accountDeletionHelpers';
 import { CURRENT_LEGAL_VERSION, hasAcceptedCurrent } from '@/lib/legalVersions';
+import { loadEntitlement } from '@/lib/entitlementServer';
 
 export async function GET() {
   try {
@@ -20,7 +21,16 @@ export async function GET() {
 
     if (!userRow) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
+    // Entitlement, so the billing success page has something to poll and any
+    // client can ask "is this household Pro?" without a second round trip.
+    // Derived, never stored — see entitlement.ts.
+    const entitlement = userRow.household_id
+      ? await loadEntitlement(supabase, userRow.household_id)
+      : { isPro: false, reason: 'none' as const };
+
     return NextResponse.json({
+      isPro: entitlement.isPro,
+      entitlementReason: entitlement.reason,
       id: user.id,
       email: user.email,
       role: userRow.role,

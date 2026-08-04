@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
+import { horizonLockState, type HorizonPlan } from '@/lib/horizonLock';
 import { useRouter, usePathname } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
 import TopPriorityCard from '@/components/dashboard/TopPriorityCard';
@@ -99,6 +100,14 @@ export default function DashboardPage() {
   // a past displayMonth simply has no entry here.
   const planMonth = plan?.months.find((m) => m.month === displayMonth) ?? null;
   const isHorizonEnd = !!(planMonth && plan && plan.months[plan.months.length - 1].month === planMonth.month);
+  // A free household's chain stops at 3 months while the window still spans
+  // 12. Without this the projection tile just vanishes from month 4 onward,
+  // which reads as a bug rather than a tier — see horizonLock.ts.
+  const horizonLock = horizonLockState(
+    plan as unknown as HorizonPlan | null,
+    displayMonth,
+    planMonth !== null,
+  );
   const isPastMonth = displayMonth < calendarMonth;
 
   const loadDashboard = useCallback((month: string) => {
@@ -268,6 +277,8 @@ export default function DashboardPage() {
                   realCloseAmount={realCloseAmount}
                   planMonth={planMonth}
                   isHorizonEnd={isHorizonEnd}
+                  horizonLocked={horizonLock.locked}
+                  horizonRemainingMonths={horizonLock.remainingMonths}
                 />
               )}
             </div>

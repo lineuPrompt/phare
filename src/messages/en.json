@@ -418,7 +418,8 @@
       "horizonEnd": "Plan horizon ends here — Phare plans 12 months ahead.",
       "note": "An estimate — assumes fixed bills, transfers, and card budgets land as dated.",
       "viewRealBalance": "See real balances on Timeline",
-      "question": "Cash you'll actually have"
+      "question": "Cash you'll actually have",
+      "horizonLocked": "{count, plural, one {# more month} other {# more months}} of projection with Phare Pro"
     },
     "topPriority": "Your #1 priority",
     "sinkingFunds": "Reserve funds",
@@ -474,8 +475,12 @@
     "actualsForMonth": "Actuals for {month} — not projections",
     "reviewLockedTitle": "Read the rest with Phare Pro",
     "reviewLockedBody": "You're seeing the opening of this month's review. Phare Pro unlocks the full letter each month, plus a 12-month projection.",
-    "horizonLocked": "{count, plural, one {# more month} other {# more months}} of projection with Phare Pro",
-    "upgradeCta": "See Phare Pro"
+    "upgradeCta": "See Phare Pro",
+    "successTitle": "Thank you — setting up Phare Pro",
+    "successActivating": "Your payment went through. We're just finishing the setup, which usually takes a few seconds.",
+    "successReady": "Phare Pro is active. Your full monthly review and 12-month projection are ready.",
+    "successSlow": "This is taking longer than usual. Your payment is safe and nothing is lost — Phare Pro will switch on shortly. If it hasn't within an hour, email support@phare.money.",
+    "successToDashboard": "Go to your dashboard"
   },
   "cards": {
     "title": "Credit Card Envelopes",

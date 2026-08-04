@@ -418,7 +418,8 @@
       "horizonEnd": "L'horizon du plan s'arrête ici — Phare planifie 12 mois à l'avance.",
       "note": "Une estimation — suppose que les factures fixes, les transferts et les budgets de carte se déroulent comme prévu.",
       "viewRealBalance": "Voir les soldes réels sur la Chronologie",
-      "question": "L'argent que vous aurez réellement"
+      "question": "L'argent que vous aurez réellement",
+      "horizonLocked": "{count, plural, one {# mois de projection de plus} other {# mois de projection de plus}} avec Phare Pro"
     },
     "topPriority": "Votre priorité #1",
     "sinkingFunds": "Fonds de réserve",
@@ -474,8 +475,12 @@
     "actualsForMonth": "Données réelles pour {month} — pas des projections",
     "reviewLockedTitle": "Lisez la suite avec Phare Pro",
     "reviewLockedBody": "Vous voyez le début du bilan de ce mois-ci. Phare Pro débloque la lettre complète chaque mois, ainsi qu’une projection sur 12 mois.",
-    "horizonLocked": "{count, plural, one {# mois de projection de plus} other {# mois de projection de plus}} avec Phare Pro",
-    "upgradeCta": "Découvrir Phare Pro"
+    "upgradeCta": "Découvrir Phare Pro",
+    "successTitle": "Merci — configuration de Phare Pro",
+    "successActivating": "Votre paiement est passé. Nous terminons la configuration, ce qui prend habituellement quelques secondes.",
+    "successReady": "Phare Pro est actif. Votre bilan mensuel complet et votre projection sur 12 mois sont prêts.",
+    "successSlow": "Cela prend plus de temps que d’habitude. Votre paiement est en sécurité et rien n’est perdu — Phare Pro s’activera sous peu. Si ce n’est pas fait d’ici une heure, écrivez à support@phare.money.",
+    "successToDashboard": "Aller au tableau de bord"
   },
   "cards": {
     "title": "Enveloppes de cartes de crédit",
