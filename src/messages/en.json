@@ -134,23 +134,21 @@
           "goals": "Goal tracking",
           "sinking": "Reserve Fund",
           "bilingual": "English & French",
+          "horizon": "3-month projection",
           "reviewPreview": "Monthly review — locked preview"
         }
       },
       "pro": {
-        "name": "Phare Lighthouse Pro",
-        "price": "$19",
+        "name": "Phare Pro",
+        "price": "$15",
         "period": "/month",
         "annual": "$150/year",
-        "founding": "Founding families: $15/month, locked forever — first 50 families.",
         "perHousehold": "One subscription covers both spouses.",
         "badge": "Coming soon",
         "features": {
           "review": "Full monthly AI review",
-          "alerts": "Budget alerts",
-          "coach": "AI coach",
-          "screenshot": "Screenshot import (coming soon)",
-          "canadian": "RRSP, RESP, TFSA-aware guidance"
+          "regeneration": "Refresh your review up to 4 times a month",
+          "horizon": "12-month projection"
         }
       }
     },

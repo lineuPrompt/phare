@@ -128,29 +128,27 @@
         "cta": "Obtenir un accès anticipé",
         "ctaNote": "Pas encore ouvert — revenez bientôt.",
         "features": {
-          "onboarding": "Plan de démarrage",
+          "onboarding": "Plan de départ",
           "spending": "Suivi des dépenses",
           "family": "Partage familial",
           "goals": "Suivi des objectifs",
           "sinking": "Fonds de réserve",
-          "bilingual": "English & Français",
-          "reviewPreview": "Revue mensuelle — aperçu verrouillé"
+          "bilingual": "Français et anglais",
+          "horizon": "Projection sur 3 mois",
+          "reviewPreview": "Bilan mensuel — aperçu verrouillé"
         }
       },
       "pro": {
-        "name": "Phare Lighthouse Pro",
-        "price": "19 $",
+        "name": "Phare Pro",
+        "price": "15 $",
         "period": "/mois",
-        "annual": "150 $/an",
-        "founding": "Familles fondatrices : 15 $/mois, prix figé pour toujours — 50 premières familles.",
+        "annual": "150 $/année",
         "perHousehold": "Un seul abonnement couvre les deux conjoints.",
         "badge": "Bientôt disponible",
         "features": {
-          "review": "Revue mensuelle complète par IA",
-          "alerts": "Alertes budgétaires",
-          "coach": "Coach IA",
-          "screenshot": "Importation par capture d'écran (bientôt disponible)",
-          "canadian": "Conseils tenant compte du REER, REEE, CELI"
+          "review": "Bilan mensuel complet par IA",
+          "regeneration": "Régénérez votre bilan jusqu’à 4 fois par mois",
+          "horizon": "Projection sur 12 mois"
         }
       }
     },

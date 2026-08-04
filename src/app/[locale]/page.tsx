@@ -158,7 +158,7 @@ export default function Home() {
               </div>
 
               <div className="space-y-3 mb-8">
-                {(['onboarding', 'spending', 'family', 'goals', 'sinking', 'bilingual', 'reviewPreview'] as const).map((key) => (
+                {(['onboarding', 'spending', 'family', 'goals', 'sinking', 'bilingual', 'horizon', 'reviewPreview'] as const).map((key) => (
                   <div key={key} className="flex items-center gap-3">
                     <span style={{color: '#2ABFBF'}}>✓</span>
                     <span style={{color: '#374151'}}>{t(`pricing.free.features.${key}`)}</span>
@@ -190,11 +190,10 @@ export default function Home() {
                 <span className="text-lg" style={{color: '#6B7280'}}>{t('pricing.pro.period')}</span>
               </div>
               <p className="text-sm mb-3" style={{color: '#6B7280'}}>{t('pricing.pro.annual')}</p>
-              <p className="text-sm font-medium mb-4" style={{color: '#B45309'}}>{t('pricing.pro.founding')}</p>
               <p className="text-sm mb-6" style={{color: '#6B7280'}}>{t('pricing.pro.perHousehold')}</p>
 
               <div className="space-y-3">
-                {(['review', 'alerts', 'coach', 'screenshot', 'canadian'] as const).map((key) => (
+                {(['review', 'regeneration', 'horizon'] as const).map((key) => (
                   <div key={key} className="flex items-center gap-3">
                     <span style={{color: '#2ABFBF'}}>✓</span>
                     <span style={{color: '#374151'}}>{t(`pricing.pro.features.${key}`)}</span>
