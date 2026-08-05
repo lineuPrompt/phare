@@ -1,7 +1,8 @@
 import type { LegalDocument } from './types';
 
 /** Section ids MUST match terms.en.ts exactly — asserted by legalContent.test.ts.
- *  Same billing caveat as the English file: no Stripe integration exists. */
+ *  Tax sentence removed 2026-08-05 (not GST/QST registered); billing is real as
+ *  of the same date. See terms.en.ts for the full note. */
 const termsFr: LegalDocument = {
   title: 'Conditions d’utilisation',
   lastUpdated: '2026-08-03',
@@ -51,7 +52,7 @@ const termsFr: LegalDocument = {
       heading: 'Tarifs et paiement',
       body: [
         'Phare offre un forfait gratuit et un forfait payant, **Phare Pro**.',
-        '**Phare Pro coûte 15 $ CA par mois ou 150 $ CA par année.** Les prix sont en dollars canadiens et les taxes applicables s’ajoutent au moment du paiement. Les paiements sont traités par Stripe; nous ne conservons pas votre numéro de carte.',
+        '**Phare Pro coûte 15 $ CA par mois ou 150 $ CA par année.** Les prix sont en dollars canadiens. Les paiements sont traités par Stripe; nous ne conservons pas votre numéro de carte.',
         'Les abonnements se renouvellent automatiquement — chaque mois pour les forfaits mensuels, chaque année pour les forfaits annuels — au prix en vigueur au renouvellement. Nous vous préviendrons à l’avance de tout changement de prix, et vous pourrez annuler avant qu’il ne prenne effet.',
         'Certains ménages peuvent recevoir un accès promotionnel ou gratuit pour une période donnée. À la fin de cette période, le compte revient au forfait gratuit à moins que vous ne vous abonniez. Nous ne vous facturerons jamais sans que vous ayez saisi des renseignements de paiement.',
       ],

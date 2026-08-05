@@ -3,11 +3,18 @@ import type { LegalDocument } from './types';
 /**
  * Founder-written copy, 2026-08-03.
  *
- * ⚠ The `billing`, `refunds` and `deletion` sections describe a paid tier,
- * automatic renewal, and in-app cancellation. NONE OF THAT IS IMPLEMENTED —
- * there is no Stripe integration in src/, and no subscription UI. Flagged to
- * the founder 2026-08-04; left as authored pending their decision. Do not treat
- * this comment as resolved until either billing ships or the copy changes.
+ * TAX: the sentence "applicable taxes are added at checkout" was REMOVED on
+ * 2026-08-05. Phare is not GST/QST registered (small supplier), so no tax is
+ * collected and Stripe Tax is deliberately not enabled — a Terms sentence
+ * promising tax collection would have described something that does not happen.
+ * If registration ever becomes required, the sentence and Stripe Tax go back
+ * together, never one without the other.
+ *
+ * BILLING IS NOW REAL, resolved 2026-08-05. The `billing`, `refunds` and
+ * `deletion` sections described a paid tier before one existed; the founder
+ * chose to build it rather than hedge the document. Checkout, the webhook, the
+ * Customer Portal and entitlement all ship, and a real end-to-end payment has
+ * been processed. This file no longer overstates the product.
  */
 const termsEn: LegalDocument = {
   title: 'Terms of Service',
@@ -58,7 +65,7 @@ const termsEn: LegalDocument = {
       heading: 'Pricing and payment',
       body: [
         'Phare offers a free tier and a paid tier, **Phare Pro**.',
-        '**Phare Pro costs $15 CAD per month, or $150 CAD per year.** Prices are in Canadian dollars and applicable taxes are added at checkout. Payment is processed by Stripe; we do not store your card number.',
+        '**Phare Pro costs $15 CAD per month, or $150 CAD per year.** Prices are in Canadian dollars. Payment is processed by Stripe; we do not store your card number.',
         'Subscriptions renew automatically — monthly plans each month, annual plans each year — at the price in effect at renewal. We will tell you in advance if a price changes, and you can cancel before it takes effect.',
         'Some households may be given promotional or complimentary access for a period. When that period ends, the account reverts to the free tier unless you subscribe. We will not charge you without your having entered payment details.',
       ],
