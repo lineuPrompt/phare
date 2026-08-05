@@ -122,7 +122,7 @@
       "title": "Un conseiller financier coûte 250 $/heure",
       "subtitle": "Phare coûte moins qu'un souper en famille au restaurant.",
       "free": {
-        "name": "Phare Lighthouse",
+        "name": "Phare — Gratuit",
         "tier": "Gratuit",
         "price": "Gratuit",
         "cta": "Obtenir un accès anticipé",
@@ -134,7 +134,7 @@
           "goals": "Suivi des objectifs",
           "sinking": "Fonds de réserve",
           "bilingual": "Français et anglais",
-          "horizon": "Projection sur 3 mois",
+          "horizon": "Projection et échéancier sur 3 mois",
           "reviewPreview": "Bilan mensuel — aperçu verrouillé"
         }
       },
@@ -148,8 +148,13 @@
         "features": {
           "review": "Bilan mensuel complet par IA",
           "regeneration": "Régénérez votre bilan jusqu’à 4 fois par mois",
-          "horizon": "Projection sur 12 mois"
-        }
+          "horizon": "Projection sur 12 mois",
+          "audit": "Audit de réconciliation",
+          "newPlan": "Reconstruisez votre plan à tout moment",
+          "categories": "Vos propres catégories personnalisées"
+        },
+        "cta": "Obtenir Phare Pro",
+        "ctaNote": "Créez d’abord votre ménage — le paiement doit être rattaché à un ménage."
       }
     },
     "finalCta": {
@@ -674,7 +679,8 @@
     },
     "remainingCash": {
       "label": "{month} se termine à"
-    }
+    },
+    "horizonLocked": "{count, plural, one {# mois de plus} other {# mois de plus}} de votre échéancier avec Phare Pro"
   },
   "goals": {
     "title": "Objectifs",
@@ -1060,5 +1066,16 @@
     "acceptButton": "Accepter et continuer",
     "accepting": "Enregistrement...",
     "acceptFailed": "Impossible d'enregistrer votre acceptation. Veuillez réessayer."
+  },
+  "billing": {
+    "planMonthly": "15 $/mois",
+    "planAnnual": "150 $/année",
+    "upgradeCta": "Passer à Phare Pro",
+    "starting": "Ouverture du paiement...",
+    "checkoutFailed": "Impossible d’ouvrir le paiement. Veuillez réessayer.",
+    "lockedTitle": "Inclus dans Phare Pro",
+    "auditLocked": "L’audit de réconciliation compare votre solde enregistré à chaque transaction; il fait partie de Phare Pro.",
+    "newPlanLocked": "Reconstruire votre plan à partir des données actuelles fait partie de Phare Pro.",
+    "categoryLocked": "Vos propres catégories font partie de Phare Pro. Celles que vous avez déjà demeurent inchangées."
   }
 }

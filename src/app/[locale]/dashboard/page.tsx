@@ -19,6 +19,7 @@ import { buildMonthView, type UnbalancedDay } from '@/lib/timelineDisplayHelpers
 import type { PlanChainMonth } from '@/lib/planChainHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 import SupportLine from '@/components/shared/SupportLine';
+import UpgradeButton from '@/components/billing/UpgradeButton';
 
 type PlanResponse = { months: PlanChainMonth[] };
 
@@ -49,6 +50,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [regenerateLocked, setRegenerateLocked] = useState(false);
+  const tBilling = useTranslations('billing');
   const [regenerateError, setRegenerateError] = useState('');
 
   const [hasAnchor, setHasAnchor] = useState(true);
@@ -202,6 +205,13 @@ export default function DashboardPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        // The paywall is a 403 with a code, not a failure. Surfacing the
+        // server's own sentence keeps the reason honest instead of
+        // flattening it to 'Regeneration failed'.
+        if (res.status === 403 && err.code === 'pro_required') {
+          setRegenerateLocked(true);
+          return;
+        }
         throw new Error(err.error || 'Regeneration failed');
       }
       // Reload dashboard so the new review + top recommendation appear.
@@ -308,6 +318,12 @@ export default function DashboardPage() {
               >
                 {regenerating ? t('regenerating') : t('regeneratePlan')}
               </button>
+              {regenerateLocked && (
+                <div className="rounded-xl p-4 mt-2" style={{ background: '#F0FDFD', border: '1px solid #99F6E4' }}>
+                  <p className="text-sm mb-3" style={{ color: '#0F766E' }}>{tBilling('newPlanLocked')}</p>
+                  <UpgradeButton />
+                </div>
+              )}
               {regenerateError && (
                 <>
                   <p className="text-sm" style={{ color: '#DC2626' }}>{regenerateError}</p>

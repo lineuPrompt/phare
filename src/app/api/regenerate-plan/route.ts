@@ -64,6 +64,7 @@ import {
 } from '@/lib/coachingHelpers';
 import { businessToday, businessMonth, cycleMonthContaining } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
+import { requirePro } from '@/lib/proGate';
 
 const SEED_CATEGORIES = [
   'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
@@ -103,6 +104,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No household' }, { status: 400 });
     }
     const householdId = userRow.household_id;
+
+    // Pro-only. Also the most expensive prompt in the app, so the gate is a
+    // cost boundary as well as a product one.
+    const gate = await requirePro(supabase, householdId, 'new_plan');
+    if (!gate.allowed) return gate.response;
 
     // ── Current calendar month boundaries (household timezone, not the
     // server's UTC clock) ────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
 import type { PlanChainMonth, CardCostBasis } from '@/lib/planChainHelpers';
 import { formatCurrency } from './types';
+import UpgradeButton from '@/components/billing/UpgradeButton';
 
 function basisKey(basis: CardCostBasis): 'basisActual' | 'basisBudget' | 'basisMax' | 'basisPosted' {
   switch (basis) {
@@ -101,13 +102,7 @@ export default function PlanChainTile({
         <p className="text-sm mb-4" style={{ color: '#94A3B8' }}>
           {t('horizonLocked', { count: horizonRemainingMonths })}
         </p>
-        <Link
-          href={`/${locale}#pricing`}
-          className="inline-block px-5 py-2 rounded-full text-sm font-medium cursor-pointer hover:opacity-90 transition-all"
-          style={{ background: '#2ABFBF', color: '#0F2044' }}
-        >
-          {tDash('upgradeCta')}
-        </Link>
+        <UpgradeButton />
       </div>
     );
   }

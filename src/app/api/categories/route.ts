@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { requirePro } from '@/lib/proGate';
 
 // GET: household's expense categories (id, name) — the shared read path for
 // any form that needs a category selector (Timeline's chequing entry form,
@@ -39,6 +40,24 @@ export async function POST(request: Request) {
     const { data: userRow } = await supabase
       .from('users').select('household_id').eq('id', user.id).single();
     if (!userRow?.household_id) return NextResponse.json({ error: 'No household' }, { status: 400 });
+
+    // CREATING a category is Pro. READING and USING existing ones is not, and
+    // this route's GET is deliberately ungated.
+    //
+    // A household that was Pro and drops to free keeps every custom category
+    // it made: still listed, still selectable, still attached to every past
+    // transaction. Nothing is deleted, hidden, or migrated. A paywall changes
+    // what someone can do NEXT — it must never reach backwards into data they
+    // already own, which would be taking something away rather than declining
+    // to sell more of it.
+    //
+    // There is no is_system column to lean on: the seeded ten come from the
+    // signup trigger and are otherwise ordinary rows. "Free uses system
+    // categories only" is therefore enforced as "free adds none", which is
+    // the same rule for anyone starting free and strictly kinder to anyone
+    // who lapses.
+    const gate = await requirePro(supabase, userRow.household_id, 'custom_categories');
+    if (!gate.allowed) return gate.response;
 
     const { data: cat, error } = await supabase
       .from('categories')

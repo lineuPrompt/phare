@@ -135,6 +135,26 @@ export async function GET(request: Request) {
     const windowStart =
       windowStartParam && windowStartParam < defaultWindowStart ? windowStartParam : defaultWindowStart;
 
+    // ── Entitled forward horizon ────────────────────────────────────────────
+    // The LAST month a free household may navigate to. Past months are never
+    // bounded — a household's own history is theirs, and the pricing card sells
+    // a projection horizon, not an archive.
+    //
+    // Computed here and returned on every response so the Timeline's month nav
+    // and the projection chain agree on one boundary. Piece 3 bounded the chain
+    // but not the ledger, which left a free household able to page to month 8 of
+    // their day ledger while the projection stopped at month 3 — one paywall
+    // contradicting itself.
+    //
+    // NOTHING BELOW THIS LINE CHANGES. The 12-month window, the bridge
+    // materialisation, the real walk — all still run in full. A free
+    // household's bridge rows and ledger are byte-identical to a Pro
+    // household's; only what is RETURNED is trimmed.
+    const horizonEntitlement = await loadEntitlement(supabase, householdId);
+    const horizonMonthCount = horizonEntitlement.isPro ? HORIZON_MONTHS_PRO : HORIZON_MONTHS_FREE;
+    const hzRaw = (tm - 1) + (horizonMonthCount - 1);
+    const horizonEndMonth = `${ty + Math.floor(hzRaw / 12)}-${String((hzRaw % 12) + 1).padStart(2, '0')}`;
+
     // ── Bridge: ensure credit card payment rows exist ───────────────────────────
     // A bridge payment for spend month M appears in the chequing ledger in month M+1.
     // The 12 payment months in the window (windowStart..windowEnd) correspond to
@@ -340,8 +360,7 @@ export async function GET(request: Request) {
       //
       // Computing all 12 and slicing also lets the lock state say honestly how
       // many further months exist, without a second pass.
-      const entitlement = await loadEntitlement(supabase, householdId);
-      const allowedMonths = entitlement.isPro ? HORIZON_MONTHS_PRO : HORIZON_MONTHS_FREE;
+      const allowedMonths = horizonMonthCount;
       plan = {
         months: months.slice(0, allowedMonths),
         horizonMonths: allowedMonths,
@@ -350,7 +369,9 @@ export async function GET(request: Request) {
       };
     }
 
-    return NextResponse.json(result.ok ? { ...result, unbalancedDays, plan } : result);
+    return NextResponse.json(
+      result.ok ? { ...result, unbalancedDays, plan, horizonEndMonth, isPro: horizonEntitlement.isPro } : result
+    );
   } catch (error) {
     console.error('Timeline GET error:', error);
     return NextResponse.json({ error: 'Failed to load timeline' }, { status: 500 });

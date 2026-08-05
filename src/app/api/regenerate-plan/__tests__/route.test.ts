@@ -88,7 +88,13 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client, calls } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [
         { data: [{ amount: 5000, type: 'income', description: 'Salary', account_id: 'chq-1' }], error: null },
         { data: [], error: null }, // Coaching Layer history window (typical surplus / installments)
@@ -127,7 +133,13 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [
         // Month-scoped fetch (headline figures)
         { data: [{ amount: 5000, type: 'income', description: 'Salary', account_id: 'chq-1' }], error: null },
@@ -176,7 +188,13 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [{ data: [], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
@@ -207,7 +225,13 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [
         { data: [], error: null }, // month-scoped headline figures
         { data: [], error: null }, // Coaching Layer history window
@@ -269,7 +293,13 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [
         { data: [], error: null }, // month-scoped headline figures
         { data: [], error: null }, // Coaching Layer history window
@@ -317,7 +347,13 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [{ data: [], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
@@ -354,7 +390,13 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [
         {
           data: [
@@ -406,7 +448,13 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [{ data: [], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
@@ -446,7 +494,13 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [{ data: [], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       // No linked_account_id for either fund — the real, live shape today
@@ -488,7 +542,13 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [
         { data: [], error: null }, // month-scoped headline figures
         { data: [], error: null }, // Coaching Layer history window
@@ -549,7 +609,13 @@ describe('POST /api/regenerate-plan — the Coaching Layer', () => {
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [
         { data: [], error: null }, // month-scoped headline figures
         { data: [], error: null }, // Coaching Layer history window
@@ -606,7 +672,13 @@ describe('POST /api/regenerate-plan — the Coaching Layer', () => {
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [
         {
           data: [
@@ -680,7 +752,13 @@ describe('POST /api/regenerate-plan — the Coaching Layer', () => {
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       // No income/expenses this month or in the trailing history — typical
       // surplus computes to exactly 0, no card accounts, no sinking funds,
       // no goals: nothing real to point to anywhere.
@@ -734,7 +812,13 @@ describe('POST /api/regenerate-plan — the Coaching Layer', () => {
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [{ data: [], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
@@ -787,7 +871,13 @@ describe('POST /api/regenerate-plan — Fix 1: topRecommendation debt-figure enf
   // clean, hand-computable requiredMonthlyContribution of exactly $1000/mo.
   const debtFixture = {
     users: [{ data: { household_id: 'hh1' }, error: null }],
-    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
     transactions: [
       { data: [], error: null }, // month-scoped headline figures
       { data: [], error: null }, // Coaching Layer history window
@@ -934,7 +1024,13 @@ describe('POST /api/regenerate-plan — Fix 1: topRecommendation debt-figure enf
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [{ data: [], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
@@ -981,7 +1077,13 @@ describe('POST /api/regenerate-plan — Fix 2: coaching.insufficientHistory', ()
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [
         // Month-scoped headline: real card spend, over its own target.
         {
@@ -1058,7 +1160,13 @@ describe('POST /api/regenerate-plan — Fix 2: coaching.insufficientHistory', ()
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [
         { data: [], error: null }, // month-scoped headline figures
         {
@@ -1120,7 +1228,13 @@ describe('POST /api/regenerate-plan — Adversarial Fix 2: sinking-funds rule re
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [{ data: [], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
@@ -1162,7 +1276,13 @@ describe('POST /api/regenerate-plan — Adversarial Fix 3: category-sourcing gua
 
   const noCardFixture = {
     users: [{ data: { household_id: 'hh1' }, error: null }],
-    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
     transactions: [{ data: [], error: null }, { data: [], error: null }],
     accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
     sinking_funds: [{ data: [], error: null }],
@@ -1322,7 +1442,13 @@ describe('POST /api/regenerate-plan — Final review bugfix 1: unsanctioned line
   // left unguarded.
   const lineLabelFixture = {
     users: [{ data: { household_id: 'hh1' }, error: null }],
-    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
     transactions: [
       { data: [{ amount: 600, type: 'expense', description: 'Museum Membership', account_id: 'chq-1' }], error: null },
       { data: [], error: null }, // Coaching Layer history window
@@ -1401,7 +1527,13 @@ describe('POST /api/regenerate-plan — Final review bugfix 2: a category litera
 
   const braceCategoryFixture = {
     users: [{ data: { household_id: 'hh1' }, error: null }],
-    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
     transactions: [
       { data: [{ amount: 500, type: 'expense', description: '{name}', account_id: 'chq-1' }], error: null },
       { data: [], error: null }, // Coaching Layer history window
@@ -1488,7 +1620,13 @@ describe('POST /api/regenerate-plan — Adversarial Fix 4: borrowed cash framing
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [
         {
           data: [
@@ -1535,7 +1673,13 @@ describe('POST /api/regenerate-plan — Adversarial Fix 4: borrowed cash framing
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [
         {
           data: [
@@ -1579,7 +1723,13 @@ describe('POST /api/regenerate-plan — Adversarial Fix 4: borrowed cash framing
 
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
-      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
       transactions: [{ data: [], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
@@ -1616,7 +1766,13 @@ describe('POST /api/regenerate-plan — reviewText borrowed-cash guard (unified 
 
   const drawFixture = {
     users: [{ data: { household_id: 'hh1' }, error: null }],
-    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
     transactions: [
       {
         data: [
@@ -1797,7 +1953,13 @@ describe('POST /api/regenerate-plan — reviewText token-leak guard (third condi
 
   const noCardFixture = {
     users: [{ data: { household_id: 'hh1' }, error: null }],
-    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
     transactions: [{ data: [], error: null }, { data: [], error: null }],
     accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
     sinking_funds: [{ data: [], error: null }],
@@ -1924,7 +2086,13 @@ describe('POST /api/regenerate-plan — reviewText illustrative single-brace tok
 
   const noCardFixture = {
     users: [{ data: { household_id: 'hh1' }, error: null }],
-    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
     transactions: [{ data: [], error: null }, { data: [], error: null }],
     accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
     sinking_funds: [{ data: [], error: null }],

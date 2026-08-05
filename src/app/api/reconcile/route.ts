@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { reconcileMonth, ReconcileTxRow, ReconcileAccountRow } from '@/lib/reconcileHelpers';
+import { requirePro } from '@/lib/proGate';
 
 /**
  * GET /api/reconcile?month=YYYY-MM
@@ -30,6 +31,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'No household' }, { status: 400 });
     }
     const householdId = userRow.household_id;
+
+    // Pro-only. Enforced here, not merely hidden: the padlock in the UI is
+    // presentation, this is the boundary.
+    const gate = await requirePro(supabase, householdId, 'audit');
+    if (!gate.allowed) return gate.response;
 
     const [y, m] = monthParam.split('-').map(Number);
     const monthStart = `${monthParam}-01`;

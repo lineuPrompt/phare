@@ -105,7 +105,13 @@ vi.mock('@/lib/anthropic', () => ({
 function guardWiringFixture() {
   return {
     users: [{ data: { household_id: 'hh1' }, error: null }],
-    households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    households: [
+      // FIRST read is the Pro gate (requirePro runs before
+      // getHouseholdTimezone). These suites test plan generation, not
+      // entitlement, so they run as a paying household.
+      { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+      { data: { timezone: 'America/Toronto' }, error: null },
+    ],
     transactions: [
       {
         data: [

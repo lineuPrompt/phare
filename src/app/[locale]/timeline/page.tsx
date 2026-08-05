@@ -14,6 +14,7 @@ import type { TimelineDay, DipInfo } from '@/lib/timelineHelpers';
 import type { Account, ExpenseCategory } from '@/components/expenses/types';
 import { formatCurrency } from '@/components/expenses/types';
 import { useBusinessToday } from '@/lib/useBusinessToday';
+import UpgradeButton from '@/components/billing/UpgradeButton';
 
 // Closing position for the viewed month — read directly off the already-
 // computed monthView.closesAt (buildMonthView, Phase 3). No new math: this
@@ -49,6 +50,9 @@ type TimelineResponse =
       dip: DipInfo | null;
       nextIncomeDate: string | null;
       unbalancedDays: UnbalancedDay[];
+      // Last month this household may navigate to. Absent on older responses.
+      horizonEndMonth?: string;
+      isPro?: boolean;
     }
   | { ok: false; reason: 'no_anchor' };
 
@@ -190,15 +194,39 @@ export default function TimelinePage() {
   }
 
   const windowEndDate = data.days.length > 0 ? data.days[data.days.length - 1].date : data.balancesStartDate;
-  const months = availableMonths(data.balancesStartDate, windowEndDate);
-  const monthIdx = months.indexOf(selectedMonth);
-  const monthView = buildMonthView(data.days, data.unbalancedDays, data.openingBalance, data.balancesStartDate, selectedMonth);
+
+  // The month nav derives its range from the DATA WINDOW (balancesStartDate ..
+  // windowEndDate), not from plan.months — so bounding the projection chain in
+  // the API left the ledger fully navigable. Capping the forward end here is
+  // what makes the two agree.
+  //
+  // Only the FORWARD end is capped. availableMonths still starts at
+  // balancesStartDate, so a free household keeps every past month of its own
+  // history: the pricing card sells a projection horizon, not an archive.
+  //
+  // The API still returns the full 12-month day set; this trims which months are
+  // reachable, and nothing about what was computed or materialised changes.
+  const allMonths = availableMonths(data.balancesStartDate, windowEndDate);
+  const horizonEnd = data.horizonEndMonth ?? null;
+  const months = horizonEnd ? allMonths.filter((m) => m <= horizonEnd) : allMonths;
+  const horizonTrimmed = months.length < allMonths.length;
+
+  // A month can be selected that the cap has just removed — a ?month= link, or
+  // a household that dropped to free while sitting on month 9. indexOf would
+  // return -1 and disable BOTH arrows, stranding them with no way back. Clamp
+  // to the last reachable month instead.
+  const effectiveMonth =
+    months.length > 0 && !months.includes(selectedMonth) && selectedMonth > (horizonEnd ?? '9999-99')
+      ? months[months.length - 1]
+      : selectedMonth;
+  const monthIdx = months.indexOf(effectiveMonth);
+  const monthView = buildMonthView(data.days, data.unbalancedDays, data.openingBalance, data.balancesStartDate, effectiveMonth);
 
   const goPrev = () => { if (monthIdx > 0) setSelectedMonth(months[monthIdx - 1]); };
   const goNext = () => { if (monthIdx >= 0 && monthIdx < months.length - 1) setSelectedMonth(months[monthIdx + 1]); };
   const goToday = () => setSelectedMonth(currentMonth);
 
-  const monthLabel = new Date(selectedMonth + '-01T00:00:00').toLocaleDateString(
+  const monthLabel = new Date(effectiveMonth + '-01T00:00:00').toLocaleDateString(
     locale === 'fr' ? 'fr-CA' : 'en-CA', { month: 'long', year: 'numeric' }
   );
 
@@ -240,7 +268,7 @@ export default function TimelinePage() {
         </button>
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold" style={{ color: '#0F2044' }}>{monthLabel}</span>
-          {selectedMonth !== currentMonth && (
+          {effectiveMonth !== currentMonth && (
             <button onClick={goToday} className="text-xs px-2 py-1 rounded-full cursor-pointer" style={{ background: '#F0FDFD', color: '#2ABFBF' }}>
               {t('nav.today')}
             </button>
@@ -268,6 +296,18 @@ export default function TimelinePage() {
         />
       )}
 
+      {/* At the paywall boundary, say what is behind it. The nav arrow's
+          existing "out of range" title would be a lie here: those months exist
+          and are computed — they are simply not included in the free tier. */}
+      {horizonTrimmed && monthIdx === months.length - 1 && (
+        <div className="rounded-xl p-4" style={{ background: '#F0FDFD', border: '1px solid #99F6E4' }}>
+          <p className="text-sm mb-3" style={{ color: '#0F766E' }}>
+            {t('horizonLocked', { count: allMonths.length - months.length })}
+          </p>
+          <UpgradeButton className="text-sm" />
+        </div>
+      )}
+
       {monthView && (
         <RemainingCashStrip
           amount={monthView.closesAt}
@@ -288,7 +328,7 @@ export default function TimelinePage() {
         </button>
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold" style={{ color: '#0F2044' }}>{monthLabel}</span>
-          {selectedMonth !== currentMonth && (
+          {effectiveMonth !== currentMonth && (
             <button onClick={goToday} className="text-xs px-2 py-1 rounded-full cursor-pointer" style={{ background: '#F0FDFD', color: '#2ABFBF' }}>
               {t('nav.today')}
             </button>

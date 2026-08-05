@@ -122,7 +122,7 @@
       "title": "A financial advisor charges $250/hour",
       "subtitle": "Phare costs less than a family dinner out.",
       "free": {
-        "name": "Phare Lighthouse",
+        "name": "Phare — Free",
         "tier": "Free",
         "price": "Free",
         "cta": "Get early access",
@@ -134,7 +134,7 @@
           "goals": "Goal tracking",
           "sinking": "Reserve Fund",
           "bilingual": "English & French",
-          "horizon": "3-month projection",
+          "horizon": "3-month projection and timeline",
           "reviewPreview": "Monthly review — locked preview"
         }
       },
@@ -148,8 +148,13 @@
         "features": {
           "review": "Full monthly AI review",
           "regeneration": "Refresh your review up to 4 times a month",
-          "horizon": "12-month projection"
-        }
+          "horizon": "12-month projection",
+          "audit": "Reconciliation Audit",
+          "newPlan": "Rebuild your plan any time",
+          "categories": "Your own custom categories"
+        },
+        "cta": "Get Phare Pro",
+        "ctaNote": "Create your household first — checkout needs somewhere to attach the subscription."
       }
     },
     "finalCta": {
@@ -674,7 +679,8 @@
     },
     "remainingCash": {
       "label": "{month} is closing at"
-    }
+    },
+    "horizonLocked": "{count, plural, one {# more month} other {# more months}} of your timeline with Phare Pro"
   },
   "goals": {
     "title": "Goals",
@@ -1060,5 +1066,16 @@
     "acceptButton": "Accept and continue",
     "accepting": "Saving...",
     "acceptFailed": "Could not record your acceptance. Please try again."
+  },
+  "billing": {
+    "planMonthly": "$15/month",
+    "planAnnual": "$150/year",
+    "upgradeCta": "Upgrade to Phare Pro",
+    "starting": "Opening checkout...",
+    "checkoutFailed": "Could not start checkout. Please try again.",
+    "lockedTitle": "Part of Phare Pro",
+    "auditLocked": "The Reconciliation Audit checks your recorded balance against every transaction, and is part of Phare Pro.",
+    "newPlanLocked": "Rebuilding your plan from current data is part of Phare Pro.",
+    "categoryLocked": "Your own categories are part of Phare Pro. The categories you already have stay exactly as they are."
   }
 }

@@ -1,6 +1,6 @@
-import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { formatDate } from './types';
+import UpgradeButton from '@/components/billing/UpgradeButton';
 
 /**
  * The monthly review.
@@ -54,16 +54,9 @@ export default function ReviewCard({
           <p className="text-sm mb-4" style={{ color: '#0F766E' }}>
             {t('reviewLockedBody')}
           </p>
-          {/* Points at the pricing section of the landing page. There is no
-              checkout until piece 4, and a button that went nowhere would be
-              worse than one that explains the tier. */}
-          <Link
-            href={`/${locale}#pricing`}
-            className="inline-block px-6 py-2.5 rounded-full text-sm font-medium text-white cursor-pointer hover:opacity-90 transition-all"
-            style={{ background: '#0F766E' }}
-          >
-            {t('upgradeCta')}
-          </Link>
+          {/* The real entry point. This used to link to /#pricing, where the
+              CTA is an inert div — a paywall that could not be paid. */}
+          <UpgradeButton />
         </div>
       )}
     </div>

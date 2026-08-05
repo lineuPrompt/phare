@@ -192,14 +192,28 @@ export default function Home() {
               <p className="text-sm mb-3" style={{color: '#6B7280'}}>{t('pricing.pro.annual')}</p>
               <p className="text-sm mb-6" style={{color: '#6B7280'}}>{t('pricing.pro.perHousehold')}</p>
 
-              <div className="space-y-3">
-                {(['review', 'regeneration', 'horizon'] as const).map((key) => (
+              <div className="space-y-3 mb-8">
+                {(['review', 'regeneration', 'horizon', 'audit', 'newPlan', 'categories'] as const).map((key) => (
                   <div key={key} className="flex items-center gap-3">
                     <span style={{color: '#2ABFBF'}}>✓</span>
                     <span style={{color: '#374151'}}>{t(`pricing.pro.features.${key}`)}</span>
                   </div>
                 ))}
               </div>
+
+              {/* Signed-out visitors get SIGNUP, not checkout. A Checkout
+                  Session attaches the subscription to a household, so there is
+                  nothing to buy until one exists. Signed-in households upgrade
+                  in-app instead — from any padlock, or the Household page —
+                  which is also where the monthly/annual choice lives. */}
+              <Link
+                href={`/${locale}/signin`}
+                className="block w-full py-3 rounded-full font-semibold text-lg text-center text-white cursor-pointer hover:opacity-90 transition-all"
+                style={{background: '#2ABFBF'}}
+              >
+                {t('pricing.pro.cta')}
+              </Link>
+              <p className="text-xs text-center mt-2" style={{color: '#9CA3AF'}}>{t('pricing.pro.ctaNote')}</p>
             </div>
           </div>
         </div>

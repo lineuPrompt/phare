@@ -8,6 +8,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import { formatCurrency, formatSignedAmount } from '@/components/expenses/types';
 import type { ReconciliationResult, AccountAudit } from '@/lib/reconcileHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
+import UpgradeButton from '@/components/billing/UpgradeButton';
 
 type ReconcileData = ReconciliationResult & { month: string };
 
@@ -244,6 +245,10 @@ export default function ReconcilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [months, setMonths] = useState<string[]>([]);
+  // Distinct from `error`: a paywall is not a failure, and rendering it as one
+  // teaches people the product is broken.
+  const [locked, setLocked] = useState(false);
+  const tBilling = useTranslations('billing');
 
   useEffect(() => {
     fetch('/api/reconcile/months')
@@ -255,10 +260,14 @@ export default function ReconcilePage() {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
+    setLocked(false);
     fetch(`/api/reconcile?month=${selectedMonth}`)
       .then(async (res) => {
         if (res.status === 401) { router.push(`/${locale}/signin`); return null; }
         const json = await res.json();
+        // 403 + pro_required is the server's paywall, enforced there. This
+        // branch only decides how it LOOKS.
+        if (res.status === 403 && json.code === 'pro_required') { setLocked(true); return null; }
         if (json.error) { setError(json.error); return null; }
         return json as ReconcileData;
       })
@@ -310,6 +319,14 @@ export default function ReconcilePage() {
               </p>
             )}
 
+            {!loading && locked && (
+              <div className="rounded-2xl p-6" style={{ background: '#F0FDFD', border: '1px solid #99F6E4' }}>
+                <p className="font-semibold text-sm mb-1" style={{ color: '#0F766E' }}>{tBilling('lockedTitle')}</p>
+                <p className="text-sm mb-4" style={{ color: '#0F766E' }}>{tBilling('auditLocked')}</p>
+                <UpgradeButton />
+              </div>
+            )}
+
             {!loading && error && (
               <div
                 className="px-4 py-3 rounded-xl text-sm"
@@ -319,7 +336,7 @@ export default function ReconcilePage() {
               </div>
             )}
 
-            {!loading && data && !error && (
+            {!loading && data && !error && !locked && (
               <>
                 {/* Reconciliation status */}
                 <ReconcileStatus
