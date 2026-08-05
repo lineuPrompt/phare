@@ -21,6 +21,15 @@ export type EntitlementInput = {
   subscription_status?: string | null;
   /** When paid access ends. Null when there has never been a subscription. */
   subscription_current_period_end?: string | null;
+  /**
+   * Stripe's cancel_at_period_end. A mid-period cancellation keeps status
+   * 'active' and sets this — so WITHOUT reading it, a cancelled household is
+   * indistinguishable from a renewing one. The practical damage is not a
+   * missing label: someone cancels, comes back, sees nothing changed, and
+   * concludes the cancellation failed. Then they cancel again, or email
+   * support, or dispute the charge.
+   */
+  subscription_cancel_at_period_end?: boolean | null;
   /** Founder-granted access, independent of Stripe entirely. YYYY-MM-DD. */
   comp_until?: string | null;
 };
@@ -28,6 +37,8 @@ export type EntitlementInput = {
 export type EntitlementReason =
   | 'comp'
   | 'active'
+  /** Paid and working, but will not renew. Still fully Pro until period end. */
+  | 'active_ending'
   | 'grace_past_due'
   | 'cancelled_paid_through'
   | 'none';
@@ -124,7 +135,14 @@ export function entitlementFor(
   // against a stale row that says active long after Stripe moved on.
   if (!paidThrough) return { isPro: false, reason: 'none' };
 
-  if (status && PAYING_STATUSES.has(status)) return { isPro: true, reason: 'active' };
+  if (status && PAYING_STATUSES.has(status)) {
+    // Same entitlement, different sentence. The Terms promise access through
+    // the paid period after cancelling; this is what lets the UI say so.
+    return {
+      isPro: true,
+      reason: household.subscription_cancel_at_period_end === true ? 'active_ending' : 'active',
+    };
+  }
   if (status && GRACE_STATUSES.has(status)) return { isPro: true, reason: 'grace_past_due' };
   if (status && PAID_THROUGH_STATUSES.has(status)) {
     return { isPro: true, reason: 'cancelled_paid_through' };

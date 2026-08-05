@@ -23,7 +23,7 @@ export interface HouseholdReader {
 }
 
 /** The exact column list entitlement depends on. One place, so it cannot drift. */
-export const ENTITLEMENT_COLUMNS = 'subscription_status, subscription_current_period_end, comp_until';
+export const ENTITLEMENT_COLUMNS = 'subscription_status, subscription_current_period_end, subscription_cancel_at_period_end, comp_until';
 
 export async function loadEntitlement(
   supabase: HouseholdReader,

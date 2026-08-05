@@ -163,3 +163,40 @@ describe('horizonMonthsFor', () => {
     expect(HORIZON_MONTHS_PRO).toBeGreaterThan(HORIZON_MONTHS_FREE);
   });
 });
+
+describe('active_ending — cancelled mid-period, still entitled', () => {
+  // Without this, a household that cancels sees NOTHING change on return and
+  // concludes the cancellation failed — then cancels again, or emails support,
+  // or disputes the charge. The entitlement is identical; only the sentence
+  // the UI can say differs.
+  it('active + cancel_at_period_end reads as active_ending, still Pro', () => {
+    expect(entitlementFor({
+      subscription_status: 'active',
+      subscription_current_period_end: future,
+      subscription_cancel_at_period_end: true,
+    }, NOW)).toEqual({ isPro: true, reason: 'active_ending' });
+  });
+
+  it('active WITHOUT the flag stays plain active', () => {
+    expect(entitlementFor({
+      subscription_status: 'active',
+      subscription_current_period_end: future,
+      subscription_cancel_at_period_end: false,
+    }, NOW)).toEqual({ isPro: true, reason: 'active' });
+  });
+
+  it('the flag alone never grants access once the period has ended', () => {
+    expect(isPro({
+      subscription_status: 'active',
+      subscription_current_period_end: past,
+      subscription_cancel_at_period_end: true,
+    }, NOW)).toBe(false);
+  });
+
+  it('a comped household is unaffected by the flag', () => {
+    expect(entitlementFor({
+      comp_until: '2027-11-01',
+      subscription_cancel_at_period_end: true,
+    }, NOW).reason).toBe('comp');
+  });
+});
