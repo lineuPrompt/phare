@@ -65,6 +65,7 @@ import {
 import { businessToday, businessMonth, cycleMonthContaining } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { requirePro } from '@/lib/proGate';
+import { reserveRegeneration } from '@/lib/regenerationQuotaServer';
 
 const SEED_CATEGORIES = [
   'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
@@ -117,6 +118,25 @@ export async function POST(request: Request) {
     const year = ty;
     const month = tmo - 1; // 0-indexed, matching firstOfMonth's contract
     const monthStart = firstOfMonth(year, month);
+
+    // Claim the slot BEFORE generating. Everything below this line costs money,
+    // and this is placed after the timezone lookup only so the quota's calendar
+    // month reuses it rather than resolving the household twice.
+    const reservation = await reserveRegeneration(
+      supabase, householdId, user.id, businessMonth(timezone)
+    );
+    if (!reservation.ok) {
+      return NextResponse.json(
+        {
+          error: reservation.reason === 'exhausted'
+            ? 'You have used all of this month’s review refreshes.'
+            : 'Could not start a refresh right now. Please try again.',
+          code: reservation.reason === 'exhausted' ? 'quota_exhausted' : 'quota_unavailable',
+          quota: reservation.quota,
+        },
+        { status: reservation.reason === 'exhausted' ? 429 : 503 }
+      );
+    }
     const monthEnd = firstOfMonth(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1);
     const currentMonthLabel = monthStart.slice(0, 7); // YYYY-MM
 

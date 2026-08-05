@@ -237,6 +237,12 @@ describe('promotion codes', () => {
     expect(createdSessions[0].allow_promotion_codes).toBe(true);
   });
 
+  it('does not demand a card when the total is zero for the life of the sub', async () => {
+    // Default is 'always', which asked for payment details on a 100%-off code.
+    await checkout({ plan: 'monthly' });
+    expect(createdSessions[0].payment_method_collection).toBe('if_required');
+  });
+
   it('enables it for the annual plan too', async () => {
     await checkout({ plan: 'annual' });
     expect(createdSessions[0].allow_promotion_codes).toBe(true);

@@ -84,7 +84,13 @@ export type EventType =
   // afterwards; it deliberately does NOT carry the email, since
   // member_deletion_requests already holds that under household-scoped RLS
   // and duplicating it here would widen the erasure's own footprint.
-  | 'member_self_deleted';
+  | 'member_self_deleted'
+  // One Pro review regeneration. UNLIKE every other event here, this one is
+  // load-bearing rather than diagnostic: it IS the monthly quota counter, so
+  // it is written with an awaited insert in regenerationQuotaServer.ts rather
+  // than through logEvent's deliberately-swallowed path. metadata.month is the
+  // household's own calendar month, which is what the count matches on.
+  | 'review_regenerated';
 
 /**
  * Insert one event row.

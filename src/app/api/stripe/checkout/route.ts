@@ -140,6 +140,19 @@ export async function POST(request: Request) {
       // customers; it does not make promo codes the comp mechanism.
       allow_promotion_codes: true,
 
+      // Don't demand a card for a subscription that will never charge one.
+      // The default is 'always', which is why a 100%-off promotion code still
+      // asked for payment details — friction on the one path where there is
+      // nothing to collect. 'if_required' keeps normal checkout unchanged and
+      // skips collection only when the total is genuinely zero for the life of
+      // the subscription.
+      //
+      // Consequence worth knowing: a household that later loses the discount
+      // has no card on file, so Stripe's first real invoice will fail into
+      // past_due — which entitlement already treats as a grace period until the
+      // period end rather than an instant cut-off.
+      payment_method_collection: 'if_required',
+
       // Existing customer if the webhook has recorded one; otherwise let Stripe
       // create it from this email. We deliberately do NOT create the customer
       // ourselves — that would be this route writing billing state.

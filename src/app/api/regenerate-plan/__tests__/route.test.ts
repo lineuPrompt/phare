@@ -1811,7 +1811,10 @@ describe('POST /api/regenerate-plan — reviewText borrowed-cash guard (unified 
     expect(createMock).toHaveBeenCalledTimes(3);
     expect(json.reviewText).toBe('A fine, clean month overall.');
 
-    const eventCall = calls.find((c) => c.table === 'events' && c.method === 'insert');
+    const eventCall = calls.find(
+      (c) => c.table === 'events' && c.method === 'insert' &&
+             (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
+    );
     expect(eventCall).toBeTruthy();
     const eventPayload = eventCall!.args[0] as { event_type: string; metadata: { triggeredBy: string[]; outcome: string } };
     expect(eventPayload.event_type).toBe('review_text_guard_retried');
@@ -1843,7 +1846,10 @@ describe('POST /api/regenerate-plan — reviewText borrowed-cash guard (unified 
     expect(json.reviewText).toContain('$1000.00');
     expect(json.reviewText).toContain('borrowed');
 
-    const eventCall = calls.find((c) => c.table === 'events' && c.method === 'insert');
+    const eventCall = calls.find(
+      (c) => c.table === 'events' && c.method === 'insert' &&
+             (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
+    );
     const eventPayload = eventCall!.args[0] as { metadata: { outcome: string } };
     expect(eventPayload.metadata.outcome).toBe('fallback_borrowed');
   });
@@ -1988,7 +1994,10 @@ describe('POST /api/regenerate-plan — reviewText token-leak guard (third condi
     expect(createMock).toHaveBeenCalledTimes(3);
     expect(json.reviewText).toBe('A fine, clean month overall.');
 
-    const eventCall = calls.find((c) => c.table === 'events' && c.method === 'insert');
+    const eventCall = calls.find(
+      (c) => c.table === 'events' && c.method === 'insert' &&
+             (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
+    );
     const eventPayload = eventCall!.args[0] as { metadata: { triggeredBy: string[]; outcome: string } };
     expect(eventPayload.metadata.triggeredBy).toEqual(['token_leak']);
     expect(eventPayload.metadata.outcome).toBe('retry_passed');
@@ -2016,7 +2025,10 @@ describe('POST /api/regenerate-plan — reviewText token-leak guard (third condi
     expect(json.reviewText).not.toContain('{{');
     expect(json.reviewText).toContain("couldn't be generated safely");
 
-    const eventCall = calls.find((c) => c.table === 'events' && c.method === 'insert');
+    const eventCall = calls.find(
+      (c) => c.table === 'events' && c.method === 'insert' &&
+             (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
+    );
     const eventPayload = eventCall!.args[0] as { metadata: { outcome: string } };
     expect(eventPayload.metadata.outcome).toBe('fallback_token');
   });
@@ -2065,7 +2077,10 @@ describe('POST /api/regenerate-plan — reviewText token-leak guard (third condi
 
     // Both fallbacks share the same generic text, but the outcome field
     // must record token_leak as the deciding reason, not category_sourcing.
-    const eventCall = calls.find((c) => c.table === 'events' && c.method === 'insert');
+    const eventCall = calls.find(
+      (c) => c.table === 'events' && c.method === 'insert' &&
+             (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
+    );
     const eventPayload = eventCall!.args[0] as { metadata: { outcome: string } };
     expect(eventPayload.metadata.outcome).toBe('fallback_token');
   });
@@ -2121,7 +2136,10 @@ describe('POST /api/regenerate-plan — reviewText illustrative single-brace tok
     expect(createMock).toHaveBeenCalledTimes(3);
     expect(json.reviewText).toBe('A fine, clean month overall.');
 
-    const eventCall = calls.find((c) => c.table === 'events' && c.method === 'insert');
+    const eventCall = calls.find(
+      (c) => c.table === 'events' && c.method === 'insert' &&
+             (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
+    );
     const eventPayload = eventCall!.args[0] as { metadata: { triggeredBy: string[] } };
     expect(eventPayload.metadata.triggeredBy).toEqual(['token_leak']);
   });
@@ -2184,7 +2202,10 @@ describe('POST /api/regenerate-plan — reviewText illustrative single-brace tok
     expect(json.reviewText).toContain('borrowed');
     expect(json.reviewText).not.toContain('{name}');
 
-    const eventCall = calls.find((c) => c.table === 'events' && c.method === 'insert');
+    const eventCall = calls.find(
+      (c) => c.table === 'events' && c.method === 'insert' &&
+             (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
+    );
     const eventPayload = eventCall!.args[0] as { metadata: { outcome: string; triggeredBy: string[] } };
     expect(eventPayload.metadata.outcome).toBe('fallback_borrowed');
     expect(eventPayload.metadata.triggeredBy).toEqual(['token_leak']);
