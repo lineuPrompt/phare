@@ -212,3 +212,33 @@ describe('POST /api/stripe/checkout', () => {
     expect(json.code).toBe('no_session_url');
   });
 });
+
+describe('promotion codes', () => {
+  // Same fixture reset as the main suite — resetModules alone leaves the shared
+  // mock state from whichever test ran last.
+  beforeEach(() => {
+    vi.resetModules();
+    writes = [];
+    createdSessions = [];
+    userRow = { data: { household_id: 'hh1', role: 'owner', email: 'owner@example.com' }, error: null };
+    householdRow = { data: { stripe_customer_id: null, name: 'The Test Household' }, error: null };
+    entitlementRow = FREE;
+    stripeIsConfigured = true;
+    sessionUrl = 'https://checkout.stripe.com/c/pay/cs_test_1';
+    createThrows = false;
+    process.env.STRIPE_PRICE_MONTHLY = 'price_monthly';
+    process.env.STRIPE_PRICE_ANNUAL = 'price_annual';
+  });
+
+  it('enables the promotion-code field on the session', async () => {
+    // Stripe HIDES the field entirely without this flag, so dashboard coupons
+    // are unreachable with no hint that a code was meant to work.
+    await checkout({ plan: 'monthly' });
+    expect(createdSessions[0].allow_promotion_codes).toBe(true);
+  });
+
+  it('enables it for the annual plan too', async () => {
+    await checkout({ plan: 'annual' });
+    expect(createdSessions[0].allow_promotion_codes).toBe(true);
+  });
+});

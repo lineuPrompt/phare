@@ -129,6 +129,17 @@ export async function POST(request: Request) {
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
 
+      // Without this Stripe HIDES the promotion-code field entirely — the
+      // coupons in the dashboard are unreachable, with no hint that a code was
+      // ever meant to work. Note the distinction it depends on: a Coupon is the
+      // discount, a Promotion Code is the customer-facing string attached to
+      // one. A coupon with no promotion code has nothing to type here.
+      //
+      // Independent of comp_until, which grants access with no Stripe objects
+      // at all. Enabling this field is for discounts on genuinely paying
+      // customers; it does not make promo codes the comp mechanism.
+      allow_promotion_codes: true,
+
       // Existing customer if the webhook has recorded one; otherwise let Stripe
       // create it from this email. We deliberately do NOT create the customer
       // ourselves — that would be this route writing billing state.
@@ -153,9 +164,6 @@ export async function POST(request: Request) {
       success_url: `${origin}/${locale}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/${locale}/household`,
 
-      // Lets a returning customer manage the subscription later from the same
-      // billing relationship rather than accumulating duplicates.
-      allow_promotion_codes: false,
     });
 
     if (!session.url) {
