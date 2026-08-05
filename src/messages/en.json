@@ -125,8 +125,7 @@
         "name": "Phare — Free",
         "tier": "Free",
         "price": "Free",
-        "cta": "Get early access",
-        "ctaNote": "Not open yet — check back soon.",
+        "cta": "Start free",
         "features": {
           "onboarding": "Onboarding plan",
           "spending": "Spending tracking",
@@ -1076,6 +1075,16 @@
     "lockedTitle": "Part of Phare Pro",
     "auditLocked": "The Reconciliation Audit checks your recorded balance against every transaction, and is part of Phare Pro.",
     "newPlanLocked": "Rebuilding your plan from current data is part of Phare Pro.",
-    "categoryLocked": "Your own categories are part of Phare Pro. The categories you already have stay exactly as they are."
+    "categoryLocked": "Your own categories are part of Phare Pro. The categories you already have stay exactly as they are.",
+    "sectionTitle": "Your plan",
+    "stateFree": "You're on the free plan.",
+    "stateActive": "Phare Pro — renews {date}.",
+    "stateEnding": "Phare Pro until {date}. Your subscription is cancelled and won't renew — you keep everything until then.",
+    "stateComped": "Phare Pro, complimentary until {date}. There's nothing to pay and nothing to manage.",
+    "manage": "Manage subscription",
+    "opening": "Opening...",
+    "portalFailed": "Could not open billing. Please try again.",
+    "updating": "Updating your plan...",
+    "ownerOnlyNote": "Only the household owner can change the subscription."
   }
 }

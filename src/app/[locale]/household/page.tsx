@@ -8,6 +8,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import SupportLine from '@/components/shared/SupportLine';
 import ExportDataSection from '@/components/shared/ExportDataSection';
 import DeleteAccountSection from '@/components/household/DeleteAccountSection';
+import SubscriptionSection from '@/components/household/SubscriptionSection';
 import {
   memberRoleView,
   canPromoteToOwner,
@@ -559,6 +560,11 @@ export default function HouseholdPage() {
               )}
             </section>
             )}
+
+            {/* Between export and deletion: the household page owns
+                account-level administration, and billing belongs with it.
+                Deletion stays last because it is the destructive one. */}
+            <SubscriptionSection locale={locale} />
 
             <ExportDataSection locale={locale} />
 

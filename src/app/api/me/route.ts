@@ -28,6 +28,31 @@ export async function GET() {
       ? await loadEntitlement(supabase, userRow.household_id)
       : { isPro: false, reason: 'none' as const };
 
+    // Read with the ADMIN client: stripe_customer_id and the subscription
+    // columns are written only by the webhook and are not part of the caller's
+    // own RLS scope. Degrades to "free, no billing account" rather than failing
+    // the endpoint — /api/me is called on nearly every page.
+    let billing = { periodEnd: null as string | null, compUntil: null as string | null, hasBillingAccount: false };
+    if (userRow.household_id) {
+      try {
+        const admin = createAdminClient();
+        const { data: hh } = await admin
+          .from('households')
+          .select('subscription_current_period_end, comp_until, stripe_customer_id')
+          .eq('id', userRow.household_id)
+          .maybeSingle();
+        if (hh) {
+          billing = {
+            periodEnd: hh.subscription_current_period_end ?? null,
+            compUntil: hh.comp_until ?? null,
+            hasBillingAccount: Boolean(hh.stripe_customer_id),
+          };
+        }
+      } catch (billingErr) {
+        console.error('/api/me — billing read failed, treating as free:', billingErr);
+      }
+    }
+
     return NextResponse.json({
       isPro: entitlement.isPro,
       entitlementReason: entitlement.reason,
@@ -44,6 +69,16 @@ export async function GET() {
       terms_version: userRow.terms_version ?? null,
       termsCurrent: hasAcceptedCurrent(userRow.terms_accepted_at, userRow.terms_version),
       currentLegalVersion: CURRENT_LEGAL_VERSION,
+
+      // Billing detail for the Household page's subscription section. isPro and
+      // entitlementReason above already come from loadEntitlement; these are the
+      // extra facts the four states need to render distinctly.
+      subscriptionPeriodEnd: billing.periodEnd,
+      compUntil: billing.compUntil,
+      // The Portal guard is the CUSTOMER, not entitlement: a comped household is
+      // Pro with no customer, a lapsed one is not Pro but has one and must still
+      // reach invoice history.
+      hasBillingAccount: billing.hasBillingAccount,
     });
   } catch {
     return NextResponse.json({ error: 'Failed to load user' }, { status: 500 });

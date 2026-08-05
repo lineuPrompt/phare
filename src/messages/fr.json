@@ -125,8 +125,7 @@
         "name": "Phare — Gratuit",
         "tier": "Gratuit",
         "price": "Gratuit",
-        "cta": "Obtenir un accès anticipé",
-        "ctaNote": "Pas encore ouvert — revenez bientôt.",
+        "cta": "Commencer gratuitement",
         "features": {
           "onboarding": "Plan de départ",
           "spending": "Suivi des dépenses",
@@ -1076,6 +1075,16 @@
     "lockedTitle": "Inclus dans Phare Pro",
     "auditLocked": "L’audit de réconciliation compare votre solde enregistré à chaque transaction; il fait partie de Phare Pro.",
     "newPlanLocked": "Reconstruire votre plan à partir des données actuelles fait partie de Phare Pro.",
-    "categoryLocked": "Vos propres catégories font partie de Phare Pro. Celles que vous avez déjà demeurent inchangées."
+    "categoryLocked": "Vos propres catégories font partie de Phare Pro. Celles que vous avez déjà demeurent inchangées.",
+    "sectionTitle": "Votre forfait",
+    "stateFree": "Vous êtes sur le forfait gratuit.",
+    "stateActive": "Phare Pro — renouvellement le {date}.",
+    "stateEnding": "Phare Pro jusqu’au {date}. Votre abonnement est annulé et ne sera pas renouvelé — vous conservez tout jusque-là.",
+    "stateComped": "Phare Pro, gratuit jusqu’au {date}. Il n’y a rien à payer ni à gérer.",
+    "manage": "Gérer l’abonnement",
+    "opening": "Ouverture...",
+    "portalFailed": "Impossible d’ouvrir la facturation. Veuillez réessayer.",
+    "updating": "Mise à jour de votre forfait...",
+    "ownerOnlyNote": "Seul le propriétaire du ménage peut modifier l’abonnement."
   }
 }

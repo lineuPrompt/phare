@@ -166,13 +166,16 @@ export default function Home() {
                 ))}
               </div>
 
-              <div
-                className="block w-full py-3 rounded-full font-semibold text-lg text-center"
-                style={{background: '#F3F4F6', color: '#9CA3AF'}}
+              {/* A working paid path next to an inert free one reads as broken.
+                  Both now go to signup — checkout needs a household either way,
+                  so free and paid share the same first step. */}
+              <Link
+                href={`/${locale}/signin`}
+                className="block w-full py-3 rounded-full font-semibold text-lg text-center cursor-pointer hover:opacity-90 transition-all"
+                style={{border: '2px solid #0F2044', color: '#0F2044'}}
               >
                 {t('pricing.free.cta')}
-              </div>
-              <p className="text-xs text-center mt-2" style={{color: '#9CA3AF'}}>{t('pricing.free.ctaNote')}</p>
+              </Link>
             </div>
 
             {/* Pro tier */}
