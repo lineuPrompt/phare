@@ -52,8 +52,7 @@
     "hero": {
       "title": "Les finances de votre famille, enfin claires.",
       "subtitle": "Remplissez notre modèle simple — ou entrez vos chiffres à la main. Obtenez un plan financier complet en 5 minutes. Sachez exactement quoi faire ce mois-ci.",
-      "cta": "Obtenir un accès anticipé",
-      "ctaNote": "Pas encore ouvert — revenez bientôt.",
+      "cta": "Commencer gratuitement",
       "secondaryCta": "Voir comment ça marche",
       "socialProof": "Conçu pour les familles canadiennes · REER, REEE, CELI · English & Français"
     },
@@ -159,8 +158,7 @@
     "finalCta": {
       "title": "Votre famille mérite un plan financier.",
       "subtitle": "Pas un autre tableur. Pas une autre application qui suit ce que vous avez déjà dépensé. Un plan qui vous dit quoi faire ensuite.",
-      "cta": "Obtenir un accès anticipé",
-      "ctaNote": "Pas encore ouvert — revenez bientôt."
+      "cta": "Commencer gratuitement"
     },
     "footer": {
       "contact": "Nous joindre :",

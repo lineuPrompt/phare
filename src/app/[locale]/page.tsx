@@ -32,12 +32,13 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4">
-          <div
-            className="px-8 py-3 rounded-full text-white font-semibold text-lg inline-block"
-            style={{background: '#9CA3AF'}}
+          <Link
+            href={`/${locale}/signin`}
+            className="px-8 py-3 rounded-full text-white font-semibold text-lg inline-block cursor-pointer hover:opacity-90 transition-all"
+            style={{background: '#0F2044'}}
           >
             {t('hero.cta')}
-          </div>
+          </Link>
           <a href="#how-it-works"
             className="px-8 py-3 rounded-full font-semibold text-lg transition-all hover:opacity-90 cursor-pointer inline-block"
             style={{ border: '2px solid #0F2044', color: '#0F2044' }}
@@ -45,7 +46,6 @@ export default function Home() {
             {t('hero.secondaryCta')}
           </a>
         </div>
-        <p className="mt-2 text-xs" style={{color: '#9CA3AF'}}>{t('hero.ctaNote')}</p>
 
         <p className="mt-6 text-sm" style={{color: '#6B7280'}}>
           {t('hero.socialProof')}
@@ -231,13 +231,13 @@ export default function Home() {
           <p className="text-lg mb-10" style={{color: '#94A3B8'}}>
             {t('finalCta.subtitle')}
           </p>
-          <div
-            className="px-10 py-4 rounded-full font-semibold text-lg inline-block"
-            style={{background: 'rgba(255,255,255,0.1)', color: '#94A3B8'}}
+          <Link
+            href={`/${locale}/signin`}
+            className="px-10 py-4 rounded-full font-semibold text-lg inline-block cursor-pointer hover:opacity-90 transition-all"
+            style={{background: '#2ABFBF', color: '#0F2044'}}
           >
             {t('finalCta.cta')}
-          </div>
-          <p className="text-sm mt-3" style={{color: '#64748B'}}>{t('finalCta.ctaNote')}</p>
+          </Link>
         </div>
       </section>
 

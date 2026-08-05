@@ -52,8 +52,7 @@
     "hero": {
       "title": "Your family finances, finally clear.",
       "subtitle": "Fill in our simple template — or enter your numbers by hand. Get a complete financial plan in 5 minutes. Know exactly what to do this month.",
-      "cta": "Get early access",
-      "ctaNote": "Not open yet — check back soon.",
+      "cta": "Start free",
       "secondaryCta": "See how it works",
       "socialProof": "Built for Canadian families · RRSP, RESP, TFSA aware · English & Français"
     },
@@ -159,8 +158,7 @@
     "finalCta": {
       "title": "Your family deserves a financial plan.",
       "subtitle": "Not another spreadsheet. Not another app that tracks what you already spent. A plan that tells you what to do next.",
-      "cta": "Get early access",
-      "ctaNote": "Not open yet — check back soon."
+      "cta": "Start free"
     },
     "footer": {
       "contact": "Contact:",
