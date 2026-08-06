@@ -109,6 +109,17 @@ export type DashboardData = {
   // drives the upgrade UI, it does not hide anything.
   reviewLocked?: boolean;
   isPro?: boolean;
+  // Null for a free household — the Pro gate refuses regenerate-plan before any
+  // quota question arises, so a count would be about something they cannot do.
+  regenerationQuota?: {
+    used: number;
+    limit: number;
+    remaining: number;
+    allowed: boolean;
+    month: string;
+    /** 'YYYY-MM-DD', first of the next month in the HOUSEHOLD's timezone. */
+    resetsOn: string;
+  } | null;
   topRecommendation?: string | null;
   reviewDate?: string | null;
   // Recurring items (income and expense) with a real cadence/amount but no

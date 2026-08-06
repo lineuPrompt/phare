@@ -482,7 +482,9 @@
     "successActivating": "Your payment went through. We're just finishing the setup, which usually takes a few seconds.",
     "successReady": "Phare Pro is active. Your full monthly review and 12-month projection are ready.",
     "successSlow": "This is taking longer than usual. Your payment is safe and nothing is lost — Phare Pro will switch on shortly. If it hasn't within an hour, email support@phare.money.",
-    "successToDashboard": "Go to your dashboard"
+    "successToDashboard": "Go to your dashboard",
+    "quotaRemaining": "{count, plural, one {# review refresh left this month} other {# review refreshes left this month}}",
+    "quotaExhausted": "You've used your {limit} review refreshes this month. Resets {date}."
   },
   "cards": {
     "title": "Credit Card Envelopes",

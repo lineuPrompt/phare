@@ -34,6 +34,17 @@ type TimelineDipResponse =
     }
   | { ok: false; reason: 'no_anchor' };
 
+/** 'YYYY-MM-DD' → a readable date. Parsed as LOCAL, not UTC: `new Date('2026-09-01')`
+ *  is midnight UTC, which renders as 31 August anywhere west of Greenwich. */
+function formatResetDate(iso: string, locale: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+}
+
 export default function DashboardPage() {
   const t = useTranslations('dashboard');
   const router = useRouter();
@@ -106,6 +117,11 @@ export default function DashboardPage() {
   // A free household's chain stops at 3 months while the window still spans
   // 12. Without this the projection tile just vanishes from month 4 onward,
   // which reads as a bug rather than a tier — see horizonLock.ts.
+  // null for a free household — they cannot reach regenerate-plan at all, so a
+  // count would describe something they cannot do.
+  const quota = data?.regenerationQuota ?? null;
+  const quotaExhausted = Boolean(quota && !quota.allowed);
+
   const horizonLock = horizonLockState(
     plan as unknown as HorizonPlan | null,
     displayMonth,
@@ -212,6 +228,13 @@ export default function DashboardPage() {
           setRegenerateLocked(true);
           return;
         }
+        // Cap reached between page load and click (the other member spent the
+        // last one). Refresh the dashboard so the button and the count agree,
+        // rather than showing a red error for a state the UI can express.
+        if (res.status === 429 && err.code === 'quota_exhausted') {
+          loadDashboard(displayMonth);
+          return;
+        }
         throw new Error(err.error || 'Regeneration failed');
       }
       // Reload dashboard so the new review + top recommendation appear.
@@ -312,12 +335,28 @@ export default function DashboardPage() {
             <div className="flex flex-col items-center gap-2 pt-2">
               <button
                 onClick={handleRegenerate}
-                disabled={regenerating}
-                className="px-6 py-2.5 rounded-full text-sm font-medium cursor-pointer hover:opacity-80 transition-all disabled:opacity-50"
+                disabled={regenerating || quotaExhausted}
+                className="px-6 py-2.5 rounded-full text-sm font-medium cursor-pointer hover:opacity-80 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ border: '1.5px solid #0F2044', color: '#0F2044' }}
               >
                 {regenerating ? t('regenerating') : t('regeneratePlan')}
               </button>
+
+              {/* The allowance, stated before it is spent. A capped household
+                  should learn it from the button, not by pressing it and
+                  reading a 429. The reset date comes from the server, computed
+                  in the household's own timezone — a UTC month boundary would
+                  roll over at 8pm on the 31st for a Quebec family. */}
+              {quota && quota.allowed && (
+                <p className="text-xs" style={{ color: '#6B7280' }}>
+                  {t('quotaRemaining', { count: quota.remaining })}
+                </p>
+              )}
+              {quotaExhausted && (
+                <p className="text-xs text-center" style={{ color: '#6B7280' }}>
+                  {t('quotaExhausted', { limit: quota!.limit, date: formatResetDate(quota!.resetsOn, locale) })}
+                </p>
+              )}
               {regenerateLocked && (
                 <div className="rounded-xl p-4 mt-2" style={{ background: '#F0FDFD', border: '1px solid #99F6E4' }}>
                   <p className="text-sm mb-3" style={{ color: '#0F766E' }}>{tBilling('newPlanLocked')}</p>

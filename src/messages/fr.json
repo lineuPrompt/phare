@@ -482,7 +482,9 @@
     "successActivating": "Votre paiement est passé. Nous terminons la configuration, ce qui prend habituellement quelques secondes.",
     "successReady": "Phare Pro est actif. Votre bilan mensuel complet et votre projection sur 12 mois sont prêts.",
     "successSlow": "Cela prend plus de temps que d’habitude. Votre paiement est en sécurité et rien n’est perdu — Phare Pro s’activera sous peu. Si ce n’est pas fait d’ici une heure, écrivez à support@phare.money.",
-    "successToDashboard": "Aller au tableau de bord"
+    "successToDashboard": "Aller au tableau de bord",
+    "quotaRemaining": "{count, plural, one {# rafraîchissement de bilan restant ce mois-ci} other {# rafraîchissements de bilan restants ce mois-ci}}",
+    "quotaExhausted": "Vous avez utilisé vos {limit} rafraîchissements de bilan ce mois-ci. Réinitialisation le {date}."
   },
   "cards": {
     "title": "Enveloppes de cartes de crédit",

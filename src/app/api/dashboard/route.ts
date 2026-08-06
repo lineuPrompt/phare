@@ -8,6 +8,8 @@ import { reviewForEntitlement } from '@/lib/reviewPreview';
 import { logEvent, isFirstReturnToday } from '@/lib/eventLogger';
 import { businessToday, businessMonth } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
+import { readQuota } from '@/lib/regenerationQuotaServer';
+import { businessMonth as quotaMonth } from '@/lib/dateHelpers';
 
 export async function GET(request: Request) {
   try {
@@ -348,6 +350,19 @@ export async function GET(request: Request) {
     const entitlement = await loadEntitlement(supabase, householdId);
     const { review, reviewLocked } = reviewForEntitlement(fullReview, entitlement.isPro);
 
+    // Regeneration allowance, so the button can render its real state BEFORE being
+    // clicked. Without this the only way to learn you are capped is to press
+    // the button and read a 429 — which is a server error sentence where a
+    // count and a reset date belong.
+    //
+    // Pro only: free households cannot reach regenerate-plan at all (the Pro
+    // gate 403s first), so a quota for them would be a number about something
+    // they cannot do. The timezone is the one already resolved above, so this
+    // adds a single count query and no extra household read.
+    const regenerationQuota = entitlement.isPro
+      ? await readQuota(supabase, householdId, quotaMonth(timezone))
+      : null;
+
     // Review-open instrumentation (Coaching Layer spec) — the strongest
     // available retention predictor. Gated on a real, non-empty review
     // string, and only on this full (non-snapshotOnly) load — snapshotOnly
@@ -405,6 +420,7 @@ export async function GET(request: Request) {
       review,
       reviewLocked,
       isPro: entitlement.isPro,
+      regenerationQuota,
       topRecommendation,
       reviewDate:        convResult.data?.created_at ?? null,
       unanchoredIncomeCount: unanchoredIncomeResult.count ?? 0,
