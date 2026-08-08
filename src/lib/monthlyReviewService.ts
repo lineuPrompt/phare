@@ -344,7 +344,29 @@ export async function generateMonthlyReview({
       const windfallExtra = monthWindfalls.reduce((sum, w) => sum + w.amount, 0);
       return { month: m, netCashFlow: monthTotals.netCashFlow, windfallExtra, hasRealData: monthRows.length > 0 };
     });
-    const typicalSurplusResult = computeTypicalSurplus(monthlyFigures);
+    // AVERAGE ONLY OVER MONTHS THAT HAPPENED (fixed 2026-08-08).
+    //
+    // computeTypicalSurplus divides by the number of months it is GIVEN, which
+    // is correct. The bug was here: this passed a fixed three-element window,
+    // so a household with one real month at +$900 and two months of nothing was
+    // reported as "typically $300" — a threefold understatement of the only
+    // month that exists, labelled typical.
+    //
+    // Harmless while three months of history was an eligibility requirement.
+    // Once one completed month became enough, this understated the first review
+    // of EVERY newly-onboarded household — precisely the November families the
+    // reviews exist to retain.
+    //
+    // Second instance of this shape after the trailing variable average: an
+    // empty period contributing 0 to a fixed-length mean. Audited 2026-08-08 —
+    // this is the only remaining division of its kind in the coaching layer.
+    //
+    // insufficientHistory below deliberately still receives the FULL window: it
+    // must keep detecting thin history in order to disclose it. Filtering its
+    // input too would silence exactly the caveat that makes a one-month figure
+    // honest.
+    const monthsWithRealData = monthlyFigures.filter((m) => m.hasRealData);
+    const typicalSurplusResult = computeTypicalSurplus(monthsWithRealData);
     const typicalSurplus = typicalSurplusResult?.typicalSurplus ?? null;
     // Fix 2 (2026-07-27): separate from fallbackApplies, which asks "is there
     // nothing anywhere to point to" — a household can have a real
