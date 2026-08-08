@@ -17,3 +17,5 @@
 -- =============================================================================
 
 -- (original body intentionally removed — see scripts/reset-household.sql)
+--
+--FORCE REDEPLOY
