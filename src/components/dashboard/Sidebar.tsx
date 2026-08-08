@@ -48,8 +48,10 @@ export default function Sidebar({ locale, role: roleProp }: { locale: string; ro
     { href: `/${locale}/dashboard`, label: t('overview'),  icon: '🏠' },
     { href: `/${locale}/timeline`,  label: t('timeline'),  icon: '📈' },
     { href: `/${locale}/cards`,     label: t('cards'),     icon: '💳' },
-    { href: `/${locale}/goals`,     label: t('goals'),     icon: '🎯' },
-    { href: `/${locale}/sinking-funds`, label: t('sinkingFunds'), icon: '🏦' },
+    // One item for both halves of what the household sets aside (2026-08-08)
+    // — Reserve Fund and Goals now share /savings. Takes the slot the two
+    // used to occupy, so nothing else in the order shifts.
+    { href: `/${locale}/savings`,   label: t('savings'),   icon: '💰' },
     { href: `/${locale}/recurring`, label: t('recurring'), icon: '🔁' },
     { href: `/${locale}/reconcile`, label: t('reconcile'), icon: '🔍' },
     ...(role === 'owner'

@@ -26,7 +26,7 @@ export default function SinkingFundsCard({
           {t('sinkingFunds')}
         </h2>
         <Link
-          href={`/${locale}/sinking-funds`}
+          href={`/${locale}/savings`}
           className="text-sm font-medium"
           style={{ color: '#2ABFBF' }}
         >
@@ -58,7 +58,7 @@ export default function SinkingFundsCard({
 
       {!buffer.linkedAccountId && (
         <Link
-          href={`/${locale}/sinking-funds`}
+          href={`/${locale}/savings`}
           className="mt-4 inline-block text-sm font-semibold px-4 py-2 rounded-xl"
           style={{ background: '#F0FDFD', color: '#2ABFBF' }}
         >

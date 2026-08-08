@@ -1,4 +1,4 @@
-import { computeInsufficientHistory, type MonthHistoryAvailability } from '@/lib/coachingHelpers';
+import type { MonthHistoryAvailability } from '@/lib/coachingHelpers';
 
 // ---------------------------------------------------------------------------
 // WHICH HOUSEHOLDS ARE DUE A MONTHLY REVIEW RIGHT NOW.
@@ -19,7 +19,10 @@ export type ReviewCandidate = {
   householdId: string;
   /** The household's own current date, 'YYYY-MM-DD' — from businessToday(tz). */
   localToday: string;
-  /** Months of ledger data, for the same threshold the coaching layer uses. */
+  /**
+   * Months that contain real ledger data. Only the REVIEWED month is consulted
+   * — see the eligibility note in decideReview.
+   */
   history: MonthHistoryAvailability[];
   /** review_month values this household already has. */
   existingReviewMonths: string[];
@@ -27,7 +30,7 @@ export type ReviewCandidate = {
 
 export type ReviewDecision =
   | { due: true; month: string }
-  | { due: false; reason: 'not_first_of_month' | 'already_generated' | 'insufficient_history' | 'malformed_date' };
+  | { due: false; reason: 'not_first_of_month' | 'already_generated' | 'no_data_for_month' | 'malformed_date' };
 
 /** The completed month, given a local date. '2026-09-01' → '2026-08'. */
 export function previousMonthOf(localDate: string): string | null {
@@ -72,15 +75,31 @@ export function decideReview(candidate: ReviewCandidate): ReviewDecision {
     return { due: false, reason: 'already_generated' };
   }
 
-  // The SAME threshold the coaching layer already uses (fewer than three months
-  // of real data). A second definition of "enough history" would drift from it,
-  // and the review's own prose is built on that helper's assumptions.
+  // ELIGIBILITY IS ONE COMPLETED MONTH WITH DATA — nothing more.
   //
-  // Below it: generate NOTHING. Not a hollow letter, and not an apology email
-  // either — a family two months into using Phare has not accumulated anything
-  // a monthly review could honestly say.
-  if (computeInsufficientHistory(history)) {
-    return { due: false, reason: 'insufficient_history' };
+  // This deliberately does NOT use computeInsufficientHistory. That helper was
+  // built as a DISCLOSURE ("this figure is conservative because trailing
+  // history is still building"), and its own doc comment says so: "a separate
+  // narration signal, not a different formula". Using it as an eligibility gate
+  // was a misreading, and an expensive one — at three months it means a family
+  // invited in November receives no review until February, so the retention
+  // mechanism does not start until after the period it exists to measure.
+  //
+  // A one-month review is writeable. It cannot say "restaurants are up from
+  // last month", but it can say what came in, what went out, what is over
+  // target and what is coming. computeInsufficientHistory keeps doing its real
+  // job inside the generation: telling the model to present its surplus figure
+  // as conservative.
+  //
+  // WHY DATA AND NOT TENURE: onboarding imports history. A household that signs
+  // up on the 28th with the Phare template has a COMPLETE month of ledger data
+  // from their spreadsheet, so a "has existed since the 1st" rule would refuse
+  // a household that has everything a review needs. The converse case — three
+  // days of hand-entered data — is thin but true, and is precisely what the
+  // conservative-figure disclosure exists to narrate.
+  const reviewedMonthHasData = history.some((h) => h.month === month && h.hasRealData);
+  if (!reviewedMonthHasData) {
+    return { due: false, reason: 'no_data_for_month' };
   }
 
   return { due: true, month };

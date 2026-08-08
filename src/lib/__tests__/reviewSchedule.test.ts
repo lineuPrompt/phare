@@ -5,13 +5,13 @@ import { decideReview, previousMonthOf, type ReviewCandidate } from '@/lib/revie
 // month; a false positive spends money on a letter about an unfinished month,
 // or duplicates one that already exists.
 
-const months = (n: number) =>
-  Array.from({ length: n }, (_, i) => ({ month: `2026-0${i + 1}`, hasRealData: true }));
+/** Months carrying real ledger data. '2026-08' is the month reviewed on 1 Sep. */
+const withData = (...ms: string[]) => ms.map((month) => ({ month, hasRealData: true }));
 
 const candidate = (over: Partial<ReviewCandidate> = {}): ReviewCandidate => ({
   householdId: 'hh1',
   localToday: '2026-09-01',
-  history: months(4),
+  history: withData('2026-06', '2026-07', '2026-08'),
   existingReviewMonths: [],
   ...over,
 });
@@ -80,45 +80,59 @@ describe('decideReview — idempotency pre-check', () => {
   });
 });
 
-describe('decideReview — insufficient history', () => {
-  it('is not due below three months of real data', () => {
-    // A family two months in has not accumulated anything a monthly review
-    // could honestly say. Generate nothing — not a hollow letter.
-    expect(decideReview(candidate({ history: months(2) })))
-      .toEqual({ due: false, reason: 'insufficient_history' });
+describe('decideReview — eligibility is ONE completed month with data', () => {
+  // Reversed 2026-08-08. computeInsufficientHistory (fewer than three months)
+  // was used as the gate; it was built as a DISCLOSURE, and at three months it
+  // meant a household invited in November got no review until February — the
+  // retention mechanism starting after the period it exists to measure.
+
+  it('ONE month of data is enough', () => {
+    // The letter cannot compare months, but it can say what came in, what went
+    // out, what is over target and what is coming. That is a useful letter.
+    expect(decideReview(candidate({ history: withData('2026-08') })))
+      .toEqual({ due: true, month: '2026-08' });
   });
 
-  it('is due at exactly three months', () => {
-    expect(decideReview(candidate({ history: months(3) })).due).toBe(true);
+  it('is due even with only the reviewed month and nothing before it', () => {
+    expect(decideReview(candidate({ history: withData('2026-08') })).due).toBe(true);
   });
 
-  it('months without real data do not count toward the threshold', () => {
-    const sparse = [
-      { month: '2026-05', hasRealData: true },
-      { month: '2026-06', hasRealData: false },
-      { month: '2026-07', hasRealData: false },
-      { month: '2026-08', hasRealData: true },
-    ];
-    expect(decideReview(candidate({ history: sparse })))
-      .toEqual({ due: false, reason: 'insufficient_history' });
+  it('is NOT due when the reviewed month itself has no data', () => {
+    // Prior months existing does not make August reviewable — a letter about a
+    // month with no ledger data would have nothing true to say.
+    expect(decideReview(candidate({ history: withData('2026-06', '2026-07') })))
+      .toEqual({ due: false, reason: 'no_data_for_month' });
   });
 
-  it('no history at all is not due', () => {
-    expect(decideReview(candidate({ history: [] })).due).toBe(false);
+  it('is NOT due with no data at all', () => {
+    expect(decideReview(candidate({ history: [] })))
+      .toEqual({ due: false, reason: 'no_data_for_month' });
+  });
+
+  it('a month flagged hasRealData=false does not count', () => {
+    expect(decideReview(candidate({
+      history: [{ month: '2026-08', hasRealData: false }],
+    }))).toEqual({ due: false, reason: 'no_data_for_month' });
+  });
+
+  it('data in the CURRENT month does not make the completed one reviewable', () => {
+    // September rows say nothing about August.
+    expect(decideReview(candidate({ history: withData('2026-09') })))
+      .toEqual({ due: false, reason: 'no_data_for_month' });
   });
 });
 
 describe('decideReview — ordering of the checks', () => {
-  it('the day is checked before history, so a new household is not reported as insufficient every hour', () => {
+  it('the day is checked before data, so a new household is not reported as dataless every hour', () => {
     // Diagnostic clarity: 'not_first_of_month' is the honest reason on the 15th,
-    // whatever the history looks like.
+    // whatever the ledger looks like.
     expect(decideReview(candidate({ localToday: '2026-09-15', history: [] })))
       .toEqual({ due: false, reason: 'not_first_of_month' });
   });
 
-  it('an already-generated month wins over insufficient history', () => {
-    // If it exists, it exists — the threshold is moot.
-    expect(decideReview(candidate({ history: months(1), existingReviewMonths: ['2026-08'] })))
+  it('an already-generated month wins over missing data', () => {
+    // If it exists, it exists — eligibility is moot.
+    expect(decideReview(candidate({ history: [], existingReviewMonths: ['2026-08'] })))
       .toEqual({ due: false, reason: 'already_generated' });
   });
 });

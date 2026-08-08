@@ -463,8 +463,7 @@
       "reviews": "Reviews",
       "recurring": "Recurring",
       "reconcile": "Audit",
-      "goals": "Goals",
-      "sinkingFunds": "Reserve Fund",
+      "savings": "Savings & Reserves",
       "household": "Household",
       "cards": "Credit Cards",
       "menu": "Menu",
@@ -681,8 +680,12 @@
     },
     "horizonLocked": "{count, plural, one {# more month} other {# more months}} of your timeline with Phare Pro"
   },
+  "savings": {
+    "title": "Savings & Reserves"
+  },
   "goals": {
     "title": "Goals",
+    "targetDate": "Target date: {date}",
     "loading": "Loading your goals...",
     "noGoals": "No savings goals yet. Create your first one below.",
     "type": {

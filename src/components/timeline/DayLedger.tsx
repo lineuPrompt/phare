@@ -38,7 +38,7 @@ function sourceHref(
     return `/${locale}/cards${qs ? `?${qs}` : ''}`;
   }
   if (entry.recurringItemId) return `/${locale}/recurring`;
-  if (entry.transferPeerId) return `/${locale}/goals`;
+  if (entry.transferPeerId) return `/${locale}/savings`;
   // One-off entries have no editable home post-consolidation (Expenses is
   // retired; Timeline's own ledger is read-only) — Audit is where they can
   // still be traced.

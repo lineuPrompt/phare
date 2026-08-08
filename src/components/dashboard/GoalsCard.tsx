@@ -19,7 +19,7 @@ export default function GoalsCard({
           {t('goals')}
         </h2>
         <Link
-          href={`/${locale}/goals`}
+          href={`/${locale}/savings`}
           className="text-sm font-medium"
           style={{ color: '#2ABFBF' }}
         >
@@ -31,7 +31,7 @@ export default function GoalsCard({
         <div className="text-center py-4">
           <p className="text-sm" style={{ color: '#6B7280' }}>{t('noGoals')}</p>
           <Link
-            href={`/${locale}/goals`}
+            href={`/${locale}/savings`}
             className="inline-block mt-3 px-4 py-2 rounded-xl text-sm font-semibold"
             style={{ background: '#F0FDFD', color: '#2ABFBF' }}
           >

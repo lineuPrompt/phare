@@ -463,8 +463,7 @@
       "reviews": "Revues",
       "recurring": "Récurrents",
       "reconcile": "Audit",
-      "goals": "Objectifs",
-      "sinkingFunds": "Fonds de réserve",
+      "savings": "Épargne et réserves",
       "household": "Foyer",
       "cards": "Cartes de crédit",
       "menu": "Menu",
@@ -681,8 +680,12 @@
     },
     "horizonLocked": "{count, plural, one {# mois de plus} other {# mois de plus}} de votre échéancier avec Phare Pro"
   },
+  "savings": {
+    "title": "Épargne et réserves"
+  },
   "goals": {
     "title": "Objectifs",
+    "targetDate": "Date cible : {date}",
     "loading": "Chargement de vos objectifs...",
     "noGoals": "Aucun objectif d'épargne. Créez le vôtre ci-dessous.",
     "type": {
