@@ -8,10 +8,44 @@ import { generateMonthlyReview } from '@/lib/monthlyReviewService';
 // ---------------------------------------------------------------------------
 // GET /api/cron/monthly-reviews — month-end review generation.
 //
-// Runs HOURLY and asks, per household, "is it the 1st where THIS family lives?"
-// A single daily UTC job would generate a Vancouver household's July review at
-// 4pm on 31 July — narrating a month still in progress as though it had ended.
-// Running hourly turns the timezone problem into a filter instead of arithmetic.
+// SCHEDULE: DAILY AT 07:00 UTC — and this is a CONSTRAINT, not a preference.
+//
+// Vercel Hobby permits daily cron jobs only. The original hourly schedule
+// (0 * * * *) was rejected at deployment VALIDATION, which silently blocked
+// five consecutive deployments — no build ran at all, so it did not look like a
+// cron problem. If this ever needs to be finer-grained again, that is a Vercel
+// Pro decision ($20/mo), not a code change.
+//
+// WHY ONE DAILY RUN IS CORRECT FOR CANADA. 07:00 UTC lands in the small hours
+// across every Canadian zone:
+//
+//     zone           summer (DST)          winter (standard)
+//     Pacific        00:00 same day        23:00 PREVIOUS day
+//     Mountain       01:00                 00:00
+//     Central        02:00                 01:00
+//     Eastern        03:00                 02:00
+//     Atlantic       04:00                 03:00
+//     Newfoundland   04:30                 03:30
+//
+// Note the Pacific winter row: 07:00 UTC is 23:00 the day BEFORE. That does not
+// break anything — the run whose local date is the 1st simply arrives one UTC
+// day later, landing at 23:00 on the 1st in Vancouver. Verified by simulating a
+// full year at both offsets: every zone gets EXACTLY ONE run per month whose
+// local date is the 1st. Never zero, never two.
+//
+// THIS IS CORRECT FOR CANADA ONLY. The whole scheme depends on the country
+// spanning roughly UTC-8 to UTC-2:30, so a single instant is "the small hours"
+// everywhere in it. Serving households outside that span would need either a
+// second daily run at a complementary hour, or hourly on Vercel Pro. Adding a
+// non-Canadian household without doing one of those would silently skip them —
+// their local date would never be the 1st when the job fires.
+//
+// THE PER-HOUSEHOLD CHECK STAYS regardless. Asking "is it the 1st where THIS
+// family lives?" is what makes a single daily run CORRECT rather than
+// coincidentally right for the current schedule — and it is what will keep this
+// honest if the schedule ever changes. Without it, a daily UTC job would
+// generate a Vancouver household's July review at 4pm on 31 July, narrating a
+// month still in progress as though it had ended.
 //
 // AUTHENTICATED. Without CRON_SECRET this is a public endpoint that spends
 // money on demand: each household it processes makes two Anthropic calls on the
