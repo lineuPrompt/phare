@@ -67,9 +67,35 @@ import { generateMonthlyReview } from '@/lib/monthlyReviewService';
 // FOREVER — the household silently never receives that month, and nothing
 // surfaces it. This is the failure mode the claim-first design creates, and
 // deleting on failure is the price of it.
+//
+// BUT DELETE-ON-FAILURE ONLY COVERS FAILURES WE LIVE TO HANDLE. If the function
+// is KILLED mid-generation — platform timeout, OOM — no catch runs, and the
+// empty claim survives exactly as if it had never been guarded. Every later run
+// then hits 23505 and reports `claimed_by_other`, which is indistinguishable in
+// the logs from healthy idempotency, so the household silently never gets that
+// month. Two Sonnet calls at 40–90s under a platform ceiling that may sit below
+// the maxDuration declared here makes that a live risk, not a theoretical one.
+//
+// SO AN EMPTY CLAIM EXPIRES. A row with `messages = []` older than
+// STUCK_CLAIM_MS is a corpse, not a claim: the next run deletes it and proceeds.
+// See the constant for why the threshold is where it is.
 // ---------------------------------------------------------------------------
 
 export const maxDuration = 300;
+
+// How long an empty claim may sit before the next run treats it as abandoned.
+//
+// The floor is the longest a LEGITIMATE generation can hold an empty claim, and
+// that is bounded by the function's own lifetime — maxDuration, 300s above. The
+// ceiling is the gap between runs: on a daily cron, any threshold under 24h
+// behaves identically for the scheduled path, because the next run is a day
+// later either way. The threshold therefore only bites when two runs overlap
+// closely — a double-pressed Run button, a manual curl beside the cron.
+//
+// That makes the choice one-sided: too tight reclaims live work, too loose costs
+// nothing anyone observes. 30 minutes is 6× the maxDuration ceiling and still
+// far inside the daily gap.
+const STUCK_CLAIM_MS = 30 * 60 * 1000;
 
 type Outcome = {
   householdId: string;
@@ -91,6 +117,29 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
+  // ===========================================================================
+  // TEMPORARY — MANUAL END-TO-END TEST ONLY. REMOVE THIS BLOCK.
+  //
+  // Added 2026-08-09 to exercise the full generation path on a day that is not
+  // the 1st. `today` (YYYY-MM-DD) replaces the household's real local date, so
+  // ?today=2026-08-01 reviews 2026-07 — a REAL claim on a real month, not a
+  // throwaway. `household` scopes the sweep to one id: without it, a relaxed
+  // date check bills two Sonnet calls for every household at once.
+  //
+  // Both are behind the CRON_SECRET check above, but that is a reason they are
+  // safe to test with, not a reason to leave them in.
+  // ===========================================================================
+  const params = new URL(request.url).searchParams;
+  const forceToday = params.get('today');
+  const onlyHousehold = params.get('household');
+  if (forceToday || onlyHousehold) {
+    console.warn(
+      'Cron monthly-reviews — TEMPORARY TEST OVERRIDE ACTIVE:',
+      JSON.stringify({ forceToday, onlyHousehold })
+    );
+  }
+  // ======================== END TEMPORARY BLOCK ==============================
+
   const admin = createAdminClient();
   const outcomes: Outcome[] = [];
 
@@ -107,12 +156,16 @@ export async function GET(request: Request) {
     for (const household of (households ?? []) as { id: string; locale: string | null }[]) {
       const householdId = household.id;
 
+      // TEMPORARY — see the test-override block above. Remove with it.
+      if (onlyHousehold && householdId !== onlyHousehold) continue;
+
       // PER-HOUSEHOLD ISOLATION. One family's failure must never stop the rest:
       // a bare Promise.all or an unguarded loop would abandon every household
       // after the first error, with no record of where it stopped.
       try {
         const timezone = await getHouseholdTimezone(admin, householdId);
-        const localToday = businessToday(timezone);
+        // `forceToday ??` is TEMPORARY — see the test-override block above.
+        const localToday = forceToday ?? businessToday(timezone);
 
         // Months with real ledger data, for the SAME threshold the coaching
         // layer uses. A second definition of "enough history" would drift from
@@ -127,13 +180,66 @@ export async function GET(request: Request) {
         );
         const history = [...monthsWithData].map((month) => ({ month, hasRealData: true }));
 
+        // ---- RECLAIM CORPSES BEFORE DECIDING ------------------------------
+        // An empty claim past STUCK_CLAIM_MS is the wreckage of a run that was
+        // killed before its catch could release it. Left alone it satisfies the
+        // uniqueness check forever, so this has to happen BEFORE the months are
+        // handed to decideReview — otherwise the corpse reads as
+        // `already_generated` and the claim insert is never reached.
         const { data: existing } = await admin
           .from('conversations')
-          .select('review_month')
+          .select('id, review_month, messages, created_at')
           .eq('household_id', householdId)
           .not('review_month', 'is', null);
 
-        const existingReviewMonths = ((existing ?? []) as { review_month: string }[])
+        const existingRows = (existing ?? []) as {
+          id: string;
+          review_month: string;
+          messages: unknown[] | null;
+          created_at: string;
+        }[];
+
+        const corpseCutoff = Date.now() - STUCK_CLAIM_MS;
+        const corpses = existingRows.filter(
+          (r) => (r.messages?.length ?? 0) === 0 && Date.parse(r.created_at) < corpseCutoff
+        );
+
+        // Ids actually removed. A corpse whose delete FAILS stays in
+        // existingReviewMonths on purpose: reporting `already_generated` is
+        // less confusing than walking into a 23505 we already predicted.
+        const reclaimedIds = new Set<string>();
+
+        if (corpses.length > 0) {
+          const ids = corpses.map((c) => c.id);
+          const { error: reclaimErr } = await admin
+            .from('conversations')
+            .delete()
+            .in('id', ids);
+
+          if (reclaimErr) {
+            console.error(
+              'Cron monthly-reviews — found abandoned empty claim(s) but could not delete them. ' +
+              'These BLOCK their month until removed by hand:',
+              householdId, corpses.map((c) => `${c.id}@${c.review_month}`), reclaimErr
+            );
+          } else {
+            ids.forEach((id) => reclaimedIds.add(id));
+            // Error level on purpose. The row is unblocked, but a generation
+            // died without ever logging why, and this line is the only record
+            // that it happened at all. It also warns that months OTHER than
+            // last month are not regenerated by this sweep — the cron only ever
+            // targets previousMonthOf(today), so an older reclaimed month stays
+            // missing until someone backfills it.
+            console.error(
+              'Cron monthly-reviews — RECLAIMED abandoned empty claim(s); a previous run was ' +
+              'killed mid-generation without releasing them:',
+              householdId, corpses.map((c) => `${c.id}@${c.review_month}`)
+            );
+          }
+        }
+
+        const existingReviewMonths = existingRows
+          .filter((r) => !reclaimedIds.has(r.id))
           .map((r) => r.review_month);
 
         const decision = decideReview({ householdId, localToday, history, existingReviewMonths });
@@ -183,7 +289,7 @@ export async function GET(request: Request) {
           });
 
           const locale = household.locale === 'fr' ? 'fr' : 'en';
-          const { error: fillErr } = await admin
+          const { data: filled, error: fillErr } = await admin
             .from('conversations')
             .update({
               messages: [
@@ -191,11 +297,27 @@ export async function GET(request: Request) {
                 { role: 'assistant', type: 'monthly_review', content: reviewText, locale },
               ],
             })
-            .eq('id', claim.id);
+            .eq('id', claim.id)
+            .select('id');
 
           if (fillErr) throw new Error(`could not write review text: ${fillErr.message}`);
 
-          outcomes.push({ householdId, status: 'generated', month });
+          // ZERO ROWS UPDATED — our claim was reclaimed as a corpse while this
+          // generation was still running, and an overlapping run now owns the
+          // month. Nothing is lost or duplicated: the unique index still allows
+          // only one row, and the run that reclaimed it writes the review. But
+          // without this check the update silently matches nothing and we
+          // report `generated` for text that went nowhere.
+          if (!filled || filled.length === 0) {
+            console.error(
+              'Cron monthly-reviews — claim %s was reclaimed while this run was still generating; ' +
+              'the review text was discarded and an overlapping run owns %s:',
+              claim.id, month, householdId
+            );
+            outcomes.push({ householdId, status: 'failed', month, reason: 'claim_reclaimed' });
+          } else {
+            outcomes.push({ householdId, status: 'generated', month });
+          }
         } catch (genErr) {
           // RELEASE THE CLAIM. An empty claim left behind would satisfy the
           // uniqueness check on every future run, so this household would
@@ -209,10 +331,15 @@ export async function GET(request: Request) {
           if (cleanupErr) {
             // The one case needing a human: the claim survives and will block
             // retries until it is removed by hand.
+            // BOTH errors. cleanupErr says the row is stuck; genErr says why
+            // the generation failed in the first place — and that is the one
+            // you need to know whether a retry will work. Logging only the
+            // cleanup failure tells you which row to delete and nothing about
+            // whether deleting it helps.
             console.error(
               'Cron monthly-reviews — GENERATION FAILED AND CLAIM COULD NOT BE RELEASED. ' +
-              'Delete conversations row %s or this household never gets %s:',
-              claim.id, month, cleanupErr
+              'Delete conversations row %s or this household never gets %s. ' +
+              'Generation error:', claim.id, month, genErr, '| Cleanup error:', cleanupErr
             );
             outcomes.push({ householdId, status: 'failed', month, reason: 'claim_stuck' });
           } else {
@@ -228,6 +355,15 @@ export async function GET(request: Request) {
 
     const generated = outcomes.filter((o) => o.status === 'generated').length;
     const failed = outcomes.filter((o) => o.status === 'failed').length;
+
+    // A SUCCESSFUL SWEEP MUST LEAVE A TRACE. The outcomes array only ever
+    // existed in the response body, which nothing reads on the scheduled path —
+    // so a healthy run and a run that skipped every household for the wrong
+    // reason looked identical in Vercel's logs: one 200 and a duration.
+    console.log(
+      'Cron monthly-reviews —',
+      JSON.stringify({ checked: outcomes.length, generated, failed, outcomes })
+    );
 
     // Always 200 once authenticated: a non-2xx makes Vercel retry the WHOLE
     // sweep, re-walking every household to re-skip them. Per-household failures

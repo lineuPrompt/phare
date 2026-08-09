@@ -70,7 +70,8 @@ describe('GET /api/sinking-funds', () => {
     expect(json.funds).toHaveLength(2);
     expect(json.buffer).toEqual({
       linkedAccountId: null, balance: 0, fundedAlready: false, totalMonthlyProvision: 558,
-      contributionAmount: null, cadence: null, secondDay: null, recurringItemId: null, nextContributionDate: null, contributions: [], upcomingContributions: [], billsPaid: [],
+      contributionAmount: null, cadence: null, secondDay: null, anchorDate: null, recurringItemId: null,
+      nextContributionDate: null, tombstonesAfterBoundary: 0, contributions: [], upcomingContributions: [], billsPaid: [],
     });
   });
 
@@ -94,6 +95,9 @@ describe('GET /api/sinking-funds', () => {
         error: null,
       }],
       recurring_items: [{ data: { id: 'ri-1', amount: 708, cadence: 'monthly', anchor_date: '2026-07-01', second_day: null }, error: null }],
+      // Detached-occurrence count, used to warn before a schedule edit moves
+      // dates out from under a date-keyed tombstone.
+      recurring_skipped_dates: [{ count: 0, error: null }],
     });
 
     try {
@@ -113,9 +117,48 @@ describe('GET /api/sinking-funds', () => {
       expect(json.buffer.cadence).toBe('monthly');
       expect(json.buffer.secondDay).toBe(null);
       expect(json.buffer.nextContributionDate).toBe('2026-08-01');
+      // The anchor is now exposed so the edit form can prefill the
+      // contribution day instead of guessing it.
+      expect(json.buffer.anchorDate).toBe('2026-07-01');
+      expect(json.buffer.tombstonesAfterBoundary).toBe(0);
       expect(json.buffer.contributions).toEqual([{ id: 't1', date: '2026-06-01', description: 'Sinking funds', amount: 708 }]);
       expect(json.buffer.upcomingContributions).toEqual([{ id: 't3', date: '2026-08-01', description: 'Sinking funds', amount: 708 }]);
       expect(json.buffer.billsPaid).toEqual([{ id: 't2', date: '2026-06-15', description: 'Property tax', amount: 300 }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports detached occurrences past the boundary, so a schedule edit can warn before it moves dates', async () => {
+    // A tombstone is keyed to a DATE. Move the schedule and it no longer
+    // matches anything the new rule generates — the edited single survives
+    // (detach nulls recurring_item_id, so the split's delete misses it) and
+    // a fresh occurrence appears on the new day. This count is what lets the
+    // UI say so before the household commits.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-10T12:00:00'));
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      sinking_funds: [{
+        data: [{ id: 'sf-1', name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, linked_account_id: 'buffer-1' }],
+        error: null,
+      }],
+      transactions: [{ data: [], error: null }],
+      recurring_items: [{ data: { id: 'ri-1', amount: 708, cadence: 'monthly', anchor_date: '2026-07-09', second_day: null }, error: null }],
+      recurring_skipped_dates: [{ count: 2, error: null }],
+    });
+
+    try {
+      const { createClient } = await import('@/lib/supabase-server');
+      (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+      const { GET } = await import('../route');
+      const json = await (await GET()).json();
+
+      expect(json.buffer.tombstonesAfterBoundary).toBe(2);
+      expect(json.buffer.anchorDate).toBe('2026-07-09');
     } finally {
       vi.useRealTimers();
     }

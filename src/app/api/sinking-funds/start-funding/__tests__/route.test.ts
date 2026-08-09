@@ -49,6 +49,17 @@ function makeSupabaseMock(script: Record<string, Resolution[]>, rpcResolution: R
   return { client, calls, rpcCalls };
 }
 
+// The route now reads an optional { anchorDay } body — a plain Request is
+// all it needs. No body at all is the pre-2026-08-09 behaviour (anchor on
+// today), which the existing cases below all exercise.
+function req(body?: unknown): Request {
+  return new Request('http://localhost/api/sinking-funds/start-funding', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+}
+
 vi.mock('@/lib/supabase-server', () => ({
   createClient: vi.fn(),
 }));
@@ -93,7 +104,7 @@ describe('POST /api/sinking-funds/start-funding — collapses every provision in
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
     const { POST } = await import('../route');
-    const res = await POST();
+    const res = await POST(req());
     const json = await res.json();
 
     expect(res.status).toBe(200);
@@ -137,7 +148,7 @@ describe('POST /api/sinking-funds/start-funding — collapses every provision in
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
     const { POST } = await import('../route');
-    const res = await POST();
+    const res = await POST(req());
     expect(res.status).toBe(400);
   });
 
@@ -152,7 +163,7 @@ describe('POST /api/sinking-funds/start-funding — collapses every provision in
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
     const { POST } = await import('../route');
-    const res = await POST();
+    const res = await POST(req());
     expect(res.status).toBe(400);
   });
 
@@ -170,7 +181,101 @@ describe('POST /api/sinking-funds/start-funding — collapses every provision in
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
     const { POST } = await import('../route');
-    const res = await POST();
+    const res = await POST(req());
     expect(res.status).toBe(400);
+  });
+  // ── Settable contribution day (2026-08-09) ────────────────────────────────
+  // Was hardcoded to "today", so a household that set up on the 9th was
+  // funded on the 9th forever regardless of when they are actually paid.
+
+  function fundableMock() {
+    return makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      household_members: [{ data: { id: 'mem-1' }, error: null }],
+      sinking_funds: [
+        { data: [{ id: 'sf-1', monthly_provision: 708, linked_account_id: null, active: true }], error: null },
+        { error: null },
+      ],
+      accounts: [
+        { data: { id: 'chq-1' }, error: null },
+        { data: [{ sort_order: 2 }], error: null },
+        { data: { id: 'buffer-1' }, error: null },
+      ],
+      recurring_items: [{ data: { id: 'ri-1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    });
+  }
+
+  async function runWith(body: unknown, systemTime: string) {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(systemTime));
+    const { client, calls, rpcCalls } = fundableMock();
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const { POST } = await import('../route');
+    const res = await POST(req(body));
+    const anchor = (calls.find((c) => c.table === 'recurring_items' && c.method === 'insert')!
+      .args[0] as { anchor_date: string }).anchor_date;
+    return { res, anchor, rpcCalls };
+  }
+
+  it('anchors on the chosen day, not the day they happened to set it up', async () => {
+    const { res, anchor, rpcCalls } = await runWith({ anchorDay: 15 }, '2026-07-09T12:00:00');
+    expect(res.status).toBe(200);
+    expect(anchor).toBe('2026-07-15');
+    // Set up on the 9th, chose the 15th: this month's 15th is still ahead,
+    // so all 12 occurrences are real and every one lands on the 15th.
+    expect(rpcCalls).toHaveLength(12);
+    expect(rpcCalls.map((c) => (c[1] as { p_date: string }).p_date).slice(0, 3))
+      .toEqual(['2026-07-15', '2026-08-15', '2026-09-15']);
+  });
+
+  it('never back-dates a contribution to a day already past this month', async () => {
+    // Set up on the 9th, chose the 5th. Materializing from the month start
+    // would write a contribution dated four days ago that never happened.
+    const { res, anchor, rpcCalls } = await runWith({ anchorDay: 5 }, '2026-07-09T12:00:00');
+    expect(res.status).toBe(200);
+    expect(anchor).toBe('2026-07-05');
+    expect(rpcCalls).toHaveLength(11);
+    const dates = rpcCalls.map((c) => (c[1] as { p_date: string }).p_date);
+    expect(dates[0]).toBe('2026-08-05');
+    expect(dates.some((d) => d < '2026-07-09')).toBe(false);
+  });
+
+  it('keeps a chosen 31st as the 31st instead of clamping it away', async () => {
+    // February has no 31st. Clamping would rewrite the household's choice to
+    // the 28th permanently, since every later read takes the day off the
+    // anchor. Rolling forward preserves it.
+    const { res, anchor, rpcCalls } = await runWith({ anchorDay: 31 }, '2026-02-10T12:00:00');
+    expect(res.status).toBe(200);
+    expect(anchor).toBe('2026-03-31');
+    const dates = rpcCalls.map((c) => (c[1] as { p_date: string }).p_date);
+    // Read-time clamping still applies per month, which is the honest place
+    // for it: month-end in short months, the 31st in long ones.
+    expect(dates).toContain('2026-04-30');
+    expect(dates).toContain('2026-05-31');
+    expect(dates.some((d) => d < '2026-02-10')).toBe(false);
+  });
+
+  it('falls back to today when no day is given (unchanged behaviour)', async () => {
+    const { res, anchor, rpcCalls } = await runWith(undefined, '2026-07-09T12:00:00');
+    expect(res.status).toBe(200);
+    expect(anchor).toBe('2026-07-09');
+    expect(rpcCalls).toHaveLength(12);
+  });
+
+  it('rejects a day outside 1-31 without creating anything', async () => {
+    for (const bad of [0, 32, 4.5, -1]) {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-09T12:00:00'));
+      const { client, calls } = fundableMock();
+      const { createClient } = await import('@/lib/supabase-server');
+      (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+      const { POST } = await import('../route');
+      const res = await POST(req({ anchorDay: bad }));
+      expect(res.status).toBe(400);
+      // Rejected before any write — no half-built buffer left behind.
+      expect(calls.filter((c) => c.method === 'insert')).toHaveLength(0);
+    }
   });
 });

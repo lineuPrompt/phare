@@ -3,12 +3,34 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 // ---------------------------------------------------------------------------
-// LIVE COMPARISON — the founder-run check before the cron is enabled.
+// ███ DISABLED — THIS TEST SPENDS REAL MONEY. DO NOT RE-ENABLE CASUALLY. ███
 //
+// It makes TWO REAL claude-sonnet-4-6 calls per invocation, against REAL
+// household data in the production Supabase project, and it loads .env.local
+// itself — so it supplies its own credentials even though vitest does not.
+//
+// It was run ONCE, on 2026-08-09, to verify the extraction refactor that moved
+// generation out of the route and into src/lib/monthlyReviewService.ts. That
+// was its whole purpose and that purpose is served.
+//
+// RE-ENABLE ONLY FOR THAT SAME PURPOSE — a refactor of the generation path
+// where you need to see real output against real data — and disable it again
+// immediately afterwards.
+//
+// It was previously gated on COMPARE_REVIEW=1, which is one stray environment
+// variable away from a paid run. It is now `describe.skip`, so no environment
+// variable can start it. Re-enabling deliberately takes TWO edits:
+//
+//   1. change `describe.skip` below to `describe.skipIf(!ENABLED)` and restore
+//      the ENABLED const:  const ENABLED = process.env.COMPARE_REVIEW === '1';
+//   2. delete the SPEND GUARD at the top of the test body
+//
+// then run:
 //   COMPARE_REVIEW=1 npx vitest run src/lib/__tests__/liveReviewComparison.test.ts
 //
-// SKIPPED unless that variable is set. It makes REAL Anthropic calls against
-// REAL household data, so it must never run in CI or as part of the suite.
+// The body is left intact rather than commented out so it keeps typechecking
+// and does not rot between uses — `describe.skip` means vitest never executes
+// it, so an intact body costs nothing.
 //
 // READ-ONLY apart from one thing worth naming: the service may emit a
 // `review_text_guard_retried` event if a guard fires. Nothing else is written —
@@ -36,7 +58,6 @@ import path from 'node:path';
 // figure in the new text is traceable, never that the two texts agree.
 // ---------------------------------------------------------------------------
 
-const ENABLED = process.env.COMPARE_REVIEW === '1';
 const HOUSEHOLD_ID = process.env.COMPARE_HOUSEHOLD ?? '2be22642-53c5-4599-ad3b-42a076e10484';
 
 /** Minimal .env.local reader — vitest does not load it, and dotenv is not a dep. */
@@ -59,8 +80,18 @@ function figuresIn(text: string): Set<number> {
   return out;
 }
 
-describe.skipIf(!ENABLED)('live review comparison', () => {
+describe.skip('live review comparison — DISABLED, SPENDS REAL MONEY (see header)', () => {
   it('generates against real data and reports a figure-level diff', async () => {
+    // SPEND GUARD. Second lock: even if the describe.skip above is removed,
+    // this refuses to spend without an explicit opt-in in the same run. Delete
+    // it only alongside that change — see the header.
+    if (process.env.COMPARE_REVIEW !== '1') {
+      throw new Error(
+        'liveReviewComparison is disabled: it makes two real paid Anthropic calls. ' +
+        'See the header before re-enabling.'
+      );
+    }
+
     loadEnvLocal();
 
     const { createClient } = await import('@supabase/supabase-js');

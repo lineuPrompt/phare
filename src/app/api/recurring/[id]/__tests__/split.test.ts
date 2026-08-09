@@ -495,4 +495,106 @@ describe('PATCH /api/recurring/[id] — Part B split-into-two-rules', () => {
       expect((row.date as string) >= effectiveFrom).toBe(true);
     }
   });
+  // ---------------------------------------------------------------------
+  // Settable contribution day (2026-08-09). The anchor is now compared by
+  // what the cadence actually READS, not by the raw stored string.
+  // ---------------------------------------------------------------------
+
+  function fundRuleSeed(anchor: string, cadence = 'monthly') {
+    const FUND = 'fund-1';
+    return {
+      ...baseSeed(),
+      accounts: [...baseSeed().accounts, { id: FUND, household_id: HOUSEHOLD, type: 'savings', is_sinking_fund: true } as unknown as Row],
+      recurring_items: [
+        {
+          id: 'ri-sf', household_id: HOUSEHOLD, member_id: null, description: 'Sinking funds', amount: 350,
+          type: 'transfer', cadence, anchor_date: anchor, second_day: null,
+          category_id: null, account_id: CHEQUING, destination_account_id: FUND, active: true,
+        } as unknown as Row,
+      ],
+      transactions: [],
+      recurring_skipped_dates: [],
+    };
+  }
+
+  async function patchRule(supabase: ReturnType<typeof makeFakeSupabase>, body: unknown) {
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
+    const { PATCH } = await import('../route');
+    const res = await PATCH(
+      new Request('http://localhost/api/recurring/ri-sf', { method: 'PATCH', body: JSON.stringify(body) }),
+      { params: Promise.resolve({ id: 'ri-sf' }) }
+    );
+    return { res, json: await res.json() };
+  }
+
+  it('re-picking the same day in a different month does NOT split — nothing about the schedule moved', async () => {
+    // The edit form builds an anchor from a day-of-month, so the month
+    // component moves around freely. For monthly cadence only the day is
+    // ever read, so this is the same schedule; splitting would freeze a row
+    // and re-materialize a year of identical dates for nothing.
+    const supabase = makeFakeSupabase(fundRuleSeed('2026-08-09'));
+    const { res, json } = await patchRule(supabase, { amount: 350, cadence: 'monthly', anchorDate: '2026-09-09' });
+
+    expect(res.status).toBe(200);
+    expect(json.split).toBeUndefined();
+    expect(supabase.rows('recurring_items')).toHaveLength(1);
+    expect(supabase.rows('recurring_items')[0].active).toBe(true);
+  });
+
+  it('moving to a different day DOES split, and the old rule is frozen', async () => {
+    const supabase = makeFakeSupabase(fundRuleSeed('2026-08-09'));
+    const { res, json } = await patchRule(supabase, { amount: 350, cadence: 'monthly', anchorDate: '2026-08-15' });
+
+    expect(res.status).toBe(200);
+    expect(json.split).toBe(true);
+    const rules = supabase.rows('recurring_items');
+    expect(rules).toHaveLength(2);
+    const frozen = rules.find((r) => r.id === 'ri-sf')!;
+    const live = rules.find((r) => r.id !== 'ri-sf')!;
+    expect(frozen.active).toBe(false);
+    expect(live.active).toBe(true);
+    expect(live.predecessor_id).toBe('ri-sf');
+    expect((live.anchor_date as string).slice(8)).toBe('15');
+  });
+
+  it('for biweekly, the same day-of-month a month later IS a different schedule and splits', async () => {
+    // Phase is load-bearing: occurrences step 14 days from the anchor, so
+    // moving it genuinely changes when money moves.
+    const supabase = makeFakeSupabase(fundRuleSeed('2026-08-09', 'biweekly'));
+    const { res, json } = await patchRule(supabase, { amount: 350, cadence: 'biweekly', anchorDate: '2026-09-09' });
+
+    expect(res.status).toBe(200);
+    expect(json.split).toBe(true);
+    expect(supabase.rows('recurring_items')).toHaveLength(2);
+  });
+
+  it('a day change applies forward only — contributions before the boundary keep their real date', async () => {
+    const todayStr = businessToday('America/Toronto');
+    const effectiveFrom = firstOfNextMonth(todayStr);
+    const pastDate = `${todayStr.slice(0, 7)}-01`;
+
+    const seed = fundRuleSeed('2026-08-09');
+    const supabase = makeFakeSupabase({
+      ...seed,
+      transactions: [
+        // A real, already-happened contribution earlier this month.
+        { id: 'tx-past-a', household_id: HOUSEHOLD, recurring_item_id: 'ri-sf', date: pastDate, amount: -350, type: 'transfer', account_id: CHEQUING } as unknown as Row,
+        { id: 'tx-past-b', household_id: HOUSEHOLD, recurring_item_id: 'ri-sf', date: pastDate, amount: 350, type: 'transfer', account_id: 'fund-1' } as unknown as Row,
+      ],
+    });
+
+    const { json } = await patchRule(supabase, { amount: 350, cadence: 'monthly', anchorDate: '2026-08-22', effectiveFrom });
+    expect(json.split).toBe(true);
+
+    const survivors = supabase.rows('transactions').filter((t) => t.date === pastDate);
+    expect(survivors).toHaveLength(2);
+    // Untouched: still linked to the OLD rule, still on their real date.
+    expect(survivors.every((t) => t.recurring_item_id === 'ri-sf')).toBe(true);
+
+    // Everything the new rule generated is on/after the boundary, on the 22nd.
+    const generated = supabase.rows('transactions').filter((t) => (t.date as string) >= effectiveFrom);
+    expect(generated.length).toBeGreaterThan(0);
+    expect(generated.every((t) => (t.date as string).slice(8) === '22')).toBe(true);
+  });
 });

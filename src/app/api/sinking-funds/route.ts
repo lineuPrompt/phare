@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { computeGoalBalance } from '@/lib/dashboardHelpers';
-import { businessToday, nextOccurrence } from '@/lib/dateHelpers';
+import { businessToday, nextOccurrence, firstOfNextMonth } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 /**
@@ -59,8 +59,10 @@ export async function GET() {
           contributionAmount: null,
           cadence: null,
           secondDay: null,
+          anchorDate: null,
           recurringItemId: null,
           nextContributionDate: null,
+          tombstonesAfterBoundary: 0,
           contributions: [],
           upcomingContributions: [],
           billsPaid: [],
@@ -106,6 +108,27 @@ export async function GET() {
     const contributionAmount = recurringRow ? Number(recurringRow.amount) : null;
     const cadence = recurringRow?.cadence ?? null;
     const secondDay = recurringRow?.second_day ?? null;
+    const anchorDate = recurringRow?.anchor_date ?? null;
+
+    // Detached occurrences (edited or deleted singles) dated on/after the
+    // boundary a schedule edit would use. A tombstone is keyed to a DATE, so
+    // it survives an amount change intact but cannot follow the schedule to a
+    // new day: move the 9th to the 15th and a tombstoned 9th no longer
+    // matches anything the new rule generates, leaving either a duplicate
+    // (edited singles keep their row — detach nulls recurring_item_id, so the
+    // split's delete misses them) or a resurrected occurrence (deleted
+    // singles come back on the new day). Surfaced so the UI can say this
+    // BEFORE the household commits, rather than letting them find out after.
+    let tombstonesAfterBoundary = 0;
+    if (recurringItemId) {
+      const { count } = await supabase
+        .from('recurring_skipped_dates')
+        .select('date', { count: 'exact', head: true })
+        .eq('household_id', householdId)
+        .eq('recurring_item_id', recurringItemId)
+        .gte('date', firstOfNextMonth(today));
+      tombstonesAfterBoundary = count ?? 0;
+    }
     const nextContributionDate = recurringRow
       ? nextOccurrence(
           { cadence: recurringRow.cadence, anchorDate: recurringRow.anchor_date, secondDay: recurringRow.second_day },
@@ -123,8 +146,10 @@ export async function GET() {
         contributionAmount,
         cadence,
         secondDay,
+        anchorDate,
         recurringItemId,
         nextContributionDate,
+        tombstonesAfterBoundary,
         contributions,
         upcomingContributions,
         billsPaid,

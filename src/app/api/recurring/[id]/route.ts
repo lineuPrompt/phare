@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { businessToday, materializeFromMonthStart, excludeSkippedDates, firstOfNextMonth } from '@/lib/dateHelpers';
+import { businessToday, materializeFromMonthStart, excludeSkippedDates, firstOfNextMonth, sameAnchorSchedule } from '@/lib/dateHelpers';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
@@ -158,10 +158,18 @@ export async function PATCH(
     const timezone = await getHouseholdTimezone(supabase, householdId);
     const todayStr = businessToday(timezone);
 
+    // The anchor is compared by what the cadence actually READS, not by the
+    // raw stored string (sameAnchorSchedule): for monthly/semimonthly only
+    // the day-of-month is ever used, so re-picking the same day in a
+    // different month is not a schedule change and must not split the rule
+    // — a split freezes a row and re-materializes a year of identical dates
+    // for nothing. Weekly/biweekly still compare in full, where the anchor's
+    // exact date sets the phase. Compared under newCadence: if the cadence
+    // itself changed, the line above has already made this true anyway.
     const valueChanged =
       Number(newAmount) !== Number(current.amount) ||
       newCadence !== current.cadence ||
-      newAnchorDate !== current.anchor_date ||
+      !sameAnchorSchedule(newAnchorDate, current.anchor_date, newCadence as Cadence) ||
       (newSecondDay ?? null) !== (current.second_day ?? null);
 
     if (valueChanged && current.anchor_date !== null) {

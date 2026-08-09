@@ -398,3 +398,71 @@ export function cycleMonthContaining(today: string, closeDay: number | null): st
   const nextYear = y + Math.floor(m / 12);
   return `${nextYear}-${String((m % 12) + 1).padStart(2, '0')}`;
 }
+
+/**
+ * The day-of-month a rule actually fires on, read off its anchor. For
+ * monthly/semimonthly cadence this is the ONLY part of anchor_date that
+ * occurrencesInMonth ever reads (see its `anchorDay` line) — the anchor's
+ * year and month are inert. Exposed so callers can compare schedules by the
+ * part that means something instead of by the raw stored string.
+ */
+export function anchorDayOfMonth(anchorDate: string): number {
+  return Number(anchorDate.split('-')[2]);
+}
+
+/**
+ * Builds a storable anchor_date for a chosen day-of-month, WITHOUT ever
+ * silently changing the day.
+ *
+ * anchor_date is a real date column, so a naive `${thisMonth}-31` is not
+ * merely ugly — in a short month it isn't a date at all and Postgres rejects
+ * it. Clamping instead (31 -> Feb 28) would be worse: the household's "the
+ * 31st" would be permanently rewritten to "the 28th", because every later
+ * read takes the day straight off the stored anchor.
+ *
+ * So this rolls FORWARD to the first month on/after `fromDate`'s month that
+ * actually contains the chosen day. Day 31 chosen in February stores
+ * 2026-03-31, not 2026-02-28 — the day survives exactly, and since only the
+ * day is ever read for monthly/semimonthly, the stored month costs nothing.
+ * occurrencesInMonth still clamps at READ time per month, which is the right
+ * place for it: "the 31st" means month-end in a short month and the 31st in
+ * a long one, rather than being flattened once at write time.
+ */
+export function anchorDateForDayOfMonth(day: number, fromDate: string): string {
+  const [startYear, startMonth] = fromDate.slice(0, 7).split('-').map(Number);
+  // At most 2 steps in practice (only 29/30/31 can miss, and never twice in
+  // a row); 12 is a generous bound that cannot loop forever.
+  for (let i = 0; i < 12; i++) {
+    const monthIndex = (startMonth - 1) + i;
+    const year = startYear + Math.floor(monthIndex / 12);
+    const month = (monthIndex % 12) + 1;
+    const lastDay = new Date(year, month, 0).getDate();
+    if (day <= lastDay) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+  }
+  // Unreachable for any day <= 31; callers validate the range before calling.
+  throw new Error(`No month within a year of ${fromDate} contains day ${day}`);
+}
+
+/**
+ * True when two anchors describe the SAME schedule under `cadence`.
+ *
+ * For monthly/semimonthly only the day-of-month is ever read, so
+ * 2026-08-09 and 2026-09-09 are the same schedule — treating them as
+ * different is what would make an edit that changed nothing still split the
+ * rule in two (freezing a row and re-materializing a year of identical
+ * dates) for no reason. For weekly/biweekly the full date is load-bearing:
+ * occurrencesInMonth steps 7 or 14 days from the anchor, so moving it shifts
+ * the phase and genuinely is a different schedule.
+ */
+export function sameAnchorSchedule(
+  a: string | null,
+  b: string | null,
+  cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly'
+): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  if (cadence === 'weekly' || cadence === 'biweekly') return false;
+  return anchorDayOfMonth(a) === anchorDayOfMonth(b);
+}

@@ -12,6 +12,10 @@ let households: Resolution;
 let txRows: Resolution;
 let existingReviews: Resolution;
 let claimResult: Resolution;
+// `.update(...).select('id')` resolves to the ROWS MATCHED. An empty array is
+// the real signal that the claim vanished underneath a running generation, so
+// the mock has to model the data, not just the error.
+let updateResult: Resolution;
 let deleteError: unknown = null;
 let generateThrows = false;
 let ops: string[] = [];
@@ -22,7 +26,13 @@ function chain(resolution: Resolution, table: string, method: string): unknown {
     get(_, prop) {
       if (prop === 'then') return (r: (v: Resolution) => unknown) => Promise.resolve(resolution).then(r);
       return (...args: unknown[]) => {
-        if (method === 'delete' && prop === 'eq') deletedClaimIds.push(String(args[1]));
+        // Releasing a claim narrows by `.eq('id', …)`; reclaiming corpses
+        // narrows by `.in('id', [...])`. Both are deletions of claim rows.
+        if (method === 'delete' && (prop === 'eq' || prop === 'in')) {
+          const target = args[1];
+          if (Array.isArray(target)) target.forEach((id) => deletedClaimIds.push(String(id)));
+          else deletedClaimIds.push(String(target));
+        }
         return chain(resolution, table, method);
       };
     },
@@ -40,7 +50,7 @@ vi.mock('@/lib/supabase-admin', () => ({
         return chain({ data: [], error: null }, table, 'select');
       },
       insert: () => { ops.push(`insert:${table}`); return chain(claimResult, table, 'insert'); },
-      update: () => { ops.push(`update:${table}`); return chain({ error: null }, table, 'update'); },
+      update: () => { ops.push(`update:${table}`); return chain(updateResult, table, 'update'); },
       delete: () => { ops.push(`delete:${table}`); return chain({ error: deleteError }, table, 'delete'); },
     }),
   }),
@@ -56,9 +66,9 @@ vi.mock('@/lib/monthlyReviewService', () => ({
   },
 }));
 
-async function runCron(auth = 'Bearer test-secret') {
+async function runCron(auth = 'Bearer test-secret', query = '') {
   const { GET } = await import('../route');
-  return GET(new Request('http://localhost/api/cron/monthly-reviews', {
+  return GET(new Request(`http://localhost/api/cron/monthly-reviews${query}`, {
     headers: auth ? { authorization: auth } : {},
   }));
 }
@@ -76,6 +86,15 @@ describe('monthly review cron', () => {
     txRows = { data: ['2026-07', '2026-08'].map((m) => ({ date: `${m}-15` })), error: null };
     existingReviews = { data: [], error: null };
     claimResult = { data: { id: 'claim-1' }, error: null };
+    updateResult = { data: [{ id: 'claim-1' }], error: null };
+  });
+
+  /** A review that was actually written — two messages, not an empty claim. */
+  const filledReview = (month: string, createdAt = '2026-09-01T07:00:00Z') => ({
+    id: `conv-${month}`,
+    review_month: month,
+    messages: [{ type: 'top_recommendation' }, { type: 'monthly_review' }],
+    created_at: createdAt,
   });
 
   // --- authentication -----------------------------------------------------
@@ -120,10 +139,68 @@ describe('monthly review cron', () => {
   });
 
   it('skips a month already generated without even claiming', async () => {
-    existingReviews = { data: [{ review_month: '2026-08' }], error: null };
+    existingReviews = { data: [filledReview('2026-08')], error: null };
     const json = await (await runCron()).json();
     expect(json.outcomes[0]).toMatchObject({ status: 'skipped', reason: 'already_generated' });
     expect(ops).not.toContain('insert:conversations');
+  });
+
+  // --- the failure delete-on-failure CANNOT cover --------------------------
+  // A killed function (platform timeout, OOM) never reaches the catch, so its
+  // empty claim survives. Every later run then reports `claimed_by_other`,
+  // which reads exactly like healthy idempotency while the household silently
+  // never receives that month.
+
+  it('reclaims an empty claim left by a killed run, and generates', async () => {
+    existingReviews = {
+      data: [{
+        id: 'corpse-1',
+        review_month: '2026-08',
+        messages: [],
+        created_at: new Date(Date.now() - 31 * 60 * 1000).toISOString(),
+      }],
+      error: null,
+    };
+    const json = await (await runCron()).json();
+
+    expect(deletedClaimIds).toContain('corpse-1');
+    // And the month must NOT read as already_generated afterwards.
+    expect(json.outcomes[0]).toMatchObject({ status: 'generated', month: '2026-08' });
+  });
+
+  it('leaves a RECENT empty claim alone — that is a live generation', async () => {
+    // The whole risk of the reclaim: a run still inside its own maxDuration
+    // must not have the row deleted out from under it by an overlapping run.
+    existingReviews = {
+      data: [{
+        id: 'inflight-1',
+        review_month: '2026-08',
+        messages: [],
+        created_at: new Date(Date.now() - 60 * 1000).toISOString(),
+      }],
+      error: null,
+    };
+    const json = await (await runCron()).json();
+
+    expect(deletedClaimIds).not.toContain('inflight-1');
+    expect(json.outcomes[0]).toMatchObject({ status: 'skipped', reason: 'already_generated' });
+    expect(ops).not.toContain('generate');
+  });
+
+  it('does not reclaim a FILLED claim however old it is', async () => {
+    existingReviews = { data: [filledReview('2026-08', '2020-01-01T00:00:00Z')], error: null };
+    const json = await (await runCron()).json();
+    expect(deletedClaimIds).not.toContain('conv-2026-08');
+    expect(json.outcomes[0]).toMatchObject({ status: 'skipped', reason: 'already_generated' });
+  });
+
+  it('reports claim_reclaimed rather than a false success when the update matches nothing', async () => {
+    // Our claim was reclaimed as a corpse mid-generation and another run owns
+    // the month. The text went nowhere, so reporting `generated` would be a lie.
+    updateResult = { data: [], error: null };
+    const json = await (await runCron()).json();
+    expect(json.outcomes[0]).toMatchObject({ status: 'failed', reason: 'claim_reclaimed' });
+    expect(json.generated).toBe(0);
   });
 
   // --- THE failure mode this design creates -------------------------------
@@ -146,6 +223,24 @@ describe('monthly review cron', () => {
     deleteError = { message: 'db down' };
     const json = await (await runCron()).json();
     expect(json.outcomes[0]).toMatchObject({ status: 'failed', reason: 'claim_stuck' });
+  });
+
+  it('claim_stuck logs the GENERATION error too, not just the cleanup error', async () => {
+    // Knowing which row to delete does not tell you whether deleting it helps.
+    // Dropping genErr here loses the only record of why generation failed.
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    generateThrows = true;
+    deleteError = { message: 'db down' };
+    await runCron();
+
+    const stuckCall = spy.mock.calls.find((c) => String(c[0]).includes('COULD NOT BE RELEASED'));
+    expect(stuckCall).toBeDefined();
+    const logged = stuckCall!
+      .map((a) => (a instanceof Error ? a.message : typeof a === 'string' ? a : JSON.stringify(a)))
+      .join(' ');
+    expect(logged).toContain('anthropic down'); // the generation error
+    expect(logged).toContain('db down');        // the cleanup error
+    spy.mockRestore();
   });
 
   // --- isolation and eligibility ------------------------------------------
@@ -178,5 +273,28 @@ describe('monthly review cron', () => {
     generateThrows = true;
     const res = await runCron();
     expect(res.status).toBe(200);
+  });
+
+  // --- TEMPORARY test overrides. DELETE THESE WITH THE BLOCK IN route.ts ----
+
+  it('?today= overrides the local date, reviewing the month before it', async () => {
+    // businessToday is mocked to 2026-09-01; the override must win and target
+    // 2026-07 instead of 2026-08.
+    txRows = { data: [{ date: '2026-07-15' }], error: null };
+    const json = await (await runCron(undefined, '?today=2026-08-01')).json();
+    expect(json.outcomes[0]).toMatchObject({ status: 'generated', month: '2026-07' });
+  });
+
+  it('?household= confines the sweep — an unscoped override would bill everyone', async () => {
+    households = { data: [{ id: 'hh1', locale: 'en' }, { id: 'hh2', locale: 'fr' }], error: null };
+    const json = await (await runCron(undefined, '?household=hh2')).json();
+    expect(json.checked).toBe(1);
+    expect(json.outcomes[0].householdId).toBe('hh2');
+  });
+
+  it('the overrides are still behind the bearer secret', async () => {
+    const res = await runCron('', '?today=2026-08-01&household=hh1');
+    expect(res.status).toBe(401);
+    expect(ops).not.toContain('generate');
   });
 });

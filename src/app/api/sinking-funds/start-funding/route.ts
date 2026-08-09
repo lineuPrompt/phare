@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { businessToday, materializeFromMonthStart } from '@/lib/dateHelpers';
+import { businessToday, materializeFromMonthStart, anchorDateForDayOfMonth } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { materializeTransferOccurrences } from '@/lib/recurringTransferHelpers';
 
@@ -22,8 +22,19 @@ import { materializeTransferOccurrences } from '@/lib/recurringTransferHelpers';
  * machinery the (now-removed) per-fund version used — only the amount fed
  * into it changes, from one fund's own provision to the summed total.
  */
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    // Optional day-of-month the contribution should come out on (2026-08-09).
+    // Previously this was hardcoded to "today", so a household that set up on
+    // the 9th was funded on the 9th forever regardless of when they're
+    // actually paid. Omitted = today's day, i.e. the old behaviour exactly.
+    const body = await request.json().catch(() => ({}));
+    const rawAnchorDay = (body as { anchorDay?: unknown }).anchorDay;
+    const anchorDay = rawAnchorDay == null ? null : Number(rawAnchorDay);
+    if (anchorDay !== null && (!Number.isInteger(anchorDay) || anchorDay < 1 || anchorDay > 31)) {
+      return NextResponse.json({ error: 'Contribution day must be a whole number from 1 to 31' }, { status: 400 });
+    }
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -104,6 +115,11 @@ export async function POST() {
     const timezone = await getHouseholdTimezone(supabase, householdId);
     const today = businessToday(timezone);
 
+    // anchorDateForDayOfMonth never clamps the chosen day (a 31st stays a
+    // 31st, rolling to a month that has one) — see its note. No day given
+    // keeps the original behaviour: today's own day-of-month.
+    const anchorDate = anchorDay === null ? today : anchorDateForDayOfMonth(anchorDay, today);
+
     const { data: item, error: itemError } = await supabase
       .from('recurring_items')
       .insert({
@@ -116,7 +132,7 @@ export async function POST() {
         amount: totalMonthlyProvision,
         type: 'transfer',
         cadence: 'monthly',
-        anchor_date: today,
+        anchor_date: anchorDate,
         second_day: null,
       })
       .select('id')
@@ -129,7 +145,20 @@ export async function POST() {
       );
     }
 
-    const dates = materializeFromMonthStart({ cadence: 'monthly', anchorDate: today, secondDay: null }, today, 12);
+    // FILTERED TO TODAY FORWARD, unlike every other materialization call in
+    // this codebase — and deliberately so. materializeFromMonthStart starts
+    // at the 1st of the current month because for an ALREADY-RUNNING rule an
+    // occurrence earlier this month is real history that must not be dropped
+    // (see its own note). Nothing is running yet here: this is the first
+    // moment the rule exists. So a chosen day earlier in the month than today
+    // (set up on the 9th, contribution on the 5th) would otherwise write a
+    // contribution dated four days ago that never happened — inventing money
+    // movement, not recording it. The first real contribution is next month's.
+    const dates = materializeFromMonthStart(
+      { cadence: 'monthly', anchorDate, secondDay: null },
+      today,
+      12
+    ).filter((d) => d >= today);
     const { materialized, error: materializeErr } = await materializeTransferOccurrences(supabase, {
       householdId,
       memberId: member.id,

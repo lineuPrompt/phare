@@ -15,6 +15,9 @@ import {
   businessMonth,
   excludeSkippedDates,
   firstOfNextMonth,
+  anchorDayOfMonth,
+  anchorDateForDayOfMonth,
+  sameAnchorSchedule,
 } from '../dateHelpers';
 
 describe('monthNameToNumber', () => {
@@ -646,5 +649,98 @@ describe('semi-monthly day-30 clamp composes correctly with businessMonth', () =
       month
     );
     expect(dates).toEqual(['2026-02-28']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Settable reserve-fund contribution day (2026-08-09)
+// ---------------------------------------------------------------------------
+
+describe('anchorDayOfMonth', () => {
+  it('reads the day off an anchor, ignoring year and month', () => {
+    expect(anchorDayOfMonth('2026-08-09')).toBe(9);
+    expect(anchorDayOfMonth('2027-02-01')).toBe(1);
+    expect(anchorDayOfMonth('2026-12-31')).toBe(31);
+  });
+});
+
+describe('anchorDateForDayOfMonth', () => {
+  it('uses the reference month when the day fits', () => {
+    expect(anchorDateForDayOfMonth(15, '2026-08-09')).toBe('2026-08-15');
+    // A day earlier in the month than the reference date is still this
+    // month's anchor — the anchor is a schedule marker, not a first payment.
+    expect(anchorDateForDayOfMonth(5, '2026-08-09')).toBe('2026-08-05');
+  });
+
+  it('rolls forward rather than clamping when the month is too short', () => {
+    // The household chose the 31st. Clamping would rewrite that to the 28th
+    // permanently, because every later read takes the day off the anchor.
+    expect(anchorDateForDayOfMonth(31, '2026-02-10')).toBe('2026-03-31');
+    expect(anchorDayOfMonth(anchorDateForDayOfMonth(31, '2026-02-10'))).toBe(31);
+
+    expect(anchorDateForDayOfMonth(30, '2026-02-10')).toBe('2026-03-30');
+    // 2026 is not a leap year; 29 does not fit in February either.
+    expect(anchorDateForDayOfMonth(29, '2026-02-10')).toBe('2026-03-29');
+  });
+
+  it('handles a leap February', () => {
+    expect(anchorDateForDayOfMonth(29, '2028-02-10')).toBe('2028-02-29');
+  });
+
+  it('rolls across a year boundary', () => {
+    expect(anchorDateForDayOfMonth(31, '2026-11-05')).toBe('2026-12-31');
+    expect(anchorDateForDayOfMonth(31, '2026-09-05')).toBe('2026-10-31');
+  });
+
+  it('always produces a real date that survives a round trip', () => {
+    for (let day = 1; day <= 31; day++) {
+      for (let month = 1; month <= 12; month++) {
+        const from = `2026-${String(month).padStart(2, '0')}-10`;
+        const anchor = anchorDateForDayOfMonth(day, from);
+        // Real calendar date, not e.g. 2026-02-31
+        const parsed = new Date(anchor + 'T00:00:00');
+        expect(parsed.getDate()).toBe(day);
+        // The chosen day is never silently changed
+        expect(anchorDayOfMonth(anchor)).toBe(day);
+      }
+    }
+  });
+
+  it('feeds occurrencesInMonth so a 31st still means month-end in short months', () => {
+    const anchor = anchorDateForDayOfMonth(31, '2026-02-10'); // 2026-03-31
+    // Clamping happens per-month at READ time, which is the honest place:
+    // "the 31st" is the 30th in April and the 31st in May.
+    expect(occurrencesInMonth({ cadence: 'monthly', anchorDate: anchor }, '2026-04')).toEqual(['2026-04-30']);
+    expect(occurrencesInMonth({ cadence: 'monthly', anchorDate: anchor }, '2026-05')).toEqual(['2026-05-31']);
+    expect(occurrencesInMonth({ cadence: 'monthly', anchorDate: anchor }, '2027-02')).toEqual(['2027-02-28']);
+  });
+});
+
+describe('sameAnchorSchedule', () => {
+  it('treats a different month with the same day as the same monthly schedule', () => {
+    // This is the whole point: picking 2026-09-09 when the anchor is
+    // 2026-08-09 changes nothing about when money moves, so it must not
+    // split the rule.
+    expect(sameAnchorSchedule('2026-08-09', '2026-09-09', 'monthly')).toBe(true);
+    expect(sameAnchorSchedule('2026-08-09', '2027-01-09', 'semimonthly')).toBe(true);
+  });
+
+  it('treats a different day as a different monthly schedule', () => {
+    expect(sameAnchorSchedule('2026-08-09', '2026-08-15', 'monthly')).toBe(false);
+    expect(sameAnchorSchedule('2026-08-09', '2026-09-15', 'semimonthly')).toBe(false);
+  });
+
+  it('treats any moved anchor as a different weekly/biweekly schedule', () => {
+    // Phase is load-bearing here — occurrencesInMonth steps 7/14 days from
+    // the anchor, so the same day-of-month a month later is a real shift.
+    expect(sameAnchorSchedule('2026-08-09', '2026-09-09', 'biweekly')).toBe(false);
+    expect(sameAnchorSchedule('2026-08-09', '2026-09-09', 'weekly')).toBe(false);
+    expect(sameAnchorSchedule('2026-08-09', '2026-08-09', 'biweekly')).toBe(true);
+  });
+
+  it('handles nulls without pretending they match', () => {
+    expect(sameAnchorSchedule(null, null, 'monthly')).toBe(true);
+    expect(sameAnchorSchedule(null, '2026-08-09', 'monthly')).toBe(false);
+    expect(sameAnchorSchedule('2026-08-09', null, 'monthly')).toBe(false);
   });
 });
