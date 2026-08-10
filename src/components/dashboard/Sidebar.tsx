@@ -52,16 +52,14 @@ export default function Sidebar({ locale, role: roleProp }: { locale: string; ro
     // — Reserve Fund and Goals now share /savings. Takes the slot the two
     // used to occupy, so nothing else in the order shifts.
     { href: `/${locale}/savings`,   label: t('savings'),   icon: '💰' },
+    // Shipped 2026-08-10 — was the last comingSoon entry, now a real page.
+    { href: `/${locale}/reviews`,   label: t('reviews'),   icon: '✉️' },
     { href: `/${locale}/recurring`, label: t('recurring'), icon: '🔁' },
     { href: `/${locale}/reconcile`, label: t('reconcile'), icon: '🔍' },
     ...(role === 'owner'
       ? [{ href: `/${locale}/household`, label: t('household'), icon: '👨‍👩‍👧' }]
       : []),
     { href: `/${locale}/upload`,    label: t('upload'),    icon: '📄' },
-  ];
-
-  const comingSoon = [
-    { label: t('reviews'), icon: '✉️' },
   ];
 
   // Shared between the mobile drawer and the desktop sidebar — one nav list,
@@ -87,17 +85,6 @@ export default function Sidebar({ locale, role: roleProp }: { locale: string; ro
         );
       })}
 
-      {comingSoon.map((item) => (
-        <div
-          key={item.label}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium opacity-40 cursor-not-allowed"
-          style={{ color: '#6B7280' }}
-        >
-          <span>{item.icon}</span>
-          {item.label}
-          <span className="ml-auto text-xs">🔒</span>
-        </div>
-      ))}
     </nav>
   );
 

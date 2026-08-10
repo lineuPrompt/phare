@@ -117,29 +117,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  // ===========================================================================
-  // TEMPORARY — MANUAL END-TO-END TEST ONLY. REMOVE THIS BLOCK.
-  //
-  // Added 2026-08-09 to exercise the full generation path on a day that is not
-  // the 1st. `today` (YYYY-MM-DD) replaces the household's real local date, so
-  // ?today=2026-08-01 reviews 2026-07 — a REAL claim on a real month, not a
-  // throwaway. `household` scopes the sweep to one id: without it, a relaxed
-  // date check bills two Sonnet calls for every household at once.
-  //
-  // Both are behind the CRON_SECRET check above, but that is a reason they are
-  // safe to test with, not a reason to leave them in.
-  // ===========================================================================
-  const params = new URL(request.url).searchParams;
-  const forceToday = params.get('today');
-  const onlyHousehold = params.get('household');
-  if (forceToday || onlyHousehold) {
-    console.warn(
-      'Cron monthly-reviews — TEMPORARY TEST OVERRIDE ACTIVE:',
-      JSON.stringify({ forceToday, onlyHousehold })
-    );
-  }
-  // ======================== END TEMPORARY BLOCK ==============================
-
   const admin = createAdminClient();
   const outcomes: Outcome[] = [];
 
@@ -156,16 +133,12 @@ export async function GET(request: Request) {
     for (const household of (households ?? []) as { id: string; locale: string | null }[]) {
       const householdId = household.id;
 
-      // TEMPORARY — see the test-override block above. Remove with it.
-      if (onlyHousehold && householdId !== onlyHousehold) continue;
-
       // PER-HOUSEHOLD ISOLATION. One family's failure must never stop the rest:
       // a bare Promise.all or an unguarded loop would abandon every household
       // after the first error, with no record of where it stopped.
       try {
         const timezone = await getHouseholdTimezone(admin, householdId);
-        // `forceToday ??` is TEMPORARY — see the test-override block above.
-        const localToday = forceToday ?? businessToday(timezone);
+        const localToday = businessToday(timezone);
 
         // Months with real ledger data, for the SAME threshold the coaching
         // layer uses. A second definition of "enough history" would drift from

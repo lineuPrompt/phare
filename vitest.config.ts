@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
+    // Blocks real (billed) Anthropic calls suite-wide. See the file's header.
+    setupFiles: ['./vitest.setup.ts'],
   },
   resolve: {
     alias: {

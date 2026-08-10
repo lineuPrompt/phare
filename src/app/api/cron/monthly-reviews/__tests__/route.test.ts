@@ -66,9 +66,9 @@ vi.mock('@/lib/monthlyReviewService', () => ({
   },
 }));
 
-async function runCron(auth = 'Bearer test-secret', query = '') {
+async function runCron(auth = 'Bearer test-secret') {
   const { GET } = await import('../route');
-  return GET(new Request(`http://localhost/api/cron/monthly-reviews${query}`, {
+  return GET(new Request('http://localhost/api/cron/monthly-reviews', {
     headers: auth ? { authorization: auth } : {},
   }));
 }
@@ -273,28 +273,5 @@ describe('monthly review cron', () => {
     generateThrows = true;
     const res = await runCron();
     expect(res.status).toBe(200);
-  });
-
-  // --- TEMPORARY test overrides. DELETE THESE WITH THE BLOCK IN route.ts ----
-
-  it('?today= overrides the local date, reviewing the month before it', async () => {
-    // businessToday is mocked to 2026-09-01; the override must win and target
-    // 2026-07 instead of 2026-08.
-    txRows = { data: [{ date: '2026-07-15' }], error: null };
-    const json = await (await runCron(undefined, '?today=2026-08-01')).json();
-    expect(json.outcomes[0]).toMatchObject({ status: 'generated', month: '2026-07' });
-  });
-
-  it('?household= confines the sweep — an unscoped override would bill everyone', async () => {
-    households = { data: [{ id: 'hh1', locale: 'en' }, { id: 'hh2', locale: 'fr' }], error: null };
-    const json = await (await runCron(undefined, '?household=hh2')).json();
-    expect(json.checked).toBe(1);
-    expect(json.outcomes[0].householdId).toBe('hh2');
-  });
-
-  it('the overrides are still behind the bearer secret', async () => {
-    const res = await runCron('', '?today=2026-08-01&household=hh1');
-    expect(res.status).toBe(401);
-    expect(ops).not.toContain('generate');
   });
 });

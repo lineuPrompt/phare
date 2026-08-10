@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-type Resolution = { data?: unknown; error?: unknown };
+// `count` is part of a PostgREST resolution too — a `select(..., { count })`
+// query resolves to { data, error, count }. Omitting it here made every
+// count-bearing fixture a type error while the tests themselves passed, since
+// vitest does not typecheck.
+type Resolution = { data?: unknown; error?: unknown; count?: number | null };
 
 function makeResultChain(resolution: Resolution) {
   const handler: ProxyHandler<object> = {
