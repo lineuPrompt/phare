@@ -450,6 +450,11 @@
     "loading": "Chargement de votre plan...",
     "regeneratePlan": "Régénérer le plan à partir des données actuelles",
     "regenerating": "Régénération…",
+    "replaceTitle": "Remplacer votre bilan de {month} ?",
+    "replaceBody": "Cela réécrit votre bilan de {month} à partir de vos données actuelles. L’ancien ne pourra pas être récupéré.",
+    "replaceConfirm": "Le remplacer",
+    "replaceCancel": "Garder l’actuel",
+    "regenerateInProgress": "Un bilan est en cours de rédaction. Veuillez réessayer dans une minute.",
     "snapshotNav": {
       "prev": "Mois précédent",
       "next": "Mois suivant",
@@ -500,11 +505,6 @@
     "collapse": "Réduire cette lettre",
     "expand": "Ouvrir cette lettre",
     "noFigureHint": "Aucune transaction enregistrée pour ce mois",
-    "showVersions": "{count, plural, one {Afficher # version précédente} other {Afficher # versions précédentes}}",
-    "hideVersions": "Masquer les versions précédentes",
-    "supersededBadge": "Version précédente",
-    "earlierTitle": "Antérieures",
-    "earlierHint": "Lettres qui ne sont rattachées à aucun mois précis — des rafraîchissements que vous avez demandés vous-même.",
     "startingPlanTitle": "Votre plan de départ",
     "startingPlanHint": "La première lettre que Phare vous a écrite, avant qu’il y ait un historique à comparer."
   },

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // The two things this route must never get wrong: sending a free household the
@@ -101,7 +101,7 @@ describe('GET /api/reviews', () => {
 
   it('a free household never receives the full letter text', async () => {
     const json = await (await get()).json();
-    const letter = json.months[0].latest;
+    const letter = json.months[0].letter;
 
     expect(letter.reviewLocked).toBe(true);
     expect(letter.review.length).toBeLessThan(LONG.length);
@@ -113,7 +113,7 @@ describe('GET /api/reviews', () => {
 
   it('the top recommendation is never withheld — it is the free tier’s value', async () => {
     const json = await (await get()).json();
-    expect(json.months[0].latest.topRecommendation).toBe('Move $200 to the buffer.');
+    expect(json.months[0].letter.topRecommendation).toBe('Move $200 to the buffer.');
   });
 
   it('a Pro household receives the whole letter', async () => {
@@ -121,8 +121,8 @@ describe('GET /api/reviews', () => {
     const json = await (await get()).json();
 
     expect(json.isPro).toBe(true);
-    expect(json.months[0].latest.reviewLocked).toBe(false);
-    expect(json.months[0].latest.review).toBe(LONG);
+    expect(json.months[0].letter.reviewLocked).toBe(false);
+    expect(json.months[0].letter.review).toBe(LONG);
   });
 
   it('computes the month figure from the ledger, not from the prose', async () => {
@@ -168,8 +168,22 @@ describe('GET /api/reviews', () => {
 
     expect(res.status).toBe(200);
     expect(json.months).toEqual([]);
-    expect(json.earlier).toEqual([]);
     expect(json.startingPlan).toBeNull();
+  });
+
+  it('does not render a legacy unmonthed refresh', async () => {
+    // Kept in the database for the dashboard, absent from the archive.
+    conversations = {
+      data: [{
+        id: 'adhoc', type: 'monthly_review', review_month: null,
+        created_at: '2026-08-14T12:00:00Z',
+        messages: [{ type: 'monthly_review', content: 'A refresh.' }],
+      }],
+      error: null,
+    };
+    const json = await (await get()).json();
+    expect(json.months).toEqual([]);
+    expect(JSON.stringify(json)).not.toContain('A refresh.');
   });
 
   it('surfaces a conversations read failure instead of pretending the archive is empty', async () => {
@@ -177,3 +191,4 @@ describe('GET /api/reviews', () => {
     expect((await get()).status).toBe(503);
   });
 });
+

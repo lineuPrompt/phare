@@ -70,6 +70,11 @@ function makeSupabaseMock(script: Record<string, Resolution[]>) {
     const list = script[table] ?? [];
     if (idx >= list.length) {
       if (table === 'events') return makeResultChain({ data: null, error: null, count: 0 });
+      // conversations is read (active-claim check) then written (upsert) on
+      // every request now. This suite is about guard argument wiring, so an
+      // exhausted script falls back to a benign result rather than making every
+      // fixture spell out persistence it does not assert on.
+      if (table === 'conversations') return makeResultChain({ data: null, error: null });
       throw new Error(`No scripted response for table "${table}" call #${idx + 1}`);
     }
     return makeResultChain(list[idx]);
@@ -80,6 +85,7 @@ function makeSupabaseMock(script: Record<string, Resolution[]>) {
     from: (table: string) => ({
       select: (..._args: unknown[]) => entry(table),
       insert: (..._args: unknown[]) => entry(table),
+      upsert: (..._args: unknown[]) => entry(table),
     }),
   };
 

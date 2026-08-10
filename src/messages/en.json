@@ -450,6 +450,11 @@
     "loading": "Loading your plan...",
     "regeneratePlan": "Regenerate plan from current data",
     "regenerating": "Regenerating…",
+    "replaceTitle": "Replace your {month} review?",
+    "replaceBody": "This rewrites your review for {month} using your current data. The existing one won't be recoverable.",
+    "replaceConfirm": "Replace it",
+    "replaceCancel": "Keep the current one",
+    "regenerateInProgress": "A review is being written right now. Please try again in a minute.",
     "snapshotNav": {
       "prev": "Previous month",
       "next": "Next month",
@@ -500,11 +505,6 @@
     "collapse": "Collapse this letter",
     "expand": "Open this letter",
     "noFigureHint": "No transactions recorded for this month",
-    "showVersions": "{count, plural, one {Show # earlier version} other {Show # earlier versions}}",
-    "hideVersions": "Hide earlier versions",
-    "supersededBadge": "Earlier version",
-    "earlierTitle": "Earlier",
-    "earlierHint": "Letters that aren't tied to a single month — refreshes you asked for yourself.",
     "startingPlanTitle": "Your starting plan",
     "startingPlanHint": "The first letter Phare wrote you, before there was any history to compare against."
   },

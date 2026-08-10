@@ -80,11 +80,45 @@ export async function POST(request: Request) {
     // timezone only for the quota's calendar month.
     const timezone = await getHouseholdTimezone(supabase, householdId);
 
+    // THE MONTH THIS REFRESH IS ABOUT: the one in progress.
+    //
+    // A family who corrects an August entry and presses Regenerate wants the
+    // August letter to reflect the correction. Targeting the last COMPLETED
+    // month would hand them a July letter that ignores the very edit they made,
+    // which fails the case the button exists for.
+    const reviewMonth = businessMonth(timezone);
+
+    // ── REFUSE WHILE THE CRON IS MID-GENERATION FOR THIS MONTH ───────────────
+    // The cron holds a fresh month by inserting an empty row and filling it a
+    // minute later. If a manual refresh upserted into that window, the cron's
+    // fill would overwrite the family's letter — or its failure path would
+    // delete it — after they had already spent a refresh on it. Rare, since the
+    // cron targets the month that just ENDED and this targets the one in
+    // progress, so the two normally address different rows; possible via a
+    // manual cron trigger. Checked BEFORE reserveRegeneration so a refused
+    // request never costs a refresh.
+    const { data: activeClaim } = await supabase
+      .from('conversations')
+      .select('id, messages')
+      .eq('household_id', householdId)
+      .eq('review_month', reviewMonth)
+      .maybeSingle();
+
+    if (activeClaim && ((activeClaim.messages as unknown[] | null)?.length ?? 0) === 0) {
+      return NextResponse.json(
+        {
+          error: 'A review is being written right now. Please try again in a minute.',
+          code: 'review_in_progress',
+        },
+        { status: 409 }
+      );
+    }
+
     // Claim the slot BEFORE generating. Everything below this line costs money,
     // and this is placed after the timezone lookup only so the quota's calendar
     // month reuses it rather than resolving the household twice.
     const reservation = await reserveRegeneration(
-      supabase, householdId, user.id, businessMonth(timezone)
+      supabase, householdId, user.id, reviewMonth
     );
     if (!reservation.ok) {
       return NextResponse.json(
@@ -103,29 +137,51 @@ export async function POST(request: Request) {
       householdId,
       locale,
       timezone,
-      // UNCHANGED BEHAVIOUR, now stated instead of assumed. A manual refresh has
-      // always reviewed the month in progress — the service derived exactly
-      // this internally. Making it explicit is the whole point of the change:
-      // the cron's window was wrong for the same reason this one was invisible.
-      reviewMonth: businessMonth(timezone),
+      reviewMonth,
       userId: user.id,
     });
 
-    // ── Save conversation row ─────────────────────────────────────────────────
-    // review_month is deliberately absent: a manual regeneration is an ad-hoc
-    // refresh, not the canonical monthly letter, and must stay outside the
-    // uniqueness claim so pressing Regenerate never collides with the cron.
-    await supabase.from('conversations').insert({
-      household_id: householdId,
-      user_id: user.id,
-      type: 'monthly_review',
-      messages: [
-        { role: 'assistant', type: 'top_recommendation', content: topRecommendation, locale },
-        { role: 'assistant', type: 'monthly_review', content: reviewText, locale },
-      ],
-    });
+    // ── Save: ONE REVIEW PER MONTH, so this REPLACES ─────────────────────────
+    // review_month is now set, reversing the previous rule. It used to be left
+    // NULL precisely so a refresh could never collide with the cron — but the
+    // cost was a row per press, and a household that regenerated a few times
+    // accumulated an archive that read as noise. Under one-per-month the
+    // collision is handled by `generated_by` instead: this row is 'manual', and
+    // the cron may replace it with the real end-of-month letter.
+    //
+    // THE PREVIOUS TEXT IS GONE, deliberately. A family who corrected an entry
+    // and regenerated wants the corrected letter, not both. The UI warns before
+    // this happens and names the month.
+    //
+    // created_at is set explicitly: the archive shows it as when the letter was
+    // written, and on a replacement the row's original insert time would
+    // misdate text produced just now.
+    const { error: saveErr } = await supabase
+      .from('conversations')
+      .upsert(
+        {
+          household_id: householdId,
+          user_id: user.id,
+          type: 'monthly_review',
+          review_month: reviewMonth,
+          generated_by: 'manual',
+          created_at: new Date().toISOString(),
+          messages: [
+            { role: 'assistant', type: 'top_recommendation', content: topRecommendation, locale },
+            { role: 'assistant', type: 'monthly_review', content: reviewText, locale },
+          ],
+        },
+        // Inferrable only because the unique index was made TOTAL — PostgREST
+        // emits no WHERE, and Postgres cannot infer a partial index from that.
+        { onConflict: 'household_id,review_month' }
+      );
 
-    return NextResponse.json({ saved: true, topRecommendation, reviewText });
+    if (saveErr) {
+      console.error('Regenerate plan — could not save the review:', saveErr);
+      throw new Error('Your review was generated but could not be saved. Please try again.');
+    }
+
+    return NextResponse.json({ saved: true, topRecommendation, reviewText, reviewMonth });
   } catch (error) {
     console.error('Regenerate plan error:', error);
     return NextResponse.json({ error: 'Failed to regenerate plan' }, { status: 500 });

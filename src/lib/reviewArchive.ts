@@ -4,26 +4,29 @@ import { reviewForEntitlement } from '@/lib/reviewPreview';
 // THE REVIEW ARCHIVE — turning a flat `conversations` list into the shape the
 // Reviews page renders.
 //
-// Three kinds of row land in `conversations`, and they are NOT interchangeable:
+// ONE REVIEW PER MONTH, PLUS THE STARTING PLAN. Nothing else is rendered.
 //
-//   MONTHED (review_month set)   The canonical monthly letter, written by the
-//                                cron. Exactly one per month — the partial
-//                                unique index on (household_id, review_month)
-//                                is what guarantees it.
-//   UNMONTHED monthly_review     An on-demand refresh from POST
-//                                /api/regenerate-plan, which deliberately
-//                                leaves review_month NULL so pressing
-//                                Regenerate can never collide with the cron.
+//   MONTHED (review_month set)   The month's letter — from the cron, or from a
+//                                manual refresh that has not been superseded
+//                                yet. Exactly one per month: the unique index
+//                                on (household_id, review_month) guarantees it,
+//                                and both writers now go through that slot.
 //   onboarding                   The letter written when the plan was first
-//                                saved.
+//                                saved. Not a review of a month; exempt.
+//   UNMONTHED monthly_review     LEGACY ONLY, and deliberately NOT RENDERED.
 //
-// WHY UNMONTHED ROWS ARE NOT SORTED INTO MONTHS. It is tempting to infer a
-// refresh's month from its created_at — "generated in August, so it describes
-// July". That inference is wrong the moment anyone regenerates twice in a
-// month, or regenerates in the same month the letter describes, and a review
-// filed under the wrong month is worse than one filed under none: the reader
-// has no way to notice. So they group under "Earlier", with their date, and
-// claim nothing about which month they cover.
+// WHY UNMONTHED ROWS ARE DROPPED RATHER THAN PLACED. Before regenerate-plan
+// wrote a month, every refresh created a row with review_month NULL. A few
+// presses produced a list that read as noise, which is what retired the
+// "Earlier" group. They cannot be folded into months either: inferring a
+// refresh's month from its created_at is wrong the moment anyone regenerates
+// twice in a month, and a letter filed under the wrong month is worse than one
+// not shown — the reader has no way to notice.
+//
+// They are dropped from the ARCHIVE, not from the database. The dashboard still
+// picks the newest conversation of any kind, so a pre-cutover household keeps
+// seeing its most recent refresh there rather than falling back to its
+// onboarding letter.
 //
 // THE FIGURE ON EACH ROW IS CODE-COMPUTED AND PASSED IN. It is never read out
 // of the letter's prose. The letter is what the model wrote about the month;
@@ -66,21 +69,13 @@ export type ArchiveMonth = {
    * figure and would be a lie about an empty month.
    */
   netCashFlow: number | null;
-  latest: ArchiveLetter;
-  /**
-   * Superseded letters for the SAME month, newest first. Normally empty: the
-   * unique index permits one monthed row per month. It is not guaranteed empty
-   * — rows predating the index, or a month whose claim was reclaimed and
-   * regenerated — so the page keeps them reachable rather than dropping them.
-   */
-  earlier: ArchiveLetter[];
+  /** The month's letter. Exactly one — see the header. */
+  letter: ArchiveLetter;
 };
 
 export type ReviewArchive = {
   /** Newest month first. */
   months: ArchiveMonth[];
-  /** Unmonthed letters, newest first. Claims no month — see the header. */
-  earlier: ArchiveLetter[];
   /** The cold-start baseline. See pickStartingPlan. */
   startingPlan: ArchiveLetter | null;
 };
@@ -127,9 +122,13 @@ function byCreatedAtDesc(a: ArchiveLetter, b: ArchiveLetter): number {
  * The EARLIEST one. save-plan inserts an onboarding letter on every plan save,
  * so a household that re-uploaded its budget has several — and the cold-start
  * baseline is the first one, the letter written when they had no history at
- * all. Later re-uploads are real letters and are not discarded; they fall
- * through to "Earlier" with the regenerations, which is where any unmonthed
- * letter belongs.
+ * all.
+ *
+ * `rest` (the later re-uploads) is returned but no longer rendered: with the
+ * "Earlier" group retired there is nowhere for them to go that would not
+ * reintroduce the noise it was retired for. It stays on the return type
+ * because it is exactly the set the cleanup script deletes, and a caller that
+ * wants to count or surface them should not have to re-derive it.
  */
 export function pickStartingPlan(onboardingLetters: ArchiveLetter[]): {
   startingPlan: ArchiveLetter | null;
@@ -148,7 +147,6 @@ export function groupReviewArchive(
   const { isPro, figures = {} } = options;
 
   const monthed = new Map<string, ArchiveLetter[]>();
-  const unmonthed: ArchiveLetter[] = [];
   const onboarding: ArchiveLetter[] = [];
 
   for (const row of rows) {
@@ -161,34 +159,27 @@ export function groupReviewArchive(
       onboarding.push(letter);
       continue;
     }
-    if (row.review_month) {
-      const list = monthed.get(row.review_month) ?? [];
-      list.push(letter);
-      monthed.set(row.review_month, list);
-      continue;
-    }
-    unmonthed.push(letter);
+    // Legacy unmonthed refresh — see the header. Skipped, not placed.
+    if (!row.review_month) continue;
+
+    const list = monthed.get(row.review_month) ?? [];
+    list.push(letter);
+    monthed.set(row.review_month, list);
   }
 
   const months: ArchiveMonth[] = [...monthed.entries()]
-    .map(([month, letters]) => {
-      const sorted = letters.sort(byCreatedAtDesc);
-      return {
-        month,
-        netCashFlow: figures[month] ?? null,
-        latest: sorted[0],
-        earlier: sorted.slice(1),
-      };
-    })
+    .map(([month, letters]) => ({
+      month,
+      netCashFlow: figures[month] ?? null,
+      // The unique index makes duplicates impossible going forward. Sorting and
+      // taking the newest is a belt-and-braces read, not a versioning feature:
+      // if a duplicate ever exists (a row predating the index), the household
+      // sees the most recent one rather than an arbitrary one.
+      letter: letters.sort(byCreatedAtDesc)[0],
+    }))
     .sort((a, b) => b.month.localeCompare(a.month));
 
-  const { startingPlan, rest } = pickStartingPlan(onboarding);
-
-  return {
-    months,
-    earlier: [...unmonthed, ...rest].sort(byCreatedAtDesc),
-    startingPlan,
-  };
+  return { months, startingPlan: pickStartingPlan(onboarding).startingPlan };
 }
 
 /** 'YYYY-MM' → 'August 2026' / 'août 2026'. */

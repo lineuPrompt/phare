@@ -16,6 +16,12 @@ let claimResult: Resolution;
 // the real signal that the claim vanished underneath a running generation, so
 // the mock has to model the data, not just the error.
 let updateResult: Resolution;
+/** Consumed in order; falls back to `updateResult` once empty. */
+let updateResults: Resolution[] = [];
+/** Every object passed to .update(), in call order. */
+let updatePayloads: Record<string, unknown>[] = [];
+/** Every object passed to .insert(), in call order. */
+let insertPayloads: Record<string, unknown>[] = [];
 let deleteError: unknown = null;
 let generateThrows = false;
 let ops: string[] = [];
@@ -49,8 +55,20 @@ vi.mock('@/lib/supabase-admin', () => ({
         if (table === 'conversations') return chain(existingReviews, table, 'select');
         return chain({ data: [], error: null }, table, 'select');
       },
-      insert: () => { ops.push(`insert:${table}`); return chain(claimResult, table, 'insert'); },
-      update: () => { ops.push(`update:${table}`); return chain(updateResult, table, 'update'); },
+      insert: (payload: unknown) => {
+        ops.push(`insert:${table}`);
+        insertPayloads.push(payload as Record<string, unknown>);
+        return chain(claimResult, table, 'insert');
+      },
+      // Payloads and per-call results are both needed now: the takeover path
+      // issues TWO updates (the compare-and-swap, then the fill), and the
+      // difference between them is the whole point of the design.
+      update: (payload: unknown) => {
+        ops.push(`update:${table}`);
+        updatePayloads.push(payload as Record<string, unknown>);
+        const res = updateResults.length ? updateResults.shift()! : updateResult;
+        return chain(res, table, 'update');
+      },
       delete: () => { ops.push(`delete:${table}`); return chain({ error: deleteError }, table, 'delete'); },
     }),
   }),
@@ -87,6 +105,9 @@ describe('monthly review cron', () => {
     existingReviews = { data: [], error: null };
     claimResult = { data: { id: 'claim-1' }, error: null };
     updateResult = { data: [{ id: 'claim-1' }], error: null };
+    updateResults = [];
+    updatePayloads = [];
+    insertPayloads = [];
   });
 
   /** A review that was actually written — two messages, not an empty claim. */
@@ -95,6 +116,16 @@ describe('monthly review cron', () => {
     review_month: month,
     messages: [{ type: 'top_recommendation' }, { type: 'monthly_review' }],
     created_at: createdAt,
+    generated_by: 'cron',
+  });
+
+  /** A real letter the FAMILY generated mid-month. Provisional, not canonical. */
+  const manualReview = (month: string, createdAt = '2026-08-14T12:00:00Z') => ({
+    id: `manual-${month}`,
+    review_month: month,
+    messages: [{ type: 'top_recommendation' }, { type: 'monthly_review' }],
+    created_at: createdAt,
+    generated_by: 'manual',
   });
 
   // --- authentication -----------------------------------------------------
@@ -267,6 +298,80 @@ describe('monthly review cron', () => {
     const json = await (await runCron()).json();
     expect(json.outcomes[0]).toMatchObject({ status: 'skipped', reason: 'no_data_for_month' });
     expect(ops).not.toContain('insert:conversations');
+  });
+
+  // --- a manual row must not consume the month ------------------------------
+  // A family who pressed Regenerate on 14 August has a real letter for
+  // '2026-08' describing half a month. If that settled the month, the cron
+  // would report `claimed_by_other` on 1 September — indistinguishable from
+  // healthy idempotency — and their August review would permanently be the
+  // mid-month draft.
+
+  it('REPLACES a manual row for the month instead of skipping it', async () => {
+    existingReviews = { data: [manualReview('2026-08')], error: null };
+    const json = await (await runCron()).json();
+
+    expect(json.outcomes[0]).toMatchObject({ status: 'generated', month: '2026-08' });
+    // Took over the existing row rather than inserting a second one — the
+    // unique index would reject that anyway.
+    expect(ops).not.toContain('insert:conversations');
+  });
+
+  it('the takeover NEVER empties the row it claims', async () => {
+    // The failure path deletes what it claimed. Emptying first would mean a
+    // transient Anthropic error destroys a letter the family paid a refresh
+    // for and leaves nothing behind.
+    existingReviews = { data: [manualReview('2026-08')], error: null };
+    await runCron();
+
+    const cas = updatePayloads[0];
+    expect(cas).toEqual({ generated_by: 'cron' });
+    expect(cas).not.toHaveProperty('messages');
+  });
+
+  it('a generation failure REVERTS the takeover instead of deleting the letter', async () => {
+    existingReviews = { data: [manualReview('2026-08')], error: null };
+    generateThrows = true;
+    const json = await (await runCron()).json();
+
+    // The family's letter survives untouched; only the label goes back.
+    expect(deletedClaimIds).not.toContain('manual-2026-08');
+    expect(updatePayloads[updatePayloads.length - 1]).toEqual({ generated_by: 'manual' });
+    expect(json.outcomes[0]).toMatchObject({ status: 'failed', reason: 'generation_failed' });
+  });
+
+  it('losing the compare-and-swap reports claimed_by_other, not a double generation', async () => {
+    existingReviews = { data: [manualReview('2026-08')], error: null };
+    updateResults = [{ data: [], error: null }]; // another run flipped it first
+    const json = await (await runCron()).json();
+
+    expect(json.outcomes[0]).toMatchObject({ status: 'claimed_by_other', month: '2026-08' });
+    expect(ops).not.toContain('generate');
+  });
+
+  it('a CRON row for the month still settles it — no rewrite, no second call', async () => {
+    existingReviews = { data: [filledReview('2026-08')], error: null };
+    const json = await (await runCron()).json();
+
+    expect(json.outcomes[0]).toMatchObject({ status: 'skipped', reason: 'already_generated' });
+    expect(ops).not.toContain('generate');
+  });
+
+  it('a legacy row with no generated_by settles the month, like a cron row', async () => {
+    // Rows written before the column existed. Treating them as manual would
+    // regenerate and bill for months that were already delivered.
+    existingReviews = {
+      data: [{ ...filledReview('2026-08'), generated_by: null }],
+      error: null,
+    };
+    const json = await (await runCron()).json();
+    expect(json.outcomes[0]).toMatchObject({ status: 'skipped', reason: 'already_generated' });
+  });
+
+  it('stamps its own rows as cron', async () => {
+    await runCron();
+    const inserted = insertPayloads[0];
+    expect(inserted).toMatchObject({ generated_by: 'cron', review_month: '2026-08' });
   });
 
   it('returns 200 even when households failed — a non-2xx would re-sweep everyone', async () => {

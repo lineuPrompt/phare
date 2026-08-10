@@ -67,34 +67,39 @@ describe('extractLetter', () => {
 });
 
 describe('groupReviewArchive', () => {
-  it('separates monthed letters, unmonthed letters and the starting plan', () => {
+  it('is one letter per month, plus the starting plan, and nothing else', () => {
     const archive = groupReviewArchive(
       [
         conv({ id: 'jul', review_month: '2026-07', created_at: '2026-08-01T07:00:00Z' }),
         conv({ id: 'jun', review_month: '2026-06', created_at: '2026-07-01T07:00:00Z' }),
-        conv({ id: 'adhoc', created_at: '2026-07-15T12:00:00Z' }),
         conv({ id: 'plan', type: 'onboarding', created_at: '2026-06-02T09:00:00Z' }),
       ],
       { isPro: true }
     );
 
     expect(archive.months.map((m) => m.month)).toEqual(['2026-07', '2026-06']);
-    expect(archive.earlier.map((l) => l.id)).toEqual(['adhoc']);
+    expect(archive.months.map((m) => m.letter.id)).toEqual(['jul', 'jun']);
     expect(archive.startingPlan?.id).toBe('plan');
+    expect(Object.keys(archive).sort()).toEqual(['months', 'startingPlan']);
   });
 
-  it('NEVER infers a month for an unmonthed letter', () => {
-    // A refresh generated in August says nothing reliable about which month it
-    // covers. Filing it under 2026-07 would be a guess the reader cannot check.
+  it('DROPS a legacy unmonthed refresh rather than inferring a month for it', () => {
+    // Pre-cutover rows have review_month NULL. Filing one under the month it
+    // was written in would be a guess the reader cannot check, and the
+    // "Earlier" bucket that used to hold them is what made the page read as
+    // noise. They stay in the database for the dashboard; they are not shown
+    // here.
     const archive = groupReviewArchive(
       [conv({ id: 'adhoc', created_at: '2026-08-14T12:00:00Z' })],
       { isPro: true }
     );
     expect(archive.months).toEqual([]);
-    expect(archive.earlier.map((l) => l.id)).toEqual(['adhoc']);
+    expect(archive.startingPlan).toBeNull();
   });
 
-  it('keeps the newest letter for a month and makes older ones reachable', () => {
+  it('shows the newest if a duplicate month somehow exists', () => {
+    // The unique index makes this impossible going forward; a row predating it
+    // must not produce an arbitrary pick.
     const archive = groupReviewArchive(
       [
         conv({ id: 'old', review_month: '2026-07', created_at: '2026-08-01T07:00:00Z' }),
@@ -104,8 +109,7 @@ describe('groupReviewArchive', () => {
     );
 
     expect(archive.months).toHaveLength(1);
-    expect(archive.months[0].latest.id).toBe('new');
-    expect(archive.months[0].earlier.map((l) => l.id)).toEqual(['old']);
+    expect(archive.months[0].letter.id).toBe('new');
   });
 
   it('drops an in-flight claim rather than rendering a dated entry with nothing in it', () => {
@@ -139,14 +143,12 @@ describe('groupReviewArchive', () => {
     const archive = groupReviewArchive(
       [
         conv({ id: 'jul', review_month: '2026-07', messages: long }),
-        conv({ id: 'adhoc', messages: long }),
         conv({ id: 'plan', type: 'onboarding', messages: long, created_at: '2026-01-01T00:00:00Z' }),
       ],
       { isPro: false }
     );
 
-    expect(archive.months[0].latest.reviewLocked).toBe(true);
-    expect(archive.earlier[0].reviewLocked).toBe(true);
+    expect(archive.months[0].letter.reviewLocked).toBe(true);
     // Matches the dashboard, which truncates whatever letter it shows —
     // onboarding included. Un-gating it here would be a paywall hole.
     expect(archive.startingPlan?.reviewLocked).toBe(true);
@@ -164,8 +166,17 @@ describe('pickStartingPlan', () => {
     );
 
     expect(archive.startingPlan?.id).toBe('first');
-    // The re-upload is a real letter and must not vanish.
-    expect(archive.earlier.map((l) => l.id)).toEqual(['reupload']);
+  });
+
+  it('later re-uploads are returned by pickStartingPlan as `rest`, for the cleanup script', () => {
+    // Not rendered — but the set has to be nameable, since it is exactly what
+    // the deletion script removes.
+    const { startingPlan, rest } = pickStartingPlan([
+      { id: 'first', createdAt: '2026-01-05T10:00:00Z', topRecommendation: 'a', review: 'a', reviewLocked: false },
+      { id: 'reupload', createdAt: '2026-05-20T10:00:00Z', topRecommendation: 'b', review: 'b', reviewLocked: false },
+    ]);
+    expect(startingPlan?.id).toBe('first');
+    expect(rest.map((l) => l.id)).toEqual(['reupload']);
   });
 
   it('returns null when the household has no onboarding letter', () => {

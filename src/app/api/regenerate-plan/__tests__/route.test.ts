@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Same hard gate as api/plan/route.ts, now applied to the ongoing monthly
 // review: the AI must never instantiate structured objects (sinking-fund
@@ -42,6 +42,12 @@ function makeSupabaseMock(script: Record<string, Resolution[]>) {
       // shields its own errors — safe to leave unscripted, same convention
       // as the dashboard route's test harness.
       if (table === 'events') return makeResultChain({ data: null, error: null, count: 0 });
+      // conversations is now touched TWICE per request — a select (is the cron
+      // mid-generation for this month?) then the upsert. These suites are about
+      // the AI guards, not persistence, so an exhausted script falls back to a
+      // benign result rather than forcing every fixture to spell both out. The
+      // persistence describe below scripts them explicitly.
+      if (table === 'conversations') return makeResultChain({ data: null, error: null });
       throw new Error(`No scripted response for table "${table}" call #${idx + 1} (method: ${method})`);
     }
     return makeResultChain(list[idx]);
@@ -52,6 +58,7 @@ function makeSupabaseMock(script: Record<string, Resolution[]>) {
     from: (table: string) => ({
       select: (...args: unknown[]) => entry(table, 'select', args),
       insert: (...args: unknown[]) => entry(table, 'insert', args),
+      upsert: (...args: unknown[]) => entry(table, 'upsert', args),
     }),
   };
 
@@ -590,6 +597,125 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
     // Neither individual fund entry carries its own fundedAlready any more —
     // it is a single shared signal, not a per-fund one.
     expect(reviewPromptSent).not.toMatch(/"dueMonth":3,"fundedAlready"/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ONE REVIEW PER MONTH. A refresh now writes into the same
+// (household_id, review_month) slot the cron uses, so what it targets and what
+// it replaces are load-bearing.
+// ---------------------------------------------------------------------------
+describe('POST /api/regenerate-plan — persistence', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createMock.mockReset();
+    vi.useFakeTimers();
+    // Mid-August. The month in progress is 2026-08; the last completed one is
+    // 2026-07, and targeting that would ignore an August correction.
+    vi.setSystemTime(new Date('2026-08-14T12:00:00'));
+  });
+
+  afterEach(() => { vi.useRealTimers(); });
+
+  function baseScript(conversations: Resolution[]) {
+    return {
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [
+        { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
+        { data: { timezone: 'America/Toronto' }, error: null },
+      ],
+      transactions: [{ data: [], error: null }, { data: [], error: null }],
+      accounts: [{ data: [], error: null }],
+      sinking_funds: [{ data: [], error: null }],
+      recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+      conversations,
+    };
+  }
+
+  async function post(conversations: Resolution[]) {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A steady month.' }] });
+
+    const { client, calls } = makeSupabaseMock(baseScript(conversations));
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ locale: 'en' }),
+    }));
+    return { res, calls };
+  }
+
+  it('targets the month IN PROGRESS, not the last completed one', async () => {
+    const { res } = await post([{ data: null, error: null }, { error: null }]);
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.reviewMonth).toBe('2026-08');
+    // The letter itself is about August too — the prompt pins it.
+    const reviewPrompt = createMock.mock.calls[1][0].messages[0].content as string;
+    expect(reviewPrompt).toContain('August 2026');
+    expect(reviewPrompt).not.toContain('July 2026');
+  });
+
+  it('UPSERTS on (household_id, review_month) and marks the row manual', async () => {
+    const { calls } = await post([{ data: null, error: null }, { error: null }]);
+
+    const upsert = calls.find((c) => c.table === 'conversations' && c.method === 'upsert');
+    expect(upsert, 'no upsert issued').toBeTruthy();
+
+    const [row, options] = upsert!.args as [Record<string, unknown>, Record<string, unknown>];
+    expect(row.review_month).toBe('2026-08');
+    expect(row.generated_by).toBe('manual');
+    // Inferrable only against a TOTAL unique index — a partial one makes
+    // Postgres reject this outright.
+    expect(options.onConflict).toBe('household_id,review_month');
+    // The displayed date must be when this text was written, not when the row
+    // it replaced was first inserted.
+    expect(String(row.created_at).startsWith('2026-08-14')).toBe(true);
+  });
+
+  it('REFUSES while the cron holds an empty claim for that month', async () => {
+    const { res, calls } = await post([
+      { data: { id: 'claim-1', messages: [] }, error: null },
+    ]);
+    const json = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(json.code).toBe('review_in_progress');
+    // Nothing was generated and nothing was written — the letter the cron is
+    // about to produce is not at risk.
+    expect(createMock).not.toHaveBeenCalled();
+    expect(calls.some((c) => c.method === 'upsert')).toBe(false);
+  });
+
+  it('the refusal costs no refresh — it happens before the quota is reserved', async () => {
+    const { calls } = await post([
+      { data: { id: 'claim-1', messages: [] }, error: null },
+    ]);
+    // reserveRegeneration reads/writes events; a refused request must not.
+    expect(calls.some((c) => c.table === 'events')).toBe(false);
+  });
+
+  it('an EXISTING FILLED review for the month is replaced, not refused', async () => {
+    // That is the whole point: correct an entry, regenerate, get the corrected
+    // letter. Only an EMPTY claim means "the cron is mid-write".
+    const { res } = await post([
+      { data: { id: 'prev', messages: [{ type: 'monthly_review', content: 'old' }] }, error: null },
+      { error: null },
+    ]);
+    expect(res.status).toBe(200);
+  });
+
+  it('surfaces a save failure instead of reporting success', async () => {
+    const { res } = await post([
+      { data: null, error: null },
+      { error: { message: 'conflict' } },
+    ]);
+    expect(res.status).toBe(500);
   });
 });
 

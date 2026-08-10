@@ -106,7 +106,6 @@ function LetterRow({
   locale,
   open,
   onToggle,
-  badge,
 }: {
   letter: ArchiveLetter;
   title: string;
@@ -115,7 +114,6 @@ function LetterRow({
   locale: string;
   open: boolean;
   onToggle: () => void;
-  badge?: string;
 }) {
   const t = useTranslations('reviews');
 
@@ -130,14 +128,6 @@ function LetterRow({
         <span className="flex-1 min-w-0">
           <span className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold" style={{ color: '#0F2044' }}>{title}</span>
-            {badge && (
-              <span
-                className="text-xs px-2 py-0.5 rounded-full"
-                style={{ background: '#F0FDFD', color: '#0F766E' }}
-              >
-                {badge}
-              </span>
-            )}
             {letter.reviewLocked && <span className="text-xs">🔒</span>}
           </span>
           {subtitle && (
@@ -165,9 +155,6 @@ export default function ReviewsList({ locale }: { locale: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
-  // Months whose superseded versions are revealed. Keyed by month, not by
-  // letter id — the disclosure belongs to the month, not to any one version.
-  const [showEarlierFor, setShowEarlierFor] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -183,7 +170,7 @@ export default function ReviewsList({ locale }: { locale: string }) {
         setData(json);
         // Open the newest letter automatically. It is the one they came for,
         // and an archive that opens fully collapsed makes the page look empty.
-        const newest = json.months[0]?.latest.id ?? json.earlier[0]?.id ?? json.startingPlan?.id ?? null;
+        const newest = json.months[0]?.letter.id ?? json.startingPlan?.id ?? null;
         setOpenId(newest);
       })
       .catch(() => { if (!cancelled) setError(t('loadError')); })
@@ -208,8 +195,7 @@ export default function ReviewsList({ locale }: { locale: string }) {
   // assertion (TS narrowing does not survive into the onToggle callback).
   const startingPlan = data.startingPlan;
 
-  const isEmpty =
-    data.months.length === 0 && data.earlier.length === 0 && !data.startingPlan;
+  const isEmpty = data.months.length === 0 && !data.startingPlan;
 
   if (isEmpty) {
     return (
@@ -223,78 +209,18 @@ export default function ReviewsList({ locale }: { locale: string }) {
 
   return (
     <div className="space-y-8">
-      {/* ---- Monthly letters ------------------------------------------- */}
+      {/* ---- One letter per month --------------------------------------- */}
       {data.months.length > 0 && (
         <section className="space-y-3">
-          {data.months.map((entry) => {
-            const revealed = showEarlierFor[entry.month] ?? false;
-            return (
-              <div key={entry.month} className="space-y-2">
-                <LetterRow
-                  letter={entry.latest}
-                  title={formatArchiveMonth(entry.month, locale)}
-                  figure={entry.netCashFlow}
-                  locale={locale}
-                  open={openId === entry.latest.id}
-                  onToggle={() => toggle(entry.latest.id)}
-                />
-
-                {entry.earlier.length > 0 && (
-                  <div className="pl-4">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowEarlierFor((s) => ({ ...s, [entry.month]: !revealed }))
-                      }
-                      className="text-xs underline"
-                      style={{ color: '#6B7280' }}
-                    >
-                      {revealed
-                        ? t('hideVersions')
-                        : t('showVersions', { count: entry.earlier.length })}
-                    </button>
-
-                    {revealed && (
-                      <div className="space-y-2 mt-2">
-                        {entry.earlier.map((letter) => (
-                          <LetterRow
-                            key={letter.id}
-                            letter={letter}
-                            title={formatArchiveMonth(entry.month, locale)}
-                            subtitle={formatDate(letter.createdAt, locale)}
-                            badge={t('supersededBadge')}
-                            locale={locale}
-                            open={openId === letter.id}
-                            onToggle={() => toggle(letter.id)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </section>
-      )}
-
-      {/* ---- Unmonthed letters ------------------------------------------ */}
-      {data.earlier.length > 0 && (
-        <section className="space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: '#6B7280' }}>
-              {t('earlierTitle')}
-            </h2>
-            <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>{t('earlierHint')}</p>
-          </div>
-          {data.earlier.map((letter) => (
+          {data.months.map((entry) => (
             <LetterRow
-              key={letter.id}
-              letter={letter}
-              title={formatDate(letter.createdAt, locale)}
+              key={entry.month}
+              letter={entry.letter}
+              title={formatArchiveMonth(entry.month, locale)}
+              figure={entry.netCashFlow}
               locale={locale}
-              open={openId === letter.id}
-              onToggle={() => toggle(letter.id)}
+              open={openId === entry.letter.id}
+              onToggle={() => toggle(entry.letter.id)}
             />
           ))}
         </section>

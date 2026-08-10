@@ -20,6 +20,7 @@ import type { PlanChainMonth } from '@/lib/planChainHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 import SupportLine from '@/components/shared/SupportLine';
 import UpgradeButton from '@/components/billing/UpgradeButton';
+import { formatArchiveMonth } from '@/lib/reviewArchive';
 
 type PlanResponse = { months: PlanChainMonth[] };
 
@@ -64,6 +65,11 @@ export default function DashboardPage() {
   const [regenerateLocked, setRegenerateLocked] = useState(false);
   const tBilling = useTranslations('billing');
   const [regenerateError, setRegenerateError] = useState('');
+  // Regenerating REPLACES this month's review and the old text is not
+  // recoverable, so the press is confirmed rather than immediate. Named for the
+  // month it will overwrite — "are you sure?" does not tell anyone what they
+  // are about to lose.
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
 
   const [hasAnchor, setHasAnchor] = useState(true);
 
@@ -211,6 +217,7 @@ export default function DashboardPage() {
   };
 
   const handleRegenerate = useCallback(async () => {
+    setConfirmRegenerate(false);
     setRegenerating(true);
     setRegenerateError('');
     try {
@@ -235,6 +242,13 @@ export default function DashboardPage() {
           loadDashboard(displayMonth);
           return;
         }
+        // The scheduled review for this month is mid-generation. Refusing is
+        // what protects the letter — and no refresh was spent, since the route
+        // checks before reserving one.
+        if (res.status === 409 && err.code === 'review_in_progress') {
+          setRegenerateError(t('regenerateInProgress'));
+          return;
+        }
         throw new Error(err.error || 'Regeneration failed');
       }
       // Reload dashboard so the new review + top recommendation appear.
@@ -244,7 +258,7 @@ export default function DashboardPage() {
     } finally {
       setRegenerating(false);
     }
-  }, [locale, displayMonth, loadDashboard]);
+  }, [locale, displayMonth, loadDashboard, t]);
 
   if (loading) {
     return (
@@ -334,13 +348,47 @@ export default function DashboardPage() {
             {/* Regenerate plan */}
             <div className="flex flex-col items-center gap-2 pt-2">
               <button
-                onClick={handleRegenerate}
-                disabled={regenerating || quotaExhausted}
+                onClick={() => setConfirmRegenerate(true)}
+                disabled={regenerating || quotaExhausted || confirmRegenerate}
                 className="px-6 py-2.5 rounded-full text-sm font-medium cursor-pointer hover:opacity-80 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ border: '1.5px solid #0F2044', color: '#0F2044' }}
               >
                 {regenerating ? t('regenerating') : t('regeneratePlan')}
               </button>
+
+              {/* THE REPLACE WARNING. It names the month, because "are you
+                  sure?" does not tell anyone what they are about to lose, and
+                  the previous letter is genuinely unrecoverable — there is no
+                  version history behind this. */}
+              {confirmRegenerate && (
+                <div
+                  className="rounded-xl p-5 mt-2 max-w-md"
+                  style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}
+                >
+                  <p className="font-semibold text-sm mb-1" style={{ color: '#92400E' }}>
+                    {t('replaceTitle', { month: formatArchiveMonth(calendarMonth, locale) })}
+                  </p>
+                  <p className="text-sm mb-4" style={{ color: '#92400E' }}>
+                    {t('replaceBody', { month: formatArchiveMonth(calendarMonth, locale) })}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleRegenerate}
+                      className="px-4 py-2 rounded-full text-sm font-medium cursor-pointer hover:opacity-80"
+                      style={{ background: '#0F2044', color: '#FFFFFF' }}
+                    >
+                      {t('replaceConfirm')}
+                    </button>
+                    <button
+                      onClick={() => setConfirmRegenerate(false)}
+                      className="px-4 py-2 rounded-full text-sm font-medium cursor-pointer hover:opacity-80"
+                      style={{ border: '1.5px solid #92400E', color: '#92400E' }}
+                    >
+                      {t('replaceCancel')}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* The allowance, stated before it is spent. A capped household
                   should learn it from the button, not by pressing it and
