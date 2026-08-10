@@ -103,6 +103,11 @@ export async function POST(request: Request) {
       householdId,
       locale,
       timezone,
+      // UNCHANGED BEHAVIOUR, now stated instead of assumed. A manual refresh has
+      // always reviewed the month in progress — the service derived exactly
+      // this internally. Making it explicit is the whole point of the change:
+      // the cron's window was wrong for the same reason this one was invisible.
+      reviewMonth: businessMonth(timezone),
       userId: user.id,
     });
 

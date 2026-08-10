@@ -58,7 +58,9 @@ import {
   buildReviewPayload,
   FundingNeed,
 } from '@/lib/coachingHelpers';
-import { businessToday, businessMonth, cycleMonthContaining } from '@/lib/dateHelpers';
+// businessMonth is deliberately NOT imported: the reviewed window comes from
+// the caller's `reviewMonth`, never from this service's own clock.
+import { businessToday, cycleMonthContaining } from '@/lib/dateHelpers';
 
 const SEED_CATEGORIES = [
   'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
@@ -88,6 +90,7 @@ export async function generateMonthlyReview({
   householdId,
   locale,
   timezone,
+  reviewMonth,
   userId,
 }: {
   /**
@@ -102,6 +105,23 @@ export async function generateMonthlyReview({
   /** IANA zone. Passed in because both callers have already resolved it. */
   timezone: string;
   /**
+   * THE MONTH THIS LETTER IS ABOUT, 'YYYY-MM'. Every figure is scoped to it and
+   * the prompt pins the model to its name.
+   *
+   * REQUIRED, AND DELIBERATELY NOT DEFAULTED. This used to be derived here from
+   * businessMonth(timezone) — the CURRENT calendar month — while the cron
+   * labelled the row with the month that had just ENDED. So the cron, running
+   * at 07:00 on 1 September to write August's review, produced a letter about
+   * September with one day of data and filed it as August. Nothing in the row
+   * showed the disagreement: the label was right, the prose was wrong, and only
+   * reading the letter revealed it.
+   *
+   * A default would rebuild exactly that trap for the next caller. Making it
+   * required means a new call site cannot compile without stating which month
+   * it means.
+   */
+  reviewMonth: string;
+  /**
    * Author of the guard-retry event, when there is one. NOT in the agreed
    * signature — found during the cut: the generation block itself calls
    * logEvent(..., user.id, 'review_text_guard_retried') at what was line 915,
@@ -112,15 +132,26 @@ export async function generateMonthlyReview({
 }): Promise<GeneratedReview> {
   const lang = locale === 'fr' ? 'French (Quebec French, natural and native)' : 'English';
 
-  // Recomputed here rather than passed, so the service owns its own month
-  // boundaries and the two callers cannot disagree about them. Identical
-  // arithmetic to what the route did at what were lines 117-141.
-  const [ty, tmo] = businessMonth(timezone).split('-').map(Number);
-  const year = ty;
-  const month = tmo - 1; // 0-indexed, matching firstOfMonth's contract
+  // The reviewed window, derived from the CALLER'S month rather than from a
+  // clock. See the reviewMonth doc above for what deriving it here cost.
+  //
+  // Rejected rather than defaulted: a malformed month would otherwise produce
+  // NaN dates, and every query below would silently return nothing — a letter
+  // about an empty month rather than an error.
+  const parsedMonth = /^(\d{4})-(\d{2})$/.exec(reviewMonth);
+  if (!parsedMonth) {
+    throw new Error(`generateMonthlyReview: reviewMonth must be 'YYYY-MM', got "${reviewMonth}"`);
+  }
+  const year = Number(parsedMonth[1]);
+  const month = Number(parsedMonth[2]) - 1; // 0-indexed, matching firstOfMonth
+  if (month < 0 || month > 11) {
+    throw new Error(`generateMonthlyReview: reviewMonth has no such month: "${reviewMonth}"`);
+  }
   const monthStart = firstOfMonth(year, month);
   const monthEnd = firstOfMonth(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1);
-  const currentMonthLabel = monthStart.slice(0, 7); // YYYY-MM
+  // Named for what it is. It was `reviewMonthLabel`, and that name is part of
+  // why the bug above survived review: "current" read as correct.
+  const reviewMonthLabel = monthStart.slice(0, 7); // YYYY-MM
 
     // ── recurring_item_id is now selected too (headline figures still come
     // entirely from computeMonthTotals over these same rows) — needed to
@@ -328,7 +359,7 @@ export async function generateMonthlyReview({
     // windfalls netted back out so a one-time extra paycheque never inflates
     // what looks like ongoing room. historyRows' fixed 3-month/12-month-ahead
     // window (fetched above) covers this.
-    const priorMonths = [1, 2, 3].map((n) => addMonthsToMonth(currentMonthLabel, -n));
+    const priorMonths = [1, 2, 3].map((n) => addMonthsToMonth(reviewMonthLabel, -n));
     const monthlyFigures = priorMonths.map((m) => {
       const mStart = `${m}-01`;
       const mEnd = `${addMonthsToMonth(m, 1)}-01`;
@@ -527,7 +558,7 @@ export async function generateMonthlyReview({
     const monthlyBudget = assembleCalculatedBudget(calculated);
 
     const aiContext =
-      `The reviewed period is ${reviewMonthName} (${currentMonthLabel}) — refer to it by this exact name, never a different month.\n` +
+      `The reviewed period is ${reviewMonthName} (${reviewMonthLabel}) — refer to it by this exact name, never a different month.\n` +
       `Net cash flow: $${netCashFlow}/month ` +
       `(income $${incomeTotal}, expenses $${expenseTotal}, savings $${totalSavings}, debt payments $${totalDebtPayments})\n` +
       `Accounting model: net = income − expenses − savings − debt payments (savings = transfers to a ` +
@@ -539,7 +570,7 @@ export async function generateMonthlyReview({
           `income, savings, or surplus because of it; if you mention the family's cash position, disclose that ` +
           `part of it was borrowed.\n`
         : '') +
-      `All figures are ACTUAL ${currentMonthLabel} ledger — computed from materialized transactions, ` +
+      `All figures are ACTUAL ${reviewMonthLabel} ledger — computed from materialized transactions, ` +
       `NOT from planned budgets or per-period recurring amounts.\n` +
       `Income lines: ${JSON.stringify(incomeLines)}\n` +
       `Expense lines (chequing, avoids card double-count): ${JSON.stringify(expenseLines)}\n` +

@@ -42,6 +42,12 @@ function chain(resolution: Resolution, filters: [string, unknown][]): unknown {
       if (prop === 'catch') return (r: (v: unknown) => unknown) => Promise.resolve(resolution).catch(r);
       return (...args: unknown[]) => {
         if (prop === 'eq' && args.length === 2) filters.push([String(args[0]), args[1]]);
+        // Range bounds are recorded too, so the REVIEWED WINDOW is inspectable
+        // and not just the tenancy filter. The tenancy assertions below look
+        // only for 'household_id', so these extra entries are inert to them.
+        if ((prop === 'gte' || prop === 'lt') && args.length === 2) {
+          filters.push([`${String(prop)}:${String(args[0])}`, args[1]]);
+        }
         // Same filters array threaded through, so the whole chain accumulates
         // onto the one record created in entry().
         return chain(resolution, filters);
@@ -105,9 +111,21 @@ async function generate(overrides: Record<string, unknown> = {}) {
     householdId: 'hh-A',
     locale: 'en',
     timezone: 'America/Toronto',
+    // FIXED, not derived. Before reviewMonth existed this suite's window came
+    // from the real clock, so the "golden output" it pinned quietly changed
+    // month every month and could never have caught the label/prose mismatch.
+    reviewMonth: '2026-07',
     userId: 'user-1',
     ...overrides,
   } as Parameters<typeof generateMonthlyReview>[0]);
+}
+
+/** The prompt text of the Nth anthropic call (1-indexed). */
+function promptOfCall(n: number): string {
+  const args = createMock.mock.calls[n - 1]?.[0] as
+    | { messages?: { content?: unknown }[]; system?: unknown }
+    | undefined;
+  return JSON.stringify(args ?? {});
 }
 
 describe('generateMonthlyReview — golden output', () => {
@@ -151,6 +169,117 @@ describe('generateMonthlyReview — golden output', () => {
     // events.user_id is ON DELETE SET NULL against auth.users, so a null author
     // is a shape the schema already permits.
     await expect(generate({ userId: null })).resolves.toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE REVIEWED MONTH IS THE CALLER'S, NOT THE CLOCK'S.
+//
+// The regression these pin: the service used to derive its window from
+// businessMonth(timezone) — the CURRENT month — while the cron labelled the row
+// with the month that had just ENDED. Running at 07:00 on 1 September to write
+// August's review, it produced a letter about September with one day of data
+// and stored it as August. The row looked perfect; only the prose was wrong.
+// ---------------------------------------------------------------------------
+describe('generateMonthlyReview — the reviewed month', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    queries = [];
+    createMock.mockReset();
+  });
+
+  /** Plan call, then a review call that leaks a template token every time. */
+  function primeFallback() {
+    createMock
+      .mockResolvedValueOnce(aiReturns(JSON.stringify({ lineClassifications: [], topRecommendation: 'x' })))
+      .mockResolvedValue(aiReturns('Spend {{DEBT_PAYMENT}} this month.'));
+  }
+
+  it('THE PROSE names the month it was asked for, not today', async () => {
+    // The deterministic fallback is real generated prose that names the month,
+    // so this is a prose-level check with no paid call: force a token leak on
+    // both attempts and the letter Phare ships is buildFallbackReviewText's.
+    primeFallback();
+    const result = await generate({ reviewMonth: '2026-03' });
+
+    expect(result.reviewText).toContain('March 2026');
+    // Today is not March 2026 on any run of this suite.
+    const todayName = new Date().toLocaleDateString('en-CA', { month: 'long', year: 'numeric' });
+    if (todayName !== 'March 2026') {
+      expect(result.reviewText).not.toContain(todayName);
+    }
+  });
+
+  it('names the month in French too', async () => {
+    primeFallback();
+    const result = await generate({ reviewMonth: '2026-03', locale: 'fr' });
+    expect(result.reviewText).toContain('mars 2026');
+  });
+
+  it('THE CRON SCENARIO — asked for August, says August, never September', async () => {
+    // The exact shape of the bug: the run that writes August's review happens
+    // in September.
+    primeFallback();
+    const result = await generate({ reviewMonth: '2026-08' });
+
+    expect(result.reviewText).toContain('August 2026');
+    expect(result.reviewText).not.toContain('September 2026');
+  });
+
+  it('pins the model to that month in the prompt', async () => {
+    createMock
+      .mockResolvedValueOnce(aiReturns(JSON.stringify({ lineClassifications: [], topRecommendation: 'x' })))
+      .mockResolvedValueOnce(aiReturns('A clean review.'));
+    await generate({ reviewMonth: '2026-03' });
+
+    // Call 1 (the plan pass) carries both forms: "The reviewed period is
+    // March 2026 (2026-03)" and "All figures are ACTUAL 2026-03 ledger".
+    const planPrompt = promptOfCall(1);
+    expect(planPrompt).toContain('March 2026');
+    expect(planPrompt).toContain('2026-03');
+
+    // Call 2 (the letter) pins the model by NAME: "The reviewed month is
+    // 'reviewMonth' above: March 2026. Refer to it by exactly this name."
+    const reviewPrompt = promptOfCall(2);
+    expect(reviewPrompt).toContain('March 2026');
+    expect(reviewPrompt).not.toContain('April 2026');
+  });
+
+  it('scopes the ledger window to that month', async () => {
+    createMock
+      .mockResolvedValueOnce(aiReturns(JSON.stringify({ lineClassifications: [], topRecommendation: 'x' })))
+      .mockResolvedValueOnce(aiReturns('A clean review.'));
+    await generate({ reviewMonth: '2026-03' });
+
+    const bounds = queries
+      .filter((q) => q.table === 'transactions')
+      .flatMap((q) => q.filters.filter(([c]) => c.startsWith('gte:') || c.startsWith('lt:')));
+
+    expect(bounds).toContainEqual(['gte:date', '2026-03-01']);
+    expect(bounds).toContainEqual(['lt:date', '2026-04-01']);
+  });
+
+  it('rolls the YEAR for a December review', async () => {
+    createMock
+      .mockResolvedValueOnce(aiReturns(JSON.stringify({ lineClassifications: [], topRecommendation: 'x' })))
+      .mockResolvedValueOnce(aiReturns('A clean review.'));
+    await generate({ reviewMonth: '2026-12' });
+
+    const bounds = queries
+      .filter((q) => q.table === 'transactions')
+      .flatMap((q) => q.filters.filter(([c]) => c.startsWith('gte:') || c.startsWith('lt:')));
+
+    expect(bounds).toContainEqual(['gte:date', '2026-12-01']);
+    // Not '2026-13-01'.
+    expect(bounds).toContainEqual(['lt:date', '2027-01-01']);
+  });
+
+  it('refuses a malformed month instead of querying a NaN window', async () => {
+    // Every query would return nothing and the family would get a confident
+    // letter about a month with no data in it.
+    await expect(generate({ reviewMonth: 'August' })).rejects.toThrow(/YYYY-MM/);
+    await expect(generate({ reviewMonth: '2026-13' })).rejects.toThrow(/no such month/);
+    expect(createMock).not.toHaveBeenCalled();
   });
 });
 

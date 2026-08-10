@@ -123,9 +123,17 @@ describe.skip('live review comparison — DISABLED, SPENDS REAL MONEY (see heade
 
     const timezone = await getHouseholdTimezone(admin, HOUSEHOLD_ID);
 
+    // WHICH MONTH TO REGENERATE. Defaults to the month the STORED review was
+    // filed under, so a comparison actually compares like with like; falls back
+    // to the current month for an unmonthed stored row, which is the window the
+    // service used to derive for itself. COMPARE_MONTH overrides both.
+    const { businessMonth } = await import('@/lib/dateHelpers');
+    const reviewMonth =
+      process.env.COMPARE_MONTH ?? stored.review_month ?? businessMonth(timezone);
+
     console.log(`\n=== LIVE COMPARISON — household ${HOUSEHOLD_ID} ===`);
     console.log(`stored review written ${stored.created_at} (type=${stored.type}, review_month=${stored.review_month ?? 'null'})`);
-    console.log(`timezone ${timezone}\n`);
+    console.log(`timezone ${timezone} — regenerating for ${reviewMonth}\n`);
 
     const fresh = await generateMonthlyReview({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -133,6 +141,7 @@ describe.skip('live review comparison — DISABLED, SPENDS REAL MONEY (see heade
       householdId: HOUSEHOLD_ID,
       locale: 'en',
       timezone,
+      reviewMonth,
       userId: null,
     });
 

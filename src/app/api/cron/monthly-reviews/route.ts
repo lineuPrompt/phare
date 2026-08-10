@@ -258,6 +258,12 @@ export async function GET(request: Request) {
             householdId,
             locale: household.locale === 'fr' ? 'fr' : 'en',
             timezone,
+            // THE SAME `month` THE CLAIM WAS FILED UNDER. The service used to
+            // derive its own window from the current calendar month, so this
+            // run — at 07:00 on the 1st — produced a letter about the month
+            // that had just STARTED and stored it as the month that had just
+            // ended. The row was labelled correctly and read wrongly.
+            reviewMonth: month,
             userId: null,
           });
 
