@@ -22,10 +22,24 @@ import { subscriptionToColumns, type StripeSubscriptionLike } from '@/lib/stripe
 //    id first; a unique violation means "already done" and returns 200. The
 //    insert is the lock — there is no read-then-write window to lose.
 //
-// 3. OUT-OF-ORDER DELIVERY. Stripe does not guarantee order. Writes are
-//    accepted only when the EVENT's own timestamp is newer than the last one
-//    applied to that household. Last-writer-wins by event time, never by
-//    arrival time.
+// 3. OUT-OF-ORDER DELIVERY — AND EVENTS THAT CANNOT BE ORDERED AT ALL.
+//    Stripe does not guarantee order, and `event.created` has only SECOND
+//    resolution. A Portal cancellation emits TWO customer.subscription.updated
+//    events bearing the same second, so no comparison of event timestamps can
+//    order them: one carries the pre-cancellation snapshot and one carries the
+//    flag, and which arrives first is a coin flip. That is not hypothetical —
+//    it shipped, and it wrote cancel_at_period_end=false over a real
+//    cancellation.
+//
+//    So THE EVENT PAYLOAD IS NEVER TRUSTED FOR STATE. The handler re-retrieves
+//    the subscription from Stripe and writes what Stripe says NOW. Ordering
+//    stops deciding correctness entirely: whichever of the two events applies
+//    first reads the same live object, so both orders produce the same row.
+//
+//    The ordering guard is kept, but only for what it is actually good for —
+//    skipping redundant work. It no longer has to be right for the state to be
+//    right, which is the only reason it is safe to keep a guard that cannot
+//    distinguish two events in the same second.
 //
 // 4. A HOUSEHOLD THAT NO LONGER EXISTS. Deleted between checkout and delivery.
 //    Retrying forever helps nobody, so the event is recorded and 200 returned —
@@ -34,9 +48,12 @@ import { subscriptionToColumns, type StripeSubscriptionLike } from '@/lib/stripe
 //    until a human reads a log. The cancellation is recorded on the event row
 //    so it is provable, not merely logged.
 //
-// ALWAYS RETURNS 2xx once the signature is valid. A non-2xx makes Stripe
-// redeliver for three days, which turns one unhandled event into thousands.
-// Failures are recorded in `last_error` on the event row instead.
+// RETURNS 2xx once the signature is valid, EXCEPT where redelivery is the
+// remedy. A non-2xx makes Stripe redeliver for three days, which turns one
+// unhandled event into thousands, so a bug in this handler is recorded in
+// `last_error` and answered 200. The two exceptions are the cases where we
+// applied nothing and a retry genuinely fixes it: the ledger being unavailable,
+// and a failed retrieve (see RETRYABLE_OUTCOMES).
 // ---------------------------------------------------------------------------
 
 /** Subscription-bearing events we act on. Anything else is recorded, not acted on. */
@@ -52,7 +69,23 @@ type Outcome =
   | 'household_missing'
   | 'orphan_cancelled'
   | 'unhandled_type'
+  | 'retrieve_failed'
   | 'error';
+
+/**
+ * Outcomes that mean "we recorded the event but never reached a verdict".
+ *
+ * These exist because the idempotency insert is a LOCK, not a record of
+ * success. Once the row is inserted, a redelivery hits the unique violation and
+ * would normally be answered 200/duplicate — which is correct for an event we
+ * finished, and catastrophic for one we abandoned. Returning 503 to ask Stripe
+ * to retry would be a lie: the retry would arrive, see the row, and be swallowed
+ * as a duplicate, stranding the household on stale state forever.
+ *
+ * So an abandoned attempt is recorded with an outcome listed here, and the
+ * duplicate branch reprocesses exactly those.
+ */
+const RETRYABLE_OUTCOMES = new Set<string>(['retrieve_failed']);
 
 /** Household id, from wherever this event type happens to carry it. */
 function householdIdFrom(event: Stripe.Event): string | null {
@@ -127,23 +160,41 @@ export async function POST(request: Request) {
       event_created_at: eventCreatedAt,
     });
 
-  if (insertErr) {
-    // 23505 = unique_violation = we have already handled this event.
-    if ((insertErr as { code?: string }).code === '23505') {
+  if (insertErr && (insertErr as { code?: string }).code === '23505') {
+    // 23505 = unique_violation = this event id is already in the ledger.
+    //
+    // Usually that means we finished it and must not repeat the work. But it
+    // ALSO covers an attempt that recorded the event and then abandoned it —
+    // a retrieve that failed, where we deliberately asked Stripe to redeliver.
+    // Answering `duplicate` there would swallow the very retry we requested.
+    const { data: prior } = await admin
+      .from('stripe_webhook_events')
+      .select('outcome')
+      .eq('id', event.id)
+      .maybeSingle();
+
+    const priorOutcome = (prior?.outcome ?? null) as string | null;
+    if (!priorOutcome || !RETRYABLE_OUTCOMES.has(priorOutcome)) {
+      // A NULL outcome means another delivery is in flight right now. That is
+      // not abandoned work, so it must not be reprocessed concurrently.
       return NextResponse.json({ received: true, duplicate: true });
     }
+
+    console.warn('Stripe webhook — reprocessing an abandoned event (%s):', priorOutcome, event.id);
+    // Fall through and process it properly this time.
+  } else if (insertErr) {
     console.error('Stripe webhook — could not record event, refusing to process:', event.id, insertErr);
     // Nothing was applied and nothing was recorded, so a retry is safe and
     // wanted — this is the one path that deliberately asks Stripe to try again.
     return NextResponse.json({ error: 'ledger_unavailable' }, { status: 503 });
   }
 
-  const finish = async (outcome: Outcome, extra: Record<string, unknown> = {}) => {
+  const finish = async (outcome: Outcome, extra: Record<string, unknown> = {}, status = 200) => {
     await admin
       .from('stripe_webhook_events')
       .update({ outcome, ...extra })
       .eq('id', event.id);
-    return NextResponse.json({ received: true, outcome });
+    return NextResponse.json({ received: true, outcome }, { status });
   };
 
   try {
@@ -201,26 +252,68 @@ export async function POST(request: Request) {
       }
     }
 
-    // --- 5. Ordering guard --------------------------------------------------
+    // --- 5. Ordering guard — now an OPTIMISATION, not a correctness control --
+    //
+    // It runs before the retrieve so a redundant event costs no Stripe call.
+    // What it must NOT do is decide what gets stored: it compares timestamps of
+    // second resolution, so it cannot order two events from the same second and
+    // will drop one of them arbitrarily. That is now harmless, because whichever
+    // sibling survives retrieves the same live subscription.
+    //
+    // Deliberately still `>=` rather than `>`. Widening it would let a genuinely
+    // stale same-second event through in the other direction, trading a bug we
+    // have fixed for the state-rollback this guard exists to prevent.
     const lastApplied = household.subscription_updated_at as string | null;
     if (lastApplied && Date.parse(lastApplied) >= Date.parse(eventCreatedAt)) {
-      // An older event arrived after a newer one. Applying it would roll state
-      // backwards — restoring `active` over a `canceled`, for instance.
       return await finish('stale_ignored');
     }
 
-    // --- 6. Resolve the full subscription object ---------------------------
-    // checkout.session.completed carries only an id, and its
-    // customer.subscription.created may arrive before or after. Retrieving the
-    // live object makes this handler correct regardless of which lands first.
-    let subscription: StripeSubscriptionLike | null = null;
+    // --- 6. Resolve the subscription FROM STRIPE, never from the event ------
+    //
+    // The event tells us WHICH subscription changed. It does not tell us what
+    // its state is — see hazard 3 above. Two events in the same second carry
+    // two different snapshots and cannot be ordered, so a payload is only ever
+    // "some state this subscription had recently", which is not what we store.
+    //
+    // Retrieving costs one GET per subscription event, against a subscription
+    // that generates roughly one event a month. That is the entire price of
+    // making delivery order irrelevant to correctness.
+    const subId = subscriptionIdFrom(event);
+    if (!subId) {
+      return await finish('unhandled_type', { last_error: 'event carried no subscription id' });
+    }
 
-    if (SUBSCRIPTION_EVENTS.has(event.type)) {
-      subscription = event.data.object as unknown as StripeSubscriptionLike;
-    } else {
-      const subId = subscriptionIdFrom(event);
-      if (!subId) return await finish('unhandled_type', { last_error: 'checkout session had no subscription' });
+    let subscription: StripeSubscriptionLike;
+    try {
       subscription = (await stripe.subscriptions.retrieve(subId)) as unknown as StripeSubscriptionLike;
+    } catch (err) {
+      const e = err as { code?: string; statusCode?: number; message?: string };
+
+      // Terminal: the subscription does not exist at Stripe. Three days of
+      // redelivery cannot conjure it, so record it and stop. Distinguishing
+      // this from "cannot reach Stripe" is the same rule cancelSubscription
+      // follows, and for the same reason.
+      if (e.code === 'resource_missing' || e.statusCode === 404) {
+        console.error('Stripe webhook — subscription not found at Stripe:', subId, event.id);
+        return await finish('error', {
+          last_error: `subscription ${subId} not found at Stripe; nothing to mirror`,
+        });
+      }
+
+      // Transient: Stripe is down, rate limiting, or timing out — and the SDK
+      // has ALREADY retried twice internally before throwing. We do not know
+      // the current state, so we write nothing and ask for redelivery.
+      //
+      // Falling back to the event payload here is the one thing we must not do:
+      // it would reintroduce exactly the cancellation bug this design removes,
+      // and only under Stripe degradation — the conditions least likely to be
+      // reproduced before a customer is billed wrongly.
+      console.error('Stripe webhook — retrieve failed, asking for redelivery:', subId, event.id, err);
+      return await finish(
+        'retrieve_failed',
+        { last_error: `retrieve failed: ${e.message ?? String(err)}` },
+        503
+      );
     }
 
     // --- 7. Write. Wholesale, never patched --------------------------------

@@ -19,6 +19,12 @@ let cancelThrows = false;
 let constructThrows = false;
 let currentEvent: Record<string, unknown>;
 let retrievedSub: Record<string, unknown> | null;
+// Which subscription ids the handler actually asked Stripe about. Lets a test
+// assert that state came from a live read rather than the event payload.
+let retrievedIds: string[] = [];
+let retrieveError: unknown = null;
+// The ledger row a redelivery finds when the idempotency insert collides.
+let priorEventRow: Resolution;
 
 function chain(resolution: Resolution): unknown {
   return new Proxy({}, {
@@ -41,7 +47,9 @@ vi.mock('@/lib/supabase-admin', () => ({
         if (table === 'households') householdUpdates.push(payload);
         return chain({ error: null });
       },
-      select: () => chain(householdRow),
+      // The handler reads two different tables: the households row, and — on a
+      // redelivery — the prior ledger row for this event id.
+      select: () => chain(table === 'stripe_webhook_events' ? priorEventRow : householdRow),
     }),
   }),
 }));
@@ -61,7 +69,11 @@ vi.mock('@/lib/stripe', () => ({
       },
     },
     subscriptions: {
-      retrieve: async () => retrievedSub,
+      retrieve: async (id: string) => {
+        retrievedIds.push(id);
+        if (retrieveError) throw retrieveError;
+        return retrievedSub;
+      },
     },
   }),
 }));
@@ -109,6 +121,9 @@ describe('stripe webhook', () => {
     constructThrows = false;
     insertResult = { error: null };
     householdRow = { data: { id: 'hh1', subscription_updated_at: null }, error: null };
+    priorEventRow = { data: null, error: null };
+    retrievedIds = [];
+    retrieveError = null;
     retrievedSub = subObject();
     currentEvent = makeEvent('customer.subscription.updated', subObject());
     process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
@@ -186,10 +201,113 @@ describe('stripe webhook', () => {
     expect(householdUpdates).toEqual([]);
   });
 
-  it('an identical timestamp is treated as already applied', async () => {
+  it('an identical timestamp skips redundant work — and that is now SAFE', async () => {
+    // This used to be the bug. A Portal cancellation emits TWO
+    // subscription.updated events in the SAME second; `event.created` has only
+    // second resolution, so the guard cannot order them and drops one. It
+    // dropped the one carrying cancel_at_period_end=true, and the survivor's
+    // payload said false — so a real cancellation was stored as "renews".
+    //
+    // The skip still happens, because it is the right thing to do with an event
+    // that buys us nothing. It is safe now for a different reason: the sibling
+    // that DID apply retrieved the live subscription rather than trusting its
+    // own payload, so the stored state is current either way. This test guards
+    // the optimisation; the two below guard the correctness.
     householdRow = { data: { id: 'hh1', subscription_updated_at: '2026-08-05T10:00:00.000Z' }, error: null };
     currentEvent = makeEvent('customer.subscription.updated', subObject(), '2026-08-05T10:00:00Z');
+
+    const res = await post();
+    const json = await res.json();
+
+    expect(json.outcome).toBe('stale_ignored');
+    expect(householdUpdates).toEqual([]);
+    // And it cost nothing: skipped before the Stripe call.
+    expect(retrievedIds).toEqual([]);
+  });
+
+  it('THE CANCELLATION BUG: writes what Stripe says NOW, not what the event carried', async () => {
+    // The exact shape of the shipped bug. The event is the pre-cancellation
+    // snapshot of a same-second pair; Stripe currently says the subscription is
+    // cancelling at period end. Trusting the payload writes false and the
+    // household page tells someone their cancelled plan renews — which is what
+    // produces a duplicate cancellation or a chargeback.
+    currentEvent = makeEvent('customer.subscription.updated', subObject({ cancel_at_period_end: false }));
+    retrievedSub = subObject({ cancel_at_period_end: true });
+
     await post();
+
+    expect(householdUpdates).toHaveLength(1);
+    expect(householdUpdates[0].subscription_cancel_at_period_end).toBe(true);
+  });
+
+  it('retrieves the live subscription for subscription.* events, not just checkout', async () => {
+    currentEvent = makeEvent('customer.subscription.updated', subObject());
+    await post();
+    expect(retrievedIds).toEqual(['sub_123']);
+  });
+
+  it('EITHER ORDER of a same-second pair produces the same row', async () => {
+    // The property that makes the fix a fix: order stops being a coin flip.
+    retrievedSub = subObject({ cancel_at_period_end: true });
+
+    for (const payload of [{ cancel_at_period_end: false }, { cancel_at_period_end: true }]) {
+      householdUpdates = [];
+      householdRow = { data: { id: 'hh1', subscription_updated_at: null }, error: null };
+      currentEvent = makeEvent('customer.subscription.updated', subObject(payload), '2026-08-05T10:00:00Z');
+
+      await post();
+      expect(householdUpdates[0].subscription_cancel_at_period_end).toBe(true);
+    }
+  });
+
+  // --- 3b. the retrieve itself failing -------------------------------------
+
+  it('asks Stripe to RETRY (503) when the retrieve fails, and writes NOTHING', async () => {
+    // Falling back to the event payload here would reintroduce the cancellation
+    // bug, and only while Stripe is degraded. We do not know the state, so we
+    // do not write one.
+    retrieveError = Object.assign(new Error('service unavailable'), { statusCode: 503 });
+
+    const res = await post();
+    expect(res.status).toBe(503);
+    expect(householdUpdates).toEqual([]);
+    expect(eventUpdates.at(-1)!.outcome).toBe('retrieve_failed');
+  });
+
+  it('a redelivery of an abandoned event is REPROCESSED, not swallowed as a duplicate', async () => {
+    // Without this the 503 above is a lie: the retry lands, hits the unique
+    // violation on the ledger, and is answered 200/duplicate — leaving the
+    // household on stale state permanently.
+    insertResult = { error: { code: '23505', message: 'duplicate key' } };
+    priorEventRow = { data: { outcome: 'retrieve_failed' }, error: null };
+
+    const res = await post();
+    const json = await res.json();
+
+    expect(json.duplicate).toBeUndefined();
+    expect(json.outcome).toBe('applied');
+    expect(householdUpdates).toHaveLength(1);
+  });
+
+  it('a redelivery of a FINISHED event is still swallowed as a duplicate', async () => {
+    insertResult = { error: { code: '23505', message: 'duplicate key' } };
+    priorEventRow = { data: { outcome: 'applied' }, error: null };
+
+    const res = await post();
+    const json = await res.json();
+
+    expect(json.duplicate).toBe(true);
+    expect(householdUpdates).toEqual([]);
+  });
+
+  it('a redelivery while another is IN FLIGHT is not reprocessed concurrently', async () => {
+    insertResult = { error: { code: '23505', message: 'duplicate key' } };
+    priorEventRow = { data: { outcome: null }, error: null };
+
+    const res = await post();
+    const json = await res.json();
+
+    expect(json.duplicate).toBe(true);
     expect(householdUpdates).toEqual([]);
   });
 
@@ -280,9 +398,11 @@ describe('stripe webhook', () => {
     expect(householdUpdates).toEqual([]);
   });
 
-  it('never returns a non-2xx once the signature is valid', async () => {
+  it('records a handler-level failure and still returns 200', async () => {
     // A non-2xx makes Stripe redeliver for three days, turning one unhandled
-    // event into thousands.
+    // event into thousands. Redelivery is reserved for the cases a retry can
+    // actually fix (ledger unavailable, retrieve failed) — never for a bad
+    // event that will be just as bad on the twentieth attempt.
     currentEvent = makeEvent('customer.subscription.updated', subObject({ metadata: {} }));
     const res = await post();
     expect(res.status).toBe(200);
