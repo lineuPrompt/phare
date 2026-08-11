@@ -172,7 +172,31 @@ export function subscriptionToColumns(sub: StripeSubscriptionLike): Subscription
   //
   // Not reachable from the Customer Portal, which is the only cancellation route
   // Phare offers a family — it takes a Stripe dashboard action or a direct API
-  // call. See the note in the handler that logs it when it does occur.
+  // call. That is the whole reason it is acceptable to defer, and the condition
+  // under which it stops being acceptable.
+  //
+  // ---------------------------------------------------------------------------
+  // THE INTENDED REMEDY, decided 2026-08-11, deliberately not applied yet.
+  // Apply it the moment early cancellation becomes reachable by a family —
+  // e.g. a Portal configuration that offers a cancellation date, or any code
+  // of ours that sets `cancel_at`. Do not re-derive this; it was argued once.
+  //
+  //   subscription_current_period_end: kind === 'scheduled_early'
+  //     ? unixToIso(sub.cancel_at ?? null)   // the date access ACTUALLY ends
+  //     : periodEndFrom(sub),
+  //   subscription_cancel_at_period_end: kind === 'at_period_end'
+  //     || kind === 'scheduled_early',
+  //
+  // Three lines, no migration. It works because this column is already the
+  // "entitled until" date in everything that reads it — entitlement compares it
+  // to now, and the household page prints it — and for every other kind it is
+  // identical to the period end. Moving the DATE is what makes setting the flag
+  // honest: "ends on <real date>, won't renew" is then true for both kinds, and
+  // the family is told the date their access actually stops.
+  //
+  // Setting the flag WITHOUT moving the date is the one combination to avoid —
+  // it dates the ending wrongly and cuts short something already paid for.
+  // ---------------------------------------------------------------------------
   const kind = cancellationKindFrom(sub);
 
   return {
