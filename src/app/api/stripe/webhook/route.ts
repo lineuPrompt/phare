@@ -319,6 +319,42 @@ export async function POST(request: Request) {
     // --- 7. Write. Wholesale, never patched --------------------------------
     const columns = subscriptionToColumns(subscription);
 
+    // --- TEMPORARY DIAGNOSTIC — REMOVE once the cancellation flag is proven --
+    //
+    // Prints what Stripe ACTUALLY returned beside what we are about to store,
+    // for one cancellation. It exists because the remaining hypothesis cannot
+    // be settled from the type definitions: `cancel_at_period_end` is still
+    // declared on Subscription in the pinned API version, but a field being
+    // declared does not mean the Customer Portal SETS it. This version also
+    // added `billing_schedules`, whose bill_until.computed_timestamp could
+    // express "cancels Sep 11" without the boolean ever flipping.
+    //
+    // So every candidate location is printed, and fields are marked ABSENT
+    // rather than coerced to null — "absent" and "present but false" point at
+    // completely different bugs, and collapsing them is what hid the original
+    // current_period_end move.
+    //
+    // Single-line JSON so the log viewer keeps it as one entry.
+    const rawSub = subscription as unknown as Record<string, unknown>;
+    const at = (k: string) => (k in rawSub ? rawSub[k] : '<<ABSENT>>');
+    console.log('Stripe webhook — RETRIEVED [v2] ' + JSON.stringify({
+      event: event.id,
+      type: event.type,
+      subId,
+      status: at('status'),
+      cancel_at_period_end: at('cancel_at_period_end'),
+      cancel_at: at('cancel_at'),
+      canceled_at: at('canceled_at'),
+      cancellation_details: at('cancellation_details'),
+      billing_schedules: at('billing_schedules'),
+      schedule: at('schedule'),
+      item_period_end: subscription.items?.data?.[0]?.current_period_end ?? '<<ABSENT>>',
+      WROTE_cancel_at_period_end: columns.subscription_cancel_at_period_end,
+      WROTE_period_end: columns.subscription_current_period_end,
+      WROTE_status: columns.subscription_status,
+    }));
+    // --- end temporary diagnostic -------------------------------------------
+
     const { error: writeErr } = await admin
       .from('households')
       .update({ ...columns, subscription_updated_at: eventCreatedAt })
