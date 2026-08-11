@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { getStripe, stripeConfigured, cancelSubscription } from '@/lib/stripe';
-import { subscriptionToColumns, type StripeSubscriptionLike } from '@/lib/stripeSubscriptionMap';
+import {
+  subscriptionToColumns,
+  cancellationKindFrom,
+  type StripeSubscriptionLike,
+} from '@/lib/stripeSubscriptionMap';
 
 // ---------------------------------------------------------------------------
 // POST /api/stripe/webhook — THE ONLY WRITER OF SUBSCRIPTION STATE.
@@ -318,6 +322,21 @@ export async function POST(request: Request) {
 
     // --- 7. Write. Wholesale, never patched --------------------------------
     const columns = subscriptionToColumns(subscription);
+
+    // A cancellation dated BEFORE the period end cannot be represented by the
+    // columns we have (see subscriptionToColumns). It is unreachable from the
+    // Portal, so if one appears a human caused it in the dashboard or over the
+    // API — and the household page will be quietly wrong about when access ends
+    // until somebody looks. Loud, and permanent: this is not the temporary
+    // diagnostic below.
+    const cancelKind = cancellationKindFrom(subscription);
+    if (cancelKind === 'scheduled_early') {
+      console.error(
+        'Stripe webhook — EARLY CANCELLATION, not representable: subscription %s ends before its ' +
+        'period end (%s). The household page will show the period end instead. Event %s.',
+        subscription.id, columns.subscription_current_period_end, event.id
+      );
+    }
 
     // --- TEMPORARY DIAGNOSTIC — REMOVE once the cancellation flag is proven --
     //

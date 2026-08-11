@@ -19,11 +19,35 @@
 // than inline in a route handler.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// THE SECOND INSTANCE OF THE SAME TRAP — cancel_at_period_end.
+//
+// The boolean is still declared, and still non-optional, on Subscription in the
+// pinned API version. It is simply NOT WHAT THE CUSTOMER PORTAL SETS. Cancelling
+// through the Portal produces:
+//
+//   cancel_at_period_end: false
+//   cancel_at:            1789144635   ← the period end, to the second
+//   canceled_at:          1786477919
+//   cancellation_details: { reason: 'cancellation_requested', ... }
+//
+// So reading the boolean returns `false` for a subscription Stripe's own Portal
+// describes as "Cancels Sep 11, 2026". Worse than the current_period_end move:
+// that one returned undefined, this one returns a plausible, wrong answer of
+// the right type. Nothing can catch it except comparing against the truth.
+//
+// The lesson worth keeping: a field existing in the type definitions says
+// nothing about whether the thing that changed the subscription actually writes
+// it. Types describe what CAN be there, not what IS.
+// ---------------------------------------------------------------------------
+
 /** Only the shape we read. Structural, so tests need no Stripe fixtures. */
 export type StripeSubscriptionLike = {
   id: string;
   status: string;
   cancel_at_period_end?: boolean | null;
+  /** Unix seconds. The Portal's real cancellation signal — see above. */
+  cancel_at?: number | null;
   customer?: string | { id: string } | null;
   items?: {
     data?: Array<{
@@ -57,6 +81,12 @@ function unixToIso(seconds: number | null | undefined): string | null {
  * would cut access short, which is the direction that breaks the Terms.
  */
 export function periodEndFrom(sub: StripeSubscriptionLike): string | null {
+  return unixToIso(periodEndUnixFrom(sub));
+}
+
+/** The same value in Stripe's own units, so cancel_at can be compared to it
+ *  without a round-trip through ISO strings. One source of truth for both. */
+function periodEndUnixFrom(sub: StripeSubscriptionLike): number | null {
   const items = sub.items?.data ?? [];
   let max: number | null = null;
   for (const item of items) {
@@ -65,7 +95,46 @@ export function periodEndFrom(sub: StripeSubscriptionLike): string | null {
       if (max === null || end > max) max = end;
     }
   }
-  return unixToIso(max);
+  return max;
+}
+
+/**
+ * What KIND of cancellation, if any, is scheduled on this subscription.
+ *
+ * Named rather than boolean because `cancel_at` conflates three genuinely
+ * different futures, and flattening them is how a family gets told the wrong
+ * thing:
+ *
+ *   at_period_end    cancel_at === the period end. The ordinary "cancel" — it
+ *                    runs to the end of what they paid for, then stops.
+ *   scheduled_early  cancel_at BEFORE the period end. Access stops mid-period.
+ *                    Not reachable from the Portal; it comes from the Stripe
+ *                    dashboard or the API. See the note in subscriptionToColumns.
+ *   scheduled_later  cancel_at AFTER the period end. This subscription RENEWS at
+ *                    least once more first, so "won't renew" would be a lie.
+ *   none             no cancellation scheduled.
+ *
+ * Exact equality, not a tolerance window. Stripe sets cancel_at to the period
+ * end to the second for a period-end cancellation, and a fuzzy match would
+ * quietly reclassify a genuine early cancellation that happened to fall nearby.
+ */
+export type CancellationKind = 'none' | 'at_period_end' | 'scheduled_early' | 'scheduled_later';
+
+export function cancellationKindFrom(sub: StripeSubscriptionLike): CancellationKind {
+  // Still honoured wherever it is still set — the API sets it even though the
+  // Portal does not, and this path is the one that already worked.
+  if (sub.cancel_at_period_end === true) return 'at_period_end';
+
+  const cancelAt = sub.cancel_at;
+  if (typeof cancelAt !== 'number' || !Number.isFinite(cancelAt) || cancelAt <= 0) return 'none';
+
+  const periodEnd = periodEndUnixFrom(sub);
+  // No period end means entitlement already reads as not-Pro regardless of any
+  // flag, so there is nothing to qualify and nothing to claim.
+  if (periodEnd === null) return 'none';
+
+  if (cancelAt === periodEnd) return 'at_period_end';
+  return cancelAt < periodEnd ? 'scheduled_early' : 'scheduled_later';
 }
 
 /** The customer id, which Stripe sends either expanded or as a bare string. */
@@ -87,12 +156,31 @@ export function customerIdFrom(sub: StripeSubscriptionLike): string | null {
  */
 export function subscriptionToColumns(sub: StripeSubscriptionLike): SubscriptionColumns {
   const firstPrice = sub.items?.data?.[0]?.price?.id ?? null;
+
+  // ONLY `at_period_end` sets the flag.
+  //
+  // `scheduled_later` must not: that subscription renews at least once more, so
+  // "won't renew" would be false.
+  //
+  // `scheduled_early` must not either — but it is NOT properly represented and
+  // this is a known gap, not an oversight. The column pair we have can say "runs
+  // out on <period end>" and nothing else; it cannot say "ends on a date that is
+  // not the period end". Setting the flag would date the ending wrongly, and
+  // leaving it clear says "renews" to somebody whose access stops sooner. Both
+  // are lies; today we tell the smaller and safer one (access is over-stated
+  // until the cancellation lands as its own event, never under-stated).
+  //
+  // Not reachable from the Customer Portal, which is the only cancellation route
+  // Phare offers a family — it takes a Stripe dashboard action or a direct API
+  // call. See the note in the handler that logs it when it does occur.
+  const kind = cancellationKindFrom(sub);
+
   return {
     stripe_subscription_id: sub.id,
     stripe_customer_id: customerIdFrom(sub),
     subscription_status: sub.status,
     subscription_current_period_end: periodEndFrom(sub),
-    subscription_cancel_at_period_end: sub.cancel_at_period_end === true,
+    subscription_cancel_at_period_end: kind === 'at_period_end',
     plan_price_id: firstPrice,
   };
 }

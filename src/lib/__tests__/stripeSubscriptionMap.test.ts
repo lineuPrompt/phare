@@ -3,6 +3,7 @@ import {
   subscriptionToColumns,
   periodEndFrom,
   customerIdFrom,
+  cancellationKindFrom,
   type StripeSubscriptionLike,
 } from '@/lib/stripeSubscriptionMap';
 import { entitlementFor } from '@/lib/entitlement';
@@ -91,6 +92,93 @@ describe('subscriptionToColumns', () => {
     expect(subscriptionToColumns(sub({ cancel_at_period_end: undefined })).subscription_cancel_at_period_end).toBe(false);
     expect(subscriptionToColumns(sub({ cancel_at_period_end: null })).subscription_cancel_at_period_end).toBe(false);
     expect(subscriptionToColumns(sub({ cancel_at_period_end: true })).subscription_cancel_at_period_end).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE PORTAL CANCELLATION. The second field-location trap in this file.
+//
+// Captured from a real Customer Portal cancellation against the pinned API
+// version, logged out of the live webhook. The boolean says false; `cancel_at`
+// carries the truth. Reading the boolean told a cancelling family their
+// subscription renews — the error that produces a duplicate cancellation or a
+// chargeback.
+// ---------------------------------------------------------------------------
+
+/** Unix seconds, straight from the production log: 2026-09-11T16:37:15Z. */
+const PORTAL_PERIOD_END = 1789144635;
+
+/** The exact payload the Portal produced, reduced to the fields we read. */
+const portalCancelled = (): StripeSubscriptionLike => ({
+  id: 'sub_1U3Ig5DmeM1uDIBVsyt20ib7',
+  status: 'active',
+  cancel_at_period_end: false,          // ← the lie
+  cancel_at: PORTAL_PERIOD_END,         // ← the truth
+  customer: 'cus_V3PURCsYYj0MQ4',
+  items: { data: [{ current_period_end: PORTAL_PERIOD_END, price: { id: 'price_1U0mU0DmeM1uDIBVbpkzxzp1' } }] },
+});
+
+describe('Portal cancellation — cancel_at, not the boolean', () => {
+  it('REGRESSION: the real Portal payload maps to cancel_at_period_end TRUE', () => {
+    // Fails against the old mapper, which read only the boolean and returned
+    // false for a subscription Stripe describes as "Cancels Sep 11, 2026".
+    expect(subscriptionToColumns(portalCancelled()).subscription_cancel_at_period_end).toBe(true);
+  });
+
+  it('and the family is told they are ending, not renewing', () => {
+    // The whole point, stated in the terms the household page uses.
+    const cols = subscriptionToColumns(portalCancelled());
+    expect(entitlementFor(cols, new Date('2026-08-11T18:00:00Z'))).toEqual({
+      isPro: true,
+      reason: 'active_ending',
+    });
+  });
+
+  it('cancel_at EQUAL to the period end → true', () => {
+    expect(cancellationKindFrom(sub({ cancel_at: FUTURE }))).toBe('at_period_end');
+    expect(subscriptionToColumns(sub({ cancel_at: FUTURE })).subscription_cancel_at_period_end).toBe(true);
+  });
+
+  it('cancel_at EARLIER than the period end → false, and classed scheduled_early', () => {
+    // PINNED DECISION, not a preference. An early cancellation ends access on a
+    // date these columns cannot express, so the flag stays clear and the page
+    // shows the period end. That over-states access rather than under-stating
+    // it — the safe direction — and the handler logs it loudly. Unreachable
+    // from the Portal; it takes a dashboard action or an API call.
+    const early = sub({ cancel_at: FUTURE - 86_400 });
+    expect(cancellationKindFrom(early)).toBe('scheduled_early');
+    expect(subscriptionToColumns(early).subscription_cancel_at_period_end).toBe(false);
+  });
+
+  it('cancel_at LATER than the period end → false, because it really does renew', () => {
+    // It renews at least once more first. "Won't renew" would be the lie here.
+    const later = sub({ cancel_at: FUTURE + 86_400 });
+    expect(cancellationKindFrom(later)).toBe('scheduled_later');
+    expect(subscriptionToColumns(later).subscription_cancel_at_period_end).toBe(false);
+  });
+
+  it('no cancel_at and the boolean false → false', () => {
+    expect(cancellationKindFrom(sub())).toBe('none');
+    expect(subscriptionToColumns(sub()).subscription_cancel_at_period_end).toBe(false);
+  });
+
+  it('the boolean TRUE with no cancel_at → true (the path that already worked)', () => {
+    // Whatever still sets the boolean — the API does — must keep working.
+    const flagged = sub({ cancel_at_period_end: true, cancel_at: null });
+    expect(cancellationKindFrom(flagged)).toBe('at_period_end');
+    expect(subscriptionToColumns(flagged).subscription_cancel_at_period_end).toBe(true);
+  });
+
+  it('a junk cancel_at is ignored rather than trusted', () => {
+    for (const junk of [0, -1, NaN, undefined, null]) {
+      expect(cancellationKindFrom(sub({ cancel_at: junk as number | null }))).toBe('none');
+    }
+  });
+
+  it('with no readable period end there is nothing to compare, and nothing is claimed', () => {
+    const noEnd = sub({ cancel_at: FUTURE, items: { data: [{ price: { id: 'price_monthly' } }] } });
+    expect(cancellationKindFrom(noEnd)).toBe('none');
+    expect(subscriptionToColumns(noEnd).subscription_cancel_at_period_end).toBe(false);
   });
 });
 
