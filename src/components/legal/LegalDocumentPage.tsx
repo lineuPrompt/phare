@@ -1,18 +1,27 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import Navbar from '@/components/brand/Navbar';
+import { createClient } from '@/lib/supabase';
 import { getLegalDocument, type LegalDocumentKey } from '@/content/legal';
 
 /**
  * Renders any legal/informational document from src/content/legal.
  *
- * DELIBERATELY PUBLIC: this component never calls /api/me and never redirects.
- * A privacy policy that requires signing in to read is not a privacy policy —
+ * DELIBERATELY PUBLIC: this component never gates and never redirects. A
+ * privacy policy that requires signing in to read is not a privacy policy —
  * and the consent screen links here, so gating it would deadlock a user who
  * cannot proceed until they have read what they are agreeing to.
+ *
+ * It does read the session, for exactly one thing: where the back link points.
+ * That is a read, not a gate — the document body renders identically either
+ * way, and the link defaults to the public destination until (and unless) the
+ * check resolves to a signed-in user, so a logged-out or offline reader always
+ * gets a working link. Nothing here may ever grow into a condition on the
+ * content itself.
  *
  * Section ids become heading anchors, so a specific clause can be linked to
  * directly. legalContent.test.ts holds those ids identical across locales, which
@@ -41,6 +50,21 @@ export default function LegalDocumentPage({ doc }: { doc: LegalDocumentKey }) {
   const pathname = usePathname();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
   const document = getLegalDocument(doc, locale);
+
+  // Now that the account menu links here from inside the app, "Back to Phare"
+  // pointing at the marketing landing page would eject a signed-in household
+  // out of the product — they came from the dashboard to look something up,
+  // not to read the sales pitch. Defaults to the public destination, so the
+  // link is correct for the whole first render and for anyone signed out.
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => { if (!cancelled && data.user) setSignedIn(true); })
+      .catch(() => { /* never let a session check affect a public document */ });
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <main className="min-h-screen" style={{ background: '#FAFAF8' }}>
@@ -82,7 +106,11 @@ export default function LegalDocumentPage({ doc }: { doc: LegalDocumentKey }) {
         </div>
 
         <div className="mt-16 pt-8" style={{ borderTop: '1px solid #E5E7EB' }}>
-          <Link href={`/${locale}`} className="text-sm underline" style={{ color: '#0F2044' }}>
+          <Link
+            href={signedIn ? `/${locale}/dashboard` : `/${locale}`}
+            className="text-sm underline"
+            style={{ color: '#0F2044' }}
+          >
             {t('backHome')}
           </Link>
         </div>

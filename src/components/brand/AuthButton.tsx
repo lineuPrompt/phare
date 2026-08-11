@@ -9,6 +9,9 @@ import type { User } from '@supabase/supabase-js';
 
 export default function AuthButton() {
   const t = useTranslations('auth');
+  // Same keys the landing-page footer uses. Reused rather than duplicated so
+  // the two surfaces can never drift apart in either locale.
+  const tLegal = useTranslations('legal');
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
@@ -89,13 +92,46 @@ export default function AuthButton() {
             >
               {t('dashboard')}
             </Link>
-            <button
-              onClick={signOut}
-              className="w-full text-left px-4 py-2.5 text-sm font-medium cursor-pointer hover:bg-gray-50 transition-all"
-              style={{ color: '#DC2626' }}
-            >
-              {t('signOut')}
-            </button>
+
+            {/* The ONLY path to the legal/help pages from inside the app. They
+                used to be reachable solely from the landing-page footer, which
+                a signed-in household never sees — so someone confused about
+                why a card charge landed in next month's tab had no route to
+                the FAQ without signing out or guessing the URL.
+
+                Placed here rather than in the sidebar or a new authenticated
+                footer because this menu already renders on every app page and
+                costs nothing visually until it is opened — these are pages you
+                consult once, not daily destinations competing with Timeline.
+
+                FAQ leads: it is the one people actually come looking for. */}
+            <div className="mt-1 pt-1" style={{ borderTop: '1px solid #F3F4F6' }}>
+              {[
+                { href: `/${locale}/faq`, label: tLegal('footerFaq') },
+                { href: `/${locale}/privacy`, label: tLegal('footerPrivacy') },
+                { href: `/${locale}/terms`, label: tLegal('footerTerms') },
+              ].map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className="block px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 transition-all"
+                  style={{ color: '#6B7280' }}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+
+            <div className="mt-1 pt-1" style={{ borderTop: '1px solid #F3F4F6' }}>
+              <button
+                onClick={signOut}
+                className="w-full text-left px-4 py-2.5 text-sm font-medium cursor-pointer hover:bg-gray-50 transition-all"
+                style={{ color: '#DC2626' }}
+              >
+                {t('signOut')}
+              </button>
+            </div>
           </div>
         )}
       </div>
