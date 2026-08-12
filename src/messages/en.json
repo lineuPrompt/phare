@@ -48,13 +48,13 @@
     "suffix": "awaiting pay dates — not yet in this month's ledger."
   },
   "landing": {
-    "badge": "AI financial coach for Canadian families",
+    "badge": "AI financial coach, built for Canada",
     "hero": {
-      "title": "Your family finances, finally clear.",
+      "title": "Your household finances, finally clear.",
       "subtitle": "Fill in our simple template — or enter your numbers by hand. Get a complete financial plan in 5 minutes. Know exactly what to do this month.",
       "cta": "Start free",
       "secondaryCta": "See how it works",
-      "socialProof": "Built for Canadian families · RRSP, RESP, TFSA aware · English & Français"
+      "socialProof": "Built for Canada · RRSP, RESP, TFSA aware · English & Français"
     },
     "problem": {
       "title": "The real reason your credit line keeps growing",
@@ -156,13 +156,13 @@
       }
     },
     "finalCta": {
-      "title": "Your family deserves a financial plan.",
+      "title": "Your household deserves a financial plan.",
       "subtitle": "Not another spreadsheet. Not another app that tracks what you already spent. A plan that tells you what to do next.",
       "cta": "Start free"
     },
     "footer": {
       "contact": "Contact:",
-      "builtFor": "Built for Canadian families",
+      "builtFor": "Built for Canada",
       "copyright": "© 2026 Phare. All rights reserved."
     }
   },
@@ -334,12 +334,12 @@
     },
     "form": {
       "title": "Enter your numbers",
-      "subtitle": "Add your income and expenses below — Phare builds your financial picture from it.",
+      "subtitle": "Add what you know — two or three lines is enough to start. You can add the rest any time.",
       "income": "Income sources",
       "incomeHint": "Enter what lands in your bank account each pay, then pick the frequency. We compute the monthly figure — no math needed.",
       "expenses": "Expenses",
-      "expenseHint": "Enter what you pay each time, then pick how often. We compute the monthly figure — no math needed.",
-      "sourcePlaceholder": "e.g. Salary — Partner 1",
+      "expenseHint": "Enter what you pay each time, then pick how often. We compute the monthly figure — no math needed. Start with the big ones; you can add more any time.",
+      "sourcePlaceholder": "e.g. Salary",
       "amountPerPay": "Amount per pay",
       "expenseAmountPlaceholder": "Amount per payment",
       "freq_weekly": "Weekly",
@@ -367,7 +367,7 @@
   "auth": {
     "signinTitle": "Welcome back",
     "signupTitle": "Create your account",
-    "signinSubtitle": "Sign in to see your family's plan.",
+    "signinSubtitle": "Sign in to see your plan.",
     "signupSubtitle": "Your financial plan, saved and waiting every month.",
     "fullName": "Full name",
     "email": "Email",

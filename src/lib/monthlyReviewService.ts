@@ -567,7 +567,7 @@ export async function generateMonthlyReview({
       (totalBorrowed > 0
         ? `Borrowed this month: $${totalBorrowed}, drawn from a credit line. This is debt, NOT income and NOT ` +
           `savings — it is already excluded from every figure above. Never describe this month as having more ` +
-          `income, savings, or surplus because of it; if you mention the family's cash position, disclose that ` +
+          `income, savings, or surplus because of it; if you mention the household's cash position, disclose that ` +
           `part of it was borrowed.\n`
         : '') +
       `All figures are ACTUAL ${reviewMonthLabel} ledger — computed from materialized transactions, ` +
@@ -593,8 +593,8 @@ export async function generateMonthlyReview({
     // plan the family never set up.
     const categoryList = SEED_CATEGORIES.join(', ');
     const planPrompt =
-      `You are Phare, an AI financial coach for Canadian families. The numbers below are VERIFIED — ` +
-      `calculated from the family's ledger. Do not change or recalculate them.\n\n` +
+      `You are Phare, an AI financial coach for Canadian households. The numbers below are VERIFIED — ` +
+      `calculated from the household's ledger. Do not change or recalculate them.\n\n` +
       `${aiContext}\n\n` +
       `Write ALL text in ${lang}.\n\n` +
       `Return ONLY valid JSON:\n` +
@@ -610,7 +610,7 @@ export async function generateMonthlyReview({
       `- Their goals (if any) are already evaluated (contribution, on-track verdict, and dates are all real, verified numbers) — do not invent or restate any of those figures anywhere.\n` +
       `- DEBT PAYOFF: if topRecommendation mentions the debt's own required monthly payment amount, you MUST write the literal placeholder ${DEBT_PAYMENT_PLACEHOLDER} in its place — never type a dollar figure for it yourself, under any circumstance, in any language or currency format. You may still describe timing/urgency around it in your own words (e.g. "with the credit line's ${DEBT_PAYMENT_PLACEHOLDER}/month payment, this month's extra room could go toward it").\n` +
       `- Their recurring contributions and debt payments (if any) are already subtracted from the net cash flow figure above — if you mention one, say it's already accounted for (e.g. "your $500/mo RRSP contribution is already counted"), never present it as new discretionary room and never double-count it against a separate suggestion.\n` +
-      `- Vocabulary: never write "code", "computed in code", or similar internal/technical phrasing — a reader must never see the word "code" at all. An estimated date or figure should read as a plain estimate (e.g. "estimated: March 2027"), never "code-estimated". Never call a figure "budgeted" unless the family actually set that budget themselves — a computed or projected amount (including a card/bridge payment total) should read as "expected", not "budgeted".\n` +
+      `- Vocabulary: never write "code", "computed in code", or similar internal/technical phrasing — a reader must never see the word "code" at all. An estimated date or figure should read as a plain estimate (e.g. "estimated: March 2027"), never "code-estimated". Never call a figure "budgeted" unless the household actually set that budget themselves — a computed or projected amount (including a card/bridge payment total) should read as "expected", not "budgeted".\n` +
       `- Canadian context: RRSP, RESP, TFSA, CESG.\n` +
       `- If net cash flow is negative, topRecommendation must address that first.\n` +
       `- topRecommendation: one specific sentence with a dollar amount.`;
@@ -734,7 +734,7 @@ export async function generateMonthlyReview({
     const REVIEW_PROMPT_ILLUSTRATIVE_TOKENS = ['name', 'month', 'need', 'freesOn'] as const;
 
     const reviewPrompt =
-      `You are Phare, an AI financial coach for Canadian families. Write this family's monthly review in ${lang}.\n\n` +
+      `You are Phare, an AI financial coach for Canadian households. Write this household's monthly review in ${lang}.\n\n` +
       `Their plan:\n${JSON.stringify(buildReviewPayload(plan))}\n\n` +
       `Write THREE paragraphs maximum. Specific numbers. One clear recommendation. Plain language. ` +
       `It must feel like a letter from a trusted financial advisor, not a report.\n\n` +
@@ -778,7 +778,7 @@ export async function generateMonthlyReview({
       `the reader must never see the word "code". An estimated date or figure reads as a plain estimate (e.g. ` +
       `"estimated: March 2027"), never "code-estimated" or "code-computed". A projected or computed amount ` +
       `(including a card/bridge payment total) reads as "expected", never "budgeted" — reserve "budgeted" only ` +
-      `for a figure the family actually set as a budget themselves.\n` +
+      `for a figure the household actually set as a budget themselves.\n` +
       `- COACHING — WHERE THE MONEY COMES FROM: "coaching" is the ONLY source of any funding-priority or ` +
       `money-source suggestion. Its "rankedNeeds" is already in the correct priority order — restate that order, ` +
       `never re-rank it yourself and never suggest funding anything not in this list. SCOPE OF THE CAP: ` +
@@ -791,7 +791,7 @@ export async function generateMonthlyReview({
       `"coaching.startingContribution" is the most you may ever propose applying as NEW, additional, on-top-of-` +
       `plan money — never recommend a larger discretionary figure than that. If "coaching.sourceCategory" ` +
       `is non-null, you may name ONLY that one category as a possible source (its exact target/actual/over figures, ` +
-      `never any other category, never a target you were not given) — phrase it as an option the family can use if ` +
+      `never any other category, never a target you were not given) — phrase it as an option the household can use if ` +
       `they choose, e.g. "restaurants ran $X against your own $Y target — that's one place it could come from," ` +
       `never a command like "cut back on X." If "coaching.sourceCategory" is null, do not name ANY category as a ` +
       `money source. If "coaching.freedCapacityEvents" is non-empty, you may describe growth only from those exact ` +
@@ -813,7 +813,7 @@ export async function generateMonthlyReview({
       `never add it into or imply it inflates any capacity figure you state. TONE: ` +
       `never write "cut", "cut back", "reduce your spending on", "wasteful", "unnecessary", "frivolous", ` +
       `"shouldn't", "you need to stop", or "overspent" (say "ran higher than your own target" instead); never imply ` +
-      `a category is frivolous or that the family is failing; no category (groceries, childcare, health included) ` +
+      `a category is frivolous or that the household is failing; no category (groceries, childcare, health included) ` +
       `is ever singled out as more discretionary than another — the voice is a humble coach offering an option, not ` +
       `an auditor issuing a verdict.\n` +
       `- NO INVENTED TARGETS: never describe any category, fund, or line as having a "budget," "target," or ` +

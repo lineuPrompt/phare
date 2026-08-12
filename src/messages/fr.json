@@ -48,13 +48,13 @@
     "suffix": "en attente d'une date de paiement — pas encore dans le registre de ce mois-ci."
   },
   "landing": {
-    "badge": "Coach financier IA pour les familles canadiennes",
+    "badge": "Coach financier IA, conçu pour le Canada",
     "hero": {
-      "title": "Les finances de votre famille, enfin claires.",
+      "title": "Les finances de votre ménage, enfin claires.",
       "subtitle": "Remplissez notre modèle simple — ou entrez vos chiffres à la main. Obtenez un plan financier complet en 5 minutes. Sachez exactement quoi faire ce mois-ci.",
       "cta": "Commencer gratuitement",
       "secondaryCta": "Voir comment ça marche",
-      "socialProof": "Conçu pour les familles canadiennes · REER, REEE, CELI · English & Français"
+      "socialProof": "Conçu pour le Canada · REER, REEE, CELI · English & Français"
     },
     "problem": {
       "title": "La vraie raison pour laquelle votre marge de crédit augmente",
@@ -156,13 +156,13 @@
       }
     },
     "finalCta": {
-      "title": "Votre famille mérite un plan financier.",
+      "title": "Votre ménage mérite un plan financier.",
       "subtitle": "Pas un autre tableur. Pas une autre application qui suit ce que vous avez déjà dépensé. Un plan qui vous dit quoi faire ensuite.",
       "cta": "Commencer gratuitement"
     },
     "footer": {
       "contact": "Nous joindre :",
-      "builtFor": "Conçu pour les familles canadiennes",
+      "builtFor": "Conçu pour le Canada",
       "copyright": "© 2026 Phare. Tous droits réservés."
     }
   },
@@ -334,12 +334,12 @@
     },
     "form": {
       "title": "Entrez vos chiffres",
-      "subtitle": "Ajoutez vos revenus et dépenses ci-dessous — Phare construit votre portrait financier à partir de ça.",
+      "subtitle": "Ajoutez ce que vous connaissez — deux ou trois lignes suffisent pour commencer. Vous pourrez ajouter le reste à tout moment.",
       "income": "Sources de revenus",
       "incomeHint": "Entrez ce qui arrive dans votre compte à chaque paie, puis choisissez la fréquence. Nous calculons le montant mensuel — pas besoin de faire les maths.",
       "expenses": "Dépenses",
-      "expenseHint": "Entrez ce que vous payez à chaque fois, puis choisissez la fréquence. Nous calculons le montant mensuel — pas besoin de faire les maths.",
-      "sourcePlaceholder": "ex. Salaire — Partenaire 1",
+      "expenseHint": "Entrez ce que vous payez à chaque fois, puis choisissez la fréquence. Nous calculons le montant mensuel — pas besoin de faire les maths. Commencez par les plus importantes; vous pourrez en ajouter à tout moment.",
+      "sourcePlaceholder": "ex. Salaire",
       "amountPerPay": "Montant par paie",
       "expenseAmountPlaceholder": "Montant par paiement",
       "freq_weekly": "Hebdomadaire",
@@ -367,7 +367,7 @@
   "auth": {
     "signinTitle": "Bon retour",
     "signupTitle": "Créez votre compte",
-    "signinSubtitle": "Connectez-vous pour voir le plan de votre famille.",
+    "signinSubtitle": "Connectez-vous pour voir votre plan.",
     "signupSubtitle": "Votre plan financier, sauvegardé et mis à jour chaque mois.",
     "fullName": "Nom complet",
     "email": "Courriel",

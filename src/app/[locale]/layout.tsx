@@ -6,7 +6,7 @@ import '../globals.css';
 
 export const metadata: Metadata = {
   title: 'Phare — Your financial lighthouse',
-  description: 'AI financial coach for Canadian families.',
+  description: 'AI financial coach for Canadian households.',
 };
 
 export default async function LocaleLayout({

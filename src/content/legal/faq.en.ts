@@ -83,7 +83,7 @@ const faqEn: LegalDocument = {
       heading: 'Can my partner see everything?',
       body: [
         'Yes — everyone in the household sees everything. Every transaction, every account, every goal, every review, regardless of who entered it or whose income it is.',
-        'Phare is built for two people managing money together, so there is no private space inside a household. Invite someone only if that’s what you want.',
+        'There is no private space inside a household — everything in one is shared, by design. Invite someone only if that’s what you want.',
         'A household holds up to two people with logins. You can also name others — children, for example — so expenses can be attributed to them, without giving them an account.',
       ],
     },

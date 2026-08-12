@@ -83,7 +83,7 @@ const faqFr: LegalDocument = {
       heading: 'Mon conjoint voit-il tout?',
       body: [
         'Oui — toutes les personnes du ménage voient tout. Chaque transaction, chaque compte, chaque objectif, chaque bilan, peu importe qui les a saisis ou à qui appartient le revenu.',
-        'Phare est conçu pour deux personnes qui gèrent leur argent ensemble : il n’y a donc pas d’espace privé à l’intérieur d’un ménage. N’invitez quelqu’un que si c’est ce que vous souhaitez.',
+        'Il n’y a pas d’espace privé à l’intérieur d’un ménage : tout y est partagé, par conception. N’invitez quelqu’un que si c’est ce que vous souhaitez.',
         'Un ménage compte au maximum deux personnes avec un identifiant. Vous pouvez aussi nommer d’autres personnes — vos enfants, par exemple — pour leur attribuer des dépenses, sans leur créer de compte.',
       ],
     },
