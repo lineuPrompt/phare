@@ -100,9 +100,9 @@
     },
     "features": {
       "title": "Everything your family needs. Nothing it doesn't.",
-      "familyBudgets": {
-        "title": "Family member budgets",
-        "description": "Individual spending limits within a shared household budget. Both spouses see the same dashboard. Alerts at 80% and 100%."
+      "cardEnvelopes": {
+        "title": "Credit card envelopes",
+        "description": "Give each card a monthly goal, then split it into per-category envelopes. Phare tracks real spending against each one across the statement cycle and flags them at 80% and 100%."
       },
       "sinkingFunds": {
         "title": "Reserve Fund",
@@ -205,7 +205,10 @@
       "nameThem": "Name your cards",
       "cardPlaceholder": "Add your credit card name",
       "creating": "Setting up...",
-      "continue": "Continue"
+      "continue": "Continue",
+      "openingBalance": "What's in your chequing account today?",
+      "openingBalancePlaceholder": "e.g. 1250.00",
+      "openingBalanceHint": "Optional — but it's the one number your timeline and month-end projection are built on. You can add it later from Timeline."
     },
     "analyzingSteps": {
       "reading": "Reading your data...",
@@ -488,7 +491,12 @@
     "successSlow": "This is taking longer than usual. Your payment is safe and nothing is lost — Phare Pro will switch on shortly. If it hasn't within an hour, email support@phare.money.",
     "successToDashboard": "Go to your dashboard",
     "quotaRemaining": "{count, plural, one {# review refresh left this month} other {# review refreshes left this month}}",
-    "quotaExhausted": "You've used your {limit} review refreshes this month. Resets {date}."
+    "quotaExhausted": "You've used your {limit} review refreshes this month. Resets {date}.",
+    "anchorPrompt": {
+      "title": "Your projection needs one number",
+      "body": "Tell Phare your chequing balance on a date you know, and it can show where the month ends up and what's coming after that. Without it, there is nothing to project from.",
+      "cta": "Set my balance"
+    }
   },
   "reviews": {
     "title": "Reviews",

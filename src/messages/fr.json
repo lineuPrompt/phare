@@ -100,9 +100,9 @@
     },
     "features": {
       "title": "Tout ce dont votre famille a besoin. Rien de plus.",
-      "familyBudgets": {
-        "title": "Budgets par membre",
-        "description": "Des limites de dépenses individuelles dans un budget familial partagé. Les deux conjoints voient le même tableau de bord. Alertes à 80 % et 100 %."
+      "cardEnvelopes": {
+        "title": "Enveloppes de carte de crédit",
+        "description": "Donnez un objectif mensuel à chaque carte, puis répartissez-le en enveloppes par catégorie. Phare suit les dépenses réelles de chacune sur le cycle de relevé et les signale à 80 % et 100 %."
       },
       "sinkingFunds": {
         "title": "Fonds de réserve",
@@ -205,7 +205,10 @@
       "nameThem": "Nommez vos cartes",
       "cardPlaceholder": "Nom de votre carte de crédit",
       "creating": "Configuration...",
-      "continue": "Continuer"
+      "continue": "Continuer",
+      "openingBalance": "Quel est le solde de votre compte chèques aujourd’hui?",
+      "openingBalancePlaceholder": "ex. 1250,00",
+      "openingBalanceHint": "Facultatif — mais c’est le chiffre sur lequel reposent votre chronologie et votre projection de fin de mois. Vous pourrez l’ajouter plus tard depuis la Chronologie."
     },
     "analyzingSteps": {
       "reading": "Lecture de vos données...",
@@ -488,7 +491,12 @@
     "successSlow": "Cela prend plus de temps que d’habitude. Votre paiement est en sécurité et rien n’est perdu — Phare Pro s’activera sous peu. Si ce n’est pas fait d’ici une heure, écrivez à support@phare.money.",
     "successToDashboard": "Aller au tableau de bord",
     "quotaRemaining": "{count, plural, one {# rafraîchissement de bilan restant ce mois-ci} other {# rafraîchissements de bilan restants ce mois-ci}}",
-    "quotaExhausted": "Vous avez utilisé vos {limit} rafraîchissements de bilan ce mois-ci. Réinitialisation le {date}."
+    "quotaExhausted": "Vous avez utilisé vos {limit} rafraîchissements de bilan ce mois-ci. Réinitialisation le {date}.",
+    "anchorPrompt": {
+      "title": "Votre projection a besoin d’un chiffre",
+      "body": "Indiquez à Phare le solde de votre compte chèques à une date que vous connaissez, et il pourra vous montrer où le mois se termine et ce qui s’en vient ensuite. Sans ce chiffre, il n’y a rien sur quoi appuyer une projection.",
+      "cta": "Saisir mon solde"
+    }
   },
   "reviews": {
     "title": "Revues",

@@ -11,6 +11,7 @@ import SinkingFundsCard from '@/components/dashboard/SinkingFundsCard';
 import GoalsCard from '@/components/dashboard/GoalsCard';
 import ReviewCard from '@/components/dashboard/ReviewCard';
 import EmptyState from '@/components/dashboard/EmptyState';
+import AnchorPromptCard from '@/components/dashboard/AnchorPromptCard';
 import { DashboardData } from '@/components/dashboard/types';
 import Sidebar from '@/components/dashboard/Sidebar';
 import { addMonthsToMonth } from '@/lib/goalHelpers';
@@ -71,6 +72,11 @@ export default function DashboardPage() {
   // are about to lose.
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
 
+  // Starts true so the prompt never flashes during the timeline fetch — it
+  // flips false only when the server actually reports no_anchor (or the
+  // household has no chequing account to anchor). A network failure leaves it
+  // true: better to show nothing than to tell someone a number is missing
+  // when we could not check.
   const [hasAnchor, setHasAnchor] = useState(true);
 
   // Plan tile (replaces the retired single-month "Projected month-end" tile)
@@ -306,6 +312,11 @@ export default function DashboardPage() {
                 belongs — this was a second display of it, not its home. */}
             <div className="space-y-6">
               {data.topRecommendation && <TopPriorityCard text={data.topRecommendation} />}
+              {/* Sits directly where the projection tile would be. Without an
+                  anchor that tile renders nothing at all, so this is the only
+                  thing standing between a new household and an unexplained
+                  blank space. */}
+              {!hasAnchor && <AnchorPromptCard locale={locale} />}
               {data.summary && (
                 <SnapshotCard
                   summary={data.summary}

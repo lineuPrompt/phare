@@ -8,6 +8,8 @@ export default function AccountStep({
   setCardCount,
   cardNames,
   setCardNames,
+  openingBalance,
+  setOpeningBalance,
   onConfirm,
   creating,
 }: {
@@ -15,6 +17,8 @@ export default function AccountStep({
   setCardCount: (n: number) => void;
   cardNames: string[];
   setCardNames: (names: string[]) => void;
+  openingBalance: string;
+  setOpeningBalance: (v: string) => void;
   onConfirm: () => void;
   creating: boolean;
 }) {
@@ -72,6 +76,38 @@ export default function AccountStep({
           ))}
         </div>
       )}
+
+      {/* THE OPENING BALANCE. Onboarding never asked for one, so every
+          household arrived at the dashboard with no account_balance_anchors
+          row — which silently removed the projection tile (PlanChainTile
+          returns null with no planMonth) and left Timeline empty. This is the
+          one real number the whole forward-looking half of the product is
+          built on, and it is asked here because this is already the "your
+          accounts" step.
+
+          Deliberately ONE field, not the date+balance pair Timeline's
+          AnchorForm uses: today's date is the only one worth defaulting to
+          during onboarding, and a second field is exactly the weight we are
+          trying to remove. A different date can be set later on Timeline.
+
+          Optional, and the hint says so. Skipping it is a legitimate choice —
+          the dashboard's anchor prompt (AnchorPromptCard) picks up anyone who
+          does, so the number is never silently missing. */}
+      <div className="mb-6 pt-5" style={{ borderTop: '1px dashed #E5E7EB' }}>
+        <label className="block text-sm font-medium mb-2" style={{ color: '#0F2044' }}>
+          {t('openingBalance')}
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          value={openingBalance}
+          onChange={(e) => setOpeningBalance(e.target.value)}
+          placeholder={t('openingBalancePlaceholder')}
+          className="w-48 px-4 py-2.5 rounded-lg text-sm outline-none"
+          style={{ border: '1.5px solid #D1D5DB', color: '#0F2044' }}
+        />
+        <p className="text-xs mt-1.5" style={{ color: '#9CA3AF' }}>{t('openingBalanceHint')}</p>
+      </div>
 
       <button
         onClick={onConfirm}

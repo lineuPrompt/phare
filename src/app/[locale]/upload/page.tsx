@@ -18,11 +18,15 @@ import { runPlausibilityGuard, PlausibilityResult } from '@/lib/plausibilityGuar
 import { TemplateParseResult } from '@/lib/templateParser';
 import { formatCAD } from '@/components/onboarding/types';
 import SupportLine from '@/components/shared/SupportLine';
+import { useBusinessToday } from '@/lib/useBusinessToday';
 
 type Status = 'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form' | 'accounts' | 'plausibility_check' | 'member_confirm' | 'anchor_dates';
 
 export default function UploadPage() {
   const t = useTranslations('upload');
+  // "Today" in the household's own timezone — the date the opening-balance
+  // anchor is stamped with. Not the browser clock; see writeOpeningAnchor.
+  const { today: businessToday } = useBusinessToday();
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -57,6 +61,10 @@ export default function UploadPage() {
   // Account step
   const [cardCount, setCardCount] = useState(1);
   const [cardNames, setCardNames] = useState<string[]>(['']);
+  // Chequing opening balance — the one real number Timeline and the dashboard
+  // projection tile are both built on. Optional; blank means "not now", and
+  // the dashboard's anchor prompt handles that case.
+  const [openingBalance, setOpeningBalance] = useState('');
   const [pendingPlanBody, setPendingPlanBody] = useState<Record<string, unknown> | null>(null);
   const [creatingAccounts, setCreatingAccounts] = useState(false);
 
@@ -91,6 +99,56 @@ export default function UploadPage() {
 
   const localeOf = () => (typeof window !== 'undefined' && window.location.pathname.startsWith('/fr') ? 'fr' : 'en');
 
+  /**
+   * Writes the chequing opening balance captured on the accounts step as a
+   * real account_balance_anchors row, dated today in the HOUSEHOLD's timezone
+   * (never the browser's guessed clock — /api/anchors rejects a future
+   * anchorDate against businessToday, and for a Montréal household a UTC
+   * "today" is tomorrow from 8pm onward).
+   *
+   * Runs AFTER the plan save, not on the accounts step itself: save-plan is
+   * what guarantees a chequing account exists (it creates one if the
+   * household somehow has none), so anchoring earlier could race a household
+   * that had no chequing row yet.
+   *
+   * A failure here is logged, not surfaced on the plan screen. That is not
+   * silence: the dashboard's AnchorPromptCard renders for exactly the state
+   * this failure leaves behind (no anchor), so the user gets an actionable
+   * prompt on the very next screen either way. A second error surface here
+   * would say the same thing, earlier and less usefully.
+   *
+   * Idempotent — /api/anchors upserts on (account_id, anchor_date), so the
+   * retry and confirm-replace paths through doSave can call it freely.
+   */
+  const writeOpeningAnchor = useCallback(async () => {
+    const raw = openingBalance.trim();
+    if (!raw) return; // skipped on purpose — the dashboard prompt covers it
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return;
+
+    try {
+      const accountsRes = await fetch('/api/accounts');
+      if (!accountsRes.ok) throw new Error(`Accounts lookup failed (${accountsRes.status})`);
+      const accountsData = await accountsRes.json();
+      const chequing = (accountsData?.accounts ?? []).find(
+        (a: { id: string; type: string }) => a.type === 'chequing'
+      );
+      if (!chequing) throw new Error('No chequing account to anchor');
+
+      const res = await fetch('/api/anchors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: chequing.id, anchorDate: businessToday, balance: value }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || `Anchor save failed (${res.status})`);
+      }
+    } catch (err) {
+      console.error('Opening balance anchor error:', err);
+    }
+  }, [openingBalance, businessToday]);
+
   const doSave = useCallback(async (
     payload: { plan: Plan; reviewText: string; locale: string; cardNames: string[]; fileMeta: FileMeta },
     confirmReplace: boolean,
@@ -120,6 +178,9 @@ export default function UploadPage() {
       });
       setHouseholdMembers(data?.householdMembers ?? []);
       setPlanSaveStatus('saved');
+      // Only after a real save — a chequing account is guaranteed to exist by
+      // this point, and there is no reason to anchor a plan that failed.
+      await writeOpeningAnchor();
       if (needsPayDate.length > 0) {
         setStatus('anchor_dates');
       }
@@ -128,7 +189,7 @@ export default function UploadPage() {
       setSaveErrorMessage(err instanceof Error ? err.message : String(err));
       setPlanSaveStatus('error');
     }
-  }, []);
+  }, [writeOpeningAnchor]);
 
   /**
    * Generating the narrative review and persisting the plan are independent
@@ -469,6 +530,7 @@ export default function UploadPage() {
           <AccountStep
             cardCount={cardCount} setCardCount={setCardCount}
             cardNames={cardNames} setCardNames={setCardNames}
+            openingBalance={openingBalance} setOpeningBalance={setOpeningBalance}
             onConfirm={confirmAccounts} creating={creatingAccounts}
           />
         )}

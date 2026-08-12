@@ -118,7 +118,7 @@ export default function Home() {
         </div>
 
         <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-          {(['familyBudgets', 'sinkingFunds', 'goalTracking', 'monthlyReview'] as const).map((key) => (
+          {(['cardEnvelopes', 'sinkingFunds', 'goalTracking', 'monthlyReview'] as const).map((key) => (
             <div
               key={key}
               className="bg-white rounded-2xl p-8"
