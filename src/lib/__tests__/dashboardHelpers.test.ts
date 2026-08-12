@@ -834,27 +834,52 @@ describe('computeMonthTotals — bi-weekly + semi-monthly income (windfall month
     const bugTotal = recurringRawAmounts.reduce((s, a) => s + a, 0);
     expect(bugTotal).toBe(BUG_AMOUNT); // confirms the bug number: $5,874
 
-    // Real ledger for a normal 2-paycheque month
+    // The month's real expenses, put in the LEDGER rather than held as a
+    // local — this is what makes netCashFlow below a real assertion about
+    // computeMonthTotals instead of arithmetic the test does itself.
+    //
+    // $6,016 is derived, not approximated: it is exactly the expense total
+    // that turns the bug's income figure into the deficit the household
+    // actually reported ($5,874 − $6,016 = −$142/month). Pinning it that way
+    // makes this fixture reproduce the reported symptom instead of merely
+    // resembling it. (It previously read `plannedExpenses = 9600` with a
+    // comment claiming the same $142 deficit — 5874 − 9600 is −$3,726, so
+    // the two never agreed. Nothing asserted on it, so nothing caught it.)
+    const REPORTED_DEFICIT = 142;
+    const monthExpenses = BUG_AMOUNT + REPORTED_DEFICIT; // 6016
+
+    // Real ledger for a normal 2-paycheque month: every paycheque as a
+    // materialized row, plus that month's expenses.
     const txns: TxRow[] = [
-      { type: 'income', account_id: CHEQUING_ID, amount: 2749 },
-      { type: 'income', account_id: CHEQUING_ID, amount: 2749 },
-      { type: 'income', account_id: CHEQUING_ID, amount: 2742 },
-      { type: 'income', account_id: CHEQUING_ID, amount: 2742 },
-      { type: 'income', account_id: CHEQUING_ID, amount: 383  },
+      { type: 'income',  account_id: CHEQUING_ID, amount: 2749 },
+      { type: 'income',  account_id: CHEQUING_ID, amount: 2749 },
+      { type: 'income',  account_id: CHEQUING_ID, amount: 2742 },
+      { type: 'income',  account_id: CHEQUING_ID, amount: 2742 },
+      { type: 'income',  account_id: CHEQUING_ID, amount: 383  },
+      { type: 'expense', account_id: CHEQUING_ID, amount: monthExpenses },
     ];
-    const { totalIncome, netCashFlow } = computeMonthTotals(txns, [chequingAcct]);
+    const { totalIncome, totalExpenses, netCashFlow } = computeMonthTotals(txns, [chequingAcct]);
 
     // Income must be the ledger amount, not the bug amount
     expect(totalIncome).not.toBe(bugTotal);
     expect(totalIncome).toBeGreaterThan(bugTotal * 1.9); // nearly double — bi-weekly counted twice
+    expect(totalExpenses).toBe(monthExpenses);
 
-    // With $9,600 in planned expenses the review was seeing a deficit.
-    // With real ledger income a surplus must be evident.
-    const plannedExpenses = 9600; // approximate from the bug report context
-    const surplusFromLedger = totalIncome - plannedExpenses;
-    const deficitFromBug    = bugTotal - plannedExpenses;
-    expect(surplusFromLedger).toBeGreaterThan(0); // surplus ✓
-    expect(deficitFromBug).toBeLessThan(0);        // bug said deficit ✗ ← the reported $142/month deficit
+    // THE ASSERTION THIS TEST IS NAMED FOR. The bug was not "income reads
+    // low" in the abstract — it was a review telling a household it had a
+    // $142/month deficit when the ledger showed a surplus. netCashFlow is
+    // the field that carried that verdict, so it is the field that has to be
+    // asserted here. Anything less proves the input and leaves the output —
+    // the part the household actually read — untested.
+    // Pinned to an absolute figure, not to `totalIncome - monthExpenses` —
+    // deriving the expectation from the function's own output would pass even
+    // if netCashFlow silently stopped subtracting expenses at all.
+    expect(netCashFlow).toBe(5349);         // 11,365 ledger income − 6,016 expenses
+    expect(netCashFlow).toBeGreaterThan(0); // surplus ✓
+
+    // And the same expenses against the bug's income figure reproduce the
+    // reported deficit exactly — the symptom this regression guards against.
+    expect(bugTotal - monthExpenses).toBe(-REPORTED_DEFICIT); // −$142 ✗
   });
 });
 

@@ -141,7 +141,7 @@
         "price": "$15",
         "period": "/month",
         "annual": "$150/year",
-        "perHousehold": "One subscription covers both spouses.",
+        "perHousehold": "One subscription per household — up to two logins, at no extra cost.",
         "badge": "Coming soon",
         "features": {
           "review": "Full monthly AI review",
@@ -422,7 +422,6 @@
       "borrowedNote": "{amount} of this is borrowed — real cash you can spend, and you'll owe it back.",
       "horizonEnd": "Plan horizon ends here — Phare plans 12 months ahead.",
       "note": "An estimate — assumes fixed bills, transfers, and card budgets land as dated.",
-      "viewRealBalance": "See real balances on Timeline",
       "question": "Cash you'll actually have",
       "horizonLocked": "{count, plural, one {# more month} other {# more months}} of projection with Phare Pro"
     },

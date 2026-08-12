@@ -1,7 +1,6 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import Link from 'next/link';
 import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
 import type { PlanChainMonth, CardCostBasis } from '@/lib/planChainHelpers';
 import { formatCurrency } from './types';
@@ -38,7 +37,6 @@ export default function PlanChainTile({
   totalBorrowed,
   locale,
   recurringHref,
-  timelineHref,
 }: {
   monthLabel: string;
   currentMonthLabel: string;
@@ -60,12 +58,8 @@ export default function PlanChainTile({
   totalBorrowed: number;
   locale: string;
   recurringHref: string;
-  timelineHref: string;
 }) {
   const t = useTranslations('dashboard.plan');
-  // Second instance for the CTA, which is shared with ReviewCard and so lives
-  // one level up rather than being duplicated into two namespaces that drift.
-  const tDash = useTranslations('dashboard');
 
   if (isPastMonth) {
     return (
@@ -198,11 +192,14 @@ export default function PlanChainTile({
         style={{ color: '#FCD34D' }}
       />
 
+      {/* No Timeline link here. SnapshotCard renders one seven lines above
+          this tile, to the identical URL — and its sentence ("this month's
+          cash flow only, not your running balance") is what sets that link
+          up, so it is the one that has to keep it. Two adjacent links to the
+          same place had already drifted to different wording in both
+          locales; this note stands on its own without one. */}
       <p className="text-xs mt-2" style={{ color: '#94A3B8' }}>
-        {t('note')}{' '}
-        <Link href={timelineHref} className="underline hover:no-underline">
-          {t('viewRealBalance')}
-        </Link>
+        {t('note')}
       </p>
 
       {isHorizonEnd && (

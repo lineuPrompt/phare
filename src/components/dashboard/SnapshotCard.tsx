@@ -276,7 +276,6 @@ export default function SnapshotCard({
           totalBorrowed={summary.totalBorrowed}
           locale={locale}
           recurringHref={`/${locale}/recurring`}
-          timelineHref={`/${locale}/timeline?month=${month}`}
         />
       )}
     </div>
