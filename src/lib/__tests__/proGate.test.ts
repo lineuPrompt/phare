@@ -25,15 +25,15 @@ const LAPSED = { subscription_status: 'canceled', subscription_current_period_en
 
 describe('requirePro', () => {
   it('allows a paying household', async () => {
-    expect(await requirePro(reader(PRO), 'hh1', 'audit')).toEqual({ allowed: true });
+    expect(await requirePro(reader(PRO), 'hh1', 'custom_categories')).toEqual({ allowed: true });
   });
 
   it('allows a COMPED household — a comp is entitlement, not a discount', async () => {
-    expect(await requirePro(reader(COMPED), 'hh1', 'audit')).toEqual({ allowed: true });
+    expect(await requirePro(reader(COMPED), 'hh1', 'custom_categories')).toEqual({ allowed: true });
   });
 
   it('refuses a free household with 403 and a code the UI can key off', async () => {
-    const r = await requirePro(reader(FREE), 'hh1', 'audit');
+    const r = await requirePro(reader(FREE), 'hh1', 'custom_categories');
     expect(r.allowed).toBe(false);
     if (r.allowed) throw new Error('unreachable');
 
@@ -43,7 +43,7 @@ describe('requirePro', () => {
     // is broken. The code is what lets the UI render a padlock instead.
     expect(body.code).toBe('pro_required');
     expect(body.locked).toBe(true);
-    expect(body.feature).toBe('audit');
+    expect(body.feature).toBe('custom_categories');
   });
 
   it('refuses a lapsed subscription', async () => {
@@ -54,16 +54,16 @@ describe('requirePro', () => {
   it('FAILS CLOSED when the household row cannot be read', async () => {
     // Defaulting to allowed on a database error would give the product away on
     // exactly the failures nobody notices.
-    const r = await requirePro(reader(null, { message: 'boom' }), 'hh1', 'audit');
+    const r = await requirePro(reader(null, { message: 'boom' }), 'hh1', 'custom_categories');
     expect(r.allowed).toBe(false);
   });
 
   it('fails closed when the row is missing entirely', async () => {
-    expect((await requirePro(reader(null), 'hh1', 'audit')).allowed).toBe(false);
+    expect((await requirePro(reader(null), 'hh1', 'custom_categories')).allowed).toBe(false);
   });
 
   it('carries the feature name through, so refusals are distinguishable', async () => {
-    for (const feature of ['audit', 'new_plan', 'custom_categories']) {
+    for (const feature of ['new_plan', 'custom_categories']) {
       const r = await requirePro(reader(FREE), 'hh1', feature);
       if (r.allowed) throw new Error('unreachable');
       expect((await r.response.json()).feature).toBe(feature);

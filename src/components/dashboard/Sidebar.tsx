@@ -12,6 +12,10 @@ export default function Sidebar({ locale, role: roleProp }: { locale: string; ro
   // When the parent knows the role (e.g. the household page), use it directly.
   // Otherwise fetch it once — this ensures the household link appears across all pages for owners.
   const [role, setRole] = useState<string | null>(roleProp ?? null);
+  // Whether the Audit item is drawn at all. Internal-only (2026-08-12) — the
+  // server decides, this only reflects the answer. Starts false so the item
+  // never appears and then vanishes; for everyone else it simply never renders.
+  const [canAudit, setCanAudit] = useState(false);
   // Mobile drawer — the desktop <aside> below is `hidden` under the `md`
   // breakpoint with no fallback, which was a full navigation dead-end on a
   // phone (confirmed live: a real trial user on mobile could not reach any
@@ -19,11 +23,17 @@ export default function Sidebar({ locale, role: roleProp }: { locale: string; ro
   // + slide-in drawer, shown only below `md`, exposing the exact same items.
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // NOTE: this fetch runs even when roleProp was supplied. It used to return
+  // early in that case, which was correct while role was the only thing it
+  // fetched — but canAudit has no prop equivalent, so an early return would
+  // silently drop the Audit item on exactly the pages that pass a role.
   useEffect(() => {
-    if (roleProp !== undefined) return; // already provided
     fetch('/api/me')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d?.role) setRole(d.role); })
+      .then((d) => {
+        if (roleProp === undefined && d?.role) setRole(d.role);
+        setCanAudit(Boolean(d?.canAudit));
+      })
       .catch(() => {});
   }, [roleProp]);
 
@@ -50,12 +60,17 @@ export default function Sidebar({ locale, role: roleProp }: { locale: string; ro
     { href: `/${locale}/cards`,     label: t('cards'),     icon: '💳' },
     // One item for both halves of what the household sets aside (2026-08-08)
     // — Reserve Fund and Goals now share /savings. Takes the slot the two
-    // used to occupy, so nothing else in the order shifts.
+    // used to occupy, so nothing else in the order shifts. Labelled "Goals"
+    // as of 2026-08-12; the URL is unchanged.
     { href: `/${locale}/savings`,   label: t('savings'),   icon: '💰' },
     // Shipped 2026-08-10 — was the last comingSoon entry, now a real page.
     { href: `/${locale}/reviews`,   label: t('reviews'),   icon: '✉️' },
     { href: `/${locale}/recurring`, label: t('recurring'), icon: '🔁' },
-    { href: `/${locale}/reconcile`, label: t('reconcile'), icon: '🔍' },
+    // Audit — internal only. Not a Pro feature, not an owner feature: a
+    // debugging instrument, shown to whoever is on the server's allowlist.
+    ...(canAudit
+      ? [{ href: `/${locale}/reconcile`, label: t('reconcile'), icon: '🔍' }]
+      : []),
     ...(role === 'owner'
       ? [{ href: `/${locale}/household`, label: t('household'), icon: '👨‍👩‍👧' }]
       : []),

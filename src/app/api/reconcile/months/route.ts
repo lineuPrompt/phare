@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { businessMonth } from '@/lib/dateHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
+import { isInternalHousehold } from '@/lib/internalAccess';
 
 // GET /api/reconcile/months
 //
@@ -9,6 +10,11 @@ import { getHouseholdTimezone } from '@/lib/householdTimezone';
 // that have at least one transaction (past or future), plus always the
 // current month — no trail of empty past months just because they're
 // within some fixed lookback window.
+//
+// INTERNAL ONLY (2026-08-12), same allowlist as GET /api/reconcile. This
+// route had NO gate at all while the page was Pro-gated — harmless then
+// (a list of month strings), but leaving it open now would mean the one
+// audit surface a non-allowlisted caller could still reach.
 export async function GET() {
   try {
     const supabase = await createClient();
@@ -21,6 +27,10 @@ export async function GET() {
       return NextResponse.json({ error: 'No household' }, { status: 400 });
     }
     const householdId = userRow.household_id as string;
+
+    if (!isInternalHousehold(householdId)) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
 
     const { data: txns } = await supabase
       .from('transactions')

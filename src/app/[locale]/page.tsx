@@ -196,7 +196,11 @@ export default function Home() {
               <p className="text-sm mb-6" style={{color: '#6B7280'}}>{t('pricing.pro.perHousehold')}</p>
 
               <div className="space-y-3 mb-8">
-                {(['review', 'regeneration', 'horizon', 'audit', 'newPlan', 'categories'] as const).map((key) => (
+                {/* 'audit' removed 2026-08-12 — the Audit page went
+                    internal-only, and a pricing card is a promise. Selling a
+                    debugging instrument nobody can reach is the one version of
+                    this that is worse than not offering it. */}
+                {(['review', 'regeneration', 'horizon', 'newPlan', 'categories'] as const).map((key) => (
                   <div key={key} className="flex items-center gap-3">
                     <span style={{color: '#2ABFBF'}}>✓</span>
                     <span style={{color: '#374151'}}>{t(`pricing.pro.features.${key}`)}</span>

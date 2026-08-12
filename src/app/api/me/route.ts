@@ -6,6 +6,7 @@ import { loadDeletionContext } from '@/lib/deletionContext';
 import { confirmationMatches } from '@/lib/accountDeletionHelpers';
 import { CURRENT_LEGAL_VERSION, hasAcceptedCurrent } from '@/lib/legalVersions';
 import { loadEntitlement } from '@/lib/entitlementServer';
+import { isInternalHousehold } from '@/lib/internalAccess';
 
 export async function GET() {
   try {
@@ -79,6 +80,13 @@ export async function GET() {
       // Pro with no customer, a lapsed one is not Pro but has one and must still
       // reach invoice history.
       hasBillingAccount: billing.hasBillingAccount,
+
+      // Internal-only surfaces (currently just the Audit page). A BOOLEAN, never
+      // the allowlist itself: the Sidebar needs to know whether to draw the
+      // item, and nothing in the browser needs to know who else is on the list.
+      // Hiding the link is cosmetic — the page and both of its API routes run
+      // this same check server-side.
+      canAudit: isInternalHousehold(userRow.household_id),
     });
   } catch {
     return NextResponse.json({ error: 'Failed to load user' }, { status: 500 });

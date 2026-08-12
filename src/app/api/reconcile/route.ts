@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { reconcileMonth, ReconcileTxRow, ReconcileAccountRow } from '@/lib/reconcileHelpers';
-import { requirePro } from '@/lib/proGate';
+import { isInternalHousehold } from '@/lib/internalAccess';
 
 /**
  * GET /api/reconcile?month=YYYY-MM
@@ -9,6 +9,10 @@ import { requirePro } from '@/lib/proGate';
  * Audit endpoint — returns every money number for the month traced to the
  * ledger, using two independent derivation paths so a bug in either path
  * surfaces as a non-zero netDifference.
+ *
+ * INTERNAL ONLY (2026-08-12). Was Pro-gated; Pro was the wrong axis, because
+ * this is a debugging instrument and gating it that way sold debugging as a
+ * feature. See src/lib/internalAccess.ts.
  *
  * Fetches ALL accounts (not just chequing) so card and goal account rows
  * appear in the per-account audit table.
@@ -32,10 +36,13 @@ export async function GET(request: Request) {
     }
     const householdId = userRow.household_id;
 
-    // Pro-only. Enforced here, not merely hidden: the padlock in the UI is
-    // presentation, this is the boundary.
-    const gate = await requirePro(supabase, householdId, 'audit');
-    if (!gate.allowed) return gate.response;
+    // Internal-only. Enforced here, not merely hidden: the page's 404 is
+    // presentation, this is the boundary. 404 rather than 403 so the answer
+    // matches the page's — a 403 would confirm the endpoint exists and that
+    // access is being withheld, which is itself information.
+    if (!isInternalHousehold(householdId)) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
 
     const [y, m] = monthParam.split('-').map(Number);
     const monthStart = `${monthParam}-01`;

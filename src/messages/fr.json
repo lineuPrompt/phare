@@ -147,7 +147,6 @@
           "review": "Bilan mensuel complet par IA",
           "regeneration": "Régénérez votre bilan jusqu’à 4 fois par mois",
           "horizon": "Projection sur 12 mois",
-          "audit": "Audit de réconciliation",
           "newPlan": "Reconstruisez votre plan à tout moment",
           "categories": "Vos propres catégories personnalisées"
         },
@@ -470,7 +469,7 @@
       "reviews": "Revues",
       "recurring": "Récurrents",
       "reconcile": "Audit",
-      "savings": "Épargne et réserves",
+      "savings": "Objectifs",
       "household": "Foyer",
       "cards": "Cartes de crédit",
       "menu": "Menu",
@@ -711,7 +710,8 @@
     "horizonLocked": "{count, plural, one {# mois de plus} other {# mois de plus}} de votre échéancier avec Phare Pro"
   },
   "savings": {
-    "title": "Épargne et réserves"
+    "title": "Objectifs",
+    "subtitle": "Épargne pour vos objectifs, votre fonds de réserve et le remboursement de vos dettes"
   },
   "goals": {
     "title": "Objectifs",
@@ -1116,7 +1116,6 @@
     "starting": "Ouverture du paiement...",
     "checkoutFailed": "Impossible d’ouvrir le paiement. Veuillez réessayer.",
     "lockedTitle": "Inclus dans Phare Pro",
-    "auditLocked": "L’audit de réconciliation compare votre solde enregistré à chaque transaction; il fait partie de Phare Pro.",
     "newPlanLocked": "Reconstruire votre plan à partir des données actuelles fait partie de Phare Pro.",
     "categoryLocked": "Vos propres catégories font partie de Phare Pro. Celles que vous avez déjà demeurent inchangées.",
     "sectionTitle": "Votre forfait",

@@ -147,7 +147,6 @@
           "review": "Full monthly AI review",
           "regeneration": "Refresh your review up to 4 times a month",
           "horizon": "12-month projection",
-          "audit": "Reconciliation Audit",
           "newPlan": "Rebuild your plan any time",
           "categories": "Your own custom categories"
         },
@@ -470,7 +469,7 @@
       "reviews": "Reviews",
       "recurring": "Recurring",
       "reconcile": "Audit",
-      "savings": "Savings & Reserves",
+      "savings": "Goals",
       "household": "Household",
       "cards": "Credit Cards",
       "menu": "Menu",
@@ -711,7 +710,8 @@
     "horizonLocked": "{count, plural, one {# more month} other {# more months}} of your timeline with Phare Pro"
   },
   "savings": {
-    "title": "Savings & Reserves"
+    "title": "Goals",
+    "subtitle": "Savings for Goals, Reserve and Debt Payment"
   },
   "goals": {
     "title": "Goals",
@@ -1116,7 +1116,6 @@
     "starting": "Opening checkout...",
     "checkoutFailed": "Could not start checkout. Please try again.",
     "lockedTitle": "Part of Phare Pro",
-    "auditLocked": "The Reconciliation Audit checks your recorded balance against every transaction, and is part of Phare Pro.",
     "newPlanLocked": "Rebuilding your plan from current data is part of Phare Pro.",
     "categoryLocked": "Your own categories are part of Phare Pro. The categories you already have stay exactly as they are.",
     "sectionTitle": "Your plan",
