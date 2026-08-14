@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { anthropic } from '@/lib/anthropic';
 import { createRateLimiter, clientIp } from '@/lib/rateLimit';
 
-// Same posture as /api/plan: unauthenticated because onboarding has no
-// household yet, but it spends Anthropic tokens (streamed, 1500 max_tokens).
+// Same posture as /api/plan: unauthenticated because this route reads nothing
+// from the database — the letter is written from the plan in the request body
+// — and so has no tenant to scope to. NOT because no household exists: the
+// signup trigger creates one and onboarding runs after signup.
+//
+// It does spend Anthropic tokens (streamed, 1500 max_tokens).
 // The client fires this exactly 1:1 with /api/plan, immediately after it
 // succeeds, and never retries it on its own — a failed stream falls back to
 // placeholder copy and proceeds to save. So the budget matches /api/plan's.

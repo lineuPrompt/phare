@@ -5,8 +5,15 @@ import { evaluateGoals, GoalResult, isDebtGoalName, computeDebtPayoff, DebtPayof
 import { businessToday, DEFAULT_HOUSEHOLD_TIMEZONE } from '@/lib/dateHelpers';
 import { createRateLimiter, clientIp } from '@/lib/rateLimit';
 
-// Unauthenticated by design — no household exists yet at this point in
-// onboarding — but it spends Anthropic tokens on every call, so it gets an
+// Unauthenticated by design — but NOT because no household exists yet. The
+// handle_new_user trigger creates a household, user row, member and chequing
+// account at signup, and onboarding runs after signup (the upload page calls
+// authenticated routes throughout). The real reason is narrower: this route
+// reads nothing from the database. The plan is assembled entirely from the
+// request body, so there is no tenant to scope to and nothing for a session
+// to authorize.
+//
+// It does spend Anthropic tokens on every call, so it gets an
 // IP-keyed cap. A real session fires this exactly once (from confirmAccounts);
 // even a user who errors out and starts over lands at 2–3. 8 per 5 minutes is
 // far above any human path and still bounds a script to ~96 calls/hour/instance.
@@ -65,9 +72,17 @@ export async function POST(request: NextRequest) {
 
     if (body.source === 'template') {
       const p = body.parsed;
-      // No household row exists yet at this pre-signup preview stage (see
-      // upload/page.tsx) — nothing to read a timezone from, so this uses
-      // the same default every fresh household gets. Once saved (save-plan),
+      // A household DOES exist by now (the signup trigger creates one), but
+      // this route is unauthenticated and reads nothing from the database, so
+      // it has no session with which to look one up. It therefore uses the
+      // same value the households.timezone column itself defaults to
+      // ('America/Toronto') — exactly right for the household that was just
+      // created at signup.
+      //
+      // KNOWN GAP, deliberately left alone here: a household that changed its
+      // timezone and then re-runs onboarding (the save-plan confirmReplace
+      // path) is dated against the default rather than its own zone. It moves
+      // goal evaluation by at most a day at a boundary. Once saved,
       // downstream routes resolve the real per-household timezone.
       const today = businessToday(DEFAULT_HOUSEHOLD_TIMEZONE);
       const rawGoals: { name: string; targetAmount: number; savedSoFar: number; targetDate: string | null }[] = p.goals ?? [];
