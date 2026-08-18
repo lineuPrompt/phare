@@ -27,8 +27,14 @@ export default function Home() {
           {t('hero.title')}
         </h1>
 
-        <p className="text-lg md:text-xl max-w-xl mb-10" style={{color: '#6B7280'}}>
+        <p className="text-lg md:text-xl max-w-xl mb-4" style={{color: '#6B7280'}}>
           {t('hero.subtitle')}
+        </p>
+
+        {/* Who it's for, stated plainly. Sits under the promise rather than in
+            it, so the hero leads on the outcome and qualifies second. */}
+        <p className="text-base max-w-xl mb-10" style={{color: '#9CA3AF'}}>
+          {t('hero.supportingLine')}
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4">
@@ -52,32 +58,54 @@ export default function Home() {
         </p>
       </section>
 
-      {/* Problem */}
+      {/* Three pillars — replaced the old "Problem" section (2026-08-18).
+          That section named four anxieties (property taxes, registration,
+          back to school, income tax) and led with "The real reason your credit
+          line keeps growing". The concrete expenses it listed are not lost:
+          they still appear under Reserve Fund in Features, where they read as
+          a capability rather than a warning. What changed is the frame — the
+          page now opens on what you gain, not on what you should be afraid
+          of. Three columns, not the old two-by-two grid. */}
       <section className="px-6 py-20" style={{background: '#0F2044'}}>
         <div className="max-w-4xl mx-auto text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-6 text-white">
-            {t('problem.title')}
+          <h2 className="text-3xl md:text-4xl font-bold text-white">
+            {t('pillars.title')}
           </h2>
-          <p className="text-lg" style={{color: '#94A3B8'}}>
-            {t('problem.subtitle')}
-          </p>
         </div>
 
-        <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
-          {(['taxes', 'registration', 'school', 'income_tax'] as const).map((key) => (
+        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+          {(['ahead', 'safe', 'matters'] as const).map((key) => (
             <div
               key={key}
               className="rounded-2xl p-6"
               style={{background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)'}}
             >
-              <h3 className="text-lg font-semibold mb-2 text-white">
-                {t(`problem.items.${key}.title`)}
+              <h3 className="text-lg font-semibold mb-3 text-white">
+                {t(`pillars.items.${key}.title`)}
               </h3>
               <p style={{color: '#94A3B8'}}>
-                {t(`problem.items.${key}.description`)}
+                {t(`pillars.items.${key}.description`)}
               </p>
             </div>
           ))}
+        </div>
+
+        {/* The trust claim. It earns its place next to the pillars because
+            every promise above is only worth as much as the numbers behind
+            it — and "the AI never invents a figure" is the actual product
+            guarantee, enforced in code (see api/plan/route.ts: the model has
+            no JSON slot for funds, goals, or debt payoff). AI appears here,
+            as a mechanism, and nowhere above it. */}
+        <div
+          className="max-w-3xl mx-auto mt-14 rounded-2xl p-8 text-center"
+          style={{background: 'rgba(42,191,191,0.10)', border: '1px solid rgba(42,191,191,0.35)'}}
+        >
+          <h3 className="text-lg font-semibold mb-3" style={{color: '#7FE3E3'}}>
+            {t('trust.title')}
+          </h3>
+          <p style={{color: '#CBD5E1'}}>
+            {t('trust.body')}
+          </p>
         </div>
       </section>
 

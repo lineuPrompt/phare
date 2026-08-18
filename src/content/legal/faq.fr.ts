@@ -9,8 +9,8 @@ const faqFr: LegalDocument = {
       id: 'what-is-phare',
       heading: 'Phare, c’est quoi au juste?',
       body: [
-        'Phare est un accompagnateur financier pour les familles. Vous lui indiquez vos revenus, vos factures, vos cartes et vos objectifs, et il tient à jour le portrait de votre argent — ce qui est entré, ce qui sort, ce qui s’en vient et si le plan tient la route.',
-        'Ce n’est pas une application bancaire et il ne se connecte pas à votre banque. Tout ce qui s’y trouve y est parce que vous ou votre conjoint l’y avez mis. C’est voulu : Phare s’accorde à votre façon de faire le suivi, et vos identifiants bancaires ne sont jamais en jeu.',
+        'Phare est un système de planification financière pour les ménages. Vous lui indiquez vos revenus, vos factures, vos cartes et vos objectifs, et il tient à jour le portrait de votre argent — ce qui est entré, ce qui sort, ce qui s’en vient et si le plan tient la route.',
+        'Ce n’est pas une application bancaire et il ne se connecte pas à votre banque. Tout ce qui s’y trouve y est parce que quelqu’un de votre ménage l’y a mis. C’est voulu : Phare s’accorde à votre façon de faire le suivi, et vos identifiants bancaires ne sont jamais en jeu.',
       ],
     },
     {
@@ -80,9 +80,9 @@ const faqFr: LegalDocument = {
     },
     {
       id: 'who-can-see-my-household',
-      heading: 'Mon conjoint voit-il tout?',
+      heading: 'Qui d’autre voit mon ménage?',
       body: [
-        'Oui — toutes les personnes du ménage voient tout. Chaque transaction, chaque compte, chaque objectif, chaque bilan, peu importe qui les a saisis ou à qui appartient le revenu.',
+        'Toutes les personnes du ménage voient tout. Chaque transaction, chaque compte, chaque objectif, chaque bilan, peu importe qui les a saisis ou à qui appartient le revenu.',
         'Il n’y a pas d’espace privé à l’intérieur d’un ménage : tout y est partagé, par conception. N’invitez quelqu’un que si c’est ce que vous souhaitez.',
         'Un ménage compte au maximum deux personnes avec un identifiant. Vous pouvez aussi nommer d’autres personnes — vos enfants, par exemple — pour leur attribuer des dépenses, sans leur créer de compte.',
       ],

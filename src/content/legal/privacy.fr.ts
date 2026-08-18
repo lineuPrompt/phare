@@ -59,7 +59,7 @@ const privacyFr: LegalDocument = {
       id: 'household-visibility',
       heading: 'Tout le monde dans votre ménage voit tout',
       body: [
-        'Phare est conçu pour les familles qui gèrent leur argent ensemble. **Il n’y a pas de données privées à l’intérieur d’un ménage.** Chaque membre — propriétaire ou membre — voit chaque transaction, chaque compte, chaque objectif et chaque bilan mensuel, peu importe qui les a saisis ou à qui appartient le revenu.',
+        'Phare est conçu pour les ménages qui gèrent leur argent ensemble. **Il n’y a pas de données privées à l’intérieur d’un ménage.** Chaque membre — propriétaire ou membre — voit chaque transaction, chaque compte, chaque objectif et chaque bilan mensuel, peu importe qui les a saisis ou à qui appartient le revenu.',
         'N’invitez quelqu’un dans votre ménage que si vous êtes à l’aise qu’il voie l’ensemble.',
       ],
     },
@@ -81,9 +81,9 @@ const privacyFr: LegalDocument = {
       heading: 'Si vous quittez un ménage qui continue d’exister',
       body: [
         'Nous conservons vos données tant que votre compte existe. Lorsque vous supprimez votre compte, ce qui se passe dépend de si vous êtes la dernière personne de votre ménage. **Ces deux cas ont des conséquences réellement différentes et nous tenons à être précis.**',
-        'Par exemple, un conjoint part et l’autre reste : nous effaçons votre identité, mais pas les registres financiers du ménage.',
+        'Par exemple, une personne part et l’autre reste : nous effaçons votre identité, mais pas les registres financiers du ménage.',
         'Votre identifiant, votre nom et votre adresse courriel sont supprimés.',
-        'Votre inscription dans le ménage est conservée mais renommée, sans votre nom. C’est nécessaire parce que des transactions du ménage y sont rattachées; la retirer corromprait les registres de la famille qui reste.',
+        'Votre inscription dans le ménage est conservée mais renommée, sans votre nom. C’est nécessaire parce que des transactions du ménage y sont rattachées; la retirer corromprait les registres du ménage qui reste.',
         'Les transactions, budgets et factures récurrentes du ménage demeurent. Ce sont tout autant les registres financiers des autres membres, et ils n’ont pas demandé qu’on les détruise.',
         'Les bilans mensuels et les plans générés pour le ménage demeurent, sans que votre compte y soit rattaché. Comme ils sont rédigés en langage clair à partir des chiffres de votre ménage, un prénom peut figurer dans le texte d’un ancien bilan.',
         'Vos registres d’utilisation demeurent, sans votre identité.',

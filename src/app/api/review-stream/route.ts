@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   // have or contribute to. It MAY suggest one — framed as a suggestion.
   const isManual = analysis?.source === 'calculated';
 
-  const prompt = `You are Phare, an AI financial coach for Canadian households. Write this household's first monthly review in ${lang}.
+  const prompt = `You are Phare, a financial planning system for Canadian households. Write this household's first monthly review in ${lang}.
 
 Their plan:
 ${JSON.stringify(plan)}

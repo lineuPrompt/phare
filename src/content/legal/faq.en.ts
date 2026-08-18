@@ -9,8 +9,8 @@ const faqEn: LegalDocument = {
       id: 'what-is-phare',
       heading: 'What is Phare, exactly?',
       body: [
-        'Phare is a financial coach for families. You tell it about your income, your bills, your cards, and your goals, and it keeps a running picture of your money — what came in, what’s going out, what’s coming, and whether the plan is holding.',
-        'It is not a bank app and it does not connect to your bank. Everything in it is there because you or your partner put it there. That is deliberate: it means Phare works with the way you already track things, and it means your bank credentials are never involved.',
+        'Phare is a financial planning system for households. You tell it about your income, your bills, your cards, and your goals, and it keeps a running picture of your money — what came in, what’s going out, what’s coming, and whether the plan is holding.',
+        'It is not a bank app and it does not connect to your bank. Everything in it is there because someone in your household put it there. That is deliberate: it means Phare works with the way you already track things, and it means your bank credentials are never involved.',
       ],
     },
     {
@@ -80,9 +80,9 @@ const faqEn: LegalDocument = {
     },
     {
       id: 'who-can-see-my-household',
-      heading: 'Can my partner see everything?',
+      heading: 'Who else can see my household?',
       body: [
-        'Yes — everyone in the household sees everything. Every transaction, every account, every goal, every review, regardless of who entered it or whose income it is.',
+        'Everyone in the household sees everything. Every transaction, every account, every goal, every review, regardless of who entered it or whose income it is.',
         'There is no private space inside a household — everything in one is shared, by design. Invite someone only if that’s what you want.',
         'A household holds up to two people with logins. You can also name others — children, for example — so expenses can be attributed to them, without giving them an account.',
       ],

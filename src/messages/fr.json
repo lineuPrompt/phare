@@ -48,48 +48,48 @@
     "suffix": "en attente d'une date de paiement — pas encore dans le registre de ce mois-ci."
   },
   "landing": {
-    "badge": "Coach financier IA, conçu pour le Canada",
+    "badge": "Fondé sur vos vrais chiffres",
     "hero": {
-      "title": "Les finances de votre ménage, enfin claires.",
-      "subtitle": "Remplissez notre modèle simple — ou entrez vos chiffres à la main. Obtenez un plan financier complet en 5 minutes. Sachez exactement quoi faire ce mois-ci.",
+      "title": "Phare éclaire le chemin vers une vie financière plus sereine.",
+      "subtitle": "Ce que vous pouvez dépenser sans risque, ce qui s’en vient, et si vous tenez le cap — à partir de vos vrais chiffres, pas d’un budget simplifié.",
+      "supportingLine": "Pour quiconque a des finances trop complexes pour un simple budget.",
       "cta": "Commencer gratuitement",
       "secondaryCta": "Voir comment ça marche",
       "socialProof": "Conçu pour le Canada · REER, REEE, CELI · English & Français"
     },
-    "problem": {
-      "title": "La vraie raison pour laquelle votre marge de crédit augmente",
-      "subtitle": "Ce n'est pas l'épicerie. Ce n'est pas le café. Ce sont les 8 000 $ en dépenses annuelles prévisibles qui arrivent sans compte pour les recevoir.",
+    "pillars": {
+      "title": "Voir venir. Dépenser en confiance. Avancer.",
       "items": {
-        "taxes": {
-          "title": "Taxes municipales",
-          "description": "Deux versements, mars et juin. Chaque année. Toujours une surprise."
+        "ahead": {
+          "title": "Voir ce qui s’en vient",
+          "description": "Les factures à venir, les cycles de carte de crédit, les creux de trésorerie avant la paie. Phare éclaire votre parcours financier pour que rien ne vous prenne au dépourvu — y compris les dépenses irrégulières qui s’accumulent discrètement sur votre marge de crédit."
         },
-        "registration": {
-          "title": "Immatriculation et assurance auto",
-          "description": "Prévisible. Annuel. Directement sur la marge de crédit."
+        "safe": {
+          "title": "Savoir ce que vous pouvez dépenser",
+          "description": "Fini les suppositions. Phare vous montre ce que vous pouvez réellement vous permettre aujourd’hui, cette semaine, d’ici la prochaine paie. Vous décidez en confiance, sans appréhension."
         },
-        "school": {
-          "title": "Rentrée scolaire",
-          "description": "Septembre frappe de la même façon chaque année. 800 $ par enfant, sans plan."
-        },
-        "income_tax": {
-          "title": "Solde d'impôt",
-          "description": "Les résidents du Québec avec un employeur ontarien doivent un solde provincial chaque avril. Chaque année."
+        "matters": {
+          "title": "Avancer vers ce qui compte",
+          "description": "Un voyage, un coussin, sortir des dettes. Phare vous montre la route et vous dit honnêtement si vous tenez le cap — et ce qui change si vous ajustez."
         }
       }
+    },
+    "trust": {
+      "title": "D’où viennent les chiffres",
+      "body": "Chaque chiffre provient de votre situation financière réelle. Le moteur de Phare fait les calculs. L’IA vous aide à les comprendre — elle n’invente jamais un montant. C’est inhabituel pour un produit d’IA, et c’est précisément pourquoi vous pouvez vous fier à ce que Phare vous dit."
     },
     "howItWorks": {
       "title": "Du tableur au plan financier en 5 minutes",
       "steps": {
         "upload": {
           "number": "1",
-          "title": "Téléversez votre budget",
+          "title": "Entrez vos chiffres",
           "description": "Remplissez notre modèle simple — ou entrez vos chiffres à la main. Phare construit votre portrait financier complet à partir de vos données."
         },
         "plan": {
           "number": "2",
           "title": "Obtenez votre plan",
-          "description": "Phare vérifie vos chiffres, ne demande que ce qui manque — les vraies dates de paie, qui gagne quoi — et vous donne un plan clair et fiable."
+          "description": "Phare vérifie vos chiffres, ne demande que ce qui manque — les vraies dates de paie, ce qui entre et quand — et vous donne un plan clair et fiable."
         },
         "review": {
           "number": "3",
@@ -99,7 +99,7 @@
       }
     },
     "features": {
-      "title": "Tout ce dont votre famille a besoin. Rien de plus.",
+      "title": "Tout ce dont vous avez besoin. Rien de plus.",
       "cardEnvelopes": {
         "title": "Enveloppes de carte de crédit",
         "description": "Donnez un objectif mensuel à chaque carte, puis répartissez-le en enveloppes par catégorie. Phare suit les dépenses réelles de chacune sur le cycle de relevé et les signale à 80 % et 100 %."
@@ -109,17 +109,17 @@
         "description": "Les dépenses annuelles provisionnées mensuellement pour qu'elles ne touchent plus jamais la marge de crédit. Taxes municipales, immatriculation, rentrée — tout est couvert."
       },
       "goalTracking": {
-        "title": "Suivi des objectifs",
+        "title": "Progression des objectifs",
         "description": "Disney 2028. Brésil 2029. Voyez exactement si vous êtes sur la bonne voie et de combien."
       },
       "monthlyReview": {
         "title": "Revue mensuelle",
-        "description": "Générée par l'IA, en langage clair, avec des chiffres précis. Une recommandation claire. Livrée le 1er de chaque mois."
+        "description": "En langage clair, avec des chiffres précis et une seule recommandation. Livrée le 1er de chaque mois."
       }
     },
     "pricing": {
       "title": "Un conseiller financier coûte 250 $/heure",
-      "subtitle": "Phare coûte moins qu'un souper en famille au restaurant.",
+      "subtitle": "Phare coûte moins qu’un souper au restaurant.",
       "free": {
         "name": "Phare — Gratuit",
         "tier": "Gratuit",
@@ -127,9 +127,9 @@
         "cta": "Commencer gratuitement",
         "features": {
           "onboarding": "Plan de départ",
-          "spending": "Suivi des dépenses",
-          "family": "Partage familial",
-          "goals": "Suivi des objectifs",
+          "spending": "Vos dépenses face au plan",
+          "family": "Partage du ménage",
+          "goals": "Progression des objectifs",
           "sinking": "Fonds de réserve",
           "bilingual": "Français et anglais",
           "horizon": "Projection et échéancier sur 3 mois",
@@ -199,7 +199,7 @@
     },
     "accounts": {
       "title": "Vos comptes",
-      "subtitle": "Combien de cartes de crédit voulez-vous suivre? Votre compte chèque est configuré automatiquement.",
+      "subtitle": "Combien de cartes de crédit Phare doit-il inclure? Votre compte chèques est configuré automatiquement.",
       "howMany": "Nombre de cartes de crédit",
       "nameThem": "Nommez vos cartes",
       "cardPlaceholder": "Nom de votre carte de crédit",

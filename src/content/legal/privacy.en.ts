@@ -65,7 +65,7 @@ const privacyEn: LegalDocument = {
       id: 'household-visibility',
       heading: 'Everyone in your household sees everything',
       body: [
-        'Phare is built for families managing money together. **There is no private data inside a household.** Every member — owner or member — can see every transaction, every account, every goal, and every monthly review, regardless of who entered it or whose income it is.',
+        'Phare is built for households managing money together. **There is no private data inside a household.** Every member — owner or member — can see every transaction, every account, every goal, and every monthly review, regardless of who entered it or whose income it is.',
         'Invite someone to your household only if you are comfortable with them seeing all of it.',
       ],
     },
@@ -87,9 +87,9 @@ const privacyEn: LegalDocument = {
       heading: 'If you leave a household that continues to exist',
       body: [
         'We keep your data for as long as your account exists. When you delete your account, what happens depends on whether you are the last person in your household. **These two cases have genuinely different outcomes and we want to be precise about them.**',
-        'If one spouse leaves and the other stays, we erase your identity but not the household’s financial records:',
+        'If one person leaves and another stays, we erase your identity but not the household’s financial records:',
         'Your login, name, and email address are deleted.',
-        'Your entry in the household is kept but relabelled, with your name removed. This is necessary because transactions in the household are attributed to it; removing it would corrupt the remaining family’s records.',
+        'Your entry in the household is kept but relabelled, with your name removed. This is necessary because transactions in the household are attributed to it; removing it would corrupt the remaining household’s records.',
         'The household’s transactions, budgets, and recurring bills stay. These are equally the other members’ financial records, and they did not ask for them to be destroyed.',
         'Monthly reviews and plans generated for the household stay, with your account no longer linked to them. Because these are written in plain language from your household’s figures, a first name may appear inside the text of an older review.',
         'Your usage records stay, with your identity removed from them.',

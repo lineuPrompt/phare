@@ -167,7 +167,7 @@ This household entered ONLY these income and expense lines. They have NOT set an
     const isTemplate = body.source === 'template';
     const categoryList = SEED_CATEGORIES.join(', ');
 
-    const prompt = `You are Phare, an AI financial coach for Canadian households. The numbers below are VERIFIED — calculated from the household's data. Do not change or recalculate them.
+    const prompt = `You are Phare, a financial planning system for Canadian households. The numbers below are VERIFIED — calculated from the household's data. Do not change or recalculate them.
 
 ${aiContext}
 

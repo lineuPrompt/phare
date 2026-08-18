@@ -593,7 +593,7 @@ export async function generateMonthlyReview({
     // plan the family never set up.
     const categoryList = SEED_CATEGORIES.join(', ');
     const planPrompt =
-      `You are Phare, an AI financial coach for Canadian households. The numbers below are VERIFIED — ` +
+      `You are Phare, a financial planning system for Canadian households. The numbers below are VERIFIED — ` +
       `calculated from the household's ledger. Do not change or recalculate them.\n\n` +
       `${aiContext}\n\n` +
       `Write ALL text in ${lang}.\n\n` +
@@ -734,7 +734,7 @@ export async function generateMonthlyReview({
     const REVIEW_PROMPT_ILLUSTRATIVE_TOKENS = ['name', 'month', 'need', 'freesOn'] as const;
 
     const reviewPrompt =
-      `You are Phare, an AI financial coach for Canadian households. Write this household's monthly review in ${lang}.\n\n` +
+      `You are Phare, a financial planning system for Canadian households. Write this household's monthly review in ${lang}.\n\n` +
       `Their plan:\n${JSON.stringify(buildReviewPayload(plan))}\n\n` +
       `Write THREE paragraphs maximum. Specific numbers. One clear recommendation. Plain language. ` +
       `It must feel like a letter from a trusted financial advisor, not a report.\n\n` +
