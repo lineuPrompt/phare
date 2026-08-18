@@ -179,7 +179,7 @@ export default function Home() {
             {/* Free tier */}
             <div className="bg-white rounded-2xl p-8" style={{border: '2px solid #E5E7EB'}}>
               <p className="text-sm font-semibold mb-1" style={{color: '#6B7280'}}>
-                {t('pricing.free.name')} — {t('pricing.free.tier')}
+                {t('pricing.free.name')}
               </p>
               <div className="mb-6">
                 <span className="text-4xl font-bold" style={{color: '#0F2044'}}>{t('pricing.free.price')}</span>
