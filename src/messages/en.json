@@ -358,6 +358,7 @@
       "title": "Double-check your income",
       "skippedIncomeRows": "{count, plural, one {1 income row could not be read — check the Frequency column spelling (accepted: weekly, bi-weekly, semi-monthly, monthly).} other {# income rows could not be read — check the Frequency column spelling (accepted: weekly, bi-weekly, semi-monthly, monthly).}}",
       "skippedGoalDateRows": "{count, plural, one {1 goal's target date could not be read — check the Target date column (accepted: a real date, or text like \"September 2026\").} other {# goals' target dates could not be read — check the Target date column (accepted: a real date, or text like \"September 2026\").}}",
+      "householdDuplicateKeys": "{count, plural, one {1 row on the Household sheet repeats a field label an earlier row already uses — only the later answer was kept. Give each row its own label (one per member, for example) so no answer is dropped.} other {# rows on the Household sheet repeat a field label an earlier row already uses — for each, only the later answer was kept. Give each row its own label (one per member, for example) so no answer is dropped.}}",
       "incomeVsStated": "You mentioned a combined income around {stated}/year, but the entries add up to about {computed}/year — does that look right?",
       "deficitNotFinanced": "Your plan shows a {deficit}/month shortfall with no credit line or debt payment to explain it. If your income is understated, correct it now — a deficit on paper needs to be financed by something real.",
       "correct": "Fix my income",

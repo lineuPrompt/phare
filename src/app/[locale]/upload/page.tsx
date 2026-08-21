@@ -48,6 +48,7 @@ export default function UploadPage() {
   const [plausibilityResult, setPlausibilityResult] = useState<Extract<PlausibilityResult, { ok: false }> | null>(null);
   const [skippedIncomeRows, setSkippedIncomeRows] = useState(0);
   const [skippedGoalDateRows, setSkippedGoalDateRows] = useState(0);
+  const [householdDuplicateKeys, setHouseholdDuplicateKeys] = useState(0);
   // The calculated body built during submitForm (or the template planBody), held until plausibility is confirmed.
   const [pendingCalculated, setPendingCalculated] = useState<Record<string, unknown> | null>(null);
 
@@ -357,12 +358,14 @@ export default function UploadPage() {
     });
     const skipped = parsed.incomeSkippedRows ?? 0;
     const skippedGoalDates = parsed.goalDateFlaggedRows ?? 0;
+    const duplicateHouseholdKeys = parsed.householdDuplicateKeys ?? 0;
     const planBody: Record<string, unknown> = { source: 'template', parsed };
 
-    if (!guard.ok || skipped > 0 || skippedGoalDates > 0) {
+    if (!guard.ok || skipped > 0 || skippedGoalDates > 0 || duplicateHouseholdKeys > 0) {
       setPendingCalculated(planBody);
       setSkippedIncomeRows(skipped);
       setSkippedGoalDateRows(skippedGoalDates);
+      setHouseholdDuplicateKeys(duplicateHouseholdKeys);
       if (!guard.ok) setPlausibilityResult(guard);
       setStatus('plausibility_check');
       return;
@@ -610,11 +613,12 @@ export default function UploadPage() {
         )}
 
         {/* Plausibility check / skipped-row warning step */}
-        {status === 'plausibility_check' && (plausibilityResult || skippedIncomeRows > 0 || skippedGoalDateRows > 0) && (
+        {status === 'plausibility_check' && (plausibilityResult || skippedIncomeRows > 0 || skippedGoalDateRows > 0 || householdDuplicateKeys > 0) && (
           <PlausibilityCheck
             result={plausibilityResult}
             skippedIncomeRows={skippedIncomeRows}
             skippedGoalDateRows={skippedGoalDateRows}
+            householdDuplicateKeys={householdDuplicateKeys}
             onConfirm={confirmPlausibility}
             onCorrect={rejectPlausibility}
             t={t}
@@ -680,6 +684,7 @@ function PlausibilityCheck({
   result,
   skippedIncomeRows,
   skippedGoalDateRows,
+  householdDuplicateKeys,
   onConfirm,
   onCorrect,
   t,
@@ -687,6 +692,7 @@ function PlausibilityCheck({
   result: Extract<PlausibilityResult, { ok: false }> | null;
   skippedIncomeRows: number;
   skippedGoalDateRows: number;
+  householdDuplicateKeys: number;
   onConfirm: () => void;
   onCorrect: () => void;
   t: ReturnType<typeof useTranslations<'upload'>>;
@@ -709,6 +715,13 @@ function PlausibilityCheck({
             <div className="rounded-xl p-4" style={{ background: 'white', border: '1px solid #FDE68A' }}>
               <p style={{ color: '#374151' }}>
                 {t('plausibility.skippedGoalDateRows', { count: skippedGoalDateRows })}
+              </p>
+            </div>
+          )}
+          {householdDuplicateKeys > 0 && (
+            <div className="rounded-xl p-4" style={{ background: 'white', border: '1px solid #FDE68A' }}>
+              <p style={{ color: '#374151' }}>
+                {t('plausibility.householdDuplicateKeys', { count: householdDuplicateKeys })}
               </p>
             </div>
           )}

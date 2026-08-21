@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import * as XLSX from 'xlsx';
+import { MAX_HOUSEHOLD_KEYS } from '../promptInputLimits';
 import {
   isPhareTemplate,
   parseSection,
@@ -195,6 +198,39 @@ function makeV3IncomeRows(dataRows: unknown[][]): unknown[][] {
   ];
 }
 
+// Household: row 0 the sheet title, row 1 blank, row 2 the column-label row,
+// row 3+ data — the shipped sheet's real shape (public/phare_template.xlsx).
+// col 0 = field label, col 1 = the household's answer, col 2 = example,
+// col 3 = notes; only cols 0 and 1 are read.
+//
+// This sheet used to be built as `addSheet('Household')` — completely empty.
+// Every parseTemplate assertion in this file therefore ran against
+// household === {}, so the two defects living in that loop (the header row
+// read as data, and duplicate labels overwriting each other silently) were
+// both invisible to a fully green suite.
+function makeHouseholdRows(dataRows: unknown[][]): unknown[][] {
+  return [
+    ['PHARE — Household Information / Information du ménage', null, null, null],
+    [null, null, null, null],
+    ['Field / Champ', 'Your answer / Votre réponse', 'Example / Exemple', 'Notes'],
+    ...dataRows,
+  ];
+}
+
+// A household as it actually arrives from a real upload: column B filled in,
+// including the blank spacer row the shipped sheet carries at index 11.
+const FILLED_HOUSEHOLD_ROWS = makeHouseholdRows([
+  ['Household name / Nom du ménage', 'Tremblay', 'Smith', null],
+  ['Province', 'Quebec', 'Quebec', 'Important for tax context'],
+  ["Number of adults / Nombre d'adultes", '2', '2', null],
+  ['Member 1 name / Nom membre 1', 'Jane', 'Jane', null],
+  ['Member 2 name (optional) / Nom membre 2 (facultatif)', 'John', 'John', null],
+  [null, null, null, null],
+  ['Credit line balance / Solde marge de crédit', 5000, 5000, null],
+  ["Employer province — Member 1 / Province de l'employeur — Membre 1", 'Ontario', 'Quebec', 'tax gap'],
+  ["Employer province — Member 2 / Province de l'employeur — Membre 2", 'Quebec', 'Ontario', null],
+]);
+
 // Fixed Expenses: rows 0–1 header content, row 2 the column-label row, row 3+ data.
 function makeV3FixedExpenseRows(dataRows: unknown[][]): unknown[][] {
   return [
@@ -205,13 +241,18 @@ function makeV3FixedExpenseRows(dataRows: unknown[][]): unknown[][] {
   ];
 }
 
-function buildWorkbook(incomeRows: unknown[][], fixedExpenseRows: unknown[][], goalRows: unknown[][] = []): Buffer {
+function buildWorkbook(
+  incomeRows: unknown[][],
+  fixedExpenseRows: unknown[][],
+  goalRows: unknown[][] = [],
+  householdRows: unknown[][] = FILLED_HOUSEHOLD_ROWS,
+): Buffer {
   const wb = XLSX.utils.book_new();
   const addSheet = (name: string, data: unknown[][] = []) => {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data as XLSX.CellObject[][], { cellDates: false }), name);
   };
 
-  addSheet('Household');
+  addSheet('Household', householdRows);
   addSheet('Monthly Income', incomeRows);
   addSheet('Fixed Expenses', fixedExpenseRows);
   // Variable Expenses: parseSection(rows, 0, 1, startRow=3, skipWords)
@@ -346,6 +387,180 @@ describe('parseTemplate — refusal contract', () => {
     expect(result.fixedExpenses.lines).toEqual([
       { label: 'Mortgage / Hypothèque', amount: 3250, rawAmount: 1500, frequency: 'biweekly' },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseTemplate — Household sheet
+//
+// This block exists because the Household fixture used to be an empty sheet,
+// so every assertion elsewhere in this file ran against household === {} and
+// the whole loop was untested. Two defects lived there undetected:
+//   1. the sheet's header row was read as a data pair, putting
+//      {"Field / Champ": "Your answer / Votre réponse"} into every prompt;
+//   2. two rows sharing a label collapsed to one key, silently discarding
+//      the earlier answer (both "Employer province" rows did exactly this).
+// ---------------------------------------------------------------------------
+
+describe('parseTemplate — Household sheet', () => {
+  it('does NOT read the column-label header row as data', () => {
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS);
+    const result = parseTemplate(buf);
+
+    // The header pair specifically — this is the exact junk that shipped.
+    expect(result.household).not.toHaveProperty('Field / Champ');
+    expect(Object.values(result.household)).not.toContain('Your answer / Votre réponse');
+    // And nothing from the two rows above it (title row, blank row) either.
+    expect(Object.keys(result.household)).not.toContain(
+      'PHARE — Household Information / Information du ménage',
+    );
+    // Real answers below the header are still read.
+    expect(result.household['Household name / Nom du ménage']).toBe('Tremblay');
+  });
+
+  it('keeps both Employer province rows as distinct keys with their own answers', () => {
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS);
+    const result = parseTemplate(buf);
+
+    expect(result.household["Employer province — Member 1 / Province de l'employeur — Membre 1"]).toBe('Ontario');
+    expect(result.household["Employer province — Member 2 / Province de l'employeur — Membre 2"]).toBe('Quebec');
+    expect(result.householdDuplicateKeys).toBe(0);
+  });
+
+  it('counts a duplicate label instead of merging it away silently', () => {
+    const rows = makeHouseholdRows([
+      ['Province', 'Quebec', null, null],
+      ["Employer province / Province de l'employeur", 'Ontario', null, null],
+      ["Employer province / Province de l'employeur", 'Quebec', null, null], // the shipped defect
+    ]);
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS, [], rows);
+    const result = parseTemplate(buf);
+
+    // The collapse itself is unavoidable — one Record key, two rows. What
+    // must never happen again is it going UNREPORTED.
+    expect(result.householdDuplicateKeys).toBe(1);
+    expect(Object.keys(result.household)).toHaveLength(2);
+    // Documented resolution: the later row wins.
+    expect(result.household["Employer province / Province de l'employeur"]).toBe('Quebec');
+  });
+
+  it('counts each duplicate separately when a label repeats more than twice', () => {
+    const rows = makeHouseholdRows([
+      ['Province', 'Quebec', null, null],
+      ['Province', 'Ontario', null, null],
+      ['Province', 'Alberta', null, null],
+    ]);
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS, [], rows);
+    const result = parseTemplate(buf);
+
+    expect(result.householdDuplicateKeys).toBe(2);
+    expect(result.household).toEqual({ Province: 'Alberta' });
+  });
+
+  it('skips a non-string, non-number answer cell rather than coercing it', () => {
+    const rows = makeHouseholdRows([
+      ['Number of adults / Nombre d\'adultes', 2, null, null],       // number: kept, stringified
+      ['Household name / Nom du ménage', 'Tremblay', null, null],    // string: kept
+      ['Has a TFSA?', true, null, null],                             // boolean: skipped, not "true"
+    ]);
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS, [], rows);
+    const result = parseTemplate(buf);
+
+    expect(result.household).toEqual({
+      "Number of adults / Nombre d'adultes": '2',
+      'Household name / Nom du ménage': 'Tremblay',
+    });
+    // The specific coercion that would otherwise reach the prompt.
+    expect(Object.values(result.household)).not.toContain('true');
+    expect(result.householdDuplicateKeys).toBe(0);
+  });
+
+  it('PINS KNOWN GAP — a date answer reaches the prompt as an Excel serial number', () => {
+    // Not a regression and not something this change introduced: sheetRows()
+    // reads with cellDates unset, so Excel hands back the underlying serial
+    // and the cell is genuinely a number by the time the guard sees it. The
+    // string|number guard therefore admits it, exactly as the old `val != null`
+    // check did. Pinned rather than left to assumption, because "46265.83" is
+    // actively misleading in a prompt — worse than a dropped field. Fixing it
+    // means reading the formatted text (cell.w) for this column, which is a
+    // separate change with its own blast radius.
+    const rows = makeHouseholdRows([
+      ['Renewal date', new Date('2026-09-01'), null, null],
+    ]);
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS, [], rows);
+    const result = parseTemplate(buf);
+
+    expect(Object.keys(result.household)).toEqual(['Renewal date']);
+    expect(result.household['Renewal date']).toMatch(/^\d+(\.\d+)?$/);
+    expect(result.household['Renewal date']).not.toContain('2026');
+  });
+
+  it('a blank answer column yields no keys at all — not one per labelled row', () => {
+    const rows = makeHouseholdRows([
+      ['Household name / Nom du ménage', null, 'Smith', null],
+      ['Province', null, 'Quebec', 'Important for tax context'],
+    ]);
+    const buf = buildWorkbook(DEFAULT_INCOME_ROWS, DEFAULT_EXPENSE_ROWS, [], rows);
+    const result = parseTemplate(buf);
+
+    // col 2 is the Example column and must never be mistaken for an answer.
+    expect(result.household).toEqual({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The SHIPPED template — asserted against the real file on disk, not a
+// fixture. A fixture can drift from the artifact users actually download;
+// these assertions cannot.
+// ---------------------------------------------------------------------------
+
+describe('the shipped public/phare_template.xlsx', () => {
+  const shippedPath = path.resolve(process.cwd(), 'public', 'phare_template.xlsx');
+  const shippedBuffer = () => fs.readFileSync(shippedPath);
+
+  /** Column-0 labels from the Household sheet's data rows (index 3 onward). */
+  function shippedHouseholdLabels(): string[] {
+    const wb = XLSX.read(shippedBuffer(), { type: 'buffer' });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets['Household'], {
+      header: 1, defval: null,
+    }) as unknown[][];
+    return rows
+      .slice(3)
+      .map((r) => r?.[0])
+      .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+      .map((v) => v.trim());
+  }
+
+  it('defines 14 field labels, every one of them distinct', () => {
+    const labels = shippedHouseholdLabels();
+    expect(labels).toHaveLength(14);
+    expect(new Set(labels).size).toBe(14);
+  });
+
+  it('names the two employer-province rows per member, matching the sheet\'s own Member 1 / Member 2 convention', () => {
+    const labels = shippedHouseholdLabels();
+    const employer = labels.filter((l) => l.toLowerCase().startsWith('employer province'));
+    expect(employer).toEqual([
+      "Employer province — Member 1 / Province de l'employeur — Membre 1",
+      "Employer province — Member 2 / Province de l'employeur — Membre 2",
+    ]);
+  });
+
+  it('parses with no header leakage and no duplicate labels', () => {
+    const result = parseTemplate(shippedBuffer());
+    expect(result.isValidV3).toBe(true);
+    expect(result.householdDuplicateKeys).toBe(0);
+    expect(result.household).not.toHaveProperty('Field / Champ');
+    // The shipped file's answer column is deliberately blank — it is a form.
+    expect(result.household).toEqual({});
+  });
+
+  it('stays within the prompt cap: one filled answer per label is far below MAX_HOUSEHOLD_KEYS', () => {
+    // Every label answered = the largest household an unmodified template can
+    // produce. Guards the caps sizing in promptInputLimits.ts, whose comment
+    // records this sheet as defining 14 keys.
+    expect(shippedHouseholdLabels()).toHaveLength(14);
+    expect(14).toBeLessThan(MAX_HOUSEHOLD_KEYS);
   });
 });
 

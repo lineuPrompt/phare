@@ -17,6 +17,11 @@
  * The contract is exact-match-or-refuse — isValidV3Template() decides which,
  * and parseTemplate() never partially parses a file that fails it.
  *
+ *   Household:        col 0 = field label, col 1 = the household's answer
+ *                     (col 2 = example, col 3 = notes — neither is read).
+ *                     Labels are the prompt's keys, so a repeated label
+ *                     collapses two answers into one; duplicates are counted
+ *                     rather than silently merged.
  *   Monthly Income:  col 0 = source name, col 1 = amount per paycheque,
  *                     col 2 = frequency string (required — an unrecognised
  *                     or missing value skips the row and counts it),
@@ -65,6 +70,7 @@ export interface TemplateParseResult {
   incomeSkippedRows: number;         // rows with an unrecognised frequency string
   fixedExpenseSkippedRows: number;   // rows with an unrecognised, non-blank frequency string
   goalDateFlaggedRows: number;       // goal rows with a target-date cell that couldn't be parsed
+  householdDuplicateKeys: number;    // Household rows whose label repeats an earlier row's — later row wins
   household: Record<string, string>;
   income: { lines: ParsedLine[]; total: number };
   fixedExpenses: { lines: ParsedLine[]; total: number };
@@ -86,6 +92,16 @@ const TEMPLATE_SHEETS = [
   'Annual Expenses',
   'Goals',
 ];
+
+// Data rows start at row index 3 in the Household sheet — row 0 is the sheet
+// title, row 1 is blank, row 2 holds the column-label header row
+// ("Field / Champ" | "Your answer / Votre réponse" | …). Household was the
+// only sheet parsed from index 0, which read that header row as data and put
+// {"Field / Champ": "Your answer / Votre réponse"} into every template
+// prompt. The other sheets never leaked their headers because their amount
+// column is checked with `typeof === 'number'`; the Household value column is
+// free text, so an explicit start row is the only thing that can do it here.
+const HOUSEHOLD_DATA_START_ROW = 3;
 
 // Data rows start at row index 5 in the Monthly Income sheet; rows 0–4 are
 // the header area that must carry the Frequency column signal (col 2).
@@ -321,14 +337,36 @@ export function parseTemplate(buffer: Buffer): TemplateParseResult {
   }
 
   // --- Household info (label in col 0, answer in col 1) ---
+  // Duplicate labels are COUNTED, not silently merged. Two rows carrying the
+  // same label collapse to one key — the later row wins and the earlier
+  // answer is discarded with no trace. That silent overwrite is the same
+  // class of failure the skipped-row counters above exist to surface, so it
+  // gets the same treatment: the caller is told how many answers were lost.
   const household: Record<string, string> = {};
   const hhRows = sheetRows(workbook.Sheets['Household']);
-  for (const row of hhRows) {
+  let householdDuplicateKeys = 0;
+  for (let i = HOUSEHOLD_DATA_START_ROW; i < hhRows.length; i++) {
+    const row = hhRows[i];
+    if (!row) continue;
+
     const key = row[0];
+    if (typeof key !== 'string' || !key.trim()) continue;
+
+    // Only a string or a number is a real answer. Every other cell type a
+    // workbook can yield here (boolean, Date, error) would otherwise be
+    // String()-coerced into the prompt as "true"/"[object Object]"/"#REF!".
+    // Requiring the type also makes a mis-set start row degrade visibly —
+    // a header row's free-text value cell still reads as a string, so this
+    // is a second line of defence, not the first.
     const val = row[1];
-    if (typeof key === 'string' && key.trim() && val != null && String(val).trim()) {
-      household[key.trim()] = String(val).trim();
-    }
+    if (typeof val !== 'string' && typeof val !== 'number') continue;
+
+    const value = String(val).trim();
+    if (!value) continue;
+
+    const label = key.trim();
+    if (Object.prototype.hasOwnProperty.call(household, label)) householdDuplicateKeys++;
+    household[label] = value;
   }
 
   // --- Income ---
@@ -411,6 +449,7 @@ export function parseTemplate(buffer: Buffer): TemplateParseResult {
     incomeSkippedRows,
     fixedExpenseSkippedRows,
     goalDateFlaggedRows,
+    householdDuplicateKeys,
     household,
     income: { lines: income, total: incomeTotal },
     fixedExpenses: { lines: fixed, total: fixedTotal },
@@ -432,6 +471,7 @@ function emptyResult(isTemplate: boolean, isValidV3: boolean): TemplateParseResu
     incomeSkippedRows: 0,
     fixedExpenseSkippedRows: 0,
     goalDateFlaggedRows: 0,
+    householdDuplicateKeys: 0,
     household: {},
     income: { lines: [], total: 0 },
     fixedExpenses: { lines: [], total: 0 },
