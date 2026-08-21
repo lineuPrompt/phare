@@ -329,7 +329,8 @@
           "same": "Les deux dates de paie doivent être différentes.",
           "generic": "Une erreur est survenue. Veuillez réessayer."
         }
-      }
+      },
+      "reviewTooLarge": "Votre plan est enregistré. La revue écrite a été omise parce que votre fichier contient plus de détails qu’une seule lettre peut couvrir — vous pouvez en générer une depuis votre tableau de bord."
     },
     "form": {
       "title": "Entrez vos chiffres",
@@ -361,6 +362,13 @@
       "deficitNotFinanced": "Votre plan affiche un déficit de {deficit}/mois sans marge de crédit ni paiement de dette pour l'expliquer. Si votre revenu est sous-estimé, corrigez-le maintenant — un déficit sur papier doit être financé par quelque chose de réel.",
       "correct": "Corriger mes revenus",
       "confirm": "Ces chiffres sont corrects — continuer quand même"
+    },
+    "errors": {
+      "payloadTooLarge": "Votre fichier contient plus de détails que nous pouvons traiter d’un seul coup. Réduisez les sections les plus longues — ou les réponses libres de l’onglet Ménage — puis téléversez-le de nouveau.",
+      "aiUnavailable": "Nous n’avons pas pu joindre le service de planification. Vos chiffres sont conservés — réessayez dans quelques minutes.",
+      "rateLimited": "Cela fait beaucoup de tentatives en peu de temps. Patientez un instant, puis réessayez.",
+      "planFailed": "Nous n’avons pas pu bâtir votre plan à partir de ce fichier. Veuillez réessayer.",
+      "generic": "Une erreur est survenue. Veuillez réessayer."
     }
   },
   "auth": {

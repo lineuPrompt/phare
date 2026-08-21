@@ -213,13 +213,35 @@ export default function UploadPage() {
     setReviewText('');
     const locale = localeOf();
     let fullText = '';
+    // Chosen from the server's `code` at the point of failure, because by the
+    // time the catch runs the response is gone. Left null for anything that
+    // isn't a recognised, permanent refusal, so the existing transient copy
+    // ("try again") stays correct for outages, 429s and dropped connections.
+    let reviewFailureMessage: string | null = null;
     try {
       const res = await fetch('/api/review-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: planData, analysis: planBody, locale }),
+        // Only `source` is sent, not the whole plan body. The route reads
+        // exactly one field off `analysis`, so shipping the rest was a second
+        // copy of the /api/plan payload that nothing ever looked at.
+        body: JSON.stringify({
+          plan: planData,
+          analysis: { source: planBody.source },
+          locale,
+        }),
       });
-      if (!res.ok || !res.body) throw new Error('Review stream failed');
+      if (!res.ok) {
+        // Read the reason BEFORE discarding the response. This check used to
+        // be `!res.ok || !res.body` with the body thrown away, which made a
+        // 413 indistinguishable from a network blip on screen.
+        const body = await res.json().catch(() => null);
+        if (body?.code === 'PAYLOAD_TOO_LARGE') {
+          reviewFailureMessage = t('plan.reviewTooLarge');
+        }
+        throw new Error(`Review stream failed: ${body?.code ?? res.status}`);
+      }
+      if (!res.body) throw new Error('Review stream failed: no body');
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -233,7 +255,7 @@ export default function UploadPage() {
     } catch (err) {
       console.error('Review streaming error:', err);
       fullText = '';
-      setReviewText(t('plan.reviewError'));
+      setReviewText(reviewFailureMessage ?? t('plan.reviewError'));
     } finally {
       setReviewStreaming(false);
     }
@@ -263,6 +285,30 @@ export default function UploadPage() {
     setReplaceConfirmation(null);
   }, []);
 
+  /**
+   * Server error bodies carry a machine-readable `code`; the `error` prose is
+   * a last-resort fallback, not the primary channel. Mapping the code to a
+   * translated key is what stops an English sentence from the API surfacing
+   * inside an otherwise French screen — every one of these routes composes its
+   * prose server-side with no notion of the caller's locale.
+   */
+  const messageForServerError = useCallback(
+    (body: { code?: string; error?: string } | null): string => {
+      switch (body?.code) {
+        case 'PAYLOAD_TOO_LARGE': return t('errors.payloadTooLarge');
+        case 'AI_UNAVAILABLE':    return t('errors.aiUnavailable');
+        case 'RATE_LIMITED':      return t('errors.rateLimited');
+        case 'INVALID_JSON':
+        case 'UNKNOWN_PLAN_SOURCE':
+        case 'PLAN_FAILED':       return t('errors.planFailed');
+        // Unrecognised code (or none): show whatever the server said rather
+        // than swallowing a real reason behind generic copy.
+        default: return body?.error || t('errors.generic');
+      }
+    },
+    [t]
+  );
+
   const buildPlan = useCallback(async (planBody: Record<string, unknown>, resolvedCardNames: string[]) => {
     setStatus('analyzing');
     const planRes = await fetch('/api/plan', {
@@ -271,8 +317,12 @@ export default function UploadPage() {
       body: JSON.stringify({ ...planBody, locale: localeOf() }),
     });
     if (!planRes.ok) {
-      const err = await planRes.json();
-      throw new Error(err.error || 'Plan generation failed');
+      // .catch(() => null) matters: a platform-generated rejection (an edge
+      // 413 that never reaches the route) has no JSON body, and letting
+      // .json() reject here would surface as generic copy two frames later
+      // instead of a reason.
+      const body = await planRes.json().catch(() => null);
+      throw new Error(messageForServerError(body));
     }
     const planData = await planRes.json();
     setPlan(planData.plan);
@@ -286,7 +336,7 @@ export default function UploadPage() {
     setPlanSaveStatus('saving');
     setStatus('plan');
     streamReview(planData.plan, planBody, resolvedCardNames);
-  }, [streamReview]);
+  }, [streamReview, messageForServerError]);
 
   /**
    * Resumes onboarding from a parsed template once member discovery (if any
@@ -473,12 +523,15 @@ export default function UploadPage() {
       );
       await buildPlan(pendingPlanBody, resolvedCardNames);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      // buildPlan already translates anything the server said; this fallback
+      // covers a throw with no message of its own (a rejected .json(), a
+      // network failure) and must not be a bare English literal.
+      setError(err instanceof Error ? err.message : t('errors.generic'));
       setStatus('error');
     } finally {
       setCreatingAccounts(false);
     }
-  }, [pendingPlanBody, cardCount, cardNames, buildPlan]);
+  }, [pendingPlanBody, cardCount, cardNames, buildPlan, t]);
 
   const startOver = useCallback(() => {
     setStatus('idle');

@@ -329,7 +329,8 @@
           "same": "The two paydays must be different days.",
           "generic": "Something went wrong. Please try again."
         }
-      }
+      },
+      "reviewTooLarge": "Your plan is saved. The written review was skipped because your file holds more detail than one letter can cover — you can generate one from your dashboard."
     },
     "form": {
       "title": "Enter your numbers",
@@ -361,6 +362,13 @@
       "deficitNotFinanced": "Your plan shows a {deficit}/month shortfall with no credit line or debt payment to explain it. If your income is understated, correct it now — a deficit on paper needs to be financed by something real.",
       "correct": "Fix my income",
       "confirm": "These numbers are right — continue anyway"
+    },
+    "errors": {
+      "payloadTooLarge": "Your file holds more detail than we can plan from in one pass. Trim the longest sections — or the free-text answers on the Household sheet — and upload it again.",
+      "aiUnavailable": "We could not reach the planning service just now. Your numbers are safe — please try again in a few minutes.",
+      "rateLimited": "That was a lot of attempts in a short time. Wait a moment, then try again.",
+      "planFailed": "We could not build your plan from this file. Please try again.",
+      "generic": "Something went wrong. Please try again."
     }
   },
   "auth": {

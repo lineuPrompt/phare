@@ -4,6 +4,13 @@ import { dedupeSinkingFunds, assembleCalculatedBudget } from '@/lib/planHelpers'
 import { evaluateGoals, GoalResult, isDebtGoalName, computeDebtPayoff, DebtPayoffResult } from '@/lib/goalHelpers';
 import { businessToday, DEFAULT_HOUSEHOLD_TIMEZONE } from '@/lib/dateHelpers';
 import { createRateLimiter, clientIp } from '@/lib/rateLimit';
+import {
+  PLAN_MAX_BODY_BYTES,
+  assertBodySize,
+  projectTemplateForPrompt,
+  projectCalculatedForPrompt,
+  isPromptInputTooLargeError,
+} from '@/lib/promptInputLimits';
 
 // Unauthenticated by design — but NOT because no household exists yet. The
 // handle_new_user trigger creates a household, user row, member and chequing
@@ -43,12 +50,43 @@ export async function POST(request: NextRequest) {
     const limit = rateLimit(clientIp(request));
     if (!limit.allowed) {
       return NextResponse.json(
-        { error: 'Too many plan requests. Please wait a moment and try again.', retryAfterSeconds: limit.retryAfterSeconds },
+        { code: 'RATE_LIMITED', error: 'Too many plan requests. Please wait a moment and try again.', retryAfterSeconds: limit.retryAfterSeconds },
         { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
       );
     }
 
-    const body = await request.json();
+    // SIZE BEFORE PARSE. The body is weighed as raw text so an oversized
+    // payload is refused without ever being materialised into an object graph
+    // — and, more to the point, without reaching a prompt. See
+    // lib/promptInputLimits.ts for how the cap was derived.
+    const raw = await request.text();
+    try {
+      assertBodySize(raw, PLAN_MAX_BODY_BYTES, 'body');
+    } catch (err) {
+      if (isPromptInputTooLargeError(err)) {
+        return NextResponse.json(
+          { code: err.code, error: err.message, field: err.field, limit: err.limit, actual: err.actual },
+          { status: 413 }
+        );
+      }
+      throw err;
+    }
+
+    let body: {
+      source?: string;
+      locale?: string;
+      parsed?: unknown;
+      calculated?: unknown;
+    };
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return NextResponse.json(
+        { code: 'INVALID_JSON', error: 'Request body was not valid JSON.' },
+        { status: 400 }
+      );
+    }
+
     const locale = body.locale === 'fr' ? 'fr' : 'en';
     const lang = locale === 'fr' ? 'French (Quebec French, natural and native)' : 'English';
 
@@ -70,85 +108,103 @@ export async function POST(request: NextRequest) {
     // every other goal uses. Never AI-emitted, for either source.
     let computedDebtPayoff: DebtPayoffResult | null = null;
 
-    if (body.source === 'template') {
-      const p = body.parsed;
-      // A household DOES exist by now (the signup trigger creates one), but
-      // this route is unauthenticated and reads nothing from the database, so
-      // it has no session with which to look one up. It therefore uses the
-      // same value the households.timezone column itself defaults to
-      // ('America/Toronto') — exactly right for the household that was just
-      // created at signup.
-      //
-      // KNOWN GAP, deliberately left alone here: a household that changed its
-      // timezone and then re-runs onboarding (the save-plan confirmReplace
-      // path) is dated against the default rather than its own zone. It moves
-      // goal evaluation by at most a day at a boundary. Once saved,
-      // downstream routes resolve the real per-household timezone.
-      const today = businessToday(DEFAULT_HOUSEHOLD_TIMEZONE);
-      const rawGoals: { name: string; targetAmount: number; savedSoFar: number; targetDate: string | null }[] = p.goals ?? [];
-      // The debt-payoff line (if any) gets its own card, not a duplicate goal
-      // card — pulled out before the rest go through evaluateGoals().
-      const debtGoalLine = rawGoals.find((g) => isDebtGoalName(g.name));
-      const nonDebtGoals = rawGoals.filter((g) => g !== debtGoalLine);
-      computedDebtPayoff = computeDebtPayoff(debtGoalLine, today);
-      computedGoals = evaluateGoals(nonDebtGoals, p.summary.netCashFlow, today);
+    try {
+      if (body.source === 'template') {
+        // ALLOWLIST PROJECTION. `p` carries only the fields this route and its
+        // prompt actually read — nothing else from the request can reach the
+        // model. household is shape-validated (count/key/value bounds) rather
+        // than key-allowlisted, so a household that renamed a field in Excel
+        // keeps its answer instead of having it silently dropped.
+        const p = projectTemplateForPrompt(body.parsed);
+        // A household DOES exist by now (the signup trigger creates one), but
+        // this route is unauthenticated and reads nothing from the database, so
+        // it has no session with which to look one up. It therefore uses the
+        // same value the households.timezone column itself defaults to
+        // ('America/Toronto') — exactly right for the household that was just
+        // created at signup.
+        //
+        // KNOWN GAP, deliberately left alone here: a household that changed its
+        // timezone and then re-runs onboarding (the save-plan confirmReplace
+        // path) is dated against the default rather than its own zone. It moves
+        // goal evaluation by at most a day at a boundary. Once saved,
+        // downstream routes resolve the real per-household timezone.
+        const today = businessToday(DEFAULT_HOUSEHOLD_TIMEZONE);
+        const rawGoals = p.goals;
+        // The debt-payoff line (if any) gets its own card, not a duplicate goal
+        // card — pulled out before the rest go through evaluateGoals().
+        const debtGoalLine = rawGoals.find((g) => isDebtGoalName(g.name));
+        const nonDebtGoals = rawGoals.filter((g) => g !== debtGoalLine);
+        computedDebtPayoff = computeDebtPayoff(debtGoalLine, today);
+        computedGoals = evaluateGoals(nonDebtGoals, p.summary.netCashFlow, today);
 
-      // ----- TypeScript assembles the budget. Exact, instant. -----
-      monthlyBudget = {
-        totalIncome: p.summary.monthlyIncome,
-        totalExpenses: p.summary.monthlyExpenses,
-        totalSavings: p.summary.netCashFlow,
-        categories: [
-          ...p.income.lines.map((l: { label: string; amount: number; rawAmount?: number; frequency?: Category['frequency']; member?: string }) => ({
-            name: l.label, budgeted: l.amount, type: 'income',
-            rawAmount: l.rawAmount, frequency: l.frequency, member: l.member,
-          })),
-          ...p.fixedExpenses.lines.map((l: { label: string; amount: number; rawAmount?: number; frequency?: Category['frequency'] }) => ({
-            name: l.label, budgeted: l.amount, type: 'expense',
-            rawAmount: l.rawAmount, frequency: l.frequency,
-          })),
-          ...p.variableExpenses.lines.map((l: { label: string; amount: number }) => ({
-            name: l.label, budgeted: l.amount, type: 'expense',
-          })),
-        ],
-      };
+        // ----- TypeScript assembles the budget. Exact, instant. -----
+        monthlyBudget = {
+          totalIncome: p.summary.monthlyIncome,
+          totalExpenses: p.summary.monthlyExpenses,
+          totalSavings: p.summary.netCashFlow,
+          categories: [
+            ...p.income.lines.map((l) => ({
+              name: l.label, budgeted: l.amount, type: 'income',
+              rawAmount: l.rawAmount, frequency: l.frequency, member: l.member,
+            })),
+            ...p.fixedExpenses.lines.map((l) => ({
+              name: l.label, budgeted: l.amount, type: 'expense',
+              rawAmount: l.rawAmount, frequency: l.frequency,
+            })),
+            ...p.variableExpenses.lines.map((l) => ({
+              name: l.label, budgeted: l.amount, type: 'expense',
+            })),
+          ],
+        };
 
-      // Sinking funds come straight from the template. Exact. fundedAlready
-      // is always false here — onboarding has no account/balance concept yet,
-      // there is nothing a fund could be funded from at this stage — so the
-      // review must narrate these as a plan, never as money already moving.
-      sinkingFundsFromData = p.sinkingFunds.lines.map(
-        (l: { label: string; annualAmount: number; monthlyProvision: number; dueMonth: string }) => ({
+        // Sinking funds come straight from the template. Exact. fundedAlready
+        // is always false here — onboarding has no account/balance concept yet,
+        // there is nothing a fund could be funded from at this stage — so the
+        // review must narrate these as a plan, never as money already moving.
+        sinkingFundsFromData = p.sinkingFunds.lines.map((l) => ({
           name: l.label,
           annualAmount: l.annualAmount,
           monthlyProvision: l.monthlyProvision,
           dueMonth: l.dueMonth,
           fundedAlready: false,
-        })
-      );
+        }));
 
-      aiContext = `Household info: ${JSON.stringify(p.household)}
+        aiContext = `Household info: ${JSON.stringify(p.household)}
 Net cash flow: $${p.summary.netCashFlow}/month (income $${p.summary.monthlyIncome}, expenses $${p.summary.monthlyExpenses}, savings $0 at plan creation)
 Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts; none exist yet)
 Their goals — ALREADY verified, do not recompute or contradict these numbers, just narrate them naturally where relevant: ${JSON.stringify(computedGoals)}
 Their debt payoff — ALREADY verified (null means no debt evident or nothing computable), do not recompute or contradict: ${JSON.stringify(computedDebtPayoff)}
 Their sinking funds (already set up): ${JSON.stringify(p.sinkingFunds.lines)}
-Expense lines: ${JSON.stringify([...p.fixedExpenses.lines, ...p.variableExpenses.lines].map((l: { label: string }) => l.label))}`;
-    } else if (body.source === 'calculated') {
-      const c = body.calculated;
+Expense lines: ${JSON.stringify([...p.fixedExpenses.lines, ...p.variableExpenses.lines].map((l) => l.label))}`;
+      } else if (body.source === 'calculated') {
+        const c = projectCalculatedForPrompt(body.calculated);
 
-      // assembleCalculatedBudget sets totalSavings = 0 (not income − expenses).
-      // Savings appear later as real transfers; using the residual here would
-      // produce a wrong net once transfers are recorded.
-      monthlyBudget = assembleCalculatedBudget(c);
+        // assembleCalculatedBudget sets totalSavings = 0 (not income − expenses).
+        // Savings appear later as real transfers; using the residual here would
+        // produce a wrong net once transfers are recorded.
+        monthlyBudget = assembleCalculatedBudget(c);
 
-      aiContext = `Net cash flow: $${c.netCashFlow}/month (income $${c.income.total}, expenses $${c.expenses.total}, savings $0 at plan creation)
+        aiContext = `Net cash flow: $${c.netCashFlow}/month (income $${c.income.total}, expenses $${c.expenses.total}, savings $0 at plan creation)
 Accounting model: net = income − expenses − savings (savings = actual transfers to goal accounts; none exist yet)
 Income lines: ${JSON.stringify(c.income.lines)}
 Expense lines: ${JSON.stringify(c.expenses.lines)}
 This household entered ONLY these income and expense lines. They have NOT set any savings goals or reserve funds. Do not invent any — you may suggest one or two in your topRecommendation prose, framed explicitly as a suggestion ("Consider a property-tax fund — Quebec bills land in March and June"), but never as a fund or goal they already have, and never with a specific monthly amount presented as theirs.`;
-    } else {
-      return NextResponse.json({ error: 'Unknown plan source' }, { status: 400 });
+      } else {
+        return NextResponse.json(
+          { code: 'UNKNOWN_PLAN_SOURCE', error: 'Unknown plan source' },
+          { status: 400 }
+        );
+      }
+    } catch (err) {
+      // A size violation inside the projection is the user's to fix, and the
+      // message names the exact field and limit — never a bare "bad request".
+      if (isPromptInputTooLargeError(err)) {
+        return NextResponse.json(
+          { code: err.code, error: err.message, field: err.field, limit: err.limit, actual: err.actual },
+          { status: 413 }
+        );
+      }
+      throw err;
     }
 
     // ----- Claude does ONLY the interpretive part, in the user's language -----
@@ -190,11 +246,28 @@ ${isTemplate ? '- Their goals and debt payoff are already evaluated (contributio
 - If net cash flow is negative, topRecommendation must address that first.
 - topRecommendation: one specific sentence with a dollar amount.`;
 
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // UPSTREAM FAILURE IS ITS OWN OUTCOME, not a generic 500. With a spend cap
+    // on the Anthropic key, a quota refusal is now a reachable state that did
+    // not exist before, and it arrives here as a thrown SDK error
+    // indistinguishable (to this catch) from an outage or a timeout. All of
+    // them mean the same thing to the family: the plan could not be written
+    // right now and retrying later is the remedy. The client maps
+    // AI_UNAVAILABLE to translated copy, so this never surfaces as a bare
+    // English sentence inside a French screen.
+    let message;
+    try {
+      message = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: prompt }],
+      });
+    } catch (aiError) {
+      console.error('Plan generation — Anthropic call failed:', aiError);
+      return NextResponse.json(
+        { code: 'AI_UNAVAILABLE', error: 'The planning service is unavailable right now. Please try again in a few minutes.' },
+        { status: 503 }
+      );
+    }
 
     const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
     const aiPart = JSON.parse(responseText.replace(/```json|```/g, '').trim());
@@ -247,7 +320,7 @@ ${isTemplate ? '- Their goals and debt payoff are already evaluated (contributio
   } catch (error) {
     console.error('Plan generation error:', error);
     return NextResponse.json(
-      { error: 'Failed to generate financial plan' },
+      { code: 'PLAN_FAILED', error: 'Failed to generate financial plan' },
       { status: 500 }
     );
   }
