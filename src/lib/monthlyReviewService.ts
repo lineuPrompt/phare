@@ -34,7 +34,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { anthropic } from '@/lib/anthropic';
-import { assembleCalculatedBudget, dedupeSinkingFunds } from '@/lib/planHelpers';
+import { assembleCalculatedBudget, dedupeSinkingFunds } from '@phare/core';
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth, monthsBetween, GoalResult, DebtPayoffResult } from '@/lib/goalHelpers';
 import { detectWindfalls } from '@/lib/reviewContextHelpers';
@@ -60,7 +60,7 @@ import {
 } from '@/lib/coachingHelpers';
 // businessMonth is deliberately NOT imported: the reviewed window comes from
 // the caller's `reviewMonth`, never from this service's own clock.
-import { businessToday, cycleMonthContaining } from '@/lib/dateHelpers';
+import { businessToday, cycleMonthContaining } from '@phare/core';
 
 const SEED_CATEGORIES = [
   'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',

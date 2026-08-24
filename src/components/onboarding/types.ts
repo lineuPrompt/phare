@@ -1,3 +1,11 @@
+// Income frequency options. Code converts these; users never pre-compute.
+// Single source of truth is @phare/core (incomeHelpers.ts) — this file used
+// to carry a second, byte-identical declaration of the same union, deduped
+// when that module moved into the package.
+import type { IncomeFrequency } from '@phare/core';
+
+export type { IncomeFrequency };
+
 export type Plan = {
   monthlyBudget: {
     totalIncome: number;
@@ -50,9 +58,6 @@ export type Plan = {
   topRecommendation: string;
 };
 
-// Income frequency options. Code converts these; users never pre-compute.
-export type IncomeFrequency = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
-
 // Expense form line — captures the per-payment amount and frequency
 // separately, same shape and semantics as IncomeFormLine below. Manual and
 // template entry must produce indistinguishable ledgers, so a manual
@@ -66,13 +71,11 @@ export type FormLine = {
 };
 
 // Income form line — captures the paycheque amount and frequency separately.
-// monthlyEquivalent() in src/lib/incomeHelpers.ts converts to monthly.
+// monthlyEquivalent() in @phare/core converts to monthly.
 export type IncomeFormLine = {
   label: string;
   amount: string;       // raw paycheque amount (what lands in the bank each pay)
   frequency: IncomeFrequency;
 };
 
-export function formatCAD(amount: number) {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(amount);
-}
+// formatCAD moved to @phare/core (money.ts) — import it from there.

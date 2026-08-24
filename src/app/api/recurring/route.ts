@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { businessToday, materializeFromMonthStart } from '@/lib/dateHelpers';
+import { businessToday, materializeFromMonthStart } from '@phare/core';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { materializeTransferOccurrences } from '@/lib/recurringTransferHelpers';

@@ -9,9 +9,9 @@
  * mixed into a month's displayed total.
  */
 import { describe, it, expect } from 'vitest';
-import { materializeFromMonthStart } from '../dateHelpers';
+import { materializeFromMonthStart } from '@phare/core';
 import { computeMonthTotals, TxRow, AccountRow } from '../dashboardHelpers';
-import { monthlyEquivalent } from '../incomeHelpers';
+import { monthlyEquivalent } from '@phare/core';
 
 const CHEQUING_ID = 'chq-1';
 const accounts: AccountRow[] = [{ id: CHEQUING_ID, type: 'chequing' }];

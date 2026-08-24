@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { NextRequest } from 'next/server';
 import { computeDebtPayoff } from '@/lib/goalHelpers';
-import { businessToday, DEFAULT_HOUSEHOLD_TIMEZONE } from '@/lib/dateHelpers';
+import { businessToday, DEFAULT_HOUSEHOLD_TIMEZONE } from '@phare/core';
 
 // The AI must never instantiate structured objects (sinking-fund rows, goal
 // cards, debt-payoff cards) for the manual-form (calculated) source. These

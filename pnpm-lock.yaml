@@ -11,6 +11,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.102.0
         version: 0.102.0(zod@3.25.76)
+      '@phare/core':
+        specifier: workspace:*
+        version: link:packages/core
       '@supabase/ssr':
         specifier: ^0.12.0
         version: 0.12.0(@supabase/supabase-js@2.110.0)
@@ -87,6 +90,8 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.9(@types/node@20.19.43)(@vitest/ui@4.1.9)(vite@8.1.2(@types/node@20.19.43)(jiti@2.7.0))
+
+  packages/core: {}
 
 packages:
 

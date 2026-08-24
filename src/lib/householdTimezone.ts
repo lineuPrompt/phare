@@ -1,5 +1,5 @@
 import type { createClient } from './supabase-server';
-import { DEFAULT_HOUSEHOLD_TIMEZONE } from './dateHelpers';
+import { DEFAULT_HOUSEHOLD_TIMEZONE } from '@phare/core';
 
 /**
  * The household's IANA timezone — the input to businessToday()/

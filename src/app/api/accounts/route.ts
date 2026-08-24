@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { logEvent, isFirstEvent } from '@/lib/eventLogger';
-import { businessToday } from '@/lib/dateHelpers';
+import { businessToday } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {

@@ -75,7 +75,16 @@ vi.mock('@/lib/supabase-admin', () => ({
 }));
 
 vi.mock('@/lib/householdTimezone', () => ({ getHouseholdTimezone: async () => 'America/Toronto' }));
-vi.mock('@/lib/dateHelpers', () => ({ businessToday: () => '2026-09-01' }));
+// Spreads the real module rather than replacing it wholesale. This used to be
+// `vi.mock('@/lib/dateHelpers', () => ({ businessToday: ... }))`, which was
+// safe when the mocked module held only date helpers. '@phare/core' is a
+// barrel of ~40 exports, so replacing it entirely would leave every other
+// core symbol in this route's graph undefined. Intent is unchanged: pin
+// businessToday, leave everything else real.
+vi.mock('@phare/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@phare/core')>();
+  return { ...actual, businessToday: () => '2026-09-01' };
+});
 vi.mock('@/lib/monthlyReviewService', () => ({
   generateMonthlyReview: async () => {
     ops.push('generate');

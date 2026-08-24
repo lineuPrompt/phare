@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { computeMonthTotals, computeGoalBalance, TxRow, AccountRow } from '../dashboardHelpers';
-import { materializeFromMonthStart } from '../dateHelpers';
+import { materializeFromMonthStart } from '@phare/core';
 
 // ---------------------------------------------------------------------------
 // Fixtures

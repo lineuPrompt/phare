@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { businessMonth, materializeRule, monthNameToNumber } from '@/lib/dateHelpers';
+import { businessMonth, materializeRule, monthNameToNumber } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { logEvent } from '@/lib/eventLogger';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
@@ -15,7 +15,7 @@ import {
   type AccountProvenanceInfo,
   type DesiredAccount,
 } from '@/lib/importProvenance';
-import { resolveMemberId, type IncomeFrequency } from '@/lib/incomeHelpers';
+import { resolveMemberId, type IncomeFrequency } from '@phare/core';
 import { ensureChequingAccount } from '@/lib/accountHelpers';
 
 type PlanCategory = {

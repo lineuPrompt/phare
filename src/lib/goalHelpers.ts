@@ -8,7 +8,7 @@
  * for save-plan to persist, but only the month/year matter to this module.
  */
 
-import { monthNameToNumber, materializeRule } from './dateHelpers';
+import { monthNameToNumber, materializeRule } from '@phare/core';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;

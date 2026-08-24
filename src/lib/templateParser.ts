@@ -38,7 +38,7 @@
  */
 
 import * as XLSX from 'xlsx';
-import { monthlyEquivalent, IncomeFrequency } from './incomeHelpers';
+import { monthlyEquivalent, IncomeFrequency } from '@phare/core';
 import { parseGoalTargetDate } from './goalHelpers';
 
 export interface ParsedLine {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { computeGoalBalance } from '@/lib/dashboardHelpers';
-import { businessToday, nextOccurrence, firstOfNextMonth } from '@/lib/dateHelpers';
+import { businessToday, nextOccurrence, firstOfNextMonth } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 /**

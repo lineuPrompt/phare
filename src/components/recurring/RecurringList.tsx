@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RecurringItem, RecurringAccount, RecurringCategory, RecurringGoalAccount, formatCurrency } from './types';
 import { formatSignedAmount } from '@/components/expenses/types';
-import { monthlyEquivalent } from '@/lib/incomeHelpers';
-import { nextOccurrence, firstOfNextMonth } from '@/lib/dateHelpers';
+import { monthlyEquivalent } from '@phare/core';
+import { nextOccurrence, firstOfNextMonth } from '@phare/core';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 
 // ── RecurringRow ───────────────────────────────────────────────────────────

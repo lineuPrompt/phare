@@ -1,0 +1,16 @@
+{
+  "name": "@phare/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared money and date logic. Consumed by the Next.js web app and the Expo app — one source of truth, no copies.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ]
+}

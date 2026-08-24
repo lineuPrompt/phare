@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
-import { findMemberNameCandidates } from '@/lib/incomeHelpers';
+import { findMemberNameCandidates } from '@phare/core';
 import {
   isPendingMember,
   householdLocaleFrom,

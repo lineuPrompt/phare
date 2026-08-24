@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
-import { businessToday } from '@/lib/dateHelpers';
+import { businessToday } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { decideReview } from '@/lib/reviewSchedule';
 import { generateMonthlyReview } from '@/lib/monthlyReviewService';

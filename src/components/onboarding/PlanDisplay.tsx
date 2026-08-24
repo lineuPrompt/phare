@@ -2,8 +2,9 @@
 
 import { useTranslations } from 'next-intl';
 import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
-import { Plan, formatCAD } from './types';
-import { hasNonMonthlyLines } from '@/lib/planHelpers';
+import { Plan } from './types';
+import { formatCAD } from '@phare/core';
+import { hasNonMonthlyLines } from '@phare/core';
 
 export default function PlanDisplay({
   plan,

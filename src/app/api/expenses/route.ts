@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { recurrenceDates } from '@/lib/dateHelpers';
+import { recurrenceDates } from '@phare/core';
 import { logEvent, isFirstEvent } from '@/lib/eventLogger';
 
 // POST: create expense (single, monthly recurring, or installments).

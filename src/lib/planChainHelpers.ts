@@ -88,7 +88,7 @@
  */
 
 import { addMonthsToMonth } from './goalHelpers';
-import { bridgePaymentDate } from './dateHelpers';
+import { bridgePaymentDate } from '@phare/core';
 import { computeCardEnvelopeRemainders } from './projectionHelpers';
 import { signAmount } from './timelineHelpers';
 

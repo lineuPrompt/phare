@@ -22,7 +22,7 @@ import TransferForm from '@/components/goals/TransferForm';
 import RecurringContributionForm from '@/components/goals/RecurringContributionForm';
 import GoalEditForm from '@/components/goals/GoalEditForm';
 import { formatCurrency, type GoalAccount, type GoalTransfer } from '@/components/dashboard/types';
-import { nextOccurrence } from '@/lib/dateHelpers';
+import { nextOccurrence } from '@phare/core';
 import { projectedContribution } from '@/lib/goalHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 

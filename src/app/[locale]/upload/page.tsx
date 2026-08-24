@@ -11,12 +11,12 @@ import PlanDisplay from '@/components/onboarding/PlanDisplay';
 import AnchorDateStep, { NeedsPayDateItem } from '@/components/onboarding/AnchorDateStep';
 import MemberConfirmStep from '@/components/onboarding/MemberConfirmStep';
 import { Plan, FormLine, IncomeFormLine } from '@/components/onboarding/types';
-import { collectUnresolvedMemberNames } from '@/lib/incomeHelpers';
-import { buildCalculatedFromFormLines } from '@/lib/planHelpers';
-import { dropResolvedItems } from '@/lib/anchorDateHelpers';
-import { runPlausibilityGuard, PlausibilityResult } from '@/lib/plausibilityGuard';
+import { collectUnresolvedMemberNames } from '@phare/core';
+import { buildCalculatedFromFormLines } from '@phare/core';
+import { dropResolvedItems } from '@phare/core';
+import { runPlausibilityGuard, PlausibilityResult } from '@phare/core';
 import { TemplateParseResult } from '@/lib/templateParser';
-import { formatCAD } from '@/components/onboarding/types';
+import { formatCAD } from '@phare/core';
 import SupportLine from '@/components/shared/SupportLine';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 

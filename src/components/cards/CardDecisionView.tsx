@@ -11,7 +11,7 @@ import {
 } from '@/lib/envelopeHelpers';
 import { formatCurrency, formatSignedAmount } from '@/components/expenses/types';
 import { EnvelopeStatus, envelopeStatus, sumWarning, CategoryEntryLine, UNCATEGORIZED_ROW_ID } from '@/lib/envelopeHelpers';
-import { cardCycleContext } from '@/lib/dateHelpers';
+import { cardCycleContext } from '@phare/core';
 
 function formatShortDate(iso: string, locale: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString(

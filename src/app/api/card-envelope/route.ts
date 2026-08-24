@@ -11,7 +11,7 @@ import {
   groupEntriesByCategory,
 } from '@/lib/envelopeHelpers';
 import { categoryDisplayName } from '@/lib/categoryTranslations';
-import { statementCycleWindow } from '@/lib/dateHelpers';
+import { statementCycleWindow } from '@phare/core';
 
 async function resolveHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();

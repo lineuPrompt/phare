@@ -6,10 +6,10 @@ import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
 import { loadEntitlement } from '@/lib/entitlementServer';
 import { reviewForEntitlement } from '@/lib/reviewPreview';
 import { logEvent, isFirstReturnToday } from '@/lib/eventLogger';
-import { businessToday, businessMonth } from '@/lib/dateHelpers';
+import { businessToday, businessMonth } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { readQuota } from '@/lib/regenerationQuotaServer';
-import { businessMonth as quotaMonth } from '@/lib/dateHelpers';
+import { businessMonth as quotaMonth } from '@phare/core';
 
 export async function GET(request: Request) {
   try {

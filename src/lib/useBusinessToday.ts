@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { businessToday, businessMonth } from './dateHelpers';
+import { businessToday, businessMonth } from '@phare/core';
 
 const DEFAULT_TIMEZONE = 'America/Toronto';
 

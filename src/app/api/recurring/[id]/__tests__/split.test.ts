@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { businessToday, firstOfNextMonth, materializeFromMonthStart } from '@/lib/dateHelpers';
+import { businessToday, firstOfNextMonth, materializeFromMonthStart } from '@phare/core';
 
 /**
  * Timeline Part B — split-into-two-rules invariant (founder-approved

@@ -84,7 +84,7 @@
  * left for later if partial-write states are ever actually observed live.
  */
 
-import { bridgePaymentDate, statementCycleWindow } from './dateHelpers';
+import { bridgePaymentDate, statementCycleWindow } from '@phare/core';
 import { signedAmount } from './envelopeHelpers';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

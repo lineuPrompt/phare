@@ -12,7 +12,7 @@ import {
   EnvTx,
   CardTxRow,
 } from '../envelopeHelpers';
-import { statementCycleWindow, cycleMonthContaining } from '../dateHelpers';
+import { statementCycleWindow, cycleMonthContaining } from '@phare/core';
 import { netCycleSpend } from '../bridgeHelpers';
 
 // ---------------------------------------------------------------------------

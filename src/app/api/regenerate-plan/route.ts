@@ -37,7 +37,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { businessMonth } from '@/lib/dateHelpers';
+import { businessMonth } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { requirePro } from '@/lib/proGate';
 import { reserveRegeneration } from '@/lib/regenerationQuotaServer';

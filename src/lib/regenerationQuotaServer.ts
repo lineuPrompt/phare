@@ -1,4 +1,4 @@
-import { businessToday } from '@/lib/dateHelpers';
+import { businessToday } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { quotaFrom, REGENERATION_EVENT, type QuotaState } from '@/lib/regenerationQuota';
 

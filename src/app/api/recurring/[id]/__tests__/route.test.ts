@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { businessToday, materializeFromMonthStart } from '@/lib/dateHelpers';
+import { businessToday, materializeFromMonthStart } from '@phare/core';
 
 // ---------------------------------------------------------------------------
 // Verifies the existing PATCH memberId path — already generic across income

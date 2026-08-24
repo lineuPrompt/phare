@@ -1,8 +1,9 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { FormLine, IncomeFormLine, IncomeFrequency, formatCAD } from './types';
-import { monthlyEquivalent } from '@/lib/incomeHelpers';
+import { FormLine, IncomeFormLine } from './types';
+import { formatCAD, type IncomeFrequency } from '@phare/core';
+import { monthlyEquivalent } from '@phare/core';
 
 const FREQUENCIES: IncomeFrequency[] = ['weekly', 'biweekly', 'semimonthly', 'monthly'];
 

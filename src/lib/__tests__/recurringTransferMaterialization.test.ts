@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { materializeFromMonthStart } from '../dateHelpers';
+import { materializeFromMonthStart } from '@phare/core';
 
 /**
  * Phase 2 (recurring transfers) date contract.

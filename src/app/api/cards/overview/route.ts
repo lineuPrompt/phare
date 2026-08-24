@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { totalSpendForCard, envelopeStatus, EnvTx } from '@/lib/envelopeHelpers';
-import { statementCycleWindow } from '@/lib/dateHelpers';
+import { statementCycleWindow } from '@phare/core';
 
 // GET /api/cards/overview?month=YYYY-MM
 // The missing third question: which card has room, without opening any

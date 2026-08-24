@@ -1,4 +1,4 @@
-import type { IncomeFrequency } from './incomeHelpers';
+import type { IncomeFrequency } from '@phare/core';
 
 // ---------------------------------------------------------------------------
 // Input caps and allowlist projections for the two unauthenticated routes that

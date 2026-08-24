@@ -57,7 +57,7 @@
  * of a bridge that already reflects real spend.
  */
 
-import { statementCycleWindow } from './dateHelpers';
+import { statementCycleWindow } from '@phare/core';
 import { netCycleSpend } from './bridgeHelpers';
 
 function r2(n: number): number {

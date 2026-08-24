@@ -10,7 +10,7 @@ import { groupUnbalancedTransactions } from '@/lib/timelineDisplayHelpers';
 import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
 import { loadEntitlement } from '@/lib/entitlementServer';
 import { HORIZON_MONTHS_FREE, HORIZON_MONTHS_PRO } from '@/lib/entitlement';
-import { businessToday } from '@/lib/dateHelpers';
+import { businessToday } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { logEvent } from '@/lib/eventLogger';
 import { addMonthsToMonth } from '@/lib/goalHelpers';

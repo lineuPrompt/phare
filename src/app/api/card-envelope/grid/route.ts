@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { buildGrid, EnvTx, EnvelopeSnapshotItem } from '@/lib/envelopeHelpers';
 import { categoryDisplayName } from '@/lib/categoryTranslations';
-import { businessMonth, businessToday, statementCycleWindow } from '@/lib/dateHelpers';
+import { businessMonth, businessToday, statementCycleWindow } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 // GET /api/card-envelope/grid?cardId=<uuid>&locale=en|fr

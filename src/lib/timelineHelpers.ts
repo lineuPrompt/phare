@@ -44,7 +44,7 @@
  * that day forward. Multiple anchors are walked in ascending date order.
  */
 
-import { formatLocalDate } from './dateHelpers';
+import { formatLocalDate } from '@phare/core';
 
 // ── Anchor selection ──────────────────────────────────────────────────────────
 

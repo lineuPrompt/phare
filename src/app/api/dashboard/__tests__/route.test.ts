@@ -78,8 +78,8 @@ vi.mock('@/lib/bridgeHelpers', async (importOriginal) => {
 // to a fixed cycle window, and the real wall-clock date would make those
 // assertions flaky. Every other test in this file is unaffected: they never
 // override it, so businessToday behaves exactly as it always did.
-vi.mock('@/lib/dateHelpers', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/dateHelpers')>();
+vi.mock('@phare/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@phare/core')>();
   return {
     ...actual,
     businessToday: vi.fn(actual.businessToday),

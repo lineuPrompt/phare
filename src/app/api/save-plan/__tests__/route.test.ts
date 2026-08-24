@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { businessMonth } from '@/lib/dateHelpers';
+import { businessMonth } from '@phare/core';
 
 // getHouseholdTimezone's fallback (and every test household's scripted
 // `households` row below) is 'America/Toronto' — matching it here keeps

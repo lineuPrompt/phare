@@ -7,7 +7,7 @@ import {
   TRANSACTIONS_EXPORT_SELECT,
   type ExportTx,
 } from '@/lib/csvExportHelpers';
-import { formatLocalDate } from '@/lib/dateHelpers';
+import { formatLocalDate } from '@phare/core';
 
 // ---------------------------------------------------------------------------
 // GET /api/export/transactions?locale=fr — "export my data", v1.

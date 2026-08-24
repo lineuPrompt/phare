@@ -127,7 +127,7 @@ describe.skip('live review comparison — DISABLED, SPENDS REAL MONEY (see heade
     // filed under, so a comparison actually compares like with like; falls back
     // to the current month for an unmonthed stored row, which is the window the
     // service used to derive for itself. COMPARE_MONTH overrides both.
-    const { businessMonth } = await import('@/lib/dateHelpers');
+    const { businessMonth } = await import('@phare/core');
     const reviewMonth =
       process.env.COMPARE_MONTH ?? stored.review_month ?? businessMonth(timezone);
 

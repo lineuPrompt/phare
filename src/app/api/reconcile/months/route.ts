@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { businessMonth } from '@/lib/dateHelpers';
+import { businessMonth } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { isInternalHousehold } from '@/lib/internalAccess';
 

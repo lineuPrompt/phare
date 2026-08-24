@@ -1,7 +1,7 @@
 // Pure helpers for per-card budget envelope math.
 // No Supabase / browser dependencies — safe to import in API routes and tests.
 
-import { statementCycleWindow } from './dateHelpers';
+import { statementCycleWindow } from '@phare/core';
 
 export type EnvTx = {
   account_id: string;

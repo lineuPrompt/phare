@@ -16,7 +16,7 @@ import {
   anchorDayOfMonth,
   anchorDateForDayOfMonth,
   sameAnchorSchedule,
-} from '@/lib/dateHelpers';
+} from '@phare/core';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 
 type Cadence = 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
