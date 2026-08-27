@@ -19,11 +19,12 @@ import {
 // placeholder copy and proceeds to save. So the budget matches /api/plan's.
 const rateLimit = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 8 });
 
-// Every non-success path returns JSON even though the success path streams
-// text/plain. That is safe because the caller checks res.ok before reading the
-// body, so it never parses this as prose — and it is now load-bearing rather
-// than incidental: the client reads `code` off this body to tell a payload
-// rejection (permanent, worth naming) from a transient outage (retry copy).
+// Every non-success path returns JSON even though the default success path
+// streams text/plain (the ?stream=0 success path returns JSON too). That is
+// safe because the caller checks res.ok before reading the body, so it never
+// parses this as prose — and it is now load-bearing rather than incidental:
+// the client reads `code` off this body to tell a payload rejection
+// (permanent, worth naming) from a transient outage (retry copy).
 function errorResponse(
   body: Record<string, unknown>,
   status: number,
@@ -129,6 +130,55 @@ Hard rules:
 - ZERO-BALANCE GOALS: for any goal whose "savedSoFar" is 0 and "fundedAlready" is false, write about it as forward-looking — e.g. "once your $X/month contribution begins" — never as if saving is already underway, even if "onTrack" is true (onTrack only means the required contribution fits their capacity, not that any money has moved yet).
 
 Start with what is going well, then what to watch, then the one thing to do this month. Write ONLY the review text, no preamble, no headings.`;
+
+    // ── NON-STREAMING MODE (?stream=0) ───────────────────────────────────────
+    // React Native's fetch does not populate response.body — there is no
+    // ReadableStream — so the mobile client cannot consume the chunked
+    // response above at all. `?stream=0` asks for the same review, same
+    // prompt, same model, same guards and caps, as one JSON body instead.
+    //
+    // ONLY the literal '0' switches modes. Absent, '1', 'false', '' and every
+    // other value stream, because the live web client sends no flag at all and
+    // must keep the exact streaming path it already reads with getReader().
+    const nonStreaming = new URL(request.url).searchParams.get('stream') === '0';
+
+    if (nonStreaming) {
+      // stream: false — the text comes from the completed message rather than
+      // being accumulated server-side from deltas. Nothing on this route
+      // inspects the generated text after the fact (there is no
+      // post-generation guard here; the guarded path is monthlyReviewService),
+      // so the streaming shape is not required to produce it.
+      let message;
+      try {
+        message = await anthropic.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1500,
+          messages: [{ role: 'user', content: prompt }],
+          stream: false,
+        });
+      } catch (aiError) {
+        console.error('Review non-streaming — Anthropic call failed:', aiError);
+        return errorResponse(
+          { code: 'AI_UNAVAILABLE', error: 'The review service is unavailable right now. Please try again in a few minutes.' },
+          503
+        );
+      }
+
+      // EVERY text block joined — deliberately not `content[0].text`. The
+      // streaming path concatenates every text_delta across every content
+      // block, so reading only the first block would hand mobile a SHORTER
+      // string than web assembles from the identical generation. Non-text
+      // blocks contribute nothing here, exactly as they contribute nothing
+      // to the stream.
+      const review = message.content
+        .map((block) => (block.type === 'text' ? block.text : ''))
+        .join('');
+
+      // The streaming path has no terminal message and no framing — it is raw
+      // text/plain — so there is no other field to carry over. { review } is
+      // the whole body.
+      return NextResponse.json({ review });
+    }
 
     // Upstream failure is its own outcome — with a spend cap on the Anthropic
     // key, a quota refusal is reachable and must not surface as a bare English
