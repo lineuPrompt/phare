@@ -1,0 +1,69 @@
+{
+  "common": {
+    "appName": "Phare",
+    "retry": "Réessayer",
+    "loading": "Chargement…",
+    "signOut": "Se déconnecter",
+    "dismiss": "Fermer"
+  },
+  "timezone": {
+    "title": "Cet appareil n'arrive pas à indiquer la date à Phare",
+    "body": "Phare détermine à quelle journée — et donc à quel mois — appartient une transaction à partir du fuseau horaire de votre ménage. Le formatage des dates de cet appareil ignore le fuseau horaire qu'on lui donne : chaque date ne serait qu'une supposition.",
+    "consequence": "Plutôt que d'inscrire vos montants dans le mauvais mois sans vous prévenir, Phare s'arrête ici.",
+    "whatToDo": "Envoyez cet écran à support@phare.money en précisant le modèle de votre appareil et la version de son système.",
+    "technicalLabel": "Détail technique"
+  },
+  "signIn": {
+    "title": "Connexion",
+    "subtitle": "Utilisez le même courriel et le même mot de passe que sur le site Web.",
+    "emailLabel": "Courriel",
+    "emailPlaceholder": "vous@exemple.com",
+    "passwordLabel": "Mot de passe",
+    "passwordPlaceholder": "Votre mot de passe",
+    "submit": "Se connecter",
+    "submitting": "Connexion en cours…",
+    "failed": "Ce courriel et ce mot de passe ne concordent pas. Vérifiez-les et réessayez.",
+    "offline": "Impossible de joindre Phare. Vérifiez votre connexion et réessayez.",
+    "forgotHint": "Mot de passe oublié? Réinitialisez-le sur phare.money, puis connectez-vous ici."
+  },
+  "review": {
+    "title": "Votre bilan mensuel",
+    "empty": "Votre premier bilan apparaîtra ici dès que Phare disposera d'un mois complet d'activité pour votre ménage.",
+    "netCashFlow": "Flux de trésorerie net",
+    "netCashFlowUnknown": "Aucune activité enregistrée",
+    "startingPlan": "Votre plan de départ",
+    "recommendation": "La recommandation du mois",
+    "locked": "La suite de cette lettre ne fait pas partie de votre forfait actuel.",
+    "loadFailed": "Impossible de charger vos bilans.",
+    "signedOut": "Votre session est terminée. Veuillez vous reconnecter."
+  },
+  "errors": {
+    "network": "Impossible de joindre Phare. Vérifiez votre connexion et réessayez.",
+    "server": "Un problème est survenu de notre côté. Réessayez dans quelques minutes.",
+    "unauthorized": "Votre session est terminée. Veuillez vous reconnecter.",
+    "rateLimited": "Trop de requêtes. Patientez un instant et réessayez."
+  },
+  "diagnostics": {
+    "title": "Diagnostics",
+    "subtitle": "Vérifications d'exécution pour cet appareil. Rien ici n'est destiné aux utilisateurs.",
+    "timezoneHeading": "Prise en charge des fuseaux horaires",
+    "timezonePassed": "assertTimeZoneSupport() a réussi",
+    "timezoneFailed": "assertTimeZoneSupport() a échoué",
+    "moneyHeading": "Formatage des montants",
+    "formatCadLabel": "formatCAD (toujours en-CA, par conception)",
+    "formatCadLocaleEnLabel": "formatCADLocale · en",
+    "formatCadLocaleFrLabel": "formatCADLocale · fr",
+    "codepointsLabel": "Points de code",
+    "nbspExpected": "Le format fr-CA n'est correct que si les deux séparateurs sont U+00A0",
+    "dateHeading": "Résolution des dates",
+    "businessTodayLabel": "businessToday (America/Toronto)",
+    "deviceHeading": "Appareil",
+    "localeLabel": "Langue détectée",
+    "streamProbeHeading": "Sonde de l'API non diffusée",
+    "streamProbeExplain": "Appelle /api/review-stream?stream=0 afin de vérifier que le fetch de React Native peut lire un corps non diffusé. Cet appel consomme des jetons Anthropic.",
+    "streamProbeRun": "Lancer la sonde (consomme des jetons)",
+    "streamProbeRunning": "En cours…",
+    "streamProbeOk": "{chars} caractères reçus en JSON",
+    "streamProbeFailed": "Échec de la sonde : {reason}"
+  }
+}

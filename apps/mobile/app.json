@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Phare",
+    "slug": "phare",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "phare",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FAFAF8"
+    },
+    "ios": {
+      "bundleIdentifier": "money.phare.app",
+      "supportsTablet": true,
+      "associatedDomains": ["applinks:phare.money"]
+    },
+    "android": {
+      "package": "money.phare.app",
+      "adaptiveIcon": {
+        "backgroundImage": "./assets/android-icon-background.png",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "phare.money", "pathPrefix": "/auth/callback" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-localization"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

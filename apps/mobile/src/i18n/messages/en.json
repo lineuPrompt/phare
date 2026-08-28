@@ -1,0 +1,69 @@
+{
+  "common": {
+    "appName": "Phare",
+    "retry": "Try again",
+    "loading": "Loading…",
+    "signOut": "Sign out",
+    "dismiss": "Close"
+  },
+  "timezone": {
+    "title": "This device can't tell Phare what day it is",
+    "body": "Phare works out which day — and so which month — a transaction belongs to using your household's time zone. This device's date formatting ignores the time zone it's given, so every date would be a guess.",
+    "consequence": "Rather than book your money into the wrong month without telling you, Phare stops here.",
+    "whatToDo": "Please send this screen to support@phare.money along with your device model and OS version.",
+    "technicalLabel": "Technical detail"
+  },
+  "signIn": {
+    "title": "Sign in",
+    "subtitle": "Use the same email and password as the website.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Your password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "failed": "That email and password didn't match. Please check them and try again.",
+    "offline": "Couldn't reach Phare. Check your connection and try again.",
+    "forgotHint": "Forgot your password? Reset it on phare.money, then sign in here."
+  },
+  "review": {
+    "title": "Your monthly review",
+    "empty": "Your first review will appear here once Phare has a full month of your household's activity.",
+    "netCashFlow": "Net cash flow",
+    "netCashFlowUnknown": "No activity recorded",
+    "startingPlan": "Your starting plan",
+    "recommendation": "This month's recommendation",
+    "locked": "The rest of this letter isn't part of your current plan.",
+    "loadFailed": "Couldn't load your reviews.",
+    "signedOut": "Your session has ended. Please sign in again."
+  },
+  "errors": {
+    "network": "Couldn't reach Phare. Check your connection and try again.",
+    "server": "Something went wrong on our end. Please try again in a few minutes.",
+    "unauthorized": "Your session has ended. Please sign in again.",
+    "rateLimited": "Too many requests. Please wait a moment and try again."
+  },
+  "diagnostics": {
+    "title": "Diagnostics",
+    "subtitle": "Runtime checks for this device. Nothing here is user-facing.",
+    "timezoneHeading": "Time zone support",
+    "timezonePassed": "assertTimeZoneSupport() passed",
+    "timezoneFailed": "assertTimeZoneSupport() threw",
+    "moneyHeading": "Currency formatting",
+    "formatCadLabel": "formatCAD (always en-CA by design)",
+    "formatCadLocaleEnLabel": "formatCADLocale · en",
+    "formatCadLocaleFrLabel": "formatCADLocale · fr",
+    "codepointsLabel": "Codepoints",
+    "nbspExpected": "fr-CA is correct only if both separators are U+00A0",
+    "dateHeading": "Date resolution",
+    "businessTodayLabel": "businessToday (America/Toronto)",
+    "deviceHeading": "Device",
+    "localeLabel": "Detected locale",
+    "streamProbeHeading": "Non-streaming API probe",
+    "streamProbeExplain": "Calls /api/review-stream?stream=0 to prove React Native's fetch can read a non-streamed body. This one call spends Anthropic tokens.",
+    "streamProbeRun": "Run probe (spends tokens)",
+    "streamProbeRunning": "Running…",
+    "streamProbeOk": "Received {chars} characters as JSON",
+    "streamProbeFailed": "Probe failed: {reason}"
+  }
+}
