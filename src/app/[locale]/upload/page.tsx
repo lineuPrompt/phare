@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
 import AnalyzingLoader from '@/components/onboarding/AnalyzingLoader';
 import UploadEntry from '@/components/onboarding/UploadEntry';
@@ -24,6 +25,7 @@ type Status = 'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form' | '
 
 export default function UploadPage() {
   const t = useTranslations('upload');
+  const router = useRouter();
   // "Today" in the household's own timezone — the date the opening-balance
   // anchor is stamped with. Not the browser clock; see writeOpeningAnchor.
   const { today: businessToday } = useBusinessToday();
@@ -285,6 +287,28 @@ export default function UploadPage() {
   const cancelReplace = useCallback(() => {
     setReplaceConfirmation(null);
   }, []);
+
+  /**
+   * The way out of onboarding.
+   *
+   * Deliberately the SAME two calls signin/page.tsx makes after a successful
+   * sign-in (push then refresh), so both entry points land on the identical
+   * screen in the identical state rather than two subtly different dashboards.
+   *
+   * refresh() is not ceremony here. next.config.ts sets
+   * experimental.staleTimes.dynamic = 30, so the client router will happily
+   * serve a /dashboard it rendered up to 30 seconds ago — which, for a user
+   * who glanced at an empty dashboard just before onboarding, means arriving
+   * at a cached copy that predates the plan they just saved.
+   *
+   * PlanDisplay only renders the button once the save is confirmed, so there
+   * is no in-flight request for this to abandon.
+   */
+  const goToDashboard = useCallback(() => {
+    const locale = localeOf();
+    router.push(`/${locale}/dashboard`);
+    router.refresh();
+  }, [router]);
 
   /**
    * Server error bodies carry a machine-readable `code`; the `error` prose is
@@ -664,6 +688,7 @@ export default function UploadPage() {
             reviewStreaming={reviewStreaming}
             planSaveStatus={planSaveStatus}
             onRetrySave={retrySave}
+            onGoToDashboard={goToDashboard}
             onStartOver={startOver}
             replaceConfirmation={replaceConfirmation}
             onConfirmReplace={confirmReplaceAndSave}

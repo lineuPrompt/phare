@@ -259,6 +259,7 @@
       "noTargetDate": "Aucune date cible définie",
       "notAchievable": "{statedDate} nécessite {amount}/mois — à votre capacité actuelle, {estimatedDate} est réaliste.",
       "monthlyReview": "Votre première revue mensuelle",
+      "goToDashboard": "Aller au tableau de bord",
       "startOver": "Téléverser un autre fichier",
       "estimatedDate": "Est.",
       "reviewError": "Nous n'avons pas pu générer votre revue pour le moment. Veuillez réessayer.",

@@ -5,6 +5,7 @@ import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
 import { Plan } from './types';
 import { formatCAD } from '@phare/core';
 import { hasNonMonthlyLines } from '@phare/core';
+import { canGoToDashboard } from '@/lib/onboardingCompletion';
 
 export default function PlanDisplay({
   plan,
@@ -13,6 +14,7 @@ export default function PlanDisplay({
   reviewStreaming,
   planSaveStatus,
   onRetrySave,
+  onGoToDashboard,
   onStartOver,
   replaceConfirmation,
   onConfirmReplace,
@@ -30,6 +32,7 @@ export default function PlanDisplay({
   reviewStreaming: boolean;
   planSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
   onRetrySave: () => void;
+  onGoToDashboard: () => void;
   onStartOver: () => void;
   replaceConfirmation: {
     totalRecurring: number; provenancedRecurring: number; legacyRecurring: number;
@@ -335,6 +338,31 @@ export default function PlanDisplay({
           </p>
           <button onClick={onRetrySave} className="text-sm font-medium underline cursor-pointer" style={{ color: '#DC2626' }}>
             {t('plan.saveRetry')}
+          </button>
+        </div>
+      )}
+
+      {/* THE INTENDED NEXT STEP.
+          Onboarding used to end here with nothing but the "upload a different
+          file" link, so the only route onward was the account dropdown — which
+          nobody opens. This is the primary action; "upload a different file"
+          stays a quiet text link beneath it because starting over is the rare
+          case, not the expected one.
+
+          The gate is canGoToDashboard(), not an inline check — see that
+          module for why the distinction matters. In short: nothing guards
+          against navigating away mid-save, so this must not render until the
+          plan is known to be persisted. A FAILED REVIEW STILL SHOWS IT: the
+          save runs regardless of the letter, so a household whose prose
+          failed is not stranded. */}
+      {canGoToDashboard({ planSaveStatus, reviewStreaming }) && (
+        <div className="pt-4">
+          <button
+            onClick={onGoToDashboard}
+            className="w-full py-3 rounded-full text-white font-semibold cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
+            style={{ background: '#0F2044' }}
+          >
+            {t('plan.goToDashboard')}
           </button>
         </div>
       )}

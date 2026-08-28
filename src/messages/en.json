@@ -259,6 +259,7 @@
       "noTargetDate": "No target date set yet",
       "notAchievable": "{statedDate} needs {amount}/mo — at your current capacity, {estimatedDate} is realistic.",
       "monthlyReview": "Your First Monthly Review",
+      "goToDashboard": "Go to dashboard",
       "startOver": "Upload a different file",
       "estimatedDate": "Est.",
       "reviewError": "We couldn't generate your review just now. Please try again.",
