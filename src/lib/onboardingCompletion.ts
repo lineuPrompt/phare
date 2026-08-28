@@ -1,48 +1,42 @@
 /**
- * When onboarding is finished enough to offer the way out.
+ * Whether the plan screen should offer the way out to the dashboard.
  *
- * WHY THIS IS A FUNCTION AND NOT AN INLINE `&&` IN THE JSX.
+ * THE RULE: show it whenever the plan screen is up, EXCEPT when the screen is
+ * already asking the user for something. There are exactly two such moments,
+ * and both own the screen while they last:
  *
- * The rule it encodes is a safety rule, not a cosmetic one. The onboarding
- * save is a plain client-side `fetch('/api/save-plan')` and there is NO
- * beforeunload guard anywhere in this codebase — so the cost of showing this
- * button one state too early is a user who taps it mid-save. A rule with that
- * consequence should be stated once, in a place a test can reach, rather than
- * buried in a render expression that nothing can assert on. This repo runs
- * Vitest in a `node` environment with no jsdom and no testing-library, so an
- * inline condition would be genuinely untestable.
+ *   - planSaveStatus === 'error' — the save failed and a Retry is sitting
+ *     there. Leaving now abandons a plan that is genuinely not saved.
+ *   - the replace-confirmation dialog is open — the server came back with
+ *     needsConfirmation, NOTHING has been written, and the user is being asked
+ *     to approve replacing existing data. A competing primary action here
+ *     would let them walk away believing they were done.
  *
- * WHAT "SAFE" MEANS HERE, precisely:
+ * Everything else shows the button. In particular:
  *
- *   planSaveStatus === 'saved' is set in doSave() only after the response came
- *   back ok AND was not a `needsConfirmation` reply. It is the one state in
- *   which the plan is known to be persisted. 'saving' is in flight; 'idle' is
- *   also what a needsConfirmation reply resets to, so the replace dialog is
- *   still open and nothing has been written; 'error' has an unsaved plan and a
- *   Retry sitting next to it.
+ *   NOT GATED ON reviewStreaming. A letter still being written does not make
+ *   the dashboard unreachable, and the plan itself is already fully rendered
+ *   above it.
  *
- *   !reviewStreaming is REDUNDANT TODAY and kept deliberately. streamReview()
- *   clears the flag in its `finally` and only then calls doSave(), so a
- *   'saved' status already implies streaming has stopped. It is asserted here
- *   so that reordering those two — moving the save earlier, or making the
- *   review resumable — cannot silently start rendering this button over a
- *   half-written letter. The redundancy is the point.
+ *   NOT GATED ON planSaveStatus === 'saved'. An earlier version of this
+ *   required it, on the reasoning that navigating away mid-save could abandon
+ *   an in-flight request. That was rejected deliberately: the "Saving your
+ *   plan…" line renders directly beside the button while a save is in flight,
+ *   so the user can see the state they are in, and the far more common failure
+ *   was a user stranded on a finished plan screen with no visible way forward.
+ *   A stranded user is certain; the mid-save exit is rare and self-signposted.
  *
- * A REVIEW FAILURE MUST NOT STRAND THE USER, and this rule gets that for free
- * rather than by special-casing it. streamReview() calls doSave()
- * unconditionally after its try/catch/finally, with placeholder copy when the
- * prose failed, so a failed review still reaches planSaveStatus === 'saved'
- * and the button still appears. There is no `reviewText` term in this
- * predicate on purpose: adding one would reintroduce exactly the coupling
- * between "the letter worked" and "the plan is safe" that the save flow was
- * restructured to remove.
+ * A FAILED REVIEW STILL SHOWS THE BUTTON, and now for a simpler reason than
+ * before — the review does not appear in this predicate at all. There is no
+ * path by which a letter failing to generate can hide the way out.
  */
 
 export type PlanSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export function canGoToDashboard(state: {
   planSaveStatus: PlanSaveStatus;
-  reviewStreaming: boolean;
+  /** True while the needsConfirmation replace dialog is on screen. */
+  replaceConfirmationOpen: boolean;
 }): boolean {
-  return state.planSaveStatus === 'saved' && !state.reviewStreaming;
+  return state.planSaveStatus !== 'error' && !state.replaceConfirmationOpen;
 }

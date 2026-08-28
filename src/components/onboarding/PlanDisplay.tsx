@@ -349,13 +349,13 @@ export default function PlanDisplay({
           stays a quiet text link beneath it because starting over is the rare
           case, not the expected one.
 
-          The gate is canGoToDashboard(), not an inline check — see that
-          module for why the distinction matters. In short: nothing guards
-          against navigating away mid-save, so this must not render until the
-          plan is known to be persisted. A FAILED REVIEW STILL SHOWS IT: the
-          save runs regardless of the letter, so a household whose prose
-          failed is not stranded. */}
-      {canGoToDashboard({ planSaveStatus, reviewStreaming }) && (
+          It renders whenever the plan screen does, and is withheld only for
+          the two states that are themselves asking the user for something:
+          a save error (Retry, above) and the replace-confirmation dialog
+          (nothing written yet). See canGoToDashboard for why it is
+          deliberately NOT gated on the save completing or the review
+          finishing — an earlier version was, and left users stranded. */}
+      {canGoToDashboard({ planSaveStatus, replaceConfirmationOpen: replaceConfirmation !== null }) && (
         <div className="pt-4">
           <button
             onClick={onGoToDashboard}
