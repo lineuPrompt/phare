@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
+import { computeGoalBalance, GOAL_ACCOUNT_TYPES, acceptsOpeningBalance } from '@/lib/dashboardHelpers';
+import { setOpeningBalance } from '@/lib/openingBalance';
 import { businessToday } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
@@ -27,7 +28,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { statementCloseDay, paymentDay, name, goalTarget, goalTargetDate, newAmountOwed } = body;
+    const { statementCloseDay, paymentDay, name, goalTarget, goalTargetDate, newAmountOwed, openingBalance } = body;
 
     const supabase = await createClient();
     const householdId = await getHousehold(supabase);
@@ -78,6 +79,35 @@ export async function PATCH(
       updates.goal_target_date = goalTargetDate;
     }
 
+    // Opening balance — a STATED STARTING POSITION, not a record of an event,
+    // so it is upserted in place rather than corrected by a delta row. This is
+    // deliberately the opposite of newAmountOwed below, which appends a
+    // 'Balance correction' because a debt balance genuinely moved over time.
+    // Sending null or 0 removes it ("I never had a starting balance"), which
+    // is a real answer and distinct from omitting the field entirely.
+    if ('openingBalance' in body) {
+      // These two would fight. newAmountOwed's delta is computed from the
+      // balance as it stands, and changing the opening balance in the same
+      // request moves that balance underneath it — the delta would be wrong
+      // by exactly the opening-balance change. They mean different things
+      // (a re-baseline vs. a restated starting position); pick one.
+      if (newAmountOwed !== undefined && newAmountOwed !== null) {
+        return NextResponse.json(
+          { error: 'Send either openingBalance or newAmountOwed, not both — they would compute against each other.' },
+          { status: 400 }
+        );
+      }
+      if (!acceptsOpeningBalance(current.type)) {
+        return NextResponse.json(
+          { error: 'An opening balance can only be set on a savings, TFSA, RRSP, or debt account.' },
+          { status: 400 }
+        );
+      }
+      if (openingBalance !== null && !Number.isFinite(Number(openingBalance))) {
+        return NextResponse.json({ error: 'Opening balance must be a number or null' }, { status: 400 });
+      }
+    }
+
     // Debt correction: insert a new transaction for the delta between the
     // desired balance and today's actual (today-cutoff) balance — never
     // mutate the opening row. Only meaningful for a debt account.
@@ -105,8 +135,22 @@ export async function PATCH(
       correctionAmount = Math.round((desiredBalance - currentBalance) * 100) / 100;
     }
 
-    if (Object.keys(updates).length === 0 && correctionAmount === null) {
+    if (Object.keys(updates).length === 0 && correctionAmount === null && !('openingBalance' in body)) {
       return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+    }
+
+    // Applied before the account row update so a failure here surfaces as an
+    // error instead of a half-applied edit. Unlike account creation, this is
+    // fatal: the household explicitly asked for this number to change.
+    if ('openingBalance' in body) {
+      const amount = openingBalance === null ? null : Number(openingBalance);
+      const obErr = await setOpeningBalance(
+        supabase, householdId, id, amount, businessToday(timezone)
+      );
+      if (obErr) {
+        console.error('Opening balance update error:', obErr);
+        return NextResponse.json({ error: obErr }, { status: 500 });
+      }
     }
 
     if (correctionAmount !== null && correctionAmount !== 0) {

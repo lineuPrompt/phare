@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server';
 import { businessToday, materializeFromMonthStart, anchorDateForDayOfMonth } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { materializeTransferOccurrences } from '@/lib/recurringTransferHelpers';
+import { setOpeningBalance } from '@/lib/openingBalance';
 
 /**
  * POST /api/sinking-funds/start-funding
@@ -33,6 +34,16 @@ export async function POST(request: Request) {
     const anchorDay = rawAnchorDay == null ? null : Number(rawAnchorDay);
     if (anchorDay !== null && (!Number.isInteger(anchorDay) || anchorDay < 1 || anchorDay > 31)) {
       return NextResponse.json({ error: 'Contribution day must be a whole number from 1 to 31' }, { status: 400 });
+    }
+
+    // Money already set aside for these bills before Phare. The buffer
+    // account is type 'savings' (flagged is_sinking_fund), so it takes the
+    // same opening-balance row every other goal account does — no special
+    // case, and it lands in the balance the Reserve Fund card already shows.
+    const rawOpeningBalance = (body as { openingBalance?: unknown }).openingBalance;
+    const openingBalance = rawOpeningBalance == null ? null : Number(rawOpeningBalance);
+    if (openingBalance !== null && !Number.isFinite(openingBalance)) {
+      return NextResponse.json({ error: 'Opening balance must be a number' }, { status: 400 });
     }
 
     const supabase = await createClient();
@@ -114,6 +125,15 @@ export async function POST(request: Request) {
 
     const timezone = await getHouseholdTimezone(supabase, householdId);
     const today = businessToday(timezone);
+
+    if (openingBalance !== null && openingBalance !== 0) {
+      const obErr = await setOpeningBalance(supabase, householdId, account.id, openingBalance, today);
+      if (obErr) {
+        console.error('Sinking fund opening balance error:', obErr);
+        // Non-fatal, same as account creation: the buffer exists and is
+        // funded going forward; only the pre-Phare seed is missing.
+      }
+    }
 
     // anchorDateForDayOfMonth never clamps the chosen day (a 31st stays a
     // 31st, rolling to a month that has one) — see its note. No day given

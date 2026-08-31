@@ -20,8 +20,16 @@ export default function GoalEditForm({
   onCancel: () => void;
 }) {
   const t = useTranslations('goals.edit');
+  const tGoals = useTranslations('goals');
+
+  // The account's single opening-balance row, if it has one. Identified by
+  // the flag the API sends, never by its description — that is editable text.
+  const existingOpeningBalance = goal.transfers.find((tr) => tr.isOpeningBalance) ?? null;
 
   const [name, setName] = useState(goal.name);
+  const [openingBalance, setOpeningBalance] = useState(
+    existingOpeningBalance ? String(existingOpeningBalance.amount) : ''
+  );
   const [hasTarget, setHasTarget] = useState(goal.goalTarget !== null);
   const [goalTarget, setGoalTarget] = useState(goal.goalTarget !== null ? String(goal.goalTarget) : '');
   const [hasTargetDate, setHasTargetDate] = useState(goal.goalTargetDate !== null);
@@ -42,7 +50,12 @@ export default function GoalEditForm({
           name: name.trim(),
           goalTarget: hasTarget ? parseFloat(goalTarget) : null,
           goalTargetDate: hasTargetDate ? goalTargetDate : null,
-          ...(goal.isDebt ? { newAmountOwed: parseFloat(amountOwed) || 0 } : {}),
+          // Never both: the route rejects them together, because the debt
+          // delta is computed against a balance an opening-balance change
+          // would move underneath it.
+          ...(goal.isDebt
+            ? { newAmountOwed: parseFloat(amountOwed) || 0 }
+            : { openingBalance: openingBalance.trim() ? Number(openingBalance) : null }),
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
@@ -71,6 +84,23 @@ export default function GoalEditForm({
           <input type="number" min="0" step="0.01" value={amountOwed} onChange={(e) => setAmountOwed(e.target.value)}
             className="w-full px-3 py-2 rounded-xl text-sm outline-none" style={inputStyle} />
           <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>{t('amountOwedHint')}</p>
+        </div>
+      )}
+
+      {/* Money the household already had before Phare. This is where an
+          EXISTING account gets one — creation is not the only moment, since
+          every household that predates this field has to reach it somehow.
+          Cleared to blank, it is removed rather than set to zero. */}
+      {!goal.isDebt && (
+        <div>
+          <label className="block text-xs font-medium mb-1" style={{ color: '#0F2044' }}>
+            {tGoals('openingBalanceLabel')}
+          </label>
+          <input type="number" step="0.01" value={openingBalance}
+            onChange={(e) => setOpeningBalance(e.target.value)}
+            placeholder={tGoals('openingBalancePlaceholder')}
+            className="w-full px-3 py-2 rounded-xl text-sm outline-none" style={inputStyle} />
+          <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>{tGoals('openingBalanceHint')}</p>
         </div>
       )}
 

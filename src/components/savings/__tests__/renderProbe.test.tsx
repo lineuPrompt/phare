@@ -27,9 +27,19 @@ import fr from '@/messages/fr.json';
 
 const MESSAGES = { en, fr } as const;
 
-// Strips tags so the printed block reads as the copy a household would see.
+// Strips tags and decodes entities so the printed block reads as the copy a
+// household would actually see. Decoding matters for French, where every
+// apostrophe ships as &#x27; — comparing raw message text against escaped
+// markup fails on the punctuation rather than on the copy.
 const text = (html: string) =>
-  html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 function render(locale: 'en' | 'fr', node: React.ReactNode) {
   return renderToStaticMarkup(
@@ -103,4 +113,40 @@ describe('contribution editor + drift notice render in both locales', () => {
       expect(m.projectionHidden).toBeTruthy();
     }
   });
+});
+
+// ---------------------------------------------------------------------------
+// Opening balance (2026-08-31). The goal forms render the new goals.* copy;
+// a missing key throws here rather than shipping an empty label.
+// ---------------------------------------------------------------------------
+import CreateGoalForm from '@/components/goals/CreateGoalForm';
+import GoalEditForm from '@/components/goals/GoalEditForm';
+import type { GoalAccount } from '@/components/dashboard/types';
+
+const GOAL: GoalAccount = {
+  id: 'g1', name: 'Vacation', type: 'savings', isDebt: false, balance: 500,
+  goalTarget: 13000, goalTargetDate: '2028-12-28', onTrack: null,
+  monthlyContribution: null, estimatedDate: null,
+  transfers: [{ id: 'ob', date: '2026-07-01', description: 'x', amount: 500, isOpeningBalance: true }],
+  upcomingTransfers: [], recurringContribution: null, debtPayoff: null,
+};
+
+describe('opening-balance copy renders in both locales', () => {
+  for (const locale of ['en', 'fr'] as const) {
+    it(`${locale}: create form shows the "already saved" field`, () => {
+      const html = render(locale, <CreateGoalForm onCreated={() => {}} />);
+      console.log(`\n--- ${locale.toUpperCase()} create form (opening balance) ---\n${text(html)}\n`);
+      expect(html).not.toMatch(/goals\.opening/);
+      const m = MESSAGES[locale].goals as Record<string, string>;
+      expect(text(html)).toContain(m.openingBalanceLabel);
+      expect(text(html)).toContain(m.openingBalanceHint);
+    });
+
+    it(`${locale}: edit form seeds the existing opening balance`, () => {
+      const html = render(locale, <GoalEditForm goal={GOAL} onSaved={() => {}} onCancel={() => {}} />);
+      console.log(`\n--- ${locale.toUpperCase()} edit form (opening balance) ---\n${text(html)}\n`);
+      expect(html).not.toMatch(/goals\.opening/);
+      expect(html).toContain('value="500"'); // read off the flagged row, not the description
+    });
+  }
 });

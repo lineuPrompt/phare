@@ -54,6 +54,10 @@ export type GoalTransfer = {
   date: string;
   description: string | null;
   amount: number;
+  // A stated starting position rather than a contribution — labelled from
+  // i18n and not editable as a ledger line (see lib/openingBalance.ts).
+  // Optional because only api/goals populates it.
+  isOpeningBalance?: boolean;
 };
 
 export type RecurringContribution = {

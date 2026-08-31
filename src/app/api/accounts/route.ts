@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
+import { GOAL_ACCOUNT_TYPES, acceptsOpeningBalance } from '@/lib/dashboardHelpers';
 import { logEvent, isFirstEvent } from '@/lib/eventLogger';
 import { businessToday } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
+import { setOpeningBalance } from '@/lib/openingBalance';
 
 async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -50,6 +51,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid account type' }, { status: 400 });
     }
 
+    // An opening balance is only meaningful where the balance is Σ the
+    // account's own rows. On chequing it becomes a phantom outflow —
+    // inflating savings, cutting net cash flow, and appearing on the
+    // Timeline as a movement that never happened — and reconciliation would
+    // not flag it, because both paths agree on the wrong number. On a card
+    // it means nothing to the envelope derivation. See acceptsOpeningBalance.
+    // Rejected loudly rather than dropped silently: a caller sending this
+    // believes it will be recorded.
+    const wantsOpeningBalance = openingBalance != null && Number(openingBalance) !== 0;
+    if (wantsOpeningBalance && !acceptsOpeningBalance(type)) {
+      return NextResponse.json(
+        { error: 'An opening balance can only be set on a savings, TFSA, RRSP, or debt account.' },
+        { status: 400 }
+      );
+    }
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const householdId = user
@@ -93,19 +110,11 @@ export async function POST(request: Request) {
     // balance ("Credit line: −$5,000"); no chequing-side peer, since this is
     // money the household already owed/had before Phare, not a transfer
     // happening today.
-    if (openingBalance != null && Number(openingBalance) !== 0) {
+    if (wantsOpeningBalance) {
       const timezone = await getHouseholdTimezone(supabase, householdId);
-      const { error: openingErr } = await supabase.from('transactions').insert({
-        household_id: householdId,
-        member_id: null,
-        category_id: null,
-        description: 'Starting balance / Solde initial',
-        amount: Number(openingBalance),
-        date: businessToday(timezone),
-        type: 'transfer',
-        source: 'manual',
-        account_id: account.id,
-      });
+      const openingErr = await setOpeningBalance(
+        supabase, householdId, account.id, Number(openingBalance), businessToday(timezone)
+      );
       if (openingErr) {
         console.error('Account opening balance insert error:', openingErr);
         // Non-fatal: account created, just the opening balance didn't seed.

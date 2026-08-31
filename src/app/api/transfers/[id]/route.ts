@@ -25,11 +25,11 @@ async function resolvePair(
   supabase: Awaited<ReturnType<typeof createClient>>,
   id: string,
   householdId: string
-): Promise<{ ids: string[]; type: string | null; recurringItemId: string | null; date: string | null; amount: number | null }> {
+): Promise<{ ids: string[]; type: string | null; recurringItemId: string | null; date: string | null; amount: number | null; isOpeningBalance: boolean }> {
   const [direct, reverse] = await Promise.all([
     supabase
       .from('transactions')
-      .select('id, type, amount, transfer_peer_id, recurring_item_id, date')
+      .select('id, type, amount, transfer_peer_id, recurring_item_id, date, is_opening_balance')
       .eq('id', id)
       .eq('household_id', householdId)
       .maybeSingle(),
@@ -63,8 +63,19 @@ async function resolvePair(
   // query found.
   const amount = target?.amount != null ? Number(target.amount) : reverse.data?.[0]?.amount != null ? Number(reverse.data[0].amount) : null;
 
-  return { ids: [...ids], type, recurringItemId, date, amount };
+  // An opening balance is a stated starting position, changed through the
+  // account form (PATCH /api/accounts/[id]) so it stays a single upsertable
+  // row. Editing it as a stray ledger line here would sidestep that and, on
+  // delete, tombstone a date that never had an occurrence.
+  const isOpeningBalance = target?.is_opening_balance === true;
+
+  return { ids: [...ids], type, recurringItemId, date, amount, isOpeningBalance };
 }
+
+/** Shared refusal so PATCH and DELETE cannot drift on the wording or the rule. */
+const OPENING_BALANCE_LOCKED = {
+  error: "This is the account's opening balance, not a contribution. Change it in the goal's settings — editing it here would turn a stated starting position into a movement.",
+} as const;
 
 // See src/app/api/expenses/[id]/route.ts's identical helper for the full
 // rationale — same detach-on-edit/delete tombstone mechanism, applied here
@@ -114,10 +125,13 @@ export async function PATCH(
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    const { ids, type, recurringItemId, date: originalDate, amount: existingAmount } = await resolvePair(supabase, id, householdId);
+    const { ids, type, recurringItemId, date: originalDate, amount: existingAmount, isOpeningBalance } = await resolvePair(supabase, id, householdId);
 
     if (ids.length === 0 || type !== 'transfer') {
       return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
+    }
+    if (isOpeningBalance) {
+      return NextResponse.json(OPENING_BALANCE_LOCKED, { status: 400 });
     }
 
     const sign = (existingAmount ?? 0) < 0 ? -1 : 1;
@@ -165,10 +179,13 @@ export async function DELETE(
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    const { ids, type, recurringItemId, date: originalDate } = await resolvePair(supabase, id, householdId);
+    const { ids, type, recurringItemId, date: originalDate, isOpeningBalance } = await resolvePair(supabase, id, householdId);
 
     if (ids.length === 0 || type !== 'transfer') {
       return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
+    }
+    if (isOpeningBalance) {
+      return NextResponse.json(OPENING_BALANCE_LOCKED, { status: 400 });
     }
 
     // Detach-on-delete (Part A3, transfer flavor): tombstone before the pair

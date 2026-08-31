@@ -33,12 +33,12 @@ export async function GET() {
 
     // Fetch FULL (all-time) transaction history for goal accounts.
     // CONTRACT: computeGoalBalance requires full history — never a month-scoped slice.
-    type TxResult = { id: string; amount: number | string; type: string; account_id: string | null; date: string; description: string | null };
+    type TxResult = { id: string; amount: number | string; type: string; account_id: string | null; date: string; description: string | null; is_opening_balance: boolean | null };
     let txData: TxResult[] = [];
     if (goalIds.length > 0) {
       const { data: txResult } = await supabase
         .from('transactions')
-        .select('id, amount, type, account_id, date, description')
+        .select('id, amount, type, account_id, date, description, is_opening_balance')
         .eq('household_id', householdId)
         .in('account_id', goalIds)
         .order('date', { ascending: false });
@@ -105,6 +105,10 @@ export async function GET() {
         date:        tx.date,
         description: tx.description,
         amount:      Number(tx.amount),
+        // Lets the history list label this row from i18n and hide the
+        // edit/delete affordances — it is changed through the goal's own
+        // form, and PATCH/DELETE /api/transfers/[id] refuse it outright.
+        isOpeningBalance: tx.is_opening_balance === true,
       });
       const transfers = goalTransfers.filter((tx) => tx.date <= today).map(toLine);
       const upcomingTransfers = goalTransfers

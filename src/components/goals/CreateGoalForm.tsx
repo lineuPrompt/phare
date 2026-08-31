@@ -19,6 +19,7 @@ export default function CreateGoalForm({ onCreated }: Props) {
   const [goalTarget, setGoalTarget] = useState('');
   const [goalTargetDate, setGoalTargetDate] = useState('');
   const [amountOwed, setAmountOwed] = useState('');
+  const [openingBalance, setOpeningBalance] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,10 +42,15 @@ export default function CreateGoalForm({ onCreated }: Props) {
         // from a negative balance toward zero, not toward a positive sum.
         goalTarget:      isDebt ? (goalTarget ? Number(goalTarget) : 0) : (goalTarget ? Number(goalTarget) : null),
         goalTargetDate:  goalTargetDate || null,
-        // Opening balance seeds the real starting ledger row — negative for
-        // a debt (money already owed before Phare), never entered by the
-        // user as negative themselves (they think in terms of "I owe $X").
-        openingBalance:  isDebt ? -Math.abs(Number(amountOwed)) : null,
+        // Opening balance seeds the real starting ledger row. Negative for a
+        // debt (money already owed before Phare), never entered by the user
+        // as negative themselves (they think in terms of "I owe $X");
+        // positive for a savings/TFSA/RRSP account, where the household
+        // thinks in terms of "I already have $X". One mechanism, two
+        // framings. Blank means no starting balance and sends null.
+        openingBalance:  isDebt
+          ? -Math.abs(Number(amountOwed))
+          : (openingBalance.trim() ? Number(openingBalance) : null),
       }),
     });
 
@@ -61,6 +67,7 @@ export default function CreateGoalForm({ onCreated }: Props) {
     setGoalTarget('');
     setGoalTargetDate('');
     setAmountOwed('');
+    setOpeningBalance('');
     onCreated();
   }
 
@@ -124,6 +131,29 @@ export default function CreateGoalForm({ onCreated }: Props) {
             className="w-full px-3 py-2 rounded-xl text-sm"
             style={{ border: '1.5px solid #D1D5DB', outline: 'none', color: '#0F2044' }}
           />
+        </div>
+      )}
+
+      {/* Non-debt: money already in the account before Phare. Same mechanism
+          as the debt field above — a one-sided starting-balance row — just
+          positive, and phrased the way a household thinks about savings
+          rather than debt. It counts toward the target (goal progress reads
+          the account balance) and never becomes a Timeline movement. */}
+      {!isDebt && (
+        <div>
+          <label className="block text-sm font-medium mb-1" style={{ color: '#0F2044' }}>
+            {t('openingBalanceLabel')}
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            value={openingBalance}
+            onChange={(e) => setOpeningBalance(e.target.value)}
+            placeholder={t('openingBalancePlaceholder')}
+            className="w-full px-3 py-2 rounded-xl text-sm"
+            style={{ border: '1.5px solid #D1D5DB', outline: 'none', color: '#0F2044' }}
+          />
+          <p className="text-xs mt-1.5" style={{ color: '#9CA3AF' }}>{t('openingBalanceHint')}</p>
         </div>
       )}
 

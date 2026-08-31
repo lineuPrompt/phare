@@ -34,6 +34,7 @@ type BufferData = SinkingFundBuffer & {
 export default function ReserveFundSection({ locale }: { locale: string }) {
   const t = useTranslations('sinkingFundsPage');
   const tEditor = useTranslations('contributionEditor');
+  const tGoals = useTranslations('goals');
   const tDash = useTranslations('dashboard');
   const router = useRouter();
 
@@ -47,6 +48,7 @@ export default function ReserveFundSection({ locale }: { locale: string }) {
   // today's day — the old hardcoded behaviour — so leaving it alone changes
   // nothing for anyone who doesn't care.
   const [startDay, setStartDay] = useState('');
+  const [startOpeningBalance, setStartOpeningBalance] = useState('');
 
   // Form state, validation and the PATCH now live in ContributionEditor,
   // shared with the goal cards below — this section only decides whether it
@@ -104,7 +106,10 @@ export default function ReserveFundSection({ locale }: { locale: string }) {
       const res = await fetch('/api/sinking-funds/start-funding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ anchorDay: day }),
+        body: JSON.stringify({
+          anchorDay: day,
+          openingBalance: startOpeningBalance.trim() ? Number(startOpeningBalance) : null,
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to start');
       load();
@@ -254,6 +259,25 @@ export default function ReserveFundSection({ locale }: { locale: string }) {
                     />
                   </label>
                   <p className="w-full text-xs" style={{ color: '#9CA3AF' }}>{t('startFundingDayHint')}</p>
+                </div>
+                {/* Money already set aside for these bills before Phare. The
+                    buffer account is an ordinary goal account underneath, so
+                    it takes the same opening-balance row — it lands in the
+                    balance above and never on the Timeline. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs" style={{ color: '#6B7280' }}>
+                    {tGoals('openingBalanceLabel')}
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={startOpeningBalance}
+                      placeholder={tGoals('openingBalancePlaceholder')}
+                      onChange={(e) => setStartOpeningBalance(e.target.value)}
+                      className="w-28 px-2 py-1.5 rounded text-sm outline-none"
+                      style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
+                    />
+                  </label>
+                  <p className="w-full text-xs" style={{ color: '#9CA3AF' }}>{tGoals('openingBalanceHint')}</p>
                 </div>
                 {startError && <p className="text-sm" style={{ color: '#DC2626' }}>{startError}</p>}
                 <button

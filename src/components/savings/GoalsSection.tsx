@@ -575,26 +575,45 @@ export default function GoalsSection({ locale }: { locale: string }) {
                             {fmtDate(tr.date)}
                           </span>
                           <span className="flex-1 min-w-0 truncate text-sm" style={{ color: '#0F2044' }}>
-                            {/* A negative-amount row on a debt account is a draw (or the
-                                pre-Phare opening balance) — same distinct warning icon as
-                                Timeline, never blending in with a payment. */}
-                            {tr.amount < 0 && <span className="mr-1">🚨</span>}
-                            {tr.description ?? '—'}
+                            {/* A negative-amount row on a debt account is a draw —
+                                same distinct warning icon as Timeline, never
+                                blending in with a payment. The opening balance is
+                                also negative for a debt, but it is labelled below
+                                rather than flagged: it is a stated starting
+                                position, not something that moved. */}
+                            {tr.amount < 0 && !tr.isOpeningBalance && <span className="mr-1">🚨</span>}
+                            {/* Rendered from i18n, not from the stored bilingual
+                                'Starting balance / Solde initial' literal — the
+                                flag is what identifies it now. */}
+                            {tr.isOpeningBalance ? t('openingBalanceRowLabel') : (tr.description ?? '—')}
                           </span>
                           <span className="text-sm font-medium shrink-0" style={{ color: tr.amount < 0 ? '#DC2626' : '#2ABFBF' }}>
                             {tr.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tr.amount), locale)}
                           </span>
                           <div className="flex gap-1 shrink-0">
-                            <button
-                              onClick={() => startEdit(tr)}
-                              className="px-2 py-1 rounded text-xs cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                              style={{ color: '#2ABFBF' }}
-                            >{t('editContribution')}</button>
-                            <button
-                              onClick={() => setConfirmDelete(tr)}
-                              className="px-2 py-1 rounded text-xs cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                              style={{ color: '#DC2626' }}
-                            >{t('deleteContribution')}</button>
+                            {/* An opening balance is changed through the goal's own
+                                form so it stays one upsertable row. Editing it as a
+                                ledger line would turn a stated starting position
+                                into a movement; PATCH/DELETE /api/transfers/[id]
+                                refuse it server-side regardless of this UI. */}
+                            {tr.isOpeningBalance ? (
+                              <span className="px-2 py-1 text-xs" style={{ color: '#9CA3AF' }}>
+                                {t('openingBalanceLocked')}
+                              </span>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => startEdit(tr)}
+                                  className="px-2 py-1 rounded text-xs cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                                  style={{ color: '#2ABFBF' }}
+                                >{t('editContribution')}</button>
+                                <button
+                                  onClick={() => setConfirmDelete(tr)}
+                                  className="px-2 py-1 rounded text-xs cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                                  style={{ color: '#DC2626' }}
+                                >{t('deleteContribution')}</button>
+                              </>
+                            )}
                           </div>
                         </div>
                       );

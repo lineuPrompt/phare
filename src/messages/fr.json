@@ -842,7 +842,13 @@
       "confirmDeleteRecurringOnly": "Sa règle de contribution récurrente sera annulée.",
       "confirmDeleteBtn": "Supprimer l'objectif",
       "deleting": "Suppression..."
-    }
+    },
+    "openingBalanceLabel": "Déjà épargné",
+    "openingBalanceHint": "Argent déjà dans ce compte avant Phare. Il compte vers votre objectif et n'apparaît jamais comme un mouvement dans votre chronologie.",
+    "openingBalancePlaceholder": "0,00",
+    "openingBalanceRowLabel": "Solde initial",
+    "openingBalanceLocked": "Il s'agit du solde initial du compte. Modifiez-le dans les réglages de l'objectif.",
+    "openingBalanceInvalid": "Entrez un nombre, ou laissez vide pour aucun."
   },
   "sinkingFundsPage": {
     "startFundingDayLabel": "Jour de la contribution",

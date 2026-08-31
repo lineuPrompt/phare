@@ -17,6 +17,7 @@ import {
 } from '@/lib/importProvenance';
 import { resolveMemberId, type IncomeFrequency } from '@phare/core';
 import { ensureChequingAccount } from '@/lib/accountHelpers';
+import { OPENING_BALANCE_DESCRIPTION } from '@/lib/openingBalance';
 
 type PlanCategory = {
   name: string;
@@ -312,13 +313,18 @@ export async function POST(request: Request) {
           household_id: householdId,
           member_id: null,
           category_id: null,
-          description: 'Starting balance / Solde initial',
+          description: OPENING_BALANCE_DESCRIPTION,
           amount: goal!.savedSoFar,
           date: monthDate,
           type: 'transfer' as const,
           source: transactionSource,
           account_id: account.id,
           file_import_id: fileImportId,
+          // Marks these as stated starting positions rather than movements,
+          // so the goal edit form can change them later and the UI can label
+          // them from i18n. Only ever set on the goal accounts filtered above
+          // — the trigger rejects it anywhere else.
+          is_opening_balance: true,
         }));
 
       if (startingBalanceRows.length > 0) {

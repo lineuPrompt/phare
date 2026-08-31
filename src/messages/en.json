@@ -842,7 +842,13 @@
       "confirmDeleteRecurringOnly": "Its recurring contribution rule will be cancelled.",
       "confirmDeleteBtn": "Delete goal",
       "deleting": "Deleting..."
-    }
+    },
+    "openingBalanceLabel": "Already saved",
+    "openingBalanceHint": "Money already in this account before Phare. It counts toward your target and never appears as a movement on your Timeline.",
+    "openingBalancePlaceholder": "0.00",
+    "openingBalanceRowLabel": "Starting balance",
+    "openingBalanceLocked": "This is the account's opening balance. Change it in the goal's settings.",
+    "openingBalanceInvalid": "Enter a number, or leave it blank for none."
   },
   "sinkingFundsPage": {
     "startFundingDayLabel": "Contribution day",
