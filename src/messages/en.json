@@ -367,6 +367,8 @@
     },
     "errors": {
       "payloadTooLarge": "Your file holds more detail than we can plan from in one pass. Trim the longest sections — or the free-text answers on the Household sheet — and upload it again.",
+      "notAuthenticated": "You need to be signed in to build your plan. Please sign in and try again.",
+      "onboardingQuotaExhausted": "Your household has used all of this month's plan generations. The allowance refills on {date}.",
       "aiUnavailable": "We could not reach the planning service just now. Your numbers are safe — please try again in a few minutes.",
       "rateLimited": "That was a lot of attempts in a short time. Wait a moment, then try again.",
       "planFailed": "We could not build your plan from this file. Please try again.",

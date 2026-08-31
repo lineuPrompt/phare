@@ -4,6 +4,8 @@ import { dedupeSinkingFunds, assembleCalculatedBudget } from '@phare/core';
 import { evaluateGoals, GoalResult, isDebtGoalName, computeDebtPayoff, DebtPayoffResult } from '@/lib/goalHelpers';
 import { businessToday, DEFAULT_HOUSEHOLD_TIMEZONE } from '@phare/core';
 import { createRateLimiter, clientIp } from '@/lib/rateLimit';
+import { requireOnboardingGeneration } from '@/lib/onboardingAuth';
+import { PLAN_GENERATION_EVENT } from '@/lib/onboardingQuota';
 import {
   PLAN_MAX_BODY_BYTES,
   assertBodySize,
@@ -12,18 +14,22 @@ import {
   isPromptInputTooLargeError,
 } from '@/lib/promptInputLimits';
 
-// Unauthenticated by design — but NOT because no household exists yet. The
-// handle_new_user trigger creates a household, user row, member and chequing
-// account at signup, and onboarding runs after signup (the upload page calls
-// authenticated routes throughout). The real reason is narrower: this route
-// reads nothing from the database. The plan is assembled entirely from the
-// request body, so there is no tenant to scope to and nothing for a session
-// to authorize.
+// AUTHENTICATED, and quota'd per household. It was neither until now.
 //
-// It does spend Anthropic tokens on every call, so it gets an
-// IP-keyed cap. A real session fires this exactly once (from confirmAccounts);
-// even a user who errors out and starts over lands at 2–3. 8 per 5 minutes is
-// far above any human path and still bounds a script to ~96 calls/hour/instance.
+// The old header argued this route needed no session because it "reads nothing
+// from the database" — true of the plan assembly, and beside the point. The
+// exposure was never tenancy, it was SPEND: every call bills Anthropic, and the
+// only thing in front of it was an in-process IP limiter that does not bind
+// (a Map per lambda, keyed on x-forwarded-for, which carrier CGNAT collapses to
+// one address for many households at once).
+//
+// So the gate is now identity plus a counted, DB-backed monthly allowance —
+// see onboardingQuota.ts for the numbers and for an honest statement of what a
+// per-household quota does and does not buy on a product with free signup.
+//
+// The IP limiter is KEPT as a cheap in-process burst damper in front of the
+// database round trips, and is no longer load-bearing. It does not bind across
+// instances and must not be described as though it does.
 const rateLimit = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 8 });
 
 const SEED_CATEGORIES = [
@@ -54,6 +60,13 @@ export async function POST(request: NextRequest) {
         { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
       );
     }
+
+    // IDENTITY, THEN ALLOWANCE — both before the body is even read, so an
+    // unauthenticated or exhausted caller never costs a parse, let alone a
+    // model call. reserve-then-generate: the slot is claimed here, so a prompt
+    // that fails downstream cannot be retried without limit.
+    const gate = await requireOnboardingGeneration(PLAN_GENERATION_EVENT);
+    if (!gate.ok) return gate.response;
 
     // SIZE BEFORE PARSE. The body is weighed as raw text so an oversized
     // payload is refused without ever being materialised into an object graph

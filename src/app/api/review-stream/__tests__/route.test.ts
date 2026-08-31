@@ -2,6 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { NextRequest } from 'next/server';
 import { REVIEW_MAX_BODY_BYTES } from '@/lib/promptInputLimits';
 
+// These routes became authenticated and quota'd. This file's assertions are
+// about prompt shape, caps and error codes — not the gate — so the caller is
+// mocked as a signed-in household with room. The gate has its own tests.
+vi.mock('@/lib/supabase-server', async () => {
+  const { supabaseServerMock } = await import('@/lib/__tests__/helpers/onboardingSessionMock');
+  return supabaseServerMock();
+});
+
+
 // ---------------------------------------------------------------------------
 // Route-level contracts for /api/review-stream that the pure lib cannot cover:
 // the malformed-JSON fix (finding M4), the 413 shape, and the proof that

@@ -66,9 +66,17 @@ export function createRateLimiter(options: { windowMs: number; max: number }) {
  * deployment. Locally it is absent and everything keys to 'unknown' — which
  * is correct for dev, where there is only one caller anyway.
  *
- * Keying on IP rather than a body field is deliberate: these routes are
- * pre-signup, so there is no email or household to key on, and a body field
- * would be trivially rotated by the very script this is meant to stop.
+ * WHAT THIS KEY IS AND IS NOT. Keying on IP was originally justified by the
+ * onboarding routes being "pre-signup". That was wrong — signup precedes
+ * onboarding, and those routes now resolve a real household (onboardingAuth.ts).
+ * The durable ceiling is the per-household monthly allowance in
+ * onboardingQuota.ts, which is counted in Postgres and therefore binds across
+ * every instance.
+ *
+ * This limiter remains an in-process BURST DAMPER in front of that, and nothing
+ * more. It does not bind across instances, and carrier CGNAT puts many
+ * households behind one address, so it must never again be treated as the
+ * spend control.
  */
 export function clientIp(request: Request): string {
   const forwarded = request.headers.get('x-forwarded-for');

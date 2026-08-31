@@ -3,6 +3,15 @@ import type { NextRequest } from 'next/server';
 import { computeDebtPayoff } from '@/lib/goalHelpers';
 import { businessToday, DEFAULT_HOUSEHOLD_TIMEZONE } from '@phare/core';
 
+// These routes became authenticated and quota'd. This file's assertions are
+// about prompt shape, caps and error codes — not the gate — so the caller is
+// mocked as a signed-in household with room. The gate has its own tests.
+vi.mock('@/lib/supabase-server', async () => {
+  const { supabaseServerMock } = await import('@/lib/__tests__/helpers/onboardingSessionMock');
+  return supabaseServerMock();
+});
+
+
 // The AI must never instantiate structured objects (sinking-fund rows, goal
 // cards, debt-payoff cards) for the manual-form (calculated) source. These
 // tests drive a DELIBERATELY MISBEHAVING AI — one that returns sinking funds,

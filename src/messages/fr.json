@@ -367,6 +367,8 @@
     },
     "errors": {
       "payloadTooLarge": "Votre fichier contient plus de détails que nous pouvons traiter d’un seul coup. Réduisez les sections les plus longues — ou les réponses libres de l’onglet Ménage — puis téléversez-le de nouveau.",
+      "notAuthenticated": "Vous devez être connecté pour bâtir votre plan. Connectez-vous, puis réessayez.",
+      "onboardingQuotaExhausted": "Votre ménage a utilisé toutes les générations de plan de ce mois-ci. Le quota se renouvelle le {date}.",
       "aiUnavailable": "Nous n’avons pas pu joindre le service de planification. Vos chiffres sont conservés — réessayez dans quelques minutes.",
       "rateLimited": "Cela fait beaucoup de tentatives en peu de temps. Patientez un instant, puis réessayez.",
       "planFailed": "Nous n’avons pas pu bâtir votre plan à partir de ce fichier. Veuillez réessayer.",

@@ -1,7 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as XLSX from 'xlsx';
 import type { NextRequest } from 'next/server';
 import { POST } from '../route';
+
+// These routes became authenticated and quota'd. This file's assertions are
+// about prompt shape, caps and error codes — not the gate — so the caller is
+// mocked as a signed-in household with room. The gate has its own tests.
+vi.mock('@/lib/supabase-server', async () => {
+  const { supabaseServerMock } = await import('@/lib/__tests__/helpers/onboardingSessionMock');
+  return supabaseServerMock();
+});
+
 
 // ---------------------------------------------------------------------------
 // /api/upload never touches Supabase — it's a pure parse-or-refuse endpoint

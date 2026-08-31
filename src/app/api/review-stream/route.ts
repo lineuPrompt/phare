@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { anthropic } from '@/lib/anthropic';
 import { createRateLimiter, clientIp } from '@/lib/rateLimit';
+import { requireOnboardingGeneration } from '@/lib/onboardingAuth';
+import { REVIEW_GENERATION_EVENT } from '@/lib/onboardingQuota';
 import {
   REVIEW_MAX_BODY_BYTES,
   assertBodySize,
@@ -8,15 +10,19 @@ import {
   isPromptInputTooLargeError,
 } from '@/lib/promptInputLimits';
 
-// Same posture as /api/plan: unauthenticated because this route reads nothing
-// from the database — the letter is written from the plan in the request body
-// — and so has no tenant to scope to. NOT because no household exists: the
-// signup trigger creates one and onboarding runs after signup.
+// Same posture as /api/plan: AUTHENTICATED, with a counted per-household
+// monthly allowance. It was unauthenticated until now on the reasoning that it
+// reads nothing from the database — true, and beside the point, since every
+// call bills Anthropic (streamed, 1500 max_tokens).
 //
-// It does spend Anthropic tokens (streamed, 1500 max_tokens).
-// The client fires this exactly 1:1 with /api/plan, immediately after it
-// succeeds, and never retries it on its own — a failed stream falls back to
-// placeholder copy and proceeds to save. So the budget matches /api/plan's.
+// IT RESERVES ITS OWN SLOT rather than riding on /api/plan's. The client fires
+// the two 1:1, so sharing one reservation looks tidier — but nothing stops a
+// script calling this route directly without ever touching /api/plan, and a
+// route that only READS a counter it never increments is unbounded. Separate
+// event type, same limit. See onboardingQuota.ts.
+//
+// The IP limiter is kept as an in-process burst damper and is no longer
+// load-bearing; it does not bind across instances.
 const rateLimit = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 8 });
 
 // Every non-success path returns JSON even though the default success path
@@ -50,6 +56,12 @@ export async function POST(request: NextRequest) {
         { 'Retry-After': String(limit.retryAfterSeconds) }
       );
     }
+
+    // IDENTITY, THEN ALLOWANCE — before the body is read, so an
+    // unauthenticated or exhausted caller costs nothing. Applies to BOTH
+    // response shapes: ?stream=0 changes what comes back, never who may ask.
+    const gate = await requireOnboardingGeneration(REVIEW_GENERATION_EVENT);
+    if (!gate.ok) return gate.response;
 
     // SIZE BEFORE PARSE — same doctrine as /api/plan. The cap is larger here
     // because this body legitimately carries the assembled plan; see

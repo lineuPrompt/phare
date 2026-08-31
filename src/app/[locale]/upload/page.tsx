@@ -18,6 +18,7 @@ import { dropResolvedItems } from '@phare/core';
 import { runPlausibilityGuard, PlausibilityResult } from '@phare/core';
 import { TemplateParseResult } from '@/lib/templateParser';
 import { formatCAD } from '@phare/core';
+import { formatResetDate } from '@/lib/onboardingQuota';
 import SupportLine from '@/components/shared/SupportLine';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 
@@ -195,6 +196,40 @@ export default function UploadPage() {
   }, [writeOpeningAnchor]);
 
   /**
+   * Server error bodies carry a machine-readable `code`; the `error` prose is
+   * a last-resort fallback, not the primary channel. Mapping the code to a
+   * translated key is what stops an English sentence from the API surfacing
+   * inside an otherwise French screen — every one of these routes composes its
+   * prose server-side with no notion of the caller's locale.
+   */
+  const messageForServerError = useCallback(
+    (body: { code?: string; error?: string; resetsOn?: string } | null): string => {
+      switch (body?.code) {
+        case 'PAYLOAD_TOO_LARGE': return t('errors.payloadTooLarge');
+        case 'AI_UNAVAILABLE':    return t('errors.aiUnavailable');
+        case 'RATE_LIMITED':      return t('errors.rateLimited');
+        case 'NOT_AUTHENTICATED': return t('errors.notAuthenticated');
+        // The reset date is the point of this message. "You hit the limit" with
+        // no date leaves a household that legitimately re-onboarded with no
+        // idea whether to wait an hour or three weeks. The server sends
+        // 'YYYY-MM-DD'; the locale formatting happens here, because the API
+        // composes no localized prose.
+        case 'ONBOARDING_QUOTA_EXHAUSTED':
+          return t('errors.onboardingQuotaExhausted', {
+            date: formatResetDate(body.resetsOn, localeOf()),
+          });
+        case 'INVALID_JSON':
+        case 'UNKNOWN_PLAN_SOURCE':
+        case 'PLAN_FAILED':       return t('errors.planFailed');
+        // Unrecognised code (or none): show whatever the server said rather
+        // than swallowing a real reason behind generic copy.
+        default: return body?.error || t('errors.generic');
+      }
+    },
+    [t]
+  );
+
+  /**
    * Generating the narrative review and persisting the plan are independent
    * concerns — a hiccup in the former (network blip, AI error, an
    * interrupted stream) must never silently skip the latter. This used to
@@ -241,6 +276,11 @@ export default function UploadPage() {
         const body = await res.json().catch(() => null);
         if (body?.code === 'PAYLOAD_TOO_LARGE') {
           reviewFailureMessage = t('plan.reviewTooLarge');
+        } else if (body?.code === 'NOT_AUTHENTICATED' || body?.code === 'ONBOARDING_QUOTA_EXHAUSTED') {
+          // Permanent for this attempt and worth naming — without this they
+          // fall through to the generic "try again" copy, which is wrong for a
+          // quota that will not clear until the 1st.
+          reviewFailureMessage = messageForServerError(body);
         }
         throw new Error(`Review stream failed: ${body?.code ?? res.status}`);
       }
@@ -271,7 +311,7 @@ export default function UploadPage() {
     setPendingSavePayload(savePayload);
     setConfirmReplaceFlag(false);
     await doSave(savePayload, false);
-  }, [t, doSave, fileMeta]);
+  }, [t, doSave, fileMeta, messageForServerError]);
 
   const retrySave = useCallback(async () => {
     if (!pendingSavePayload) return;
@@ -310,29 +350,6 @@ export default function UploadPage() {
     router.refresh();
   }, [router]);
 
-  /**
-   * Server error bodies carry a machine-readable `code`; the `error` prose is
-   * a last-resort fallback, not the primary channel. Mapping the code to a
-   * translated key is what stops an English sentence from the API surfacing
-   * inside an otherwise French screen — every one of these routes composes its
-   * prose server-side with no notion of the caller's locale.
-   */
-  const messageForServerError = useCallback(
-    (body: { code?: string; error?: string } | null): string => {
-      switch (body?.code) {
-        case 'PAYLOAD_TOO_LARGE': return t('errors.payloadTooLarge');
-        case 'AI_UNAVAILABLE':    return t('errors.aiUnavailable');
-        case 'RATE_LIMITED':      return t('errors.rateLimited');
-        case 'INVALID_JSON':
-        case 'UNKNOWN_PLAN_SOURCE':
-        case 'PLAN_FAILED':       return t('errors.planFailed');
-        // Unrecognised code (or none): show whatever the server said rather
-        // than swallowing a real reason behind generic copy.
-        default: return body?.error || t('errors.generic');
-      }
-    },
-    [t]
-  );
 
   const buildPlan = useCallback(async (planBody: Record<string, unknown>, resolvedCardNames: string[]) => {
     setStatus('analyzing');
