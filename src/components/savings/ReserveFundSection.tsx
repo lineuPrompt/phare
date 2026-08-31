@@ -11,21 +11,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { formatCurrency, monthName, SinkingFund, SinkingFundBuffer } from '@/components/dashboard/types';
-import {
-  firstOfNextMonth,
-  anchorDayOfMonth,
-  anchorDateForDayOfMonth,
-  sameAnchorSchedule,
-} from '@phare/core';
+import { firstOfNextMonth } from '@phare/core';
 import { useBusinessToday } from '@/lib/useBusinessToday';
-
-type Cadence = 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
-
-// For monthly/semimonthly the schedule is a DAY, and only the day is ever
-// read back out of the anchor — so that's what the family picks. For
-// weekly/biweekly the anchor's full date sets the phase (every 7/14 days
-// counted from it), so those need a real date instead.
-const usesDayOfMonth = (cadence: Cadence) => cadence === 'monthly' || cadence === 'semimonthly';
+import ContributionEditor, { type Cadence } from '@/components/savings/ContributionEditor';
+import ContributionDriftNotice from '@/components/savings/ContributionDriftNotice';
+import type { ContributionDrift } from '@/lib/contributionDrift';
 
 type BufferData = SinkingFundBuffer & {
   contributionAmount: number | null;
@@ -35,6 +25,7 @@ type BufferData = SinkingFundBuffer & {
   recurringItemId: string | null;
   nextContributionDate: string | null;
   tombstonesAfterBoundary: number;
+  contributionDrift: ContributionDrift | null;
   contributions: { id: string; date: string; description: string | null; amount: number }[];
   upcomingContributions: { id: string; date: string; description: string | null; amount: number }[];
   billsPaid: { id: string; date: string; description: string | null; amount: number }[];
@@ -42,6 +33,7 @@ type BufferData = SinkingFundBuffer & {
 
 export default function ReserveFundSection({ locale }: { locale: string }) {
   const t = useTranslations('sinkingFundsPage');
+  const tEditor = useTranslations('contributionEditor');
   const tDash = useTranslations('dashboard');
   const router = useRouter();
 
@@ -56,20 +48,10 @@ export default function ReserveFundSection({ locale }: { locale: string }) {
   // nothing for anyone who doesn't care.
   const [startDay, setStartDay] = useState('');
 
+  // Form state, validation and the PATCH now live in ContributionEditor,
+  // shared with the goal cards below — this section only decides whether it
+  // is open.
   const [editingContribution, setEditingContribution] = useState(false);
-  const [newAmount, setNewAmount] = useState('');
-  const [newCadence, setNewCadence] = useState<Cadence>('monthly');
-  const [newSecondDay, setNewSecondDay] = useState('30');
-  // Two shapes for the same field — see usesDayOfMonth above. Only the one
-  // matching the currently-selected cadence is ever sent.
-  const [newAnchorDay, setNewAnchorDay] = useState('');
-  const [newAnchorDate, setNewAnchorDate] = useState('');
-  const [editSaving, setEditSaving] = useState(false);
-  const [editError, setEditError] = useState('');
-  // Set when a save would move the schedule while detached occurrences exist
-  // past the boundary. Shows the warning and turns Save into an explicit
-  // confirm — the household can proceed, they just aren't surprised by it.
-  const [scheduleWarning, setScheduleWarning] = useState(false);
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -133,89 +115,6 @@ export default function ReserveFundSection({ locale }: { locale: string }) {
     }
   }
 
-  function openEditContribution() {
-    setNewAmount(String(buffer?.contributionAmount ?? buffer?.totalMonthlyProvision ?? ''));
-    setNewCadence(buffer?.cadence ?? 'monthly');
-    setNewSecondDay(String(buffer?.secondDay ?? '30'));
-    // Both shapes seeded from the one stored anchor, so switching cadence
-    // inside the form doesn't land on an empty field.
-    setNewAnchorDay(buffer?.anchorDate ? String(anchorDayOfMonth(buffer.anchorDate)) : '');
-    setNewAnchorDate(buffer?.anchorDate ?? '');
-    setEditError('');
-    setScheduleWarning(false);
-    setEditingContribution(true);
-  }
-
-  function closeEditContribution() {
-    setEditingContribution(false);
-    setScheduleWarning(false);
-    setEditError('');
-  }
-
-  // The anchor this form would send, in the shape the selected cadence needs.
-  // null means "leave it alone" — the PATCH route falls back to the rule's
-  // current anchor when anchorDate is absent.
-  function resolveAnchorDate(): string | null {
-    if (usesDayOfMonth(newCadence)) {
-      const day = parseInt(newAnchorDay, 10);
-      if (!Number.isInteger(day) || day < 1 || day > 31) return null;
-      return anchorDateForDayOfMonth(day, today);
-    }
-    return newAnchorDate || null;
-  }
-
-  async function saveContribution(confirmedSchedule = false) {
-    if (!buffer?.recurringItemId) return;
-    const parsed = parseFloat(newAmount);
-    if (!parsed || parsed <= 0) {
-      setEditError(t('editAmountInvalid'));
-      return;
-    }
-    if (usesDayOfMonth(newCadence) && newAnchorDay !== '') {
-      const day = parseInt(newAnchorDay, 10);
-      if (!Number.isInteger(day) || day < 1 || day > 31) {
-        setEditError(t('dayInvalid'));
-        return;
-      }
-    }
-
-    const anchorDate = resolveAnchorDate();
-
-    // Warn ONLY when the schedule actually moves. An amount-only change also
-    // splits the rule, but dates don't move under it, so the tombstone
-    // carry-forward lands exactly where it should and there is nothing to
-    // warn about — firing here too would be noise that trains people to
-    // click through.
-    const scheduleMoved =
-      newCadence !== (buffer.cadence ?? 'monthly') ||
-      !sameAnchorSchedule(anchorDate, buffer.anchorDate, newCadence);
-    if (scheduleMoved && buffer.tombstonesAfterBoundary > 0 && !confirmedSchedule) {
-      setScheduleWarning(true);
-      return;
-    }
-
-    setEditSaving(true);
-    setEditError('');
-    try {
-      const res = await fetch(`/api/recurring/${buffer.recurringItemId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: parsed,
-          cadence: newCadence,
-          secondDay: newCadence === 'semimonthly' ? parseInt(newSecondDay, 10) : null,
-          ...(anchorDate ? { anchorDate } : {}),
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed to update');
-      closeEditContribution();
-      load();
-    } catch (err) {
-      setEditError(err instanceof Error ? err.message : t('editError'));
-    } finally {
-      setEditSaving(false);
-    }
-  }
 
   async function doDelete() {
     if (!buffer?.linkedAccountId) return;
@@ -377,108 +276,18 @@ export default function ReserveFundSection({ locale }: { locale: string }) {
                   <span className="text-sm" style={{ color: '#6B7280' }}>{t('currentBalance')}</span>
                 </div>
 
-                {editingContribution ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={newAmount}
-                      onChange={(e) => setNewAmount(e.target.value)}
-                      className="w-32 px-2 py-1.5 rounded text-sm outline-none"
-                      style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
-                    />
-                    <select
-                      value={newCadence}
-                      onChange={(e) => setNewCadence(e.target.value as Cadence)}
-                      className="px-2 py-1.5 rounded text-sm outline-none bg-white"
-                      style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
-                    >
-                      <option value="monthly">{t('cadenceMonthly')}</option>
-                      <option value="biweekly">{t('cadenceBiweekly')}</option>
-                      <option value="semimonthly">{t('cadenceSemimonthly')}</option>
-                      <option value="weekly">{t('cadenceWeekly')}</option>
-                    </select>
-                    {/* When the contribution comes out. A day-of-month for
-                        monthly/semimonthly (only the day is ever read back);
-                        a real date for weekly/biweekly, where the anchor sets
-                        the phase. Same 1-31 number-input pattern the second
-                        semimonthly day beside it already uses. */}
-                    {usesDayOfMonth(newCadence) ? (
-                      <span className="flex items-center gap-1.5">
-                        <label className="text-xs" style={{ color: '#6B7280' }}>{t('contributionDayLabel')}</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="31"
-                          value={newAnchorDay}
-                          onChange={(e) => setNewAnchorDay(e.target.value)}
-                          className="w-16 px-2 py-1.5 rounded text-sm outline-none"
-                          style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
-                        />
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5">
-                        <label className="text-xs" style={{ color: '#6B7280' }}>{t('firstDateLabel')}</label>
-                        <input
-                          type="date"
-                          value={newAnchorDate}
-                          onChange={(e) => setNewAnchorDate(e.target.value)}
-                          className="px-2 py-1.5 rounded text-sm outline-none bg-white"
-                          style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
-                        />
-                      </span>
-                    )}
-                    {newCadence === 'semimonthly' && (
-                      <span className="flex items-center gap-1.5">
-                        <label className="text-xs" style={{ color: '#6B7280' }}>{t('secondDay')}</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="31"
-                          value={newSecondDay}
-                          onChange={(e) => setNewSecondDay(e.target.value)}
-                          className="w-16 px-2 py-1.5 rounded text-sm outline-none"
-                          style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
-                        />
-                      </span>
-                    )}
-                    <button
-                      onClick={() => saveContribution(scheduleWarning)}
-                      disabled={editSaving}
-                      className="px-3 py-1.5 rounded text-sm font-medium text-white disabled:opacity-50"
-                      style={{ background: scheduleWarning ? '#B45309' : '#2ABFBF' }}
-                    >
-                      {editSaving
-                        ? t('savingContribution')
-                        : scheduleWarning
-                          ? t('scheduleWarningConfirm')
-                          : t('saveContribution')}
-                    </button>
-                    <button
-                      onClick={closeEditContribution}
-                      className="px-3 py-1.5 rounded text-sm"
-                      style={{ color: '#6B7280' }}
-                    >
-                      {t('cancelEdit')}
-                    </button>
-                    {editError && <p className="w-full text-sm" style={{ color: '#DC2626' }}>{editError}</p>}
-                    {/* Detached-occurrence warning — shown only when this save
-                        would move the schedule AND singles were edited or
-                        removed past the boundary. They can proceed; the point
-                        is that they aren't surprised afterwards. */}
-                    {scheduleWarning && (
-                      <div className="w-full rounded-xl p-3 space-y-1" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
-                        <p className="text-sm font-semibold" style={{ color: '#92400E' }}>{t('scheduleWarningTitle')}</p>
-                        <p className="text-xs" style={{ color: '#92400E' }}>
-                          {t('scheduleWarningBody', { count: buffer.tombstonesAfterBoundary })}
-                        </p>
-                      </div>
-                    )}
-                    <p className="w-full text-xs" style={{ color: '#9CA3AF' }}>
-                      {usesDayOfMonth(newCadence) ? `${t('contributionDayHint')} ` : `${t('firstDateHint')} `}
-                      {t('editEffectiveNote')}
-                    </p>
-                  </div>
+                {editingContribution && buffer.recurringItemId ? (
+                  <ContributionEditor
+                    recurringItemId={buffer.recurringItemId}
+                    currentAmount={buffer.contributionAmount ?? buffer.totalMonthlyProvision}
+                    cadence={buffer.cadence}
+                    anchorDate={buffer.anchorDate}
+                    secondDay={buffer.secondDay}
+                    tombstonesAfterBoundary={buffer.tombstonesAfterBoundary}
+                    today={today}
+                    onSaved={() => { setEditingContribution(false); load(); }}
+                    onCancel={() => setEditingContribution(false)}
+                  />
                 ) : (
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <p className="text-sm font-medium" style={{ color: '#0F2044' }}>
@@ -487,14 +296,24 @@ export default function ReserveFundSection({ locale }: { locale: string }) {
                       {buffer.nextContributionDate && ` · ${t('nextContribution', { date: fmtDate(buffer.nextContributionDate) })}`}
                     </p>
                     <div className="flex gap-3">
-                      <button onClick={openEditContribution} className="text-xs font-semibold" style={{ color: '#2ABFBF' }}>
-                        {t('editContributionCta')}
-                      </button>
-                      <button onClick={() => setConfirmDelete(true)} className="text-xs font-semibold" style={{ color: '#DC2626' }}>
+                      {buffer.recurringItemId && (
+                        <button onClick={() => setEditingContribution(true)} className="text-xs font-semibold cursor-pointer" style={{ color: '#2ABFBF' }}>
+                          {tEditor('editCta')}
+                        </button>
+                      )}
+                      <button onClick={() => setConfirmDelete(true)} className="text-xs font-semibold cursor-pointer" style={{ color: '#DC2626' }}>
                         {t('deleteCta')}
                       </button>
                     </div>
                   </div>
+                )}
+
+                {/* The buffer's upcoming rows are read-only in this section,
+                    but the Timeline can still edit one into disagreeing with
+                    the rule above. Say so rather than showing a headline that
+                    quietly contradicts the list further down. */}
+                {buffer.contributionDrift && (
+                  <ContributionDriftNotice drift={buffer.contributionDrift} locale={locale} />
                 )}
               </>
             )}

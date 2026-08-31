@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { GOAL_ACCOUNT_TYPES, computeGoalBalance } from '@/lib/dashboardHelpers';
 import { computeDebtPayoff } from '@/lib/goalHelpers';
-import { businessToday } from '@phare/core';
+import { computeContributionDrift } from '@/lib/contributionDrift';
+import { businessToday, firstOfNextMonth } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
 export async function GET() {
@@ -51,13 +52,13 @@ export async function GET() {
     // Goals or Recurring page).
     type RecurringRuleRow = {
       id: string; amount: number | string; cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
-      anchor_date: string | null; second_day: number | null; destination_account_id: string | null;
+      anchor_date: string | null; second_day: number | null; destination_account_id: string | null; effective_from: string | null;
     };
     let recurringByGoal = new Map<string, RecurringRuleRow>();
     if (goalIds.length > 0) {
       const { data: ruleRows } = await supabase
         .from('recurring_items')
-        .select('id, amount, cadence, anchor_date, second_day, destination_account_id')
+        .select('id, amount, cadence, anchor_date, second_day, destination_account_id, effective_from')
         .eq('household_id', householdId)
         .eq('type', 'transfer')
         .eq('active', true)
@@ -69,6 +70,28 @@ export async function GET() {
 
     const timezone = await getHouseholdTimezone(supabase, householdId);
     const today = businessToday(timezone);
+
+    // Detached occurrences (edited or deleted singles) dated on/after the
+    // boundary a schedule edit would use — same figure the Reserve Fund has
+    // always had (api/sinking-funds/route.ts). The goal card's contribution
+    // editor needs it to warn BEFORE a schedule move strands them; without
+    // it that editor would move a schedule blind. Fetched for every goal's
+    // rule in one query and counted per rule, rather than a count query per
+    // goal.
+    const boundary = firstOfNextMonth(today);
+    const ruleIds = [...recurringByGoal.values()].map((r) => r.id);
+    const tombstonesByRule = new Map<string, number>();
+    if (ruleIds.length > 0) {
+      const { data: tombRows } = await supabase
+        .from('recurring_skipped_dates')
+        .select('recurring_item_id')
+        .eq('household_id', householdId)
+        .in('recurring_item_id', ruleIds)
+        .gte('date', boundary);
+      for (const row of (tombRows ?? []) as { recurring_item_id: string }[]) {
+        tombstonesByRule.set(row.recurring_item_id, (tombstonesByRule.get(row.recurring_item_id) ?? 0) + 1);
+      }
+    }
 
     const goals = goalAccounts.map((a) => {
       // Goal-side transfer rows: account_id = this goal, type = 'transfer'.
@@ -123,7 +146,19 @@ export async function GET() {
           cadence: rule.cadence,
           anchorDate: rule.anchor_date,
           secondDay: rule.second_day,
+          tombstonesAfterBoundary: tombstonesByRule.get(rule.id) ?? 0,
         } : null,
+        // Do the upcoming rows still say what the rule says? They can stop
+        // agreeing without any join surviving to prove it — editing a single
+        // occurrence nulls its recurring_item_id (see lib/contributionDrift.ts)
+        // — so this compares the amounts actually listed, not the FK. Drives
+        // the on-card notice AND suppresses the projection, which is computed
+        // from the rule amount and is therefore wrong whenever this is set.
+        contributionDrift: computeContributionDrift(
+          upcomingTransfers,
+          rule ? Number(rule.amount) : null,
+          rule?.effective_from ?? null
+        ),
         debtPayoff,
       };
     });

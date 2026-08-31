@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { computeGoalBalance } from '@/lib/dashboardHelpers';
+import { computeContributionDrift } from '@/lib/contributionDrift';
 import { businessToday, nextOccurrence, firstOfNextMonth } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
@@ -97,7 +98,7 @@ export async function GET() {
 
     const { data: recurringRow } = await supabase
       .from('recurring_items')
-      .select('id, amount, cadence, anchor_date, second_day')
+      .select('id, amount, cadence, anchor_date, second_day, effective_from')
       .eq('household_id', householdId)
       .eq('destination_account_id', linkedAccountId)
       .eq('type', 'transfer')
@@ -150,6 +151,17 @@ export async function GET() {
         recurringItemId,
         nextContributionDate,
         tombstonesAfterBoundary,
+        // Same check the goal cards run. The buffer's upcoming rows are
+        // read-only in this section, but they are NOT out of reach: the
+        // Timeline's day ledger edits any transfer row, buffer contributions
+        // included, and detaches it exactly the same way. This household
+        // already has one such row ($350 against a $628.02 rule), so the
+        // notice is not hypothetical here.
+        contributionDrift: computeContributionDrift(
+          upcomingContributions,
+          contributionAmount,
+          recurringRow?.effective_from ?? null
+        ),
         contributions,
         upcomingContributions,
         billsPaid,

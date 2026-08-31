@@ -25,6 +25,8 @@ import { formatCurrency, type GoalAccount, type GoalTransfer } from '@/component
 import { nextOccurrence } from '@phare/core';
 import { projectedContribution } from '@/lib/goalHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
+import ContributionEditor from '@/components/savings/ContributionEditor';
+import ContributionDriftNotice from '@/components/savings/ContributionDriftNotice';
 
 // Inline edit state for a single transfer row
 type TransferEdit = {
@@ -37,6 +39,7 @@ type TransferEdit = {
 export default function GoalsSection({ locale }: { locale: string }) {
   const t = useTranslations('goals');
   const tGoalsRecurring = useTranslations('goals.recurring');
+  const tEditor = useTranslations('contributionEditor');
   const router = useRouter();
   const { today: businessTodayDate } = useBusinessToday();
 
@@ -49,6 +52,13 @@ export default function GoalsSection({ locale }: { locale: string }) {
   // so a draw and a payment can never be open on the same goal at once.
   const [drawFor, setDrawFor] = useState<string | null>(null);
   const [recurringSetupFor, setRecurringSetupFor] = useState<string | null>(null);
+  // Which goal's contribution RULE is open for editing (2026-08-31). Goals
+  // had no rule editor at all before this — the only way to change a
+  // contribution was to edit each materialized row by hand, which detaches
+  // every one of them from the rule and leaves the card contradicting
+  // itself. Same ContributionEditor the Reserve Fund uses, same forward-
+  // apply guarantee.
+  const [editingRuleFor, setEditingRuleFor] = useState<string | null>(null);
 
   // Transfer edit/delete state
   const [editing, setEditing] = useState<TransferEdit | null>(null);
@@ -367,26 +377,59 @@ export default function GoalsSection({ locale }: { locale: string }) {
                     (() => {
                       const rc = goal.recurringContribution!;
                       const today = businessTodayDate;
+                      const drift = goal.contributionDrift ?? null;
                       const next = nextOccurrence(
                         { cadence: rc.cadence, anchorDate: rc.anchorDate, secondDay: rc.secondDay },
                         today
                       );
-                      const projection = goal.goalTargetDate
+                      // Suppressed outright while the upcoming rows disagree
+                      // with the rule. projectedContribution extrapolates ONE
+                      // amount — the rule's — across every future occurrence,
+                      // so under drift it is guaranteed to state a total the
+                      // household is not on course for. Deliberately not
+                      // blended with the real row amounts either: a figure
+                      // that is part-rule, part-rows can't be checked against
+                      // anything on screen.
+                      const projection = goal.goalTargetDate && !drift
                         ? projectedContribution(goal.balance, rc.anchorDate ? { cadence: rc.cadence, anchorDate: rc.anchorDate, secondDay: rc.secondDay } : null, rc.amount, today, goal.goalTargetDate)
                         : null;
                       return (
-                        <div>
-                          <p className="text-sm font-medium" style={{ color: '#0F2044' }}>
-                            {formatCurrency(rc.amount, locale)}{cadenceShort(rc.cadence)}
-                            {next && ` · ${tGoalsRecurring('next', {
-                              date: new Date(next + 'T00:00:00').toLocaleDateString(
-                                locale === 'fr' ? 'fr-CA' : 'en-CA', { month: 'short', day: 'numeric' }
-                              ),
-                            })}`}
-                            {!rc.anchorDate && ` · ⚠ ${tGoalsRecurring('needsDate')}`}
-                          </p>
+                        <div className="space-y-2">
+                          {editingRuleFor === goal.id ? (
+                            <ContributionEditor
+                              recurringItemId={rc.recurringItemId}
+                              currentAmount={rc.amount}
+                              cadence={rc.cadence}
+                              anchorDate={rc.anchorDate}
+                              secondDay={rc.secondDay}
+                              tombstonesAfterBoundary={rc.tombstonesAfterBoundary ?? 0}
+                              today={today}
+                              onSaved={() => { setEditingRuleFor(null); load(); }}
+                              onCancel={() => setEditingRuleFor(null)}
+                            />
+                          ) : (
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <p className="text-sm font-medium" style={{ color: '#0F2044' }}>
+                                {formatCurrency(rc.amount, locale)}{cadenceShort(rc.cadence)}
+                                {next && ` · ${tGoalsRecurring('next', {
+                                  date: new Date(next + 'T00:00:00').toLocaleDateString(
+                                    locale === 'fr' ? 'fr-CA' : 'en-CA', { month: 'short', day: 'numeric' }
+                                  ),
+                                })}`}
+                                {!rc.anchorDate && ` · ⚠ ${tGoalsRecurring('needsDate')}`}
+                              </p>
+                              <button
+                                onClick={() => setEditingRuleFor(goal.id)}
+                                className="text-xs font-semibold cursor-pointer"
+                                style={{ color: '#2ABFBF' }}
+                              >
+                                {tEditor('editCta')}
+                              </button>
+                            </div>
+                          )}
+                          {drift && <ContributionDriftNotice drift={drift} locale={locale} />}
                           {projection !== null && goal.goalTargetDate && (
-                            <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>
+                            <p className="text-xs" style={{ color: '#9CA3AF' }}>
                               {tGoalsRecurring('projection', {
                                 amount: formatCurrency(rc.amount, locale) + cadenceShort(rc.cadence),
                                 total: formatCurrency(projection, locale),
@@ -395,6 +438,12 @@ export default function GoalsSection({ locale }: { locale: string }) {
                                 ),
                               })}
                             </p>
+                          )}
+                          {/* Says why the projection is missing rather than
+                              silently dropping the line — an absent number is
+                              otherwise indistinguishable from a bug. */}
+                          {drift && goal.goalTargetDate && (
+                            <p className="text-xs" style={{ color: '#9CA3AF' }}>{tEditor('projectionHidden')}</p>
                           )}
                         </div>
                       );
@@ -556,91 +605,51 @@ export default function GoalsSection({ locale }: { locale: string }) {
                 {/* Upcoming — materialized future rows (Phase 2 recurring
                     transfers), shown separately, never counted in the
                     balance above. Next 12 months only (the materialization
-                    window), not the whole life of the plan. */}
+                    window), not the whole life of the plan.
+
+                    READ-ONLY FOR AMOUNT since 2026-08-31. Editing one of
+                    these rows detaches it from its rule (PATCH
+                    /api/transfers/[id] tombstones the date and nulls
+                    recurring_item_id), which is how a household ended up
+                    with 24 rows at $125 under a $25 rule and a card that
+                    contradicted itself. The honest way to change what a
+                    future contribution is worth is the rule editor above,
+                    which applies forward and leaves history alone.
+
+                    Delete stays: "skip this one occurrence" is a real need
+                    with no other home, and it removes a row rather than
+                    leaving a wrong one behind. Past rows keep full edit —
+                    correcting what actually happened is legitimate. */}
                 {goal.upcomingTransfers.length > 0 && (
                   <div className="pt-3 border-t" style={{ borderColor: '#F3F4F6' }}>
                     <h4 className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: '#9CA3AF' }}>
                       {t('upcoming')} · {t('next12Months')}
                     </h4>
                     <div className="space-y-1">
-                      {goal.upcomingTransfers.map((tr) => {
-                        const isEditingThis = editing?.id === tr.id;
-
-                        if (isEditingThis && editing) {
-                          return (
-                            <div
-                              key={tr.id}
-                              className="flex flex-wrap items-center gap-2 py-2 px-2 rounded-lg"
-                              style={{ background: '#F0FDFD' }}
-                            >
-                              <input
-                                type="date"
-                                value={editing.date}
-                                onChange={(e) => setEditing({ ...editing, date: e.target.value })}
-                                className="px-2 py-1.5 rounded text-sm outline-none"
-                                style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
-                              />
-                              <input
-                                type="text"
-                                value={editing.description}
-                                onChange={(e) => setEditing({ ...editing, description: e.target.value })}
-                                placeholder={t('transfer.descriptionPlaceholder')}
-                                className="flex-1 min-w-[100px] px-2 py-1.5 rounded text-sm outline-none"
-                                style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
-                              />
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={editing.amount}
-                                onChange={(e) => setEditing({ ...editing, amount: e.target.value })}
-                                className="w-24 px-2 py-1.5 rounded text-sm outline-none"
-                                style={{ border: '1px solid #D1D5DB', color: '#0F2044' }}
-                              />
-                              <button
-                                onClick={saveEdit}
-                                disabled={saving || !editing.amount || parseFloat(editing.amount) <= 0}
-                                className="px-3 py-1.5 rounded text-sm font-medium text-white cursor-pointer disabled:opacity-40"
-                                style={{ background: '#2ABFBF' }}
-                              >✓</button>
-                              <button
-                                onClick={() => setEditing(null)}
-                                className="px-3 py-1.5 rounded text-sm cursor-pointer"
-                                style={{ color: '#6B7280' }}
-                              >✕</button>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div
-                            key={tr.id}
-                            className="flex items-center gap-3 py-1.5 px-2 group"
-                            style={{ borderBottom: '1px solid #F9FAFB' }}
-                          >
-                            <span className="text-sm w-14 shrink-0" style={{ color: '#9CA3AF' }}>
-                              {fmtDate(tr.date)}
-                            </span>
-                            <span className="flex-1 min-w-0 truncate text-sm" style={{ color: '#9CA3AF' }}>
-                              {tr.description ?? '—'}
-                            </span>
-                            <span className="text-sm font-medium shrink-0" style={{ color: '#9CA3AF' }}>
-                              {tr.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tr.amount), locale)}
-                            </span>
-                            <div className="flex gap-1 shrink-0">
-                              <button
-                                onClick={() => startEdit(tr)}
-                                className="px-2 py-1 rounded text-xs cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                                style={{ color: '#2ABFBF' }}
-                              >{t('editContribution')}</button>
-                              <button
-                                onClick={() => setConfirmDelete(tr)}
-                                className="px-2 py-1 rounded text-xs cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                                style={{ color: '#DC2626' }}
-                              >{t('deleteContribution')}</button>
-                            </div>
+                      {goal.upcomingTransfers.map((tr) => (
+                        <div
+                          key={tr.id}
+                          className="flex items-center gap-3 py-1.5 px-2 group"
+                          style={{ borderBottom: '1px solid #F9FAFB' }}
+                        >
+                          <span className="text-sm w-14 shrink-0" style={{ color: '#9CA3AF' }}>
+                            {fmtDate(tr.date)}
+                          </span>
+                          <span className="flex-1 min-w-0 truncate text-sm" style={{ color: '#9CA3AF' }}>
+                            {tr.description ?? '—'}
+                          </span>
+                          <span className="text-sm font-medium shrink-0" style={{ color: '#9CA3AF' }}>
+                            {tr.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tr.amount), locale)}
+                          </span>
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              onClick={() => setConfirmDelete(tr)}
+                              className="px-2 py-1 rounded text-xs cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                              style={{ color: '#DC2626' }}
+                            >{t('deleteContribution')}</button>
                           </div>
-                        );
-                      })}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

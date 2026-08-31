@@ -1,3 +1,5 @@
+import type { ContributionDrift } from '@/lib/contributionDrift';
+
 export type DashboardSummary = {
   totalIncome: number;
   totalExpenses: number;
@@ -60,6 +62,11 @@ export type RecurringContribution = {
   cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
   anchorDate: string | null; // null = needs a date, not yet materializing
   secondDay: number | null;
+  // Detached occurrences (edited/deleted singles) dated on or after the
+  // boundary a schedule edit would use — the contribution editor's warning
+  // gate. Only api/goals populates this; the dashboard's copy of the goal
+  // shape does not, hence optional.
+  tombstonesAfterBoundary?: number;
 };
 
 export type DebtPayoff = {
@@ -90,6 +97,11 @@ export type GoalAccount = {
   // shown separately from history, never counted in `balance`.
   upcomingTransfers: GoalTransfer[];
   recurringContribution: RecurringContribution | null;
+  // Set when the upcoming rows above no longer agree with the rule that
+  // made them (see lib/contributionDrift.ts). Non-null means the projection
+  // must not be shown — it is computed from the rule amount. Optional for
+  // the same reason as tombstonesAfterBoundary: only api/goals computes it.
+  contributionDrift?: ContributionDrift | null;
   debtPayoff: DebtPayoff | null;
 };
 
