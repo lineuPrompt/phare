@@ -1,7 +1,28 @@
 -- =============================================================================
 -- Phare — a durable marker for a stated opening balance. 2026-08-31.
 --
--- PENDING APPLICATION — do not apply to production without founder sign-off.
+-- STATUS: APPLIED — 2026-08-31.
+--
+--   Verified by direct read of production, not by assumption. What was
+--   actually confirmed (read-only, via PostgREST):
+--     * transactions.is_opening_balance selectable          — column is live
+--     * exactly 1 flagged row: "Credit Line", type=debt,
+--       2026-07-17, -$500.00, type='transfer'               — backfill correct
+--     * 0 flagged rows on a non-goal account
+--     * 0 flagged rows whose type is not 'transfer'
+--     * 0 'Balance correction' rows marked                  — nothing over-swept
+--     * 0 accounts holding more than one flagged row
+--
+--   NOT confirmable that way: the unique index and the trigger. PostgREST
+--   cannot read pg_catalog, and proving the trigger fires requires an insert
+--   that must be rejected. The VERIFY block at the foot of this file is what
+--   establishes both — it runs inside BEGIN/ROLLBACK and leaves nothing
+--   behind. Until it has been run and its six NOTICEs read, treat the index
+--   and trigger as present-but-unproven.
+--
+--   Superseded banner, kept as history — until 2026-08-31 this file read:
+--     "PENDING APPLICATION — do not apply to production without founder
+--      sign-off."
 --
 -- WHY THIS COLUMN EXISTS. Households arrive with money already in their goal
 -- accounts. That is recorded as a one-sided 'transfer' row on the goal

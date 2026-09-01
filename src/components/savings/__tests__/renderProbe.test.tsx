@@ -137,9 +137,12 @@ describe('opening-balance copy renders in both locales', () => {
       const html = render(locale, <CreateGoalForm onCreated={() => {}} />);
       console.log(`\n--- ${locale.toUpperCase()} create form (opening balance) ---\n${text(html)}\n`);
       expect(html).not.toMatch(/goals\.opening/);
-      const m = MESSAGES[locale].goals as Record<string, string>;
-      expect(text(html)).toContain(m.openingBalanceLabel);
-      expect(text(html)).toContain(m.openingBalanceHint);
+      // Read the two strings directly rather than casting the namespace —
+      // `goals` also holds nested objects (type, typeDesc, recurring), so a
+      // Record<string, string> cast is a lie tsc rightly rejects.
+      const { openingBalanceLabel, openingBalanceHint } = MESSAGES[locale].goals;
+      expect(text(html)).toContain(openingBalanceLabel);
+      expect(text(html)).toContain(openingBalanceHint);
     });
 
     it(`${locale}: edit form seeds the existing opening balance`, () => {
