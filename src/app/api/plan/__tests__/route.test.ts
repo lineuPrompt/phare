@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { NextRequest } from 'next/server';
-import { computeDebtPayoff } from '@/lib/goalHelpers';
+import { computeDebtPayoff, addMonthsToMonth } from '@/lib/goalHelpers';
 import { businessToday, DEFAULT_HOUSEHOLD_TIMEZONE } from '@phare/core';
 
 // These routes became authenticated and quota'd. This file's assertions are
@@ -124,6 +124,16 @@ describe('POST /api/plan — debtPayoff is code-computed (template source)', () 
   // The founder's fixture: a "Pay off credit line" goal alongside an
   // ordinary savings goal. AI is deliberately misbehaving again — it
   // returns its own debtPayoff figures, which must be ignored entirely.
+  // Target dates are RELATIVE TO TODAY, not hardcoded. They used to be
+  // '2026-09-01' and '2027-01-01', which was a time bomb: on 2026-09-01
+  // monthsBetween(today, target) hit 0, requiredMonthlyContribution
+  // classified the goal 'past_due', computeDebtPayoff correctly returned
+  // null — and this test blew up dereferencing it. The `toEqual(expected)`
+  // line even passed, because `expected` went null too; only the next line
+  // caught it. A fixture that has to be in the future must say so in code.
+  const debtTargetDate = `${addMonthsToMonth(businessToday(DEFAULT_HOUSEHOLD_TIMEZONE), 6)}-01`;
+  const savingsTargetDate = `${addMonthsToMonth(businessToday(DEFAULT_HOUSEHOLD_TIMEZONE), 10)}-01`;
+
   const TEMPLATE_BODY = {
     source: 'template',
     locale: 'en',
@@ -134,8 +144,8 @@ describe('POST /api/plan — debtPayoff is code-computed (template source)', () 
       variableExpenses: { lines: [] },
       sinkingFunds: { lines: [] },
       goals: [
-        { name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 0, targetDate: '2026-09-01' },
-        { name: 'Emergency fund', targetAmount: 3000, savedSoFar: 0, targetDate: '2027-01-01' },
+        { name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 0, targetDate: debtTargetDate },
+        { name: 'Emergency fund', targetAmount: 3000, savedSoFar: 0, targetDate: savingsTargetDate },
       ],
       summary: { monthlyIncome: 5000, monthlyExpenses: 3000, netCashFlow: 2000 },
     },
@@ -153,7 +163,7 @@ describe('POST /api/plan — debtPayoff is code-computed (template source)', () 
 
     const today = businessToday(DEFAULT_HOUSEHOLD_TIMEZONE);
     const expected = computeDebtPayoff(
-      { name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 0, targetDate: '2026-09-01' },
+      { name: 'Pay off credit line', targetAmount: 5000, savedSoFar: 0, targetDate: debtTargetDate },
       today
     );
 

@@ -15,9 +15,13 @@ function fmtDay(iso: string, locale: string) {
   });
 }
 
-function sourceHref(
+// Exported for test: the precedence between these branches is the whole
+// behaviour, and it regressed once already (a contribution landing on
+// /recurring instead of /savings).
+export function sourceHref(
   entry: {
     isBridge: boolean;
+    type: 'income' | 'expense' | 'transfer';
     recurringItemId: string | null;
     transferPeerId: string | null;
     bridgeSourceAccount: string | null;
@@ -37,6 +41,19 @@ function sourceHref(
     const qs = params.toString();
     return `/${locale}/cards${qs ? `?${qs}` : ''}`;
   }
+  // A TRANSFER GOES TO /savings, EVEN WHEN IT HAS A RULE (2026-09-01).
+  // A materialized goal contribution carries BOTH recurringItemId and
+  // transferPeerId, and the recurringItemId branch below used to win — so
+  // clicking a contribution landed on the generic rules list rather than on
+  // the goal, past the contribution editor that actually changes it. Type is
+  // the reliable discriminator here: every transfer belongs to a goal or the
+  // reserve buffer, both of which live on /savings.
+  //
+  // Deliberately NOT deep-linked to a specific goal card. That needs the
+  // rule's destination_account_id, which the Timeline does not fetch, and
+  // adding a query for a nicer anchor is not worth it (2026-09-01 scope
+  // call). The page is the right page.
+  if (entry.type === 'transfer') return `/${locale}/savings`;
   if (entry.recurringItemId) return `/${locale}/recurring`;
   if (entry.transferPeerId) return `/${locale}/savings`;
   // One-off entries have no editable home post-consolidation (Expenses is
