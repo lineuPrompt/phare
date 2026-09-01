@@ -1,4 +1,20 @@
 -- =============================================================================
+-- ⚠ SPENT — DO NOT RUN AGAIN. Ran 2026-09-01, AFTER the contribution editor
+-- rather than before it, and that ordering made it harmful: it re-attached 24
+-- rows the split had already superseded, leaving the goal with duplicate
+-- contributions from 2026-10-07 to 2027-07-28. Cleaned up by
+-- scripts/repair-duplicate-contributions-after-split.sql.
+--
+-- THE FLAW WAS IN BLOCK 1, not in the mutation. Its checks could not tell the
+-- safe ordering from the unsafe one: whether or not the editor had already
+-- run, Block 1c saw the same 24 detached rows, because the split's own DELETE
+-- (keyed on recurring_item_id) had matched none of them. A one-off repair that
+-- depends on running before some other action must VERIFY that action has not
+-- happened — check the rules, not only the rows. The corrective file's 1a
+-- shows what that check looks like.
+--
+-- Kept for the record. Every statement below is left exactly as it was run.
+-- =============================================================================
 -- ONE-TIME REPAIR — detached future contributions on ONE goal.
 -- Household 2be22642, goal "Ferias e Viagens". Written 2026-08-31, re-pinned 2026-09-01.
 --
