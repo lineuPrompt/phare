@@ -175,6 +175,22 @@ export type MonthTotals = {
   // NOT available capacity.
   totalBorrowed: number;
   netCashFlow: number;
+  /**
+   * totalSavings partitioned by the account the money went TO — the same
+   * rows, from the same branch of the same loop, so these sum to
+   * totalSavings exactly (integer-cent partition; see the accumulator).
+   *
+   * `accountId: null` is the "Other" bucket and is not optional: a chequing
+   * contribution whose peer row is missing, or whose destination account has
+   * been deleted, still counts toward totalSavings by design, so it must
+   * still appear here. Without it the lines would sum to less than the
+   * headline.
+   *
+   * Names are NOT resolved here — this module never sees account names, only
+   * ids and types. The route joins them against its already-fetched account
+   * list.
+   */
+  savingsByDestination: { accountId: string | null; amount: number }[];
 };
 
 export function computeMonthTotals(
@@ -209,9 +225,20 @@ export function computeMonthTotals(
 
   let income = 0;
   let expenses = 0;
-  let savings = 0;
   let debtPayments = 0;
   let borrowed = 0;
+
+  // SAVINGS IS ACCUMULATED IN INTEGER CENTS, unlike the other buckets, and
+  // so is its per-destination breakdown below. That is what makes
+  // "sum(savingsByDestination) === totalSavings" true by construction for
+  // ANY input rather than merely true for well-formed 2-decimal money:
+  // both the total and the parts are derived from the same integer
+  // partition, so no rounding step can separate them.
+  //
+  // For real data this changes nothing — amounts are numeric(12,2), and
+  // summing 2-decimal values then rounding gives the identical figure.
+  let savingsCents = 0;
+  const savingsByDestination = new Map<string | null, number>();
 
   for (const tx of transactions) {
     const amt = Number(tx.amount);
@@ -240,18 +267,50 @@ export function computeMonthTotals(
         if (peerIsDebt) {
           debtPayments += amt;
         } else {
-          savings += amt;
+          const cents = Math.round(amt * 100);
+          savingsCents += cents;
+          // THE BREAKDOWN IS EMITTED HERE, inside the branch that owns the
+          // total — not derived afterwards. Grouping these rows anywhere else
+          // would mean re-implementing three separate rules (chequing-only,
+          // draws excluded, debt peers excluded), any one of which could drift
+          // from this loop. Emitting from the same line that does `savings +=`
+          // makes "the parts sum to the whole" structurally true rather than
+          // merely tested.
+          //
+          // A null key is the "Other" bucket: the peer row is missing
+          // (transfer_peer_id null, or pointing at a row outside this month's
+          // set) or its account is gone. Those rows still count toward
+          // `savings` — the classification above deliberately falls back to
+          // savings — so they must appear in the breakdown too, or the lines
+          // would sum to less than the headline. A real one exists in
+          // production: a $350 chequing row described "Transfer to deleted
+          // goal" with transfer_peer_id = NULL.
+          const destinationId = peer?.account_id ?? null;
+          savingsByDestination.set(
+            destinationId,
+            (savingsByDestination.get(destinationId) ?? 0) + cents
+          );
         }
       }
     }
   }
 
+  const savings = savingsCents / 100;
+
   return {
     totalIncome:       Math.round(income       * 100) / 100,
     totalExpenses:     Math.round(expenses     * 100) / 100,
-    totalSavings:      Math.round(savings      * 100) / 100,
+    totalSavings:      savings,
     totalDebtPayments: Math.round(debtPayments * 100) / 100,
     totalBorrowed:     Math.round(borrowed     * 100) / 100,
+    // Same integer partition as totalSavings, so the lines sum to it exactly.
+    // Largest first; the "Other" bucket (accountId null) always sorts last
+    // regardless of size — it is a caveat, not a destination.
+    savingsByDestination: [...savingsByDestination.entries()]
+      .map(([accountId, c]) => ({ accountId, amount: c / 100 }))
+      .sort((a, b) =>
+        a.accountId === null ? 1 : b.accountId === null ? -1 : b.amount - a.amount
+      ),
     // Unchanged formula in spirit — savings + debtPayments together equal
     // exactly what the single pre-split `savings` total used to be, so this
     // number is identical to what netCashFlow returned before the split.

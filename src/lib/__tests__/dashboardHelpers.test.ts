@@ -44,6 +44,7 @@ describe('computeMonthTotals — baseline', () => {
       totalDebtPayments: 0,
       totalBorrowed:     0,
       netCashFlow:       0,
+      savingsByDestination: [],
     });
   });
 

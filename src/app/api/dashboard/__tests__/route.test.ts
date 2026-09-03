@@ -317,7 +317,10 @@ describe('GET /api/dashboard?snapshotOnly=1 — month-switch fetch never touches
     expect(json).toEqual({
       hasPlan: true,
       month: '2026-08-01',
-      summary: { totalIncome: 3000, totalExpenses: 1200, totalSavings: 0, totalDebtPayments: 0, totalBorrowed: 0, netCashFlow: 1800 },
+      // savingsByDestination rides along on the snapshotOnly path too — the
+      // breakdown must follow the headline through every route that serves
+      // it, or the month-switch fetch would silently drop it.
+      summary: { totalIncome: 3000, totalExpenses: 1200, totalSavings: 0, totalDebtPayments: 0, totalBorrowed: 0, netCashFlow: 1800, savingsByDestination: [] },
       unanchoredIncomeCount: 0,
       unanchoredExpenseCount: 0,
       earliestAnchorMonth: '2026-01',

@@ -13,6 +13,14 @@ export type DashboardSummary = {
   // dashboardHelpers.ts). Shown beside surplus/deficit, never folded into it.
   totalBorrowed: number;
   netCashFlow: number;
+  // totalSavings partitioned by destination account, emitted by
+  // computeMonthTotals from the same branch that produces the total, with
+  // the household's own account name attached by api/dashboard. These sum to
+  // totalSavings exactly. `name: null` (and/or `accountId: null`) is the
+  // "Other" bucket — a contribution whose destination cannot be named, which
+  // still counts toward the headline. Optional: older cached payloads and the
+  // onboarding preview don't carry it.
+  savingsByDestination?: { accountId: string | null; name: string | null; amount: number }[];
 };
 
 // Informational only (Build 4 Part A, 2026-07-21 revision) — one shared

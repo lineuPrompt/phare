@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import type { RefObject } from 'react';
 import type { MonthView } from '@/lib/timelineDisplayHelpers';
-import type { TimelineEntry, TimelineTx } from '@/lib/timelineHelpers';
+import { classifyDip, type TimelineEntry, type TimelineTx } from '@/lib/timelineHelpers';
 import type { ExpenseCategory } from '@/components/expenses/types';
 import { formatCurrency, formatSignedAmount } from '@/components/expenses/types';
 
@@ -370,14 +370,27 @@ export default function DayLedger({
   onChanged: () => void;
 }) {
   const t = useTranslations('timeline.list');
-  const { visibleDays, unbalancedDays, opensAt, closesAt, balancesBeginNote } = monthView;
+  const { visibleDays, unbalancedDays, opensAt, closesAt, balancesBeginNote, lowest } = monthView;
 
   const isEmpty = visibleDays.length === 0 && unbalancedDays.length === 0;
 
+  // The month's own low, beside the month's own opening and closing balance —
+  // month-scoped and recomputed on every navigation, unlike the header's
+  // payday-anchored dip. Coloured by the SAME classifyDip tiers the header
+  // uses, so "how bad is this number" means one thing across the page.
+  const lowestStatus = classifyDip(lowest);
+  const lowestColor =
+    lowestStatus === 'red' ? '#DC2626' : lowestStatus === 'amber' ? '#B45309' : '#0F2044';
+
   return (
     <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>
-      <div className="flex items-center justify-between mb-4 text-sm" style={{ color: '#6B7280' }}>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-4 text-sm" style={{ color: '#6B7280' }}>
         <span>{t('opensAt')} <strong style={{ color: '#0F2044' }}>{formatCurrency(opensAt, locale)}</strong></span>
+        <span>
+          {t('lowestThisMonth')}{' '}
+          <strong style={{ color: lowestColor }}>{formatCurrency(lowest.balance, locale)}</strong>
+          {' '}{t('lowestOn', { date: fmtDay(lowest.date, locale) })}
+        </span>
         <span>{t('closesAt')} <strong style={{ color: '#0F2044' }}>{formatCurrency(closesAt, locale)}</strong></span>
       </div>
 

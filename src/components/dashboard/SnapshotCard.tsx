@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
@@ -27,6 +30,9 @@ function SubtractionRow({
   locale,
   color,
   emphasis = false,
+  onToggle,
+  expanded = false,
+  toggleLabel,
 }: {
   label: string;
   operator: string;
@@ -34,6 +40,10 @@ function SubtractionRow({
   locale: string;
   color: string;
   emphasis?: boolean;
+  /** Present only on the savings row, and only when there is a breakdown. */
+  onToggle?: () => void;
+  expanded?: boolean;
+  toggleLabel?: string;
 }) {
   return (
     <div
@@ -51,12 +61,27 @@ function SubtractionRow({
       >
         {operator}
       </span>
-      <p
-        className={`flex-1 min-w-0 truncate ${emphasis ? 'text-sm font-semibold' : 'text-sm'}`}
-        style={{ color: emphasis ? '#0F2044' : '#6B7280' }}
-      >
-        {label}
-      </p>
+      {onToggle ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="flex-1 min-w-0 flex items-center gap-1.5 text-left cursor-pointer"
+        >
+          <span className="truncate text-sm" style={{ color: '#6B7280' }}>{label}</span>
+          <span aria-hidden="true" className="shrink-0 text-xs" style={{ color: '#0284C7' }}>
+            {expanded ? '▴' : '▾'}
+          </span>
+          <span className="sr-only">{toggleLabel}</span>
+        </button>
+      ) : (
+        <p
+          className={`flex-1 min-w-0 truncate ${emphasis ? 'text-sm font-semibold' : 'text-sm'}`}
+          style={{ color: emphasis ? '#0F2044' : '#6B7280' }}
+        >
+          {label}
+        </p>
+      )}
       <p
         className={`shrink-0 tabular-nums font-bold ${emphasis ? 'text-lg sm:text-xl' : 'text-sm sm:text-base'}`}
         style={{ color }}
@@ -124,6 +149,11 @@ export default function SnapshotCard({
   const t = useTranslations('dashboard');
   const tNav = useTranslations('dashboard.snapshotNav');
   const surplus = summary.netCashFlow >= 0;
+
+  // Same inline useState idiom GoalsSection / ReserveFundSection already use
+  // for their own expandables — deliberately not a shared Accordion.
+  const [savingsOpen, setSavingsOpen] = useState(false);
+  const savingsLines = summary.savingsByDestination ?? [];
 
   const monthLabel = monthLabelFor(month, locale);
   const showPlanTile = currentMonth !== undefined && isPastMonth !== undefined;
@@ -215,7 +245,38 @@ export default function SnapshotCard({
         <SubtractionRow
           label={t('savings')} operator="−" amount={summary.totalSavings}
           locale={locale} color="#0284C7"
+          onToggle={savingsLines.length > 0 ? () => setSavingsOpen((v) => !v) : undefined}
+          expanded={savingsOpen}
+          toggleLabel={savingsOpen ? t('savingsBreakdownHide') : t('savingsBreakdownShow')}
         />
+        {/* Where the money actually went. These are emitted from the same
+            branch that computed the headline above (computeMonthTotals), in
+            integer cents, so they sum to it exactly — the whole point of the
+            feature is that a household can check that by eye. Names are the
+            household's own; "Other" is a contribution whose destination
+            cannot be named, never a category we invented. */}
+        {savingsOpen && savingsLines.length > 0 && (
+          <div style={{ background: '#F8FAFC', borderTop: '1px solid #E5E7EB' }}>
+            {savingsLines.map((line) => (
+              <div
+                key={line.accountId ?? '__other__'}
+                className="flex items-center gap-2 pl-8 pr-3 sm:pr-4 py-2"
+              >
+                <p className="flex-1 min-w-0 truncate text-sm" style={{ color: '#6B7280' }}>
+                  {line.name ?? t('savingsOther')}
+                </p>
+                <p className="shrink-0 tabular-nums text-sm" style={{ color: '#0284C7' }}>
+                  {formatCurrency(line.amount, locale)}
+                </p>
+              </div>
+            ))}
+            {savingsLines.some((l) => l.name === null) && (
+              <p className="pl-8 pr-3 sm:pr-4 pb-2 text-xs" style={{ color: '#9CA3AF' }}>
+                {t('savingsOtherHint')}
+              </p>
+            )}
+          </div>
+        )}
         {summary.totalDebtPayments > 0 && (
           <SubtractionRow
             label={t('debtPayments')} operator="−" amount={summary.totalDebtPayments}

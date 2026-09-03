@@ -232,7 +232,7 @@ export default function TimelinePage() {
 
   return shell(
     <>
-      <TimelineHeader todayBalance={data.todayBalance} dip={data.dip} windowEndDate={windowEndDate} locale={locale} />
+      <TimelineHeader todayBalance={data.todayBalance} dip={data.dip} nextIncomeDate={data.nextIncomeDate} locale={locale} />
 
       {/* Add entry — the one place chequing transactions get added by hand */}
       <div>

@@ -153,3 +153,109 @@ describe('opening-balance copy renders in both locales', () => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Timeline dip tile + savings breakdown (2026-09-03). Renders the real
+// components against the real message files; a missing key throws here.
+// ---------------------------------------------------------------------------
+import TimelineHeader from '@/components/timeline/TimelineHeader';
+
+describe('timeline dip tile names the payday, in both locales', () => {
+  for (const locale of ['en', 'fr'] as const) {
+    it(`${locale}: healthy dip`, () => {
+      const html = render(locale,
+        <TimelineHeader todayBalance={4565.28} dip={{ date: '2026-09-07', balance: 1560.5 }}
+          nextIncomeDate="2026-09-09" locale={locale} />
+      );
+      console.log(`\n--- ${locale.toUpperCase()} dip tile (healthy) ---\n${text(html)}\n`);
+      expect(html).not.toMatch(/timeline\.header\./);
+      // The PAYDAY ITSELF must render — asserting only the static phrase would
+      // pass with an empty date, which is the bug this names.
+      expect(text(html)).toContain(locale === 'en' ? 'September 9' : '9 septembre');
+    });
+
+    it(`${locale}: amber dip (under $200) — the tier that never fired before`, () => {
+      const html = render(locale,
+        <TimelineHeader todayBalance={800} dip={{ date: '2026-09-21', balance: 150.25 }}
+          nextIncomeDate="2026-09-23" locale={locale} />
+      );
+      console.log(`\n--- ${locale.toUpperCase()} dip tile (AMBER) ---\n${text(html)}\n`);
+      expect(html).toContain('#FFFBEB'); // amber background, not teal
+    });
+
+    it(`${locale}: negative dip`, () => {
+      const html = render(locale,
+        <TimelineHeader todayBalance={100} dip={{ date: '2026-09-21', balance: -240 }}
+          nextIncomeDate="2026-09-23" locale={locale} />
+      );
+      console.log(`\n--- ${locale.toUpperCase()} dip tile (RED) ---\n${text(html)}\n`);
+      expect(text(html)).toMatch(locale === 'en' ? /below zero before your next pay/ : /sous zéro avant votre prochaine paie/);
+    });
+
+    it(`${locale}: no upcoming pay — fallback names no far-future date`, () => {
+      const html = render(locale,
+        <TimelineHeader todayBalance={100} dip={null} nextIncomeDate={null}
+          locale={locale} />
+      );
+      console.log(`\n--- ${locale.toUpperCase()} dip tile (no pay found) ---\n${text(html)}\n`);
+      expect(text(html)).not.toContain('2027');
+      expect(text(html)).toMatch(locale === 'en' ? /Recurring page/ : /page Récurrents/);
+    });
+  }
+});
+
+describe('savings breakdown copy resolves in both locales', () => {
+  it('all four keys present and non-empty', () => {
+    for (const locale of ['en', 'fr'] as const) {
+      const d = MESSAGES[locale].dashboard;
+      for (const k of ['savingsBreakdownShow', 'savingsBreakdownHide', 'savingsOther', 'savingsOtherHint'] as const) {
+        console.log(`${locale}: ${k.padEnd(22)} = ${JSON.stringify(d[k])}`);
+        expect(d[k]).toBeTruthy();
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The month strip. Rendered for real rather than unit-testing a colour
+// helper — the point is that the figure and its tier reach the screen.
+// ---------------------------------------------------------------------------
+import DayLedger from '@/components/timeline/DayLedger';
+import type { MonthView } from '@/lib/timelineDisplayHelpers';
+
+const monthView = (lowBalance: number): MonthView => ({
+  month: '2026-09',
+  visibleDays: [],
+  unbalancedDays: [],
+  opensAt: 4565.28,
+  closesAt: 3143.57,
+  balancesBeginNote: false,
+  lowest: { date: '2026-09-21', balance: lowBalance },
+});
+
+describe('DayLedger month strip shows the month low', () => {
+  for (const locale of ['en', 'fr'] as const) {
+    it(`${locale}: prints the value and its date beside opens/closes`, () => {
+      const html = render(locale,
+        <DayLedger monthView={monthView(236.85)} today="2026-09-03" locale={locale}
+          categories={[]} onChanged={() => {}} />
+      );
+      console.log(`\n--- ${locale.toUpperCase()} month strip ---\n${text(html)}\n`);
+      expect(html).not.toMatch(/timeline\.list\./);
+      const { lowestThisMonth } = MESSAGES[locale].timeline.list;
+      expect(text(html)).toContain(lowestThisMonth);
+      expect(text(html)).toContain(locale === 'en' ? '$236.85' : '236,85');
+    });
+  }
+
+  it('colours the month low by the SAME classifyDip tiers as the header', () => {
+    // healthy (>= $200) — ink, not a warning colour
+    expect(render('en', <DayLedger monthView={monthView(236.85)} today="2026-09-03" locale="en" categories={[]} onChanged={() => {}} />)).toContain('#0F2044');
+    // amber (0 <= x < $200)
+    const amber = render('en', <DayLedger monthView={monthView(150.25)} today="2026-09-03" locale="en" categories={[]} onChanged={() => {}} />);
+    expect(amber).toContain('#B45309');
+    // red (< 0)
+    const red = render('en', <DayLedger monthView={monthView(-40)} today="2026-09-03" locale="en" categories={[]} onChanged={() => {}} />);
+    expect(red).toContain('#DC2626');
+  });
+});

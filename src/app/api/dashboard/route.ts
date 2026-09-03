@@ -248,7 +248,27 @@ export async function GET(request: Request) {
       ]);
 
     // Headline totals from the actual ledger for the displayed month.
-    const summary = computeMonthTotals(txResult.data ?? [], allAccounts);
+    const rawSummary = computeMonthTotals(txResult.data ?? [], allAccounts);
+
+    // Attach the household's own name to each savings destination. Names live
+    // here, not in dashboardHelpers — that module only ever sees ids and
+    // types, and keeping it that way is what lets the partition stay a pure
+    // function of the same rows the totals came from.
+    //
+    // A null name means "we cannot say where this went": either the peer row
+    // was missing (accountId null already) or the destination account has
+    // since been deleted, so the id no longer resolves. Both render as
+    // "Other" — and both still count toward totalSavings, which is exactly
+    // why they must be carried through rather than dropped.
+    const accountNameById = new Map(allAccounts.map((a) => [a.id as string, a.name as string]));
+    const summary = {
+      ...rawSummary,
+      savingsByDestination: rawSummary.savingsByDestination.map((line) => ({
+        accountId: line.accountId,
+        name: line.accountId ? accountNameById.get(line.accountId) ?? null : null,
+        amount: line.amount,
+      })),
+    };
 
     if (snapshotOnly) {
       return NextResponse.json({

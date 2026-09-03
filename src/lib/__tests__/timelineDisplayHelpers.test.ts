@@ -166,3 +166,74 @@ describe('buildMonthView', () => {
     expect(augView!.unbalancedDays).toEqual([]);
   });
 });
+
+// ── MonthView.lowest — the month's own low (2026-09-03) ─────────────────────
+// A DIFFERENT figure from TimelineHeader's dip: month-scoped, recomputed on
+// every navigation, and not stopped by the next payday. The Timeline banner
+// under-reported September because it showed the pre-payday dip ($1,560.50 on
+// Sep 7) while the month's actual low was $236.85 on Sep 21.
+describe('buildMonthView — lowest', () => {
+  it('finds the minimum end-of-day balance in the month', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-09-01', 1000)],
+      transactions: [
+        tx({ date: '2026-09-05', amount: 700, type: 'expense' }),   // 300
+        tx({ date: '2026-09-10', amount: 900, type: 'income' }),    // 1200
+        tx({ date: '2026-09-20', amount: 1100, type: 'expense' }),  // 100  <- low
+        tx({ date: '2026-09-25', amount: 500, type: 'income' }),    // 600
+      ],
+      windowStart: '2026-09-01', windowEnd: '2026-09-30', today: '2026-09-01',
+    });
+    const view = buildMonthView(result.ok ? result.days : [], [], 0, '2026-09-01', '2026-09')!;
+    expect(view.lowest).toEqual({ date: '2026-09-20', balance: 100 });
+  });
+
+  it('reports the EARLIEST date of a flat run at the low, not the last', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-09-01', 500)],
+      transactions: [tx({ date: '2026-09-04', amount: 450, type: 'expense' })], // 50, carried to month end
+      windowStart: '2026-09-01', windowEnd: '2026-09-30', today: '2026-09-01',
+    });
+    const view = buildMonthView(result.ok ? result.days : [], [], 0, '2026-09-01', '2026-09')!;
+    expect(view.lowest.balance).toBe(50);
+    expect(view.lowest.date).toBe('2026-09-04'); // the day it dropped, not 2026-09-30
+  });
+
+  it('considers days with NO entries — the low can sit on an empty day', () => {
+    // The minimum is reached on the 4th and every later empty day carries it;
+    // computing over visibleDays only would still find 50 here, so the real
+    // guard is the day AFTER a drop being eligible at all.
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-09-01', 500)],
+      transactions: [
+        tx({ date: '2026-09-04', amount: 450, type: 'expense' }),  // 50
+        tx({ date: '2026-09-28', amount: 900, type: 'income' }),   // 950
+      ],
+      windowStart: '2026-09-01', windowEnd: '2026-09-30', today: '2026-09-01',
+    });
+    const view = buildMonthView(result.ok ? result.days : [], [], 0, '2026-09-01', '2026-09')!;
+    expect(view.lowest).toEqual({ date: '2026-09-04', balance: 50 });
+    // and every day between is still part of the scan
+    expect(view.visibleDays.length).toBe(2);
+  });
+
+  it('a month that only rises reports its opening day as the low', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-09-01', 200)],
+      transactions: [tx({ date: '2026-09-15', amount: 800, type: 'income' })],
+      windowStart: '2026-09-01', windowEnd: '2026-09-30', today: '2026-09-01',
+    });
+    const view = buildMonthView(result.ok ? result.days : [], [], 0, '2026-09-01', '2026-09')!;
+    expect(view.lowest).toEqual({ date: '2026-09-01', balance: 200 });
+  });
+
+  it('a negative month low is reported as negative, not clamped', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-09-01', 100)],
+      transactions: [tx({ date: '2026-09-10', amount: 340, type: 'expense' })],
+      windowStart: '2026-09-01', windowEnd: '2026-09-30', today: '2026-09-01',
+    });
+    const view = buildMonthView(result.ok ? result.days : [], [], 0, '2026-09-01', '2026-09')!;
+    expect(view.lowest).toEqual({ date: '2026-09-10', balance: -240 });
+  });
+});

@@ -77,6 +77,24 @@ export type MonthView = {
   opensAt: number;                  // balance at the start of the month (or balancesStartDate if mid-month)
   closesAt: number;                 // balance at the end of the last known day in the month
   balancesBeginNote: boolean;       // true when balancesStartDate falls inside this month, after day 1
+  /**
+   * The lowest end-of-day balance anywhere in this month, and the first date
+   * it is reached (2026-09-03).
+   *
+   * A DIFFERENT FIGURE FROM TimelineHeader's dip, deliberately. The dip is
+   * today-anchored and stops at the next payday — it answers "will I run
+   * short before I'm paid". This answers "how low does this month get",
+   * which is a month-scoped question and therefore belongs in the month
+   * strip, recomputed on every navigation. Neither is a restatement of the
+   * other, and both are labelled so they cannot be read as the same number
+   * disagreeing.
+   *
+   * Computed over EVERY day in the month, not just visibleDays: a day with
+   * no entries carries the previous day's balance forward, so the minimum
+   * can legitimately sit on an empty day (it is simply the first day that
+   * reached it that gets named).
+   */
+  lowest: { date: string; balance: number };
 };
 
 /**
@@ -105,6 +123,15 @@ export function buildMonthView(
   const balancesBeginNote =
     balancesStartDate.slice(0, 7) === month && balancesStartDate.slice(8, 10) !== '01';
 
+  // Earliest date wins a tie — a flat run at the month's low is reported at
+  // the day it first dropped there, which is the day that caused it.
+  let lowest = { date: monthDays[0].date, balance: monthDays[0].endOfDayBalance };
+  for (const d of monthDays) {
+    if (d.endOfDayBalance < lowest.balance) {
+      lowest = { date: d.date, balance: d.endOfDayBalance };
+    }
+  }
+
   return {
     month,
     visibleDays,
@@ -112,5 +139,6 @@ export function buildMonthView(
     opensAt,
     closesAt,
     balancesBeginNote,
+    lowest,
   };
 }

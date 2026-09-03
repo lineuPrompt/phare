@@ -506,7 +506,11 @@
       "title": "Votre projection a besoin d’un chiffre",
       "body": "Indiquez à Phare le solde de votre compte chèques à une date que vous connaissez, et il pourra vous montrer où le mois se termine et ce qui s’en vient ensuite. Sans ce chiffre, il n’y a rien sur quoi appuyer une projection.",
       "cta": "Saisir mon solde"
-    }
+    },
+    "savingsBreakdownShow": "Voir le détail",
+    "savingsBreakdownHide": "Masquer le détail",
+    "savingsOther": "Autre",
+    "savingsOtherHint": "Contributions dont le compte de destination n'existe plus."
   },
   "reviews": {
     "title": "Revues",
@@ -637,10 +641,10 @@
     "loading": "Chargement de votre chronologie...",
     "header": {
       "balanceToday": "Solde aujourd'hui",
-      "lowestPoint": "Point le plus bas",
-      "dipsBelowZero": "Vous passez sous zéro",
       "on": "le",
-      "noDip": "Aucun revenu prévu à venir dans cette vue — solde affiché jusqu'au {date}."
+      "noDip": "Aucune paie à venir n'a été trouvée : impossible d'afficher un creux. Ajoutez vos revenus à la page Récurrents.",
+      "lowestBeforePay": "Point le plus bas avant votre prochaine paie ({payday}) :",
+      "dipsBelowZeroBeforePay": "Vous passez sous zéro avant votre prochaine paie ({payday}) :"
     },
     "list": {
       "opensAt": "Ouvre à",
@@ -664,7 +668,9 @@
       "moneyIn": "Entrée d'argent",
       "categoryUnchanged": "Catégorie...",
       "projectionBadge": "Projection",
-      "projectionNote": "Tout ce qui suit ne s'est pas encore produit"
+      "projectionNote": "Tout ce qui suit ne s'est pas encore produit",
+      "lowestThisMonth": "Plus bas",
+      "lowestOn": "le {date}"
     },
     "nav": {
       "prev": "Précédent",

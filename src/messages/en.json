@@ -506,7 +506,11 @@
       "title": "Your projection needs one number",
       "body": "Tell Phare your chequing balance on a date you know, and it can show where the month ends up and what's coming after that. Without it, there is nothing to project from.",
       "cta": "Set my balance"
-    }
+    },
+    "savingsBreakdownShow": "Show breakdown",
+    "savingsBreakdownHide": "Hide breakdown",
+    "savingsOther": "Other",
+    "savingsOtherHint": "Contributions whose destination account no longer exists."
   },
   "reviews": {
     "title": "Reviews",
@@ -637,10 +641,10 @@
     "loading": "Loading your timeline...",
     "header": {
       "balanceToday": "Balance today",
-      "lowestPoint": "Lowest point",
-      "dipsBelowZero": "You dip below zero",
       "on": "on",
-      "noDip": "No income scheduled ahead in this view — balance shown through {date}."
+      "noDip": "No upcoming pay found, so there's no dip to show. Add your income on the Recurring page.",
+      "lowestBeforePay": "Lowest point before your next pay ({payday}):",
+      "dipsBelowZeroBeforePay": "You dip below zero before your next pay ({payday}):"
     },
     "list": {
       "opensAt": "Opens at",
@@ -664,7 +668,9 @@
       "moneyIn": "Money in",
       "categoryUnchanged": "Category...",
       "projectionBadge": "Projection",
-      "projectionNote": "Everything below hasn't happened yet"
+      "projectionNote": "Everything below hasn't happened yet",
+      "lowestThisMonth": "Lowest",
+      "lowestOn": "on {date}"
     },
     "nav": {
       "prev": "Previous",
