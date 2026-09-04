@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/brand/Navbar';
@@ -21,6 +21,7 @@ import { formatCAD } from '@phare/core';
 import { formatResetDate } from '@/lib/onboardingQuota';
 import SupportLine from '@/components/shared/SupportLine';
 import { useBusinessToday } from '@/lib/useBusinessToday';
+import { emitClientEvent } from '@/lib/clientEvents';
 
 type Status = 'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form' | 'accounts' | 'plausibility_check' | 'member_confirm' | 'anchor_dates';
 
@@ -102,6 +103,32 @@ export default function UploadPage() {
   const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
 
   const localeOf = () => (typeof window !== 'undefined' && window.location.pathname.startsWith('/fr') ? 'fr' : 'en');
+
+  /**
+   * FUNNEL — the entry screen was reached.
+   *
+   * This is the one thing the event log could not previously say. A household
+   * that signs in and vanishes leaves an identical trail (a single `returned`
+   * row) whether it never clicked the dashboard's call to action or clicked it
+   * and bounced off the "download this spreadsheet" ask — and those two have
+   * opposite fixes, on different screens. Its ABSENCE is what carries the
+   * information, which is why it has to fire on arrival rather than on any
+   * later action.
+   *
+   * Once per page mount, deliberately not once per return to 'idle':
+   * startOver() sends someone back to this screen and that is a re-entry, not
+   * a new arrival. The ref also absorbs React StrictMode's development-only
+   * double invocation of effects, so a dev session does not inflate the count.
+   *
+   * emitClientEvent returns void and swallows every failure — there is nothing
+   * here for the render path to await or to fail on.
+   */
+  const entryEventSent = useRef(false);
+  useEffect(() => {
+    if (entryEventSent.current) return;
+    entryEventSent.current = true;
+    emitClientEvent('onboarding_entry_viewed');
+  }, []);
 
   /**
    * Writes the chequing opening balance captured on the accounts step as a
@@ -422,6 +449,20 @@ export default function UploadPage() {
   }, [pendingTemplateParsed, proceedWithParsedTemplate]);
 
   const handleFile = useCallback(async (file: File) => {
+    // FUNNEL — the template lane. This is the single choke point for both the
+    // drop zone and the file picker, so it counts a chosen path exactly once
+    // per attempt without either entry point having to remember to.
+    //
+    // Fires on the ATTEMPT, before /api/upload can refuse the file. A
+    // wrong-file bounce is a household that chose this lane and got turned
+    // away, which is a different fact from never choosing it; keeping them
+    // distinct is the point. (Which refusal they hit is event #3,
+    // onboarding_upload_rejected — deliberately not built yet.)
+    //
+    // No file name, no size, no type: the metadata is the literal 'template'
+    // and nothing else. fileMeta.fileName stays where it belongs, in
+    // save-plan's import provenance.
+    emitClientEvent('onboarding_path_chosen', { path: 'template' });
     setStatus('uploading');
     setError('');
     const detectedFileMeta: FileMeta = { fileName: file.name, fileType: 'excel' };
@@ -612,7 +653,14 @@ export default function UploadPage() {
           <UploadEntry
             dragOver={dragOver} setDragOver={setDragOver}
             onDrop={onDrop} onFileSelect={onFileSelect}
-            onManual={() => { setFileMeta(null); setStatus('form'); }}
+            onManual={() => {
+              // FUNNEL — the manual lane, the other half of the fork. Emitted
+              // here rather than inside UploadEntry so that component stays
+              // presentational and both lanes are declared side by side.
+              emitClientEvent('onboarding_path_chosen', { path: 'manual' });
+              setFileMeta(null);
+              setStatus('form');
+            }}
           />
         )}
 
