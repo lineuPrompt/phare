@@ -2,8 +2,37 @@
 -- Phare — restore the 'signup' event to handle_new_user
 -- 2026-09-04.
 --
--- STATUS: PENDING APPLICATION as of writing. Apply in the SQL Editor, then run
---   the VERIFY block at the bottom and record the result in this banner.
+-- STATUS: APPLIED AND VERIFIED LIVE on 2026-09-04. All four checks run in the
+--   SQL Editor and reported by the founder:
+--
+--     CHECK 1 (prosrc) — has_events_insert, has_signup_literal,
+--       has_empty_string_guard, has_path_b, is_security_definer all TRUE;
+--       overload_count = 1. The insert is in the live body, and this replace
+--       did not regress 20260623000001's empty-string guard.
+--     CHECK 2 (trigger) — on_auth_user_created, on auth.users, bound to this
+--       function's oid, tgenabled = 'O'. The function is not merely correct,
+--       something calls it.
+--     CHECK 3 (backfill) — households = 6, total_signup_events = 6,
+--       backfilled = 6, live = 0, households_without_signup = 0.
+--     CHECK 4 (live probe) — signup_rows = 1 and locale = 'fr'. Rolled back.
+--
+--   CHECK 4 IS THE ONE THAT MATTERS MOST. Checks 1-3 confirm text and rows;
+--   only this one proves the trigger FIRES, that metadata is composed from
+--   raw_user_meta_data rather than hardcoded to the 'en' default, and that the
+--   SECURITY DEFINER insert clears the events_all RLS policy. It had never
+--   been executed before this date.
+--
+--   `live = 0` IS ITSELF A FINDING, and the reason this file exists. Not one
+--   of the six households had a genuine trigger-written signup row — the
+--   regression below covered every household in the database, which is what
+--   the diagnosis predicted and had no way to prove until this ran. The first
+--   non-backfilled 'signup' row will come from the next real signup.
+--   See "READING THE DATA" at the foot of this file: that boundary has to be
+--   respected by any funnel query, or the first one you write will lie.
+--
+--   Superseded banner, kept as history — until 2026-09-04 this file read:
+--     "PENDING APPLICATION as of writing. Apply in the SQL Editor, then run
+--      the VERIFY block at the bottom and record the result in this banner."
 --
 -- WHAT BROKE, AND WHEN
 -- --------------------
@@ -264,22 +293,120 @@ SELECT
 -- migration. CHECK 1 is the authoritative one. If it errors, ROLLBACK and move
 -- on; do not "fix" it by filling in auth columns you do not understand.
 --
-  BEGIN;
-    INSERT INTO auth.users (id, email, raw_user_meta_data)
-    VALUES (
-      gen_random_uuid(),
-      'verify-probe-' || gen_random_uuid() || '@example.invalid',
-      jsonb_build_object('full_name', 'Probe', 'locale', 'fr')
-    );
+-- ALREADY RUN — 2026-09-04, returned signup_rows = 1, locale = 'fr'. See the
+-- STATUS banner. It is COMMENTED OUT AGAIN ON PURPOSE and must stay that way.
+--
+-- WHY IT MUST NOT SIT HERE AS LIVE SQL. It was uncommented to run it, which is
+-- exactly right for a one-off probe and exactly wrong to leave behind. Two
+-- distinct hazards, the second much worse than the first:
+--
+--   1. A replay of this file top-to-bottom inserts a junk row into auth.users.
+--      Survivable — the ROLLBACK catches it when the block runs standalone.
+--
+--   2. THE ONE THAT MATTERS: if this file is ever applied by a runner that
+--      wraps each migration in its own transaction, the `BEGIN` below is a
+--      NO-OP — Postgres warns "there is already a transaction in progress" and
+--      carries on — so the trailing `ROLLBACK` is no longer scoped to the
+--      probe. It rolls back THE WHOLE FILE: the restored function, the
+--      backfill, everything. And the runner, having seen no error, may record
+--      the migration as applied.
+--
+-- That is the same failure shape this migration exists to repair: it succeeds
+-- silently and undoes the thing it was supposed to do. To re-run the probe,
+-- uncomment it, run it ALONE in the SQL Editor, and re-comment it afterwards.
+--
+--   BEGIN;
+--     INSERT INTO auth.users (id, email, raw_user_meta_data)
+--     VALUES (
+--       gen_random_uuid(),
+--       'verify-probe-' || gen_random_uuid() || '@example.invalid',
+--       jsonb_build_object('full_name', 'Probe', 'locale', 'fr')
+--     );
+--
+--     -- Expect exactly: signup_rows = 1, and locale = 'fr' — the locale is the
+--     -- point, it proves metadata is composed from raw_user_meta_data rather
+--     -- than hardcoded to the 'en' default.
+--     SELECT count(*) AS signup_rows,
+--            max(metadata->>'locale') AS locale
+--       FROM events e
+--       JOIN households h ON h.id = e.household_id
+--      WHERE e.event_type = 'signup'
+--        AND h.name = 'Probe';
+--   ROLLBACK;
+--
+-- After running CHECK 4, confirm the ROLLBACK actually took — the SQL Editor
+-- does not always say. Both of these must return zero rows:
+--
+--   SELECT id, name FROM households WHERE name = 'Probe';
+--   SELECT id, email FROM auth.users
+--    WHERE email LIKE 'verify-probe-%@example.invalid';
+-- =============================================================================
 
-    -- Expect exactly: signup_rows = 1, and locale = 'fr' — the locale is the
-    -- point, it proves metadata is composed from raw_user_meta_data rather
-    -- than hardcoded to the 'en' default.
-    SELECT count(*) AS signup_rows,
-           max(metadata->>'locale') AS locale
-      FROM events e
-      JOIN households h ON h.id = e.household_id
-     WHERE e.event_type = 'signup'
-       AND h.name = 'Probe';
-  ROLLBACK;
+
+-- =============================================================================
+-- READING THE DATA — the cohort boundary this migration creates
+--
+-- CHECK 3 returned backfilled = 6, live = 0. Every household that existed on
+-- 2026-09-04 has a signup row that was RECONSTRUCTED, and none of them has any
+-- of the funnel events that shipped the same day (onboarding_entry_viewed,
+-- onboarding_path_chosen — src/lib/clientEvents.ts).
+--
+-- THE TRAP: the obvious first query is "of all households with a signup, how
+-- many reached the upload entry screen?" — and today that returns 0 of 6. That
+-- number means the events did not exist while those households were onboarding.
+-- It does NOT mean nobody reached the page. Reading it as a 0% entry rate would
+-- invent a catastrophe out of the fix for the thing being measured, which is a
+-- worse outcome than the blindness this all started as.
+--
+-- So every funnel query must be scoped to households whose signup is LIVE, not
+-- backfilled. That predicate is the cohort definition, not a detail:
+--
+--   WITH cohort AS (
+--     SELECT household_id, created_at AS signed_up_at
+--       FROM events
+--      WHERE event_type = 'signup'
+--        AND COALESCE(metadata->>'backfilled', 'false') <> 'true'
+--   )
+--   SELECT
+--     count(*)                                                   AS signups,
+--     count(*) FILTER (WHERE reached_entry)                      AS reached_entry,
+--     count(*) FILTER (WHERE chose_template)                     AS chose_template,
+--     count(*) FILTER (WHERE chose_manual)                       AS chose_manual,
+--     count(*) FILTER (WHERE generated_plan)                     AS generated_plan,
+--     count(*) FILTER (WHERE saved_plan)                         AS saved_plan,
+--     count(*) FILTER (WHERE active_days > 1)                    AS came_back
+--   FROM (
+--     SELECT
+--       c.household_id,
+--       EXISTS (SELECT 1 FROM events e WHERE e.household_id = c.household_id
+--                AND e.event_type = 'onboarding_entry_viewed')     AS reached_entry,
+--       EXISTS (SELECT 1 FROM events e WHERE e.household_id = c.household_id
+--                AND e.event_type = 'onboarding_path_chosen'
+--                AND e.metadata->>'path' = 'template')             AS chose_template,
+--       EXISTS (SELECT 1 FROM events e WHERE e.household_id = c.household_id
+--                AND e.event_type = 'onboarding_path_chosen'
+--                AND e.metadata->>'path' = 'manual')               AS chose_manual,
+--       EXISTS (SELECT 1 FROM events e WHERE e.household_id = c.household_id
+--                AND e.event_type = 'onboarding_plan_generated')   AS generated_plan,
+--       EXISTS (SELECT 1 FROM events e WHERE e.household_id = c.household_id
+--                AND e.event_type = 'completed_onboarding')        AS saved_plan,
+--       (SELECT count(*) FROM events e WHERE e.household_id = c.household_id
+--                AND e.event_type = 'returned')                    AS active_days
+--     FROM cohort c
+--   ) f;
+--
+-- TWO THINGS THAT WILL BE MISREAD IF NOT WRITTEN DOWN:
+--
+--   'returned' IS AN ACTIVE-DAY COUNT, NOT A RETURN COUNT. It is deduped per
+--   (household, user, UTC day) and fires on the FIRST dashboard load ever, so
+--   "came back" is count > 1, never count > 0. It is also UTC rather than the
+--   household's timezone, so a late-evening Montréal session can straddle two
+--   UTC days and read as two.
+--
+--   chose_template AND chose_manual ARE NOT MUTUALLY EXCLUSIVE, deliberately.
+--   Someone who drops the wrong file and then falls back to typing sets both,
+--   and that pair is a real finding about the template rather than a bug in the
+--   query. They also both fire on the ATTEMPT, before /api/upload can refuse
+--   the file — the refusal reason is onboarding_upload_rejected, which is not
+--   built yet.
 -- =============================================================================
