@@ -1,0 +1,42 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://rmxnryjslussumwttzna.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_uu7muln1rtsadno473bFsw_gRGLVJOe",
+        "EXPO_PUBLIC_API_URL": "https://phare.money"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://rmxnryjslussumwttzna.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_uu7muln1rtsadno473bFsw_gRGLVJOe",
+        "EXPO_PUBLIC_API_URL": "https://phare.money"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://rmxnryjslussumwttzna.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_uu7muln1rtsadno473bFsw_gRGLVJOe",
+        "EXPO_PUBLIC_API_URL": "https://phare.money"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
