@@ -113,7 +113,10 @@ export default function CardEnvelopeEditor({
       onSaved();
     } else {
       const d = await res.json().catch(() => ({}));
-      setError(d.error ?? 'Failed to save.');
+      // The editor can still be open when a statement closes (page left open
+      // across the close date); the server refuses the write — say why, in
+      // the family's language, rather than echoing the English error.
+      setError(d.code === 'cycle_closed' ? t('editor.cycleClosed') : (d.error ?? 'Failed to save.'));
     }
   };
 

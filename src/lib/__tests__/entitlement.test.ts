@@ -3,6 +3,7 @@ import {
   entitlementFor,
   isPro,
   horizonMonthsFor,
+  entitledHorizonEndMonth,
   HORIZON_MONTHS_FREE,
   HORIZON_MONTHS_PRO,
 } from '@/lib/entitlement';
@@ -161,6 +162,25 @@ describe('horizonMonthsFor', () => {
     // Teeth: without this the constants could both be 3 and every test above
     // would still pass.
     expect(HORIZON_MONTHS_PRO).toBeGreaterThan(HORIZON_MONTHS_FREE);
+  });
+});
+
+// The one horizon-end function the Timeline AND the Cards page call. The
+// current month counts as month 1.
+describe('entitledHorizonEndMonth', () => {
+  it('free: current + 2 (three months including this one)', () => {
+    expect(entitledHorizonEndMonth('2026-09', false)).toBe('2026-11');
+  });
+
+  it('Pro: current + 11 (twelve months including this one)', () => {
+    expect(entitledHorizonEndMonth('2026-09', true)).toBe('2027-08');
+  });
+
+  it('rolls over the year boundary', () => {
+    expect(entitledHorizonEndMonth('2026-11', false)).toBe('2027-01');
+    expect(entitledHorizonEndMonth('2026-12', false)).toBe('2027-02');
+    expect(entitledHorizonEndMonth('2026-01', true)).toBe('2026-12');
+    expect(entitledHorizonEndMonth('2026-02', true)).toBe('2027-01');
   });
 });
 

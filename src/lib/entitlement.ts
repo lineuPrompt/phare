@@ -182,3 +182,19 @@ export const REGENERATIONS_PER_MONTH_PRO = 4;
 export function horizonMonthsFor(household: EntitlementInput | null | undefined, now?: Date): number {
   return isPro(household, now) ? HORIZON_MONTHS_PRO : HORIZON_MONTHS_FREE;
 }
+
+/**
+ * The LAST month (YYYY-MM) a household may navigate to, counting the current
+ * month as month 1 — free: current + 2, Pro: current + 11.
+ *
+ * ONE function for every navigable surface. The Timeline and the Cards page
+ * both call this, so the two can never sell a different horizon: before
+ * 2026-09-11 Cards had its own flat +11 and a free household saw eleven
+ * forward months of card plan while its Timeline stopped at three.
+ */
+export function entitledHorizonEndMonth(currentMonth: string, pro: boolean): string {
+  const count = pro ? HORIZON_MONTHS_PRO : HORIZON_MONTHS_FREE;
+  const [y, m] = currentMonth.split('-').map(Number);
+  const idx = (m - 1) + (count - 1);
+  return `${y + Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, '0')}`;
+}

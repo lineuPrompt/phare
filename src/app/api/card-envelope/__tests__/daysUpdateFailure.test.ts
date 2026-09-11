@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /**
  * Tier 2 (2026-07-22, Codex adversarial review) — POST /api/card-envelope
@@ -17,6 +17,8 @@ type Row = Record<string, unknown> & { id: string };
 function makeFakeSupabase(opts: { failAccountUpdate?: boolean } = {}) {
   const store = {
     users: [{ id: 'user-1', household_id: 'hh-1' }] as Row[],
+    // Read by the closed-cycle lock (getHouseholdTimezone).
+    households: [{ id: 'hh-1', timezone: 'America/Toronto' }] as Row[],
     accounts: [{ id: 'card-1', household_id: 'hh-1', name: 'Visa', type: 'credit_card' }] as Row[],
     monthly_goals: [] as Row[],
     card_envelope_items: [] as Row[],
@@ -75,6 +77,14 @@ vi.mock('@/lib/supabase-server', () => ({
 describe('POST /api/card-envelope — partial statement-day write failure', () => {
   beforeEach(() => {
     vi.resetModules();
+    // The posted month (2026-07) must still be an OPEN cycle, or the
+    // closed-cycle lock refuses it before the write path under test runs.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-20T12:00:00'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('goal + categories save, statement-day update fails: response marks it explicitly, not a bare saved:true', async () => {

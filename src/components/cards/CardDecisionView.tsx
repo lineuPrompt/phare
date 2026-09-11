@@ -10,8 +10,8 @@ import {
   type SortDirection,
 } from '@/lib/envelopeHelpers';
 import { formatCurrency, formatSignedAmount } from '@/components/expenses/types';
-import { EnvelopeStatus, envelopeStatus, sumWarning, CategoryEntryLine, UNCATEGORIZED_ROW_ID } from '@/lib/envelopeHelpers';
-import { cardCycleContext } from '@phare/core';
+import { EnvelopeStatus, envelopeStatus, sumWarning, CategoryEntryLine, UNCATEGORIZED_ROW_ID, CycleState, PastPlanState } from '@/lib/envelopeHelpers';
+import { cardCycleContext, statementCycleWindow } from '@phare/core';
 
 function formatShortDate(iso: string, locale: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString(
@@ -55,6 +55,11 @@ export type DecisionViewProps = {
   // moving an entry OUT of the category it was wrongly filed under, and the
   // right destination often has no envelope of its own.
   categories: { id: string; name: string }[];
+  // From GET /api/card-envelope. A closed cycle's plan is read-only (the
+  // server refuses the write) and shown exactly as saved for that month;
+  // pastPlan says whether anything was saved for it at all.
+  cycleState: CycleState;
+  pastPlan: PastPlanState | null;
 };
 
 /**
@@ -233,9 +238,17 @@ export default function CardDecisionView({
   statementCloseDay,
   paymentDay,
   categories,
+  cycleState,
+  pastPlan,
 }: DecisionViewProps) {
   const t = useTranslations('cards');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const locked = cycleState === 'closed';
+  // No category budgets exist FOR this closed month. Its envelope column
+  // must read "—", never $0.00: a zero is a budget of zero, which nobody set.
+  const noCategoryBudgets = pastPlan === 'goalOnly' || pastPlan === 'none';
+  const closedOn = locked ? statementCycleWindow(month, statementCloseDay).end : null;
   const remaining = totalGoal !== null ? totalGoal - totalSpent : null;
   const overGoal = remaining !== null && remaining < 0;
 
@@ -347,6 +360,23 @@ export default function CardDecisionView({
         </p>
       )}
 
+      {/* Closed statement: the plan is history. Say so, and say plainly when
+          nothing (or only a goal) was saved for this month — the table below
+          then shows spending against no carried-in numbers. */}
+      {locked && closedOn && (
+        <div className="rounded-xl px-4 py-3 space-y-1" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+          <p className="text-xs sm:text-sm" style={{ color: '#475569' }}>
+            {t('decision.lockedNote', { date: formatShortDate(closedOn, locale) })}
+          </p>
+          {pastPlan === 'goalOnly' && (
+            <p className="text-xs sm:text-sm font-medium" style={{ color: '#0F2044' }}>{t('decision.noCategoryBudgets')}</p>
+          )}
+          {pastPlan === 'none' && (
+            <p className="text-xs sm:text-sm font-medium" style={{ color: '#0F2044' }}>{t('decision.noPlanSaved')}</p>
+          )}
+        </div>
+      )}
+
       {/* Three-question header strip */}
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <div className="rounded-2xl bg-white p-3 sm:p-5 min-w-0" style={{ border: '1px solid #E5E7EB' }}>
@@ -388,6 +418,10 @@ export default function CardDecisionView({
       {/* Per-category decision table */}
       <div className="rounded-2xl bg-white p-3 sm:p-6" style={{ border: '1px solid #E5E7EB' }}>
         {!hasEnvelope ? (
+          locked ? (
+            // Closed and empty: nothing to set up any more, and nothing spent.
+            <p className="text-center py-6 text-sm" style={{ color: '#6B7280' }}>{t('decision.entries.noEntries')}</p>
+          ) : (
           <div className="text-center py-6">
             <p className="text-sm mb-3" style={{ color: '#6B7280' }}>{t('decision.noEnvelope')}</p>
             <button
@@ -398,6 +432,7 @@ export default function CardDecisionView({
               {t('editor.title')}
             </button>
           </div>
+          )
         ) : (
           <>
             <div className="flex items-center justify-between mb-4">
@@ -458,13 +493,15 @@ export default function CardDecisionView({
                     {allExpanded ? t('decision.collapseAll') : t('decision.expandAll')}
                   </button>
                 )}
-                <button
-                  onClick={onEditEnvelope}
-                  className="text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-80"
-                  style={{ border: '1.5px solid #2ABFBF', color: '#2ABFBF' }}
-                >
-                  {t('editor.title')}
-                </button>
+                {!locked && (
+                  <button
+                    onClick={onEditEnvelope}
+                    className="text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-80"
+                    style={{ border: '1.5px solid #2ABFBF', color: '#2ABFBF' }}
+                  >
+                    {t('editor.title')}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -510,7 +547,7 @@ export default function CardDecisionView({
                           {row.categoryName}
                         </td>
                         <td className="py-2.5 text-right" style={{ color: '#6B7280' }}>
-                          {formatCurrency(row.monthlyAmount, locale)}
+                          {noCategoryBudgets ? '—' : formatCurrency(row.monthlyAmount, locale)}
                         </td>
                         <td className="py-2.5 text-right font-medium" style={{ color: '#0F2044' }}>
                           {formatCurrency(row.actual, locale)}
@@ -594,14 +631,14 @@ export default function CardDecisionView({
                 {/* TOTAL sums its own columns — no goal comparison mixed in. */}
                 <tr style={{ borderTop: '2px solid #0F2044' }}>
                   <td className="py-3 font-bold" style={{ color: '#0F2044' }}>{t('decision.total')}</td>
-                  <td className="py-3 text-right font-bold" style={{ color: '#0F2044' }}>
-                    {formatCurrency(envelopeSum, locale)}
+                  <td className="py-3 text-right font-bold" style={{ color: noCategoryBudgets ? '#9CA3AF' : '#0F2044' }}>
+                    {noCategoryBudgets ? '—' : formatCurrency(envelopeSum, locale)}
                   </td>
                   <td className="py-3 text-right font-bold" style={{ color: statusColor(totalStatus, spentSum) === '#9CA3AF' ? '#0F2044' : statusColor(totalStatus, spentSum) }}>
                     {formatCurrency(spentSum, locale)}
                   </td>
-                  <td className="py-3 text-right font-bold" style={{ color: leftSum < 0 ? '#DC2626' : '#0F2044' }}>
-                    {formatCurrency(leftSum, locale)}
+                  <td className="py-3 text-right font-bold" style={{ color: noCategoryBudgets ? '#9CA3AF' : leftSum < 0 ? '#DC2626' : '#0F2044' }}>
+                    {noCategoryBudgets ? '—' : formatCurrency(leftSum, locale)}
                   </td>
                   <td className="py-3 text-right font-bold">
                     {totalStatus === 'over' ? (

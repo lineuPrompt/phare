@@ -9,6 +9,10 @@ import {
   carryForwardMap,
   buildGrid,
   groupEntriesByCategory,
+  cycleState,
+  pastPlanState,
+  cardHistoryFloorMonth,
+  gridWindowMonths,
   EnvTx,
   CardTxRow,
 } from '../envelopeHelpers';
@@ -366,6 +370,142 @@ describe('buildGrid', () => {
     );
     expect(grid.totalActuals[0]).toBe(100);
     expect(grid.totalActuals[1]).toBe(50); // January's cycle already open, real data, not future
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6b. Past months (2026-09-11): closed cycles are snapshot-only
+// ---------------------------------------------------------------------------
+
+describe('cycleState', () => {
+  // Close 27: August's cycle is Jul 28 – Aug 27.
+  it('closed only once the close date has PASSED', () => {
+    expect(cycleState('2026-08', 27, '2026-08-27')).toBe('open');   // close date itself
+    expect(cycleState('2026-08', 27, '2026-08-28')).toBe('closed');  // the day after
+  });
+
+  it('open from the day its window starts, future before that', () => {
+    expect(cycleState('2026-08', 27, '2026-07-27')).toBe('future');
+    expect(cycleState('2026-08', 27, '2026-07-28')).toBe('open');
+  });
+
+  it('no close day: the calendar month is the cycle', () => {
+    expect(cycleState('2026-08', null, '2026-08-31')).toBe('open');
+    expect(cycleState('2026-08', null, '2026-09-01')).toBe('closed');
+  });
+});
+
+describe('pastPlanState', () => {
+  it('saved / goalOnly / none', () => {
+    expect(pastPlanState(true, true)).toBe('saved');
+    expect(pastPlanState(true, false)).toBe('saved');
+    expect(pastPlanState(false, true)).toBe('goalOnly');
+    expect(pastPlanState(false, false)).toBe('none');
+  });
+});
+
+describe('cardHistoryFloorMonth', () => {
+  it('maps each card\'s earliest date to the cycle containing it, via its own close day', () => {
+    // Jun 29 on a close-27 card is JULY's cycle (Jun 28 – Jul 27).
+    expect(cardHistoryFloorMonth([{ date: '2026-06-29', closeDay: 27 }], [], '2026-09')).toBe('2026-07');
+    // Jun 27 is still June's cycle on the same card.
+    expect(cardHistoryFloorMonth([{ date: '2026-06-27', closeDay: 27 }], [], '2026-09')).toBe('2026-06');
+    // No close day: calendar month.
+    expect(cardHistoryFloorMonth([{ date: '2026-06-29', closeDay: null }], [], '2026-09')).toBe('2026-06');
+  });
+
+  it('takes the earliest across cards and saved snapshots', () => {
+    expect(cardHistoryFloorMonth(
+      [{ date: '2026-07-10', closeDay: 15 }, { date: '2026-08-01', closeDay: 27 }],
+      ['2026-05-01', null],
+      '2026-09'
+    )).toBe('2026-05');
+  });
+
+  it('never later than the current month; empty history → current month', () => {
+    expect(cardHistoryFloorMonth([], [], '2026-09')).toBe('2026-09');
+    expect(cardHistoryFloorMonth([{ date: null, closeDay: 27 }], [null], '2026-09')).toBe('2026-09');
+    expect(cardHistoryFloorMonth([{ date: '2027-01-05', closeDay: 27 }], ['2026-12-01'], '2026-09')).toBe('2026-09');
+  });
+});
+
+describe('gridWindowMonths', () => {
+  const PRO_END = '2027-08';  // current 2026-09 + 11
+  const FREE_END = '2026-11'; // current 2026-09 + 2
+
+  it('current or future picked: today\'s forward window', () => {
+    for (const picked of ['2026-09', '2026-10', '2027-08']) {
+      const w = gridWindowMonths(picked, '2026-09', PRO_END);
+      expect(w[0]).toBe('2026-09');
+      expect(w).toHaveLength(12);
+      expect(w[11]).toBe('2027-08');
+    }
+  });
+
+  it('past picked: starts AT the picked month, 12 wide', () => {
+    const w = gridWindowMonths('2026-07', '2026-09', PRO_END);
+    expect(w[0]).toBe('2026-07');
+    expect(w).toHaveLength(12);
+    expect(w[11]).toBe('2027-06');
+  });
+
+  it('never past the horizon', () => {
+    expect(gridWindowMonths('2026-09', '2026-09', FREE_END)).toEqual(['2026-09', '2026-10', '2026-11']);
+    expect(gridWindowMonths('2026-07', '2026-09', FREE_END)).toEqual(['2026-07', '2026-08', '2026-09', '2026-10', '2026-11']);
+  });
+
+  it('a pick more than 12 months back is all history — no horizon clipping needed', () => {
+    const w = gridWindowMonths('2025-01', '2026-09', FREE_END);
+    expect(w[0]).toBe('2025-01');
+    expect(w[11]).toBe('2025-12');
+  });
+});
+
+describe('buildGrid — closed columns use only their own month\'s snapshot', () => {
+  const names = new Map([[CAT_GROCERY, 'Groceries'], [CAT_REST, 'Restaurants']]);
+  // Calendar-month cycles (closeDay null). Today Sep 11: Jul + Aug closed, Sep open, Oct future.
+  const months = ['2026-07', '2026-08', '2026-09', '2026-10'];
+  const today = '2026-09-11';
+  const txns: EnvTx[] = [
+    tx(VISA, 120, '2026-07-10', CAT_GROCERY),
+    tx(VISA, 90, '2026-08-10', CAT_GROCERY),
+    tx(VISA, 40, '2026-09-05', CAT_GROCERY),
+  ];
+  // July: full plan. August: GOAL ONLY (the Costco Lineu shape). September: nothing.
+  const items = new Map([['2026-07', [{ categoryId: CAT_GROCERY, monthlyAmount: 650 }, { categoryId: CAT_REST, monthlyAmount: 100 }]]]);
+  const goals = new Map([['2026-07', 3000], ['2026-08', 2800]]);
+  const grid = buildGrid(txns, VISA, items, names, months, goals, '2026-09', null, today);
+  const groceries = grid.rows.find((r) => r.categoryId === CAT_GROCERY)!;
+
+  it('reports each column\'s cycle state and past plan state', () => {
+    expect(grid.cycleStates).toEqual(['closed', 'closed', 'open', 'future']);
+    expect(grid.pastPlans).toEqual(['saved', 'goalOnly', null, null]);
+  });
+
+  it('goal-but-no-categories month: its own goal, and NO category budget carried in from July', () => {
+    expect(grid.totalGoals[1]).toBe(2800);
+    expect(groceries.budgets[1]).toBe(0); // not July's 650
+    expect(groceries.actuals[1]).toBe(90); // real spend still shown
+  });
+
+  it('a closed month with its own plan shows exactly that plan', () => {
+    expect(groceries.budgets[0]).toBe(650);
+    expect(grid.totalGoals[0]).toBe(3000);
+  });
+
+  it('open and future columns still carry forward, unchanged', () => {
+    // Nearest saved at-or-before is July for items, August for the goal.
+    expect(groceries.budgets[2]).toBe(650);
+    expect(groceries.budgets[3]).toBe(650);
+    expect(grid.totalGoals[2]).toBe(2800);
+    expect(grid.totalGoals[3]).toBe(2800);
+  });
+
+  it('nothing saved for a closed month → none, goal null (not carried)', () => {
+    const g = buildGrid(txns, VISA, items, names, ['2026-08'], new Map([['2026-07', 3000]]), '2026-09', null, today);
+    expect(g.pastPlans[0]).toBe('none');
+    expect(g.totalGoals[0]).toBeNull();
+    expect(g.rows.find((r) => r.categoryId === CAT_GROCERY)!.budgets[0]).toBe(0);
   });
 });
 

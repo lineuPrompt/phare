@@ -555,6 +555,9 @@
       "noEnvelope": "Aucune enveloppe définie — ajoutez des catégories ci-dessous pour suivre vos dépenses par catégorie.",
       "goalVsAllocated": "Objectif {goal} · sous-budgets {sum} · {over} en surallocation",
       "cycleLine": "Cycle : {start} – {end} · payé le {paysOn}",
+      "lockedNote": "Ce relevé a été fermé le {date}. Son plan reste tel qu'il a été enregistré et ne peut plus être modifié — vous pouvez toujours ajouter ou corriger des entrées.",
+      "noCategoryBudgets": "Aucun budget par catégorie n'a été enregistré pour ce mois — seulement l'objectif mensuel.",
+      "noPlanSaved": "Aucun plan n'a été enregistré pour ce mois — vous voyez seulement ce qui a été dépensé.",
       "entries": {
         "noEntries": "Aucune entrée ce mois-ci.",
         "edit": "Modifier",
@@ -598,15 +601,26 @@
       "copying": "Copie en cours...",
       "copyNothingToCopy": "Aucune enveloppe enregistrée pour le mois précédent.",
       "copyFailed": "Impossible de charger le mois précédent.",
-      "daysUpdateFailed": "Votre objectif de dépenses et vos catégories ont été enregistrés, mais le jour de relevé/paiement n'a pas pu être enregistré. Veuillez réessayer."
+      "daysUpdateFailed": "Votre objectif de dépenses et vos catégories ont été enregistrés, mais le jour de relevé/paiement n'a pas pu être enregistré. Veuillez réessayer.",
+      "cycleClosed": "Ce relevé est fermé : son plan ne peut plus être modifié."
     },
     "grid": {
-      "title": "Plan sur 12 mois",
+      "title": "Mois par mois",
       "total": "Total dépensé",
       "goal": "Objectif",
       "current": "en cours",
       "uncategorized": "Sans catégorie",
-      "empty": "Configurez des catégories d'enveloppe pour voir votre plan sur 12 mois."
+      "empty": "Configurez des catégories d'enveloppe pour voir votre plan mois par mois.",
+      "closed": "fermé",
+      "goalOnly": "objectif seul",
+      "noPlan": "aucun plan",
+      "legendClosed": "Les mois ombrés sont des relevés fermés, comparés au plan enregistré pour ce mois-là.",
+      "legendGoalOnly": "Objectif seul : un objectif mensuel a été enregistré, mais aucun budget par catégorie.",
+      "legendNoPlan": "Aucun plan : rien n'a été prévu pour ce mois-là, donc seules les dépenses sont affichées."
+    },
+    "nav": {
+      "pickMonth": "Mois du relevé",
+      "horizonLocked": "{count, plural, one {# mois de plus} other {# mois de plus}} pour planifier vos cartes avec Phare Pro"
     },
     "overview": {
       "title": "Marge de manœuvre sur vos cartes",

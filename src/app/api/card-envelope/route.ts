@@ -9,9 +9,13 @@ import {
   EnvTx,
   CardTxRow,
   groupEntriesByCategory,
+  cycleState,
+  pastPlanState,
 } from '@/lib/envelopeHelpers';
 import { categoryDisplayName } from '@/lib/categoryTranslations';
-import { statementCycleWindow } from '@phare/core';
+import { businessToday, statementCycleWindow } from '@phare/core';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
+import { fetchCardGoalForMonth } from '@/lib/cardPlanServer';
 
 async function resolveHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -56,19 +60,16 @@ export async function GET(request: Request) {
     const closeDay = (card.statement_close_day as number | null) ?? null;
     const cycleWindow = statementCycleWindow(monthParam, closeDay);
 
-    // Card's total monthly goal (carry-forward: latest goal on or before this month)
-    const monthStart = `${monthParam}-01`;
-    const { data: goalRow } = await supabase
-      .from('monthly_goals')
-      .select('card_goal')
-      .eq('household_id', householdId)
-      .eq('account_id', cardId)
-      .lte('month', monthStart)
-      .order('month', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Closed cycles (close date passed) are history: snapshot-only goal, and
+    // the plan is read-only — see POST below and envelopeHelpers.cycleState.
+    const timezone = await getHouseholdTimezone(supabase, householdId);
+    const state = cycleState(monthParam, closeDay, businessToday(timezone));
+    const closed = state === 'closed';
 
-    const totalGoal: number | null = goalRow ? Number(goalRow.card_goal) : null;
+    // Card's total monthly goal: that month's own row when closed, otherwise
+    // carried forward from the latest goal on or before this month.
+    const monthStart = `${monthParam}-01`;
+    const totalGoal = await fetchCardGoalForMonth(supabase, householdId, cardId, monthParam, closed);
 
     // Envelope items saved for exactly this month (month-scoped: editing one
     // month never touches another — see 20260714000000 migration).
@@ -159,6 +160,10 @@ export async function GET(request: Request) {
       categories: categoriesForEditor,
       entriesByCategory,
       uncategorizedEntries,
+      cycleState: state,
+      // Closed cycles only: what was saved for exactly this month. Items above
+      // are already exact-month, and totalGoal is exact-month when closed.
+      pastPlan: closed ? pastPlanState((items ?? []).length > 0, totalGoal !== null) : null,
     });
   } catch (error) {
     console.error('GET /api/card-envelope error:', error);
@@ -197,11 +202,31 @@ export async function POST(request: Request) {
     // Guard: account must belong to this household
     const { data: card } = await supabase
       .from('accounts')
-      .select('id')
+      .select('id, statement_close_day')
       .eq('id', cardId)
       .eq('household_id', householdId)
       .single();
     if (!card) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+
+    // CLOSED-CYCLE LOCK (2026-09-11). Once a cycle's statement close date has
+    // passed, its goal and category budgets are history — what the family
+    // planned for that month — and must not be rewritten after its spending
+    // is known. This is the enforcement; the Cards page hiding its Edit
+    // button is only a courtesy. Checked BEFORE any write, so a refused
+    // request changes nothing, statement days included.
+    //
+    // Uses the card's STORED close day, not one in this request body: a
+    // request cannot unlock a month by claiming a later close day.
+    // Transaction entry (POST /api/expenses) is deliberately NOT locked — a
+    // late-posted charge still belongs to its closed cycle.
+    const storedCloseDay = (card.statement_close_day as number | null) ?? null;
+    const timezone = await getHouseholdTimezone(supabase, householdId);
+    if (cycleState(month, storedCloseDay, businessToday(timezone)) === 'closed') {
+      return NextResponse.json(
+        { error: 'This statement has closed. Its plan can no longer be changed.', code: 'cycle_closed' },
+        { status: 409 }
+      );
+    }
 
     const monthStart = `${month}-01`;
 

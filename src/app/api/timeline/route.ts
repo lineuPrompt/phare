@@ -9,7 +9,7 @@ import {
 import { groupUnbalancedTransactions } from '@/lib/timelineDisplayHelpers';
 import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
 import { loadEntitlement } from '@/lib/entitlementServer';
-import { HORIZON_MONTHS_FREE, HORIZON_MONTHS_PRO } from '@/lib/entitlement';
+import { HORIZON_MONTHS_FREE, HORIZON_MONTHS_PRO, entitledHorizonEndMonth } from '@/lib/entitlement';
 import { businessToday } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { logEvent } from '@/lib/eventLogger';
@@ -152,8 +152,9 @@ export async function GET(request: Request) {
     // household's; only what is RETURNED is trimmed.
     const horizonEntitlement = await loadEntitlement(supabase, householdId);
     const horizonMonthCount = horizonEntitlement.isPro ? HORIZON_MONTHS_PRO : HORIZON_MONTHS_FREE;
-    const hzRaw = (tm - 1) + (horizonMonthCount - 1);
-    const horizonEndMonth = `${ty + Math.floor(hzRaw / 12)}-${String((hzRaw % 12) + 1).padStart(2, '0')}`;
+    // Shared with the Cards page's month picker (GET /api/cards/months) — one
+    // function, so the two surfaces cannot disagree on where the horizon ends.
+    const horizonEndMonth = entitledHorizonEndMonth(`${ty}-${String(tm).padStart(2, '0')}`, horizonEntitlement.isPro);
 
     // ── Bridge: ensure credit card payment rows exist ───────────────────────────
     // A bridge payment for spend month M appears in the chequing ledger in month M+1.

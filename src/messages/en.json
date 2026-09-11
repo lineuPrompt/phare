@@ -555,6 +555,9 @@
       "noEnvelope": "No envelope set — add categories below to track spending by category.",
       "goalVsAllocated": "Goal {goal} · sub-budgets {sum} · {over} over-allocated",
       "cycleLine": "Cycle: {start} – {end} · pays {paysOn}",
+      "lockedNote": "This statement closed on {date}. Its plan stays as it was saved and can no longer be edited — you can still add or correct entries.",
+      "noCategoryBudgets": "No category budgets were saved for this month — only the monthly goal.",
+      "noPlanSaved": "No plan was saved for this month — you're seeing what was spent.",
       "entries": {
         "noEntries": "No entries this month.",
         "edit": "Edit",
@@ -598,15 +601,26 @@
       "copying": "Copying...",
       "copyNothingToCopy": "No envelope was saved for the previous month.",
       "copyFailed": "Couldn't load the previous month.",
-      "daysUpdateFailed": "Your spending goal and categories saved, but the statement/payment day couldn't be saved. Please try again."
+      "daysUpdateFailed": "Your spending goal and categories saved, but the statement/payment day couldn't be saved. Please try again.",
+      "cycleClosed": "This statement has closed, so its plan can no longer be changed."
     },
     "grid": {
-      "title": "12-month plan",
+      "title": "Month by month",
       "total": "Total spent",
       "goal": "Goal",
       "current": "current",
       "uncategorized": "Uncategorized",
-      "empty": "Set up envelope categories to see your 12-month plan."
+      "empty": "Set up envelope categories to see your plan month by month.",
+      "closed": "closed",
+      "goalOnly": "goal only",
+      "noPlan": "no plan saved",
+      "legendClosed": "Shaded months are closed statements, compared with the plan saved for that month.",
+      "legendGoalOnly": "Goal only: a monthly goal was saved, but no category budgets.",
+      "legendNoPlan": "No plan saved: nothing was planned for that month, so only spending is shown."
+    },
+    "nav": {
+      "pickMonth": "Statement month",
+      "horizonLocked": "{count, plural, one {# more month} other {# more months}} of card planning with Phare Pro"
     },
     "overview": {
       "title": "Room across your cards",

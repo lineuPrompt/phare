@@ -1,7 +1,9 @@
 // Pure helpers for per-card budget envelope math.
 // No Supabase / browser dependencies — safe to import in API routes and tests.
 
-import { statementCycleWindow } from '@phare/core';
+import { statementCycleWindow, cycleMonthContaining } from '@phare/core';
+import { availableMonths } from './timelineDisplayHelpers';
+import { addMonthsToMonth } from './goalHelpers';
 
 export type EnvTx = {
   account_id: string;
@@ -230,11 +232,96 @@ export function carryForwardMap<T>(
 }
 
 // ---------------------------------------------------------------------------
-// Forward-looking grid: current cycle + next 11. The current cycle shows
-// real actuals (even $0 so far); future cycles are budget-only (actuals
-// null) — the past doesn't help the decision, so this grid never looks
-// backward. Budgets are carried forward per-cell from the nearest saved
-// envelope snapshot at or before that month.
+// Cycle state: where one statement cycle sits relative to today.
+//
+//   closed — its close date has passed (window.end < today). Its spend is
+//            final, and its plan is history: shown exactly as it was saved
+//            for that month, never carried forward, and no longer writable
+//            (POST /api/card-envelope refuses it).
+//   open   — today falls inside its window.
+//   future — its window has not started yet; budget-only.
+//
+// Built on statementCycleWindow, the one definition of a cycle's dates. The
+// close date itself is still open: a charge can post on it.
+// ---------------------------------------------------------------------------
+
+export type CycleState = 'closed' | 'open' | 'future';
+
+export function cycleState(cycleMonth: string, closeDay: number | null, today: string): CycleState {
+  const window = statementCycleWindow(cycleMonth, closeDay);
+  if (window.end < today) return 'closed';
+  if (window.start > today) return 'future';
+  return 'open';
+}
+
+// What was saved for a CLOSED cycle, read from that month's own snapshot only:
+//   saved    — category budgets exist for exactly that month
+//   goalOnly — a goal row exists for that month, but no category budgets
+//   none     — nothing was saved for that month at all
+// Carry-forward is deliberately absent here: a past month shows what the
+// family planned FOR that month, or says plainly that they didn't.
+export type PastPlanState = 'saved' | 'goalOnly' | 'none';
+
+export function pastPlanState(hasCategoryBudgets: boolean, hasGoal: boolean): PastPlanState {
+  if (hasCategoryBudgets) return 'saved';
+  if (hasGoal) return 'goalOnly';
+  return 'none';
+}
+
+// ---------------------------------------------------------------------------
+// Month range for the Cards page picker.
+//
+// Floor: the earliest cycle month with real card data OR a saved plan, never
+// later than the current month. A transaction maps to the cycle that contains
+// its date (cycleMonthContaining), per card, because close days differ: a
+// June 29 charge on a card closing the 27th belongs to the JULY cycle, while
+// a June 30 charge on a card with no close day belongs to June.
+// ---------------------------------------------------------------------------
+
+export function cardHistoryFloorMonth(
+  earliestTxnByCard: { date: string | null; closeDay: number | null }[],
+  snapshotMonths: (string | null)[],
+  currentMonth: string
+): string {
+  let floor = currentMonth;
+  for (const { date, closeDay } of earliestTxnByCard) {
+    if (!date) continue;
+    const m = cycleMonthContaining(date, closeDay);
+    if (m < floor) floor = m;
+  }
+  for (const s of snapshotMonths) {
+    if (!s) continue;
+    const m = s.slice(0, 7);
+    if (m < floor) floor = m;
+  }
+  return floor;
+}
+
+// The grid's columns for a picked month. Current or future picked: today's
+// forward window, starting at the current month. Past picked: the window
+// starts AT the picked month. Either way at most GRID_COLUMNS wide and never
+// past the household's entitled horizon (entitledHorizonEndMonth).
+export const GRID_COLUMNS = 12;
+
+export function gridWindowMonths(selectedMonth: string, currentMonth: string, horizonEndMonth: string): string[] {
+  const start = selectedMonth < currentMonth ? selectedMonth : currentMonth;
+  const lastByWidth = addMonthsToMonth(start, GRID_COLUMNS - 1);
+  const end = lastByWidth < horizonEndMonth ? lastByWidth : horizonEndMonth;
+  return availableMonths(start, end);
+}
+
+// ---------------------------------------------------------------------------
+// Month-by-month grid. Three kinds of column, by cycleState:
+//   closed — real actuals against that month's OWN saved snapshot (exact
+//            month, no carry-forward). pastPlans says which of
+//            saved/goalOnly/none applies, so the UI can say so.
+//   open   — real actuals (even $0 so far) against the carried-forward plan.
+//   future — budget-only (actuals null), carried forward per-cell from the
+//            nearest saved envelope snapshot at or before that month.
+//
+// A closed column's actual is only as good as the transactions passed in:
+// the caller MUST fetch every rendered column's full cycle window, or a past
+// cell silently reads $0. GET /api/card-envelope/grid fetches exactly that.
 // ---------------------------------------------------------------------------
 
 export type EnvelopeSnapshotItem = { categoryId: string; monthlyAmount: number };
@@ -242,7 +329,7 @@ export type EnvelopeSnapshotItem = { categoryId: string; monthlyAmount: number }
 export type GridRow = {
   categoryId: string;
   name: string;
-  budgets: number[];          // one per month, carried forward
+  budgets: number[];          // one per month: exact snapshot when closed, carried forward otherwise
   actuals: (number | null)[]; // null = future cycle, budget-only
 };
 export type GridData = {
@@ -252,6 +339,8 @@ export type GridData = {
   uncategorizedActuals: (number | null)[];
   totalActuals: (number | null)[];
   totalGoals: (number | null)[];
+  cycleStates: CycleState[];
+  pastPlans: (PastPlanState | null)[]; // null for open/future columns
 };
 
 // itemSnapshotsByMonth: Map<'YYYY-MM', items saved for exactly that month>
@@ -281,9 +370,15 @@ export function buildGrid(
   closeDay: number | null,
   today: string
 ): GridData {
-  const isFuture = (month: string) => statementCycleWindow(month, closeDay).start > today;
+  const cycleStates = months.map((month) => cycleState(month, closeDay, today));
+  const isClosedAt = (i: number) => cycleStates[i] === 'closed';
+  const isFuture = (month: string) => cycleState(month, closeDay, today) === 'future';
 
-  const effectiveItems = months.map((month) => carryForwardMap(itemSnapshotsByMonth, month) ?? []);
+  const effectiveItems = months.map((month, i) =>
+    isClosedAt(i)
+      ? (itemSnapshotsByMonth.get(month) ?? [])
+      : (carryForwardMap(itemSnapshotsByMonth, month) ?? [])
+  );
 
   // Row set: any category ever in an effective snapshot, union any category
   // with actual activity in an eligible (non-future) cycle — a refund in a
@@ -316,9 +411,17 @@ export function buildGrid(
     isFuture(month) ? null : totalSpendForCard(transactions, cardId, month, closeDay)
   );
 
-  const totalGoals = months.map((month) => carryForwardMap(goalsByMonth, month));
+  const totalGoals = months.map((month, i) =>
+    isClosedAt(i) ? (goalsByMonth.get(month) ?? null) : carryForwardMap(goalsByMonth, month)
+  );
 
-  return { months, currentMonth, rows, uncategorizedActuals, totalActuals, totalGoals };
+  const pastPlans = months.map((month, i) =>
+    isClosedAt(i)
+      ? pastPlanState((itemSnapshotsByMonth.get(month) ?? []).length > 0, goalsByMonth.has(month))
+      : null
+  );
+
+  return { months, currentMonth, rows, uncategorizedActuals, totalActuals, totalGoals, cycleStates, pastPlans };
 }
 
 // Sentinel categoryId for the always-net "no category" row shown alongside

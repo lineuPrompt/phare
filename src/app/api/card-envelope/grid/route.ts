@@ -1,27 +1,39 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { buildGrid, EnvTx, EnvelopeSnapshotItem } from '@/lib/envelopeHelpers';
+import { buildGrid, gridWindowMonths, EnvTx, EnvelopeSnapshotItem } from '@/lib/envelopeHelpers';
 import { categoryDisplayName } from '@/lib/categoryTranslations';
 import { businessMonth, businessToday, statementCycleWindow } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
+import { loadEntitlement } from '@/lib/entitlementServer';
+import { entitledHorizonEndMonth } from '@/lib/entitlement';
 
-// GET /api/card-envelope/grid?cardId=<uuid>&locale=en|fr
-// Forward-looking grid for one card: current cycle + next 11. The current
-// cycle shows real actuals (from this cycle's transactions); future cycles
-// are budget-only — the past doesn't help the decision, so this grid never
-// looks backward. Budgets are carried forward per-cell from the nearest
-// saved envelope snapshot at or before that month (read-only projection;
-// never writes anything). Statement-cycle scoping (2026-07-31): "current"
-// means the cycle whose window contains today, not merely the calendar
-// month — see envelopeHelpers.buildGrid's isFuture, which is day-aware for
-// exactly this reason.
+// GET /api/card-envelope/grid?cardId=<uuid>&locale=en|fr[&month=YYYY-MM]
+//
+// Month-by-month grid for one card. The window follows the month picked on
+// the Cards page (gridWindowMonths): current or future picked → today's
+// forward window; past picked → up to 12 columns starting there. Never past
+// the household's entitled horizon — the same entitledHorizonEndMonth the
+// Timeline uses. `month` omitted = current month, the old default.
+//
+// Closed cycles show real actuals against that month's own saved snapshot;
+// the open cycle shows real actuals against the carried-forward plan; future
+// cycles are budget-only, carried forward (see envelopeHelpers.buildGrid).
+// Statement-cycle scoping (2026-07-31): "current" means the cycle whose
+// window contains today, not merely the calendar month.
+//
+// Reverses the 2026-07 "this grid never looks backward" decision, at the
+// founder's request (2026-09-11): past months are where real spend lives.
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const cardId = url.searchParams.get('cardId');
     const locale = url.searchParams.get('locale') === 'fr' ? 'fr' : 'en';
+    const monthParam = url.searchParams.get('month');
     if (!cardId) {
       return NextResponse.json({ error: 'cardId required' }, { status: 400 });
+    }
+    if (monthParam !== null && !/^\d{4}-\d{2}$/.test(monthParam)) {
+      return NextResponse.json({ error: 'Invalid month (expected YYYY-MM)' }, { status: 400 });
     }
 
     const supabase = await createClient();
@@ -40,33 +52,34 @@ export async function GET(request: Request) {
     if (!card) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
     const closeDay = (card.statement_close_day as number | null) ?? null;
 
-    // Current month + next 11
     const timezone = await getHouseholdTimezone(supabase, householdId);
     const currentMonth = businessMonth(timezone);
     const today = businessToday(timezone);
-    const [cy0, cm0] = currentMonth.split('-').map(Number);
-    const months: string[] = [];
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(cy0, cm0 - 1 + i, 1);
-      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-    }
+    const entitlement = await loadEntitlement(supabase, householdId);
+    const horizonEndMonth = entitledHorizonEndMonth(currentMonth, entitlement.isPro);
+    const months = gridWindowMonths(monthParam ?? currentMonth, currentMonth, horizonEndMonth);
 
-    // Only the currently-open cycle(s) can have real actuals in a
-    // forward-looking grid. Fetch from the current calendar month's cycle
-    // window through the NEXT calendar month's cycle window — near a
-    // close-day boundary, the cycle labeled with next month may already have
-    // started (see buildGrid's isFuture), so both windows are covered rather
-    // than assuming only `currentMonth`'s window can ever be "live."
+    // Fetch EVERY rendered column's full cycle window: from the first
+    // column's cycle start to the last column's cycle end. Consecutive cycle
+    // windows are contiguous, so this covers each column completely.
+    //
+    // This is load-bearing, not an optimisation detail. buildGrid gives any
+    // non-future column a real number, so a closed column whose transactions
+    // were never fetched reads $0 — a plausible, wrong figure. The old fetch
+    // (current + next cycle only) was safe only because the grid never had a
+    // past column; see the regression test in __tests__/pastWindow.test.ts.
     const rangeStart = statementCycleWindow(months[0], closeDay).start;
-    const rangeEnd = statementCycleWindow(months[1], closeDay).end;
+    const rangeEnd = statementCycleWindow(months[months.length - 1], closeDay).end;
 
-    const { data: rawTxns } = await supabase
+    const { data: rawTxns, error: txnErr } = await supabase
       .from('transactions')
       .select('account_id, amount, category_id, type, date, is_bridge')
       .eq('household_id', householdId)
       .eq('account_id', cardId)
       .gte('date', rangeStart)
       .lte('date', rangeEnd);
+    // A failed read must not render as a grid of real-looking $0 actuals.
+    if (txnErr) throw new Error(`grid transactions read failed: ${txnErr.message}`);
 
     // All envelope-item snapshots ever saved for this card, grouped by month
     // — carried forward per-cell so future columns show the projected plan.

@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { totalSpendForCard, envelopeStatus, EnvTx } from '@/lib/envelopeHelpers';
-import { statementCycleWindow } from '@phare/core';
+import { totalSpendForCard, envelopeStatus, cycleState, EnvTx } from '@/lib/envelopeHelpers';
+import { businessToday, statementCycleWindow } from '@phare/core';
+import { getHouseholdTimezone } from '@/lib/householdTimezone';
+import { fetchCardGoalForMonth } from '@/lib/cardPlanServer';
 
 // GET /api/cards/overview?month=YYYY-MM
 // The missing third question: which card has room, without opening any
@@ -41,23 +43,20 @@ export async function GET(request: Request) {
     const cardList = cards ?? [];
     if (cardList.length === 0) return NextResponse.json({ cards: [] });
 
-    const monthStart = `${monthParam}-01`;
+    // Same goal rule as the decision view below it, per card (close days
+    // differ, so one card's cycle can be closed while another's is open):
+    // closed → that month's own goal; otherwise carried forward.
+    const timezone = await getHouseholdTimezone(supabase, householdId);
+    const today = businessToday(timezone);
 
     const rows = await Promise.all(
       cardList.map(async (card) => {
         const closeDay = (card.statement_close_day as number | null) ?? null;
         const cycleWindow = statementCycleWindow(monthParam, closeDay);
+        const closed = cycleState(monthParam, closeDay, today) === 'closed';
 
-        const [{ data: goalRow }, { data: txns }] = await Promise.all([
-          supabase
-            .from('monthly_goals')
-            .select('card_goal')
-            .eq('household_id', householdId)
-            .eq('account_id', card.id)
-            .lte('month', monthStart)
-            .order('month', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
+        const [goal, { data: txns }] = await Promise.all([
+          fetchCardGoalForMonth(supabase, householdId, card.id, monthParam, closed),
           supabase
             .from('transactions')
             .select('account_id, amount, category_id, type, date, is_bridge')
@@ -66,8 +65,6 @@ export async function GET(request: Request) {
             .gte('date', cycleWindow.start)
             .lte('date', cycleWindow.end),
         ]);
-
-        const goal = goalRow ? Number(goalRow.card_goal) : null;
         const spent = totalSpendForCard((txns ?? []) as EnvTx[], card.id, monthParam, closeDay);
 
         return {

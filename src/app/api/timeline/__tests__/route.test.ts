@@ -318,6 +318,9 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
     expect(json.plan.horizonLocked).toBe(false);
     expect(json.plan.months[0].month).toBe('2026-07');
     expect(json.plan.months[0].isPartialMonth).toBe(true);
+    // Month-nav horizon. GET /api/cards/months asserts this SAME value at the
+    // same clock (cards/__tests__/months.test.ts) — the two must never differ.
+    expect(json.horizonEndMonth).toBe('2027-06');
     // No dated rows, no card cost → the anchor never moves.
     expect(json.plan.months.every((m: { balance: number }) => m.balance === 1000)).toBe(true);
   });
@@ -339,6 +342,8 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
     // The months beyond the horizon are ABSENT, not flagged. A client cannot
     // read what was never sent.
     expect(json.plan.months[json.plan.months.length - 1].month).toBe('2026-09');
+    // Same value GET /api/cards/months must return for a free household.
+    expect(json.horizonEndMonth).toBe('2026-09');
   });
 
   it('an unreadable household row fails CLOSED to the free horizon', async () => {
