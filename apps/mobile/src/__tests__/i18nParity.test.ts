@@ -4,6 +4,7 @@ import path from 'node:path';
 import en from '../i18n/messages/en.json';
 import fr from '../i18n/messages/fr.json';
 import { flattenKeys, lookup, type Catalog } from '../i18n/catalog';
+import { CURRENCY_FIGURE } from './complianceScan';
 
 // ---------------------------------------------------------------------------
 // BILINGUAL FROM THE FIRST COMMIT, ENFORCED THE WAY THE WEB APP ENFORCES IT.
@@ -165,7 +166,11 @@ describe('App Store compliance — no pricing or steering copy', () => {
   // web app's own src/messages/en.json contains "$15", "$150/year" and
   // "Upgrade to Phare Pro"; reusing it here is exactly what this forbids.
   const FORBIDDEN = [
+    // Kept deliberately LOOSER than the shared CURRENCY_FIGURE: catalogue
+    // strings are pure copy with no regex backreferences or bytecode to
+    // misfire on, so here even "$5" is refused.
     /\$\s?\d/,           // any price-shaped figure
+    CURRENCY_FIGURE,     // adds the fr-CA form the line above misses: "15 $"
     /\bupgrade\b/i,
     /\bpricing\b/i,
     /\bsubscri/i,        // subscribe / subscription
@@ -178,6 +183,18 @@ describe('App Store compliance — no pricing or steering copy', () => {
     /\btarif/i,
     /\bprix\b/i,
   ];
+
+  it('refuses a planted price in either currency-sign position', () => {
+    // No catalogue contains a price today, so without a planted positive a
+    // pattern dropped from FORBIDDEN leaves every assertion green — the fr
+    // form's removal survived mutation until this was added. U+00A0 is built
+    // from its code point so the test cannot be quietly "fixed" by an editor
+    // turning it into a plain space.
+    const nbsp = String.fromCharCode(0xa0);
+    const refused = (text: string) => FORBIDDEN.some((pattern) => pattern.test(text));
+    expect(refused('Only $15 a month')).toBe(true);
+    expect(refused(`Seulement 150${nbsp}$`)).toBe(true);
+  });
 
   it.each(['en', 'fr'])('%s contains no pricing or upgrade copy', (locale) => {
     const offenders: string[] = [];

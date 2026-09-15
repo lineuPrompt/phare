@@ -13,4 +13,5 @@ export * from './plausibilityGuard';
 export * from './incomeHelpers';
 export * from './planHelpers';
 export * from './money';
+export * from './timeline';
 export * from './timezoneSupport';

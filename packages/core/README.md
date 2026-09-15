@@ -20,6 +20,7 @@ exists.
 | `planHelpers.ts` | `buildCalculatedFromFormLines`, three-bucket budget assembly |
 | `plausibilityGuard.ts` | The two-prong "is this plan believable" check |
 | `money.ts` | `formatCAD`, `formatCADLocale` |
+| `timeline.ts` | Cash Timeline result types, `classifyDip` + `DIP_AMBER_THRESHOLD`, `buildMonthView`. Display logic only — the ledger walk (`buildCashTimeline`) stays in the web app, which re-exports these from `src/lib/timelineHelpers.ts` / `timelineDisplayHelpers.ts` |
 | `timezoneSupport.ts` | `assertTimeZoneSupport` — the runtime capability probe |
 
 ---

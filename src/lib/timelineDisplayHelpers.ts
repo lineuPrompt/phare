@@ -8,14 +8,15 @@
  * these return.
  */
 
-import type { TimelineDay, TimelineTx } from './timelineHelpers';
+import type { TimelineTx, UnbalancedDay } from '@phare/core';
+
+// ── Moved to @phare/core (2026-09-15) ─────────────────────────────────────────
+// buildMonthView, MonthView and UnbalancedDay now live in
+// packages/core/src/timeline.ts, shared with the Expo app's Timeline.
+// Re-exported here so no web import site had to change.
+export { buildMonthView, type MonthView, type UnbalancedDay } from '@phare/core';
 
 // ── Unbalanced days (mid-window first anchor) ──────────────────────────────
-
-export type UnbalancedDay = {
-  date: string;        // YYYY-MM-DD
-  entries: TimelineTx[]; // income first, then expense/transfer — same convention as TimelineDay
-};
 
 /**
  * Groups transactions strictly before a known-balance start date, for the
@@ -66,79 +67,4 @@ export function availableMonths(balancesStartDate: string, windowEnd: string): s
     cursor = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
   }
   return months;
-}
-
-// ── Single-month slice ───────────────────────────────────────────────────────
-
-export type MonthView = {
-  month: string;                    // YYYY-MM
-  visibleDays: TimelineDay[];       // this month's days with >=1 entry, chronological
-  unbalancedDays: UnbalancedDay[];  // this month's pre-balance days with entries, if any
-  opensAt: number;                  // balance at the start of the month (or balancesStartDate if mid-month)
-  closesAt: number;                 // balance at the end of the last known day in the month
-  balancesBeginNote: boolean;       // true when balancesStartDate falls inside this month, after day 1
-  /**
-   * The lowest end-of-day balance anywhere in this month, and the first date
-   * it is reached (2026-09-03).
-   *
-   * A DIFFERENT FIGURE FROM TimelineHeader's dip, deliberately. The dip is
-   * today-anchored and stops at the next payday — it answers "will I run
-   * short before I'm paid". This answers "how low does this month get",
-   * which is a month-scoped question and therefore belongs in the month
-   * strip, recomputed on every navigation. Neither is a restatement of the
-   * other, and both are labelled so they cannot be read as the same number
-   * disagreeing.
-   *
-   * Computed over EVERY day in the month, not just visibleDays: a day with
-   * no entries carries the previous day's balance forward, so the minimum
-   * can legitimately sit on an empty day (it is simply the first day that
-   * reached it that gets named).
-   */
-  lowest: { date: string; balance: number };
-};
-
-/**
- * Slices a full fetched TimelineResult (days + unbalancedDays) down to one
- * calendar month for display. Returns null when the month has no data at
- * all in this result (outside [balancesStartDate, windowEnd]) — the caller
- * uses that to disable prev/next navigation rather than render an empty
- * month that looks like zero cash.
- */
-export function buildMonthView(
-  days: TimelineDay[],
-  unbalancedDays: UnbalancedDay[],
-  openingBalance: number,
-  balancesStartDate: string,
-  month: string
-): MonthView | null {
-  const monthDays = days.filter((d) => d.date.startsWith(month));
-  if (monthDays.length === 0) return null;
-
-  const firstIdx = days.indexOf(monthDays[0]);
-  const opensAt = firstIdx > 0 ? days[firstIdx - 1].endOfDayBalance : openingBalance;
-  const closesAt = monthDays[monthDays.length - 1].endOfDayBalance;
-  const visibleDays = monthDays.filter((d) => d.entries.length > 0);
-  const monthUnbalanced = unbalancedDays.filter((d) => d.date.startsWith(month));
-
-  const balancesBeginNote =
-    balancesStartDate.slice(0, 7) === month && balancesStartDate.slice(8, 10) !== '01';
-
-  // Earliest date wins a tie — a flat run at the month's low is reported at
-  // the day it first dropped there, which is the day that caused it.
-  let lowest = { date: monthDays[0].date, balance: monthDays[0].endOfDayBalance };
-  for (const d of monthDays) {
-    if (d.endOfDayBalance < lowest.balance) {
-      lowest = { date: d.date, balance: d.endOfDayBalance };
-    }
-  }
-
-  return {
-    month,
-    visibleDays,
-    unbalancedDays: monthUnbalanced,
-    opensAt,
-    closesAt,
-    balancesBeginNote,
-    lowest,
-  };
 }

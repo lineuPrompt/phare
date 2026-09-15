@@ -44,7 +44,28 @@
  * that day forward. Multiple anchors are walked in ascending date order.
  */
 
-import { formatLocalDate } from '@phare/core';
+import {
+  formatLocalDate,
+  type TimelineTx,
+  type TimelineEntry,
+  type TimelineDay,
+  type DipInfo,
+} from '@phare/core';
+
+// ── Moved to @phare/core (2026-09-15) ─────────────────────────────────────────
+// The result types, classifyDip and DIP_AMBER_THRESHOLD now live in
+// packages/core/src/timeline.ts so the Expo app's Timeline reads the same dip
+// tiers as this one. Re-exported here so no web import site had to change.
+// Everything that COMPUTES the ledger stays in this file.
+export {
+  classifyDip,
+  DIP_AMBER_THRESHOLD,
+  type DipStatus,
+  type TimelineTx,
+  type TimelineEntry,
+  type TimelineDay,
+  type DipInfo,
+} from '@phare/core';
 
 // ── Anchor selection ──────────────────────────────────────────────────────────
 
@@ -84,42 +105,6 @@ export function selectAnchorsForTimeline(
 export type TimelineAnchor = {
   date: string;    // YYYY-MM-DD — balance resets to this value at start of day
   balance: number; // CAD dollars, 2 decimal places
-};
-
-export type TimelineTx = {
-  id: string;
-  date: string;                // YYYY-MM-DD
-  description: string | null;
-  amount: number;              // positive in DB, EXCEPT a debt draw's chequing-
-                                // side row (type='transfer'), which is stored
-                                // negative — see TRANSFER DIRECTION NOTE above.
-  type: 'income' | 'expense' | 'transfer';
-  recurringItemId: string | null;
-  recurrenceId: string | null;
-  installmentLabel: string | null; // "N/Total" e.g. "3/12"
-  transferPeerId: string | null;
-  isBridge: boolean;
-  bridgeSourceAccount: string | null;
-  bridgeSourceMonth: string | null; // YYYY-MM — the card's spend month this bridge pays for
-};
-
-export type TimelineEntry = TimelineTx & {
-  signedAmount: number; // positive = money in, negative = money out
-  isFuture: boolean;    // date > today
-};
-
-export type TimelineDay = {
-  date: string;
-  // Income entries first, then expenses/transfers — display convention only.
-  // End-of-day balance is the net of all entries regardless of this order.
-  entries: TimelineEntry[];
-  endOfDayBalance: number;
-  isNegative: boolean;
-};
-
-export type DipInfo = {
-  date: string;
-  balance: number;
 };
 
 export type TimelineResult =
@@ -345,28 +330,4 @@ export function buildCashTimeline(params: {
     dip,
     nextIncomeDate,
   };
-}
-
-// ---------------------------------------------------------------------------
-// Dip classification — shared by the Timeline header AND the dashboard's
-// "lowest point" tile (Build 3 Phase 4). Both render the SAME `dip` value
-// buildCashTimeline computes above; this is the one place the three-way
-// healthy/amber/red read is decided, so the two surfaces can never disagree
-// about which color a given dip should be.
-// ---------------------------------------------------------------------------
-
-export type DipStatus = 'healthy' | 'amber' | 'red' | 'none';
-
-// A positive dip below this dollar amount reads as "low" (amber) rather than
-// "healthy" (green). Judgment call, not derived from any other figure in the
-// app — there's no existing household-scale-relative signal available at
-// this cutoff to derive it from instead. Tune here if it doesn't feel right
-// in practice; every consumer of classifyDip picks it up automatically.
-export const DIP_AMBER_THRESHOLD = 200;
-
-export function classifyDip(dip: DipInfo | null): DipStatus {
-  if (dip === null) return 'none';
-  if (dip.balance < 0) return 'red';
-  if (dip.balance < DIP_AMBER_THRESHOLD) return 'amber';
-  return 'healthy';
 }

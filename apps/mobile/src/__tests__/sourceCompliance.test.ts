@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { FORBIDDEN_TEXT } from './complianceScan';
 
 // ---------------------------------------------------------------------------
 // APP STORE COMPLIANCE, CHECKED OVER ALL SOURCE — not just the catalogues.
@@ -22,6 +23,9 @@ import path from 'node:path';
 
 const SRC_DIR = path.resolve(__dirname, '..');
 const APP_DIR = path.resolve(__dirname, '..', '..', 'app');
+// @phare/core is compiled into this app's bundle, so its source is this app's
+// source for the purpose of this rule — a string added there ships here.
+const CORE_DIR = path.resolve(__dirname, '..', '..', '..', '..', 'packages', 'core', 'src');
 
 function listFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
@@ -32,7 +36,7 @@ function listFiles(dir: string): string[] {
     .filter((file) => fs.statSync(file).isFile());
 }
 
-const FILES = [...listFiles(SRC_DIR), ...listFiles(APP_DIR)];
+const FILES = [...listFiles(SRC_DIR), ...listFiles(APP_DIR), ...listFiles(CORE_DIR)];
 
 /** Comments stripped: prose ABOUT the rule must not trip the rule. */
 function code(source: string): string {
@@ -44,19 +48,25 @@ describe('no purchase-steering surface anywhere in the app source', () => {
     expect(FILES.length).toBeGreaterThan(10);
   });
 
-  // The `(?<![.\w])` guard on the word patterns keeps an IDENTIFIER from
-  // reading as copy. Without it this flagged `sub.subscription.unsubscribe()`
-  // — the Supabase auth listener in useSession.ts, which has nothing to do
-  // with billing. A compliance test that fires on unrelated code gets
-  // weakened or deleted, and then it is not protecting anything.
-  it.each([
-    ['a currency figure', /\$\s?\d/],
-    ['the word upgrade', /(?<![.\w])upgrade\b/i],
-    ['the word pricing', /(?<![.\w])pricing\b/i],
-    ['subscribe/subscription', /(?<![.\w])subscri(be|ption)\b/i],
-    ['a per-month price form', /\d\s*\/\s*(month|mo|mois)\b/i],
-    ['the Pro plan name', /(?<![.\w])phare\s+pro\b/i],
-  ])('contains no %s', (_label, pattern) => {
+  // The patterns live in complianceScan.ts, shared with the catalogue scan and
+  // the compiled-bundle scan, so the three cannot drift into three different
+  // definitions of "a price". The word patterns' `(?<![.\w])` guard keeps an
+  // IDENTIFIER from reading as copy: without it this flagged
+  // `sub.subscription.unsubscribe()` — the Supabase auth listener in
+  // useSession.ts, which has nothing to do with billing. A compliance test
+  // that fires on unrelated code gets weakened or deleted, and then it is not
+  // protecting anything. The currency pattern's own history is in that file.
+  const TABLE = FORBIDDEN_TEXT.map(([label, pattern]) => [label, pattern] as const);
+
+  it('runs every shared pattern, not a subset', () => {
+    // Today's source contains no price, so dropping a pattern from this table
+    // would leave every assertion below green — mutation-tested, it survived.
+    // This is what fails instead.
+    expect(TABLE.map(([label]) => label)).toEqual(FORBIDDEN_TEXT.map(([label]) => label));
+    expect(TABLE.map(([label]) => label)).toContain('a currency figure');
+  });
+
+  it.each(TABLE)('contains no %s', (_label, pattern) => {
     const offenders: string[] = [];
 
     for (const file of FILES) {
