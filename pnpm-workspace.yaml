@@ -1,6 +1,13 @@
 packages:
   - 'packages/*'
   - 'apps/*'
+# expo-router declares reanimated/worklets as optional peers with a '*' range, so
+# pnpm auto-installs the newest release rather than the one Expo SDK 57 bundles.
+# worklets >= 0.12 dropped WorkletRuntime::executeSync, which expo-modules-core
+# still calls, breaking the iOS build. Pin both to the SDK 57 bundled versions.
+overrides:
+  react-native-reanimated: 4.5.1
+  react-native-worklets: 0.10.1
 allowBuilds:
   '@parcel/watcher': true
   '@swc/core': true
