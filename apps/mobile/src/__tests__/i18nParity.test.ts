@@ -30,6 +30,16 @@ const CATALOGS: Record<string, Catalog> = {
   fr: fr as Catalog,
 };
 
+/** Every key in a catalogue — branches as well as leaves, at any depth. */
+function countKeys(catalog: Catalog): number {
+  let count = 0;
+  for (const value of Object.values(catalog)) {
+    count += 1;
+    if (typeof value !== 'string') count += countKeys(value);
+  }
+  return count;
+}
+
 function listSourceFiles(dir: string): string[] {
   return (fs.readdirSync(dir, { recursive: true }) as string[])
     .filter((entry) => /\.(tsx|ts)$/.test(entry))
@@ -102,11 +112,17 @@ describe('locale catalogues are in parity', () => {
 
     // A repeat at the same depth is only suspicious when the NAME repeats
     // across different parents, which is legitimate ("title" under two
-    // sections). So assert on the parsed-vs-raw count instead: every leaf and
-    // branch in the parsed object must appear at least once in the file.
-    const parsedCount =
-      flattenKeys(CATALOGS[locale]).length +
-      Object.keys(CATALOGS[locale]).length;
+    // sections). So assert on the parsed-vs-raw count instead: every key in
+    // the file must survive into the parsed object. A duplicate makes the raw
+    // count exceed the parsed one, because JSON.parse collapsed two into one.
+    //
+    // COUNTS BRANCHES AT EVERY DEPTH. This used to be
+    // `flattenKeys(...).length + Object.keys(...).length`, which is leaves
+    // plus TOP-LEVEL keys — correct only while every section was exactly two
+    // levels deep, as they all were until timeline.header.* arrived. The
+    // arithmetic then failed on a catalogue with nothing wrong with it, which
+    // is the kind of failure that gets a test deleted rather than read.
+    const parsedCount = countKeys(CATALOGS[locale]);
     const rawCount = [...seen.values()].reduce((a, b) => a + b, 0);
     expect(rawCount).toBe(parsedCount);
   });

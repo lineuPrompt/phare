@@ -1,41 +1,18 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { useSession } from '../src/lib/useSession';
-import SignInScreen from '../src/screens/SignInScreen';
+import AuthGate from '../src/components/AuthGate';
 import ReviewScreen from '../src/screens/ReviewScreen';
-import { theme } from '../src/theme';
 
 /**
- * The auth gate.
+ * The home route: the monthly review, behind the auth gate.
  *
- * Rendering the two screens conditionally rather than redirecting between two
- * routes is deliberate for a scaffold this size: a redirect on session change
- * races the sign-in call's own completion and can push a duplicate screen or
- * strand the user on a route the session no longer permits. One component that
- * reads one piece of state has no such race.
- *
- * The 'loading' branch matters — reading the persisted session out of
- * SecureStore is asynchronous, so treating "not yet known" as "signed out"
- * would flash the sign-in screen on every cold start for a signed-in user.
+ * The gate itself (and the reasoning about why it renders the sign-in screen
+ * in place rather than redirecting) moved into src/components/AuthGate.tsx
+ * when /timeline was added — a second signed-in route needed the same
+ * protection, and two copies of an auth decision is one too many.
  */
 export default function Index() {
-  const session = useSession();
-
-  if (session.status === 'loading') {
-    return (
-      <View style={styles.centred}>
-        <ActivityIndicator color={theme.color.heading} />
-      </View>
-    );
-  }
-
-  return session.status === 'signedIn' ? <ReviewScreen /> : <SignInScreen />;
+  return (
+    <AuthGate>
+      <ReviewScreen />
+    </AuthGate>
+  );
 }
-
-const styles = StyleSheet.create({
-  centred: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.color.background,
-  },
-});

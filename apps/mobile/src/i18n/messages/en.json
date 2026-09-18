@@ -37,6 +37,37 @@
     "loadFailed": "Couldn't load your reviews.",
     "signedOut": "Your session has ended. Please sign in again."
   },
+  "timeline": {
+    "title": "Cash Timeline",
+    "backToReview": "Monthly review",
+    "noChequing": "Phare needs a chequing account before it can show your timeline. You can add one on phare.money.",
+    "noAnchor": {
+      "title": "To show your timeline, Phare needs one real number: your chequing balance on a date you know.",
+      "body": "Set your chequing account's opening balance on phare.money, and everything else follows from it."
+    },
+    "header": {
+      "balanceToday": "Balance today",
+      "on": "on",
+      "noDip": "No upcoming pay found, so there's no dip to show. Add your income on phare.money.",
+      "lowestBeforePay": "Lowest point before your next pay ({payday}):",
+      "dipsBelowZeroBeforePay": "You dip below zero before your next pay ({payday}):"
+    },
+    "list": {
+      "opensAt": "Opens at",
+      "closesAt": "Closes at",
+      "lowestThisMonth": "Lowest",
+      "lowestOn": "on {date}",
+      "empty": "Nothing on the books this month.",
+      "noBalanceYet": "no balance yet",
+      "balancesBegin": "Balances begin {date} — the date of your first anchor.",
+      "projectionBadge": "Projection",
+      "projectionNote": "Everything below hasn't happened yet",
+      "untilNextPay": "Next month, up to your pay on {payday}",
+      "today": "Today",
+      "endOfDay": "End of day",
+      "untitled": "Entry"
+    }
+  },
   "errors": {
     "network": "Couldn't reach Phare. Check your connection and try again.",
     "server": "Something went wrong on our end. Please try again in a few minutes.",

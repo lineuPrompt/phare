@@ -37,6 +37,37 @@
     "loadFailed": "Impossible de charger vos bilans.",
     "signedOut": "Votre session est terminée. Veuillez vous reconnecter."
   },
+  "timeline": {
+    "title": "Chronologie de trésorerie",
+    "backToReview": "Bilan mensuel",
+    "noChequing": "Phare a besoin d'un compte chèques pour afficher votre chronologie. Vous pouvez en ajouter un sur phare.money.",
+    "noAnchor": {
+      "title": "Pour afficher votre chronologie, Phare a besoin d'un vrai chiffre : le solde de votre compte chèques à une date que vous connaissez.",
+      "body": "Indiquez le solde initial de votre compte chèques sur phare.money : tout le reste en découle."
+    },
+    "header": {
+      "balanceToday": "Solde aujourd'hui",
+      "on": "le",
+      "noDip": "Aucune paie à venir n'a été trouvée : impossible d'afficher un creux. Ajoutez vos revenus sur phare.money.",
+      "lowestBeforePay": "Point le plus bas avant votre prochaine paie ({payday}) :",
+      "dipsBelowZeroBeforePay": "Vous passez sous zéro avant votre prochaine paie ({payday}) :"
+    },
+    "list": {
+      "opensAt": "Ouvre à",
+      "closesAt": "Ferme à",
+      "lowestThisMonth": "Plus bas",
+      "lowestOn": "le {date}",
+      "empty": "Rien de prévu ce mois-ci.",
+      "noBalanceYet": "solde pas encore connu",
+      "balancesBegin": "Les soldes commencent le {date} — la date de votre premier ancrage.",
+      "projectionBadge": "Projection",
+      "projectionNote": "Tout ce qui suit ne s'est pas encore produit",
+      "untilNextPay": "Le mois prochain, jusqu'à votre paie du {payday}",
+      "today": "Aujourd'hui",
+      "endOfDay": "Fin de journée",
+      "untitled": "Entrée"
+    }
+  },
   "errors": {
     "network": "Impossible de joindre Phare. Vérifiez votre connexion et réessayez.",
     "server": "Un problème est survenu de notre côté. Réessayez dans quelques minutes.",

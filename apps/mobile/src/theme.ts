@@ -18,6 +18,20 @@ export const theme = {
     danger: '#DC2626',
     dangerSurface: '#FEF2F2',
     dangerBorder: '#FECACA',
+    // Added for the Timeline (2026-09-17). Five values, each earning its place
+    // by carrying a meaning the existing ones cannot:
+    //   positive  — money IN, on a ledger that mixes in and out in one column
+    //   warning   — classifyDip's amber tier, and a debt draw's amount: cash
+    //               arriving that was borrowed, not earned
+    //   accent    — "today", the one row the screen scrolls to
+    // The web page uses two different ambers (#92400E in the header, #B45309
+    // in the ledger) for one tier. One amber here; a tier that means one thing
+    // should not have two colours.
+    positive: '#16A34A',
+    warning: '#B45309',
+    warningSurface: '#FFFBEB',
+    accent: '#2ABFBF',
+    accentSurface: '#F0FDFD',
   },
   space: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
   radius: { md: 12, lg: 16 },

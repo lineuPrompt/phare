@@ -186,6 +186,14 @@ export default function ReviewScreen() {
           </Pressable>
         </View>
 
+        {/* The two screens are peers, so this REPLACES rather than pushes: a
+            back stack that grows every time you look at the other one is a
+            stack of the same two screens. Both routes carry the same auth
+            gate, so neither can be reached signed out. */}
+        <Link href="/timeline" replace style={styles.timelineLink}>
+          {t('timeline.title')} →
+        </Link>
+
         {errorKey && (
           <View style={styles.errorBox}>
             <Text style={styles.errorText}>{t(errorKey)}</Text>
@@ -266,6 +274,12 @@ const styles = StyleSheet.create({
   },
   errorText: { color: theme.color.danger, fontSize: 14 },
   retry: { color: theme.color.danger, fontSize: 14, fontWeight: '700' },
+  timelineLink: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.color.heading,
+    paddingHorizontal: theme.space.xs,
+  },
   diagnosticsLink: {
     fontSize: 13,
     color: theme.color.muted,
