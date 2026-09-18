@@ -288,6 +288,7 @@ export default function TimelinePage() {
       {monthView && (
         <DayLedger
           monthView={monthView}
+          balancesStartDate={data.balancesStartDate}
           today={today}
           locale={locale}
           categories={categories}

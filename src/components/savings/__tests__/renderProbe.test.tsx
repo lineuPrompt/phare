@@ -237,7 +237,7 @@ describe('DayLedger month strip shows the month low', () => {
   for (const locale of ['en', 'fr'] as const) {
     it(`${locale}: prints the value and its date beside opens/closes`, () => {
       const html = render(locale,
-        <DayLedger monthView={monthView(236.85)} today="2026-09-03" locale={locale}
+        <DayLedger monthView={monthView(236.85)} balancesStartDate="2026-09-01" today="2026-09-03" locale={locale}
           categories={[]} onChanged={() => {}} />
       );
       console.log(`\n--- ${locale.toUpperCase()} month strip ---\n${text(html)}\n`);
@@ -248,14 +248,87 @@ describe('DayLedger month strip shows the month low', () => {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // THE NOTE THAT SHIPPED WRONG FOR MONTHS, and why nothing caught it: the
+  // fixture above sets balancesBeginNote: false, so this note never rendered in
+  // any test. It printed `month + '-01'` while only ever appearing when
+  // balances DON'T start on the 1st — wrong on every render, by construction.
+  // See docs/tickets/balances-begin-wrong-date.md.
+  //
+  // Rendered in both locales against the real catalogues, and asserted as the
+  // whole sentence: a date-shaped substring would pass on the wrong date too.
+  // ---------------------------------------------------------------------------
+  const BALANCES_START = '2026-09-15';
+
+  const midMonthAnchorView = (): MonthView => ({
+    ...monthView(236.85),
+    balancesBeginNote: true,
+    // The note renders inside the unbalanced-days block, so the fixture needs
+    // one pre-anchor day for it to appear at all.
+    unbalancedDays: [
+      {
+        date: '2026-09-03',
+        entries: [
+          {
+            id: 'tx-1',
+            date: '2026-09-03',
+            description: 'Hydro',
+            amount: 120,
+            type: 'expense',
+            recurringItemId: null,
+            recurrenceId: null,
+            installmentLabel: null,
+            transferPeerId: null,
+            isBridge: false,
+            bridgeSourceAccount: null,
+            bridgeSourceMonth: null,
+          },
+        ],
+      },
+    ],
+  });
+
+  /** fmtDay's format, mirrored here so the expectation is independent of it. */
+  const asDayLedgerFormats = (iso: string, locale: 'en' | 'fr') =>
+    new Date(iso + 'T00:00:00').toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+
+  for (const locale of ['en', 'fr'] as const) {
+    it(`${locale}: "balances begin" names the real start date, not the 1st`, () => {
+      const html = render(locale,
+        <DayLedger monthView={midMonthAnchorView()} balancesStartDate={BALANCES_START}
+          today="2026-09-20" locale={locale} categories={[]} onChanged={() => {}} />
+      );
+      console.log(`\n--- ${locale.toUpperCase()} balances-begin note ---\n${text(html)}\n`);
+      expect(html).not.toMatch(/timeline\.list\./);
+
+      const expected = MESSAGES[locale].timeline.list.balancesBegin.replace(
+        '{date}',
+        asDayLedgerFormats(BALANCES_START, locale)
+      );
+      expect(text(html)).toContain(expected);
+
+      // And explicitly not the date the bug printed: the 1st of the viewed
+      // month, which balancesBeginNote guarantees is never the answer.
+      const theBug = MESSAGES[locale].timeline.list.balancesBegin.replace(
+        '{date}',
+        asDayLedgerFormats('2026-09-01', locale)
+      );
+      expect(text(html)).not.toContain(theBug);
+    });
+  }
+
   it('colours the month low by the SAME classifyDip tiers as the header', () => {
     // healthy (>= $200) — ink, not a warning colour
-    expect(render('en', <DayLedger monthView={monthView(236.85)} today="2026-09-03" locale="en" categories={[]} onChanged={() => {}} />)).toContain('#0F2044');
+    expect(render('en', <DayLedger monthView={monthView(236.85)} balancesStartDate="2026-09-01" today="2026-09-03" locale="en" categories={[]} onChanged={() => {}} />)).toContain('#0F2044');
     // amber (0 <= x < $200)
-    const amber = render('en', <DayLedger monthView={monthView(150.25)} today="2026-09-03" locale="en" categories={[]} onChanged={() => {}} />);
+    const amber = render('en', <DayLedger monthView={monthView(150.25)} balancesStartDate="2026-09-01" today="2026-09-03" locale="en" categories={[]} onChanged={() => {}} />);
     expect(amber).toContain('#B45309');
     // red (< 0)
-    const red = render('en', <DayLedger monthView={monthView(-40)} today="2026-09-03" locale="en" categories={[]} onChanged={() => {}} />);
+    const red = render('en', <DayLedger monthView={monthView(-40)} balancesStartDate="2026-09-01" today="2026-09-03" locale="en" categories={[]} onChanged={() => {}} />);
     expect(red).toContain('#DC2626');
   });
 });

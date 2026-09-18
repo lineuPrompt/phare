@@ -356,6 +356,7 @@ function EntryRow({
 
 export default function DayLedger({
   monthView,
+  balancesStartDate,
   today,
   locale,
   categories,
@@ -363,6 +364,17 @@ export default function DayLedger({
   onChanged,
 }: {
   monthView: MonthView;
+  /**
+   * First date with a known balance, straight from the API response.
+   *
+   * REQUIRED, and deliberately not optional-with-a-fallback. MonthView carries
+   * `balancesBeginNote` — the boolean DERIVED from this date — but not the date
+   * itself, so the note below used the only date in scope (`month + '-01'`) and
+   * was therefore wrong every time it rendered: the note only appears when
+   * balances DON'T start on the 1st. An optional prop would let that come back
+   * silently at any call site that forgot it.
+   */
+  balancesStartDate: string;
   today: string;
   locale: string;
   categories: ExpenseCategory[];
@@ -413,7 +425,11 @@ export default function DayLedger({
           ))}
           {balancesBeginNote && (
             <p className="text-xs px-1" style={{ color: '#9CA3AF' }}>
-              {t('balancesBegin', { date: fmtDay(monthView.month + '-01', locale) })}
+              {/* The REAL start date. This said `monthView.month + '-01'` until
+                  2026-09-18, which balancesBeginNote guarantees is never the
+                  answer — it is true only when balances start after the 1st.
+                  See docs/tickets/balances-begin-wrong-date.md. */}
+              {t('balancesBegin', { date: fmtDay(balancesStartDate, locale) })}
             </p>
           )}
         </div>
