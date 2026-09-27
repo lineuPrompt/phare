@@ -93,6 +93,13 @@ Run from the repo root unless noted.
 
 ## 5. Data changes
 
+**Database reads**
+- Every database read goes through the `supabase` MCP server, which runs
+  `--read-only` (local scope, project `rmxnryjslussumwttzna`).
+- **Never use `SUPABASE_SERVICE_ROLE_KEY` for queries**: not in scripts, curl
+  calls, or ad-hoc clients. If the MCP server is not connected, stop and say so.
+  Do not fall back to the key.
+
 **Migrations**
 - Versioned in `supabase/migrations/`. Lineu applies them in the Supabase SQL
   Editor. Every migration ends with a VERIFY block.
