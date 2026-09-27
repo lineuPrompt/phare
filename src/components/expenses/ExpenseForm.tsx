@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { Account, ExpenseCategory } from './types';
 import { useBusinessToday } from '@/lib/useBusinessToday';
+import { canSaveExpense } from '@phare/core';
 
 export default function ExpenseForm({
   categories,
@@ -103,9 +104,14 @@ export default function ExpenseForm({
   const inputStyle = { border: '1.5px solid #D1D5DB', color: '#0F2044' };
 
   // Category required only for expenses; account required only when multiple accounts exist
-  const canSave = description.trim() && parseFloat(amount) > 0
-    && (entryType === 'income' || categoryId)
-    && (accounts.length <= 1 || selectedAccountId);
+  const canSave = canSaveExpense({
+    description,
+    amount: parseFloat(amount),
+    entryType,
+    categoryId,
+    accountCount: accounts.length,
+    selectedAccountId,
+  });
 
   return (
     <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>

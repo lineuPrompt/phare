@@ -1,4 +1,5 @@
 import { memberRoleView, type MemberRoleInput } from '@/lib/memberProvisioningHelpers';
+import { confirmationMatches, type DeletionVerdict } from '@phare/core';
 
 // ---------------------------------------------------------------------------
 // WHICH DELETION IS EVEN AVAILABLE TO THIS PERSON.
@@ -21,26 +22,10 @@ export type DeletionMember = MemberRoleInput & {
   deleted_at?: string | null;
 };
 
-export type DeletionVerdict =
-  /** Case B. Another owner remains, so the household carries on without them. */
-  | { mode: 'self_delete' }
-  /** Case A. Nobody else has an account at all — their account IS the household. */
-  | { mode: 'household_delete'; reason: 'sole_member' }
-  /**
-   * Case A via the escape hatch. Others exist but NONE has ever signed in, so
-   * there is no one to hand ownership to. Offered, never automatic — the route
-   * and the UI both require a second, separate confirmation.
-   */
-  | { mode: 'household_delete'; reason: 'all_pending' }
-  /** Blocked, with a way forward: promote one of these, then delete. */
-  | { mode: 'blocked_promote'; candidates: { id: string; name?: string }[] }
-  /**
-   * Blocked with no automatic way forward: somebody else is active, but their
-   * role could not be read as promotable. Deliberately NOT collapsed into the
-   * escape hatch — offering to destroy the household here would destroy an
-   * active person's data on the strength of a failed role lookup.
-   */
-  | { mode: 'blocked_no_path' };
+// DeletionVerdict and confirmationMatches live in @phare/core
+// (packages/core/src/accountDeletion.ts): the mobile deletion screen renders the
+// same verdict and gates its button on the same phrase check the routes use.
+export { confirmationMatches, type DeletionVerdict };
 
 /** Members who hold real access right now: an account, not a tombstone. */
 export function liveAccessHolders<T extends DeletionMember>(members: T[]): T[] {
@@ -94,23 +79,4 @@ export function decideDeletion(
   // rather than defaulting to 'member' precisely so this case stays visible
   // instead of silently becoming an offer to delete everything.
   return { mode: 'blocked_no_path' };
-}
-
-/**
- * Confirmation-phrase check.
- *
- * The phrase is the household's name (whole-household deletion) or the
- * caller's own email (self-deletion) — never a generic word like "DELETE",
- * which a person can type without reading, and which reads identically on
- * every screen in the product.
- *
- * Trimmed and case-insensitive on purpose: this is a gate against acting
- * without reading, not a spelling test. Someone who types their household's
- * name in the wrong case has demonstrated exactly the understanding being
- * checked for.
- */
-export function confirmationMatches(expected: string | null | undefined, typed: unknown): boolean {
-  if (typeof expected !== 'string' || expected.trim().length === 0) return false;
-  if (typeof typed !== 'string') return false;
-  return typed.trim().toLowerCase() === expected.trim().toLowerCase();
 }

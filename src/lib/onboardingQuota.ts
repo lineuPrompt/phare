@@ -70,33 +70,7 @@ export function onboardingQuotaFrom(used: number, month: string): QuotaState {
   return quotaFrom(used, month, ONBOARDING_GENERATIONS_PER_MONTH);
 }
 
-/**
- * 'YYYY-MM-DD' → a date a person reads, in their own locale.
- *
- * TWO INDEPENDENT GUARDS against the off-by-one-day slip, and this is not
- * belt-and-braces by accident — mutation testing showed each one alone is
- * sufficient, so removing either in isolation changes nothing observable:
- *
- *   - `timeZone: 'UTC'` on the formatter, so the ambient server/browser zone
- *     cannot shift the rendered day.
- *   - parsing at NOON rather than midnight, so even without that option there
- *     are twelve hours of slack either side.
- *
- * Without BOTH, `new Date('2026-09-01')` is midnight UTC and formats as August
- * 31st in every Canadian zone: the household would be told its allowance
- * refills the day before it actually does. Do not "simplify" by deleting one
- * on the grounds that the tests still pass — they pass because the other is
- * still there.
- *
- * Returns '' for a missing or malformed value so the caller renders a message
- * with a blank date rather than "Invalid Date".
- */
-export function formatResetDate(resetsOn: string | undefined, locale: string): string {
-  if (!resetsOn || !/^\d{4}-\d{2}-\d{2}$/.test(resetsOn)) return '';
-  return new Intl.DateTimeFormat(locale === 'fr' ? 'fr-CA' : 'en-CA', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(`${resetsOn}T12:00:00Z`));
-}
+// formatResetDate moved to @phare/core (packages/core/src/onboarding.ts) so the
+// mobile onboarding flow renders the same date. Re-exported so web imports keep
+// resolving to the one implementation.
+export { formatResetDate } from '@phare/core';

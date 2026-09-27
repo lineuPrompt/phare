@@ -18,6 +18,7 @@ import { dropResolvedItems } from '@phare/core';
 import { runPlausibilityGuard, PlausibilityResult } from '@phare/core';
 import { TemplateParseResult } from '@/lib/templateParser';
 import { formatCAD } from '@phare/core';
+import { afterSaveOutcome, onboardingErrorKind, openingAnchorValue } from '@phare/core';
 import { formatResetDate } from '@/lib/onboardingQuota';
 import SupportLine from '@/components/shared/SupportLine';
 import { useBusinessToday } from '@/lib/useBusinessToday';
@@ -152,10 +153,9 @@ export default function UploadPage() {
    * retry and confirm-replace paths through doSave can call it freely.
    */
   const writeOpeningAnchor = useCallback(async () => {
-    const raw = openingBalance.trim();
-    if (!raw) return; // skipped on purpose — the dashboard prompt covers it
-    const value = Number(raw);
-    if (!Number.isFinite(value)) return;
+    // Blank is skipped on purpose — the dashboard prompt covers it.
+    const value = openingAnchorValue(openingBalance);
+    if (value === null) return;
 
     try {
       const accountsRes = await fetch('/api/accounts');
@@ -196,23 +196,23 @@ export default function UploadPage() {
       if (!res.ok) {
         throw new Error(data?.error || `Save failed (${res.status})`);
       }
-      if (data?.needsConfirmation) {
-        setReplaceConfirmation(data.counts);
+      const outcome = afterSaveOutcome<NeedsPayDateItem, NonNullable<typeof replaceConfirmation>>(data);
+      if (outcome.kind === 'needsConfirmation') {
+        setReplaceConfirmation(outcome.counts);
         setPlanSaveStatus('idle');
         return;
       }
       setReplaceConfirmation(null);
-      const needsPayDate: NeedsPayDateItem[] = data?.needsPayDate ?? [];
       setSaveNotices({
-        unmatchedMembers: data?.unmatchedMembers ?? [],
-        needsPayDate,
+        unmatchedMembers: outcome.unmatchedMembers,
+        needsPayDate: outcome.needsPayDate,
       });
-      setHouseholdMembers(data?.householdMembers ?? []);
+      setHouseholdMembers(outcome.householdMembers);
       setPlanSaveStatus('saved');
       // Only after a real save — a chequing account is guaranteed to exist by
       // this point, and there is no reason to anchor a plan that failed.
       await writeOpeningAnchor();
-      if (needsPayDate.length > 0) {
+      if (outcome.kind === 'needsPayDate') {
         setStatus('anchor_dates');
       }
     } catch (err) {
@@ -231,26 +231,26 @@ export default function UploadPage() {
    */
   const messageForServerError = useCallback(
     (body: { code?: string; error?: string; resetsOn?: string } | null): string => {
-      switch (body?.code) {
-        case 'PAYLOAD_TOO_LARGE': return t('errors.payloadTooLarge');
-        case 'AI_UNAVAILABLE':    return t('errors.aiUnavailable');
-        case 'RATE_LIMITED':      return t('errors.rateLimited');
-        case 'NOT_AUTHENTICATED': return t('errors.notAuthenticated');
+      // Which codes are recognised is decided once, in core, for web and
+      // mobile alike. The keys stay literal here so the i18n key test sees them.
+      switch (onboardingErrorKind(body?.code)) {
+        case 'payloadTooLarge':  return t('errors.payloadTooLarge');
+        case 'aiUnavailable':    return t('errors.aiUnavailable');
+        case 'rateLimited':      return t('errors.rateLimited');
+        case 'notAuthenticated': return t('errors.notAuthenticated');
         // The reset date is the point of this message. "You hit the limit" with
         // no date leaves a household that legitimately re-onboarded with no
         // idea whether to wait an hour or three weeks. The server sends
         // 'YYYY-MM-DD'; the locale formatting happens here, because the API
         // composes no localized prose.
-        case 'ONBOARDING_QUOTA_EXHAUSTED':
+        case 'onboardingQuotaExhausted':
           return t('errors.onboardingQuotaExhausted', {
-            date: formatResetDate(body.resetsOn, localeOf()),
+            date: formatResetDate(body?.resetsOn, localeOf()),
           });
-        case 'INVALID_JSON':
-        case 'UNKNOWN_PLAN_SOURCE':
-        case 'PLAN_FAILED':       return t('errors.planFailed');
+        case 'planFailed':       return t('errors.planFailed');
         // Unrecognised code (or none): show whatever the server said rather
         // than swallowing a real reason behind generic copy.
-        default: return body?.error || t('errors.generic');
+        case null: return body?.error || t('errors.generic');
       }
     },
     [t]

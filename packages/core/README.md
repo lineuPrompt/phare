@@ -22,6 +22,9 @@ exists.
 | `money.ts` | `formatCAD`, `formatCADLocale` |
 | `timeline.ts` | Cash Timeline result types, `classifyDip` + `DIP_AMBER_THRESHOLD`, `buildMonthView`. Display logic only — the ledger walk (`buildCashTimeline`) stays in the web app, which re-exports these from `src/lib/timelineHelpers.ts` / `timelineDisplayHelpers.ts` |
 | `timezoneSupport.ts` | `assertTimeZoneSupport` — the runtime capability probe |
+| `onboarding.ts` | `canGoToDashboard`, `formatResetDate`, `onboardingErrorKind` (server code → message kind), `afterSaveOutcome` (what a save-plan body means), `openingAnchorValue`. Web re-exports the first two from `src/lib/onboardingCompletion.ts` / `onboardingQuota.ts` |
+| `accountDeletion.ts` | `DeletionVerdict` type, `confirmationMatches` — the phrase check the routes and both clients share. `decideDeletion` stays in the web app |
+| `entry.ts` | `parseAmountInput` (exact-or-null; reads a fr-CA decimal comma), `canSaveExpense` |
 
 ---
 

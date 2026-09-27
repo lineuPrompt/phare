@@ -76,10 +76,15 @@ describe('the review can never hide the way out', () => {
     expect(canGoToDashboard.length).toBe(1);
 
     const source = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/lib/onboardingCompletion.ts'),
+      path.resolve(process.cwd(), 'packages/core/src/onboarding.ts'),
       'utf8'
     );
-    const body = source.slice(source.indexOf('export function canGoToDashboard'));
+    // Guard the slice: indexOf returning -1 would slice to the last character
+    // and let both not.toContain assertions pass against nothing.
+    const start = source.indexOf('export function canGoToDashboard');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const end = source.indexOf('\nexport ', start + 1);
+    const body = source.slice(start, end === -1 ? undefined : end);
     expect(body).not.toContain('reviewStreaming');
     expect(body).not.toContain('reviewText');
   });

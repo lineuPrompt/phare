@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useTransactionExport } from '@/components/shared/useTransactionExport';
+import { confirmationMatches, type DeletionVerdict } from '@phare/core';
 
 /**
  * The deletion surface, for both cases.
@@ -26,14 +27,8 @@ import { useTransactionExport } from '@/components/shared/useTransactionExport';
  *    take over is one decision; typing the household name is another.
  */
 
-type Verdict =
-  | { mode: 'self_delete' }
-  | { mode: 'household_delete'; reason: 'sole_member' | 'all_pending' }
-  | { mode: 'blocked_promote'; candidates: { id: string; name?: string }[] }
-  | { mode: 'blocked_no_path' };
-
 type Preview = {
-  verdict: Verdict;
+  verdict: DeletionVerdict;
   householdName: string | null;
   blastRadius: {
     members: number;
@@ -105,7 +100,9 @@ export default function DeleteAccountSection({ locale }: { locale: string }) {
   }
 
   const phrase = confirmWith.phrase ?? '';
-  const phraseMatches = typed.trim().toLowerCase() === phrase.trim().toLowerCase() && phrase.length > 0;
+  // The same check the route runs, so the button is never enabled for a phrase
+  // the server would refuse.
+  const phraseMatches = confirmationMatches(phrase, typed);
   // The escape hatch's first gate. Only ever required for all_pending — a sole
   // member has nobody to hand the household to by definition, so asking them to
   // acknowledge it would be noise.
