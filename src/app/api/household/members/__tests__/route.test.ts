@@ -633,3 +633,161 @@ describe('POST /api/household/members — hard member cap', () => {
     expect(await res.json()).toEqual({ success: true, resent: true });
   });
 });
+
+// ---------------------------------------------------------------------------
+// The gates in front of the service-role client, and what the route says when
+// the Admin API fails. These run the REAL route. They replace
+// src/lib/__tests__/memberProvisioning.test.ts, which asserted against a copy
+// of this logic written inside the test file and stayed green with the owner
+// gate and the email check both disabled here.
+//
+// The session mock throws on any read it was not scripted for, and the route
+// turns a throw into a 500. So a gate that stops rejecting does not pass by
+// accident: the request runs on into an unscripted read and the status moves.
+// The "no Admin API call" assertions are the security half: the service-role
+// client bypasses RLS, and nothing may reach it before the owner check.
+// ---------------------------------------------------------------------------
+describe('POST /api/household/members — auth, validation, Admin API failures', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createUserMock.mockReset();
+    resetPasswordMock.mockReset();
+    adminUsersSelectMock.mockReset();
+    adminFromCalls.length = 0;
+  });
+
+  async function useSession(script: Record<string, Resolution[]>, signedIn = true) {
+    const mock = makeSupabaseMock(script);
+    if (!signedIn) {
+      (mock.client.auth as { getUser: () => Promise<unknown> }).getUser = async () => ({
+        data: { user: null },
+        error: null,
+      });
+    }
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(mock.client);
+    return mock;
+  }
+
+  const VALID = { email: 'marc@example.com', fullName: 'Marc Nobody', role: 'member' };
+
+  function expectNothingProvisioned() {
+    expect(createUserMock).not.toHaveBeenCalled();
+    expect(resetPasswordMock).not.toHaveBeenCalled();
+    expect(adminFromCalls).toEqual([]);
+  }
+
+  it('401s a signed-out caller before reading anything', async () => {
+    const { calls } = await useSession({}, false);
+
+    const res = await postMembers(VALID);
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'Not authenticated' });
+    expect(calls).toEqual([]);
+    expectNothingProvisioned();
+  });
+
+  it('401s a signed-in user with no users row', async () => {
+    await useSession({ users: [{ data: null, error: null }] });
+
+    const res = await postMembers(VALID);
+
+    expect(res.status).toBe(401);
+    expectNothingProvisioned();
+  });
+
+  it('403s a member-role caller, and never reaches the service-role client', async () => {
+    const { calls } = await useSession({
+      users: [{ data: { household_id: 'hh1', role: 'member' }, error: null }],
+    });
+
+    const res = await postMembers(VALID);
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'Only the household owner can provision members' });
+    // The caller's own users row is the only thing read.
+    expect(calls.map((c) => c.table)).toEqual(['users']);
+    expectNothingProvisioned();
+  });
+
+  it.each([
+    ['no @', 'marc.example.com'],
+    ['no dot after the @', 'marc@example'],
+    ['a space inside', 'marc @example.com'],
+    ['two @', 'marc@@example.com'],
+  ])('400s an email with %s, before any Admin API call', async (_label, email) => {
+    await useSession({ users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }] });
+
+    const res = await postMembers({ ...VALID, email });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'Invalid email format' });
+    expectNothingProvisioned();
+  });
+
+  it.each([
+    ['a missing email', { ...VALID, email: undefined }, 'Email is required'],
+    ['a blank email', { ...VALID, email: '   ' }, 'Email is required'],
+    ['a missing name', { ...VALID, fullName: undefined }, 'Full name is required'],
+    ['a blank name', { ...VALID, fullName: '  ' }, 'Full name is required'],
+    ['an unknown role', { ...VALID, role: 'admin' }, 'Role must be member or owner'],
+    ['a missing role', { ...VALID, role: undefined }, 'Role must be member or owner'],
+  ])('400s %s, before any Admin API call', async (_label, body, error) => {
+    await useSession({ users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }] });
+
+    const res = await postMembers(body);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error });
+    expectNothingProvisioned();
+  });
+
+  it('500s with the Admin API\'s own reason when createUser fails for a non-duplicate cause', async () => {
+    createUserMock.mockResolvedValue({
+      data: { user: null },
+      error: { message: 'Database error creating new user', status: 500 },
+    });
+    const { calls } = await useSession({
+      users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
+      household_members: [
+        { count: 0, error: null }, // member-cap count
+        { data: [], error: null }, // no name-only candidates
+      ],
+    });
+
+    const res = await postMembers(VALID);
+
+    expect(res.status).toBe(500);
+    // The server's real reason, not a generic message hiding it.
+    expect(await res.json()).toEqual({ error: 'Database error creating new user' });
+    expect(createUserMock).toHaveBeenCalledTimes(1);
+    // No email for an account that does not exist, and no row touched.
+    expect(resetPasswordMock).not.toHaveBeenCalled();
+    expect(calls.some((c) => c.method === 'update' || c.method === 'delete')).toBe(false);
+  });
+
+  it('500s when the set-password email fails after the account exists, without leaking the new user id', async () => {
+    createUserMock.mockResolvedValue({ data: { user: { id: 'new-auth-user-leak-check' } }, error: null });
+    resetPasswordMock.mockResolvedValue({ error: { message: 'SMTP unavailable' } });
+    await useSession({
+      users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
+      household_members: [
+        { count: 0, error: null },
+        { data: [], error: null },
+      ],
+    });
+
+    const res = await postMembers(VALID);
+    const json = await res.json();
+
+    expect(res.status).toBe(500);
+    // Says the account WAS created, so the owner does not invite again into a
+    // duplicate-email 409.
+    expect(json.error).toContain('Member created but failed to send set-password email');
+    expect(JSON.stringify(json)).not.toContain('new-auth-user-leak-check');
+    expect(json.success).toBeUndefined();
+    expect(createUserMock).toHaveBeenCalledTimes(1);
+    expect(resetPasswordMock).toHaveBeenCalledTimes(1);
+  });
+});
