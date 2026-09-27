@@ -99,6 +99,9 @@ Run from the repo root unless noted.
 - **Never use `SUPABASE_SERVICE_ROLE_KEY` for queries**: not in scripts, curl
   calls, or ad-hoc clients. If the MCP server is not connected, stop and say so.
   Do not fall back to the key.
+- **Never write `SUPABASE_ACCESS_TOKEN` into any file**: not `.mcp.json`,
+  `.claude.json`, `.env*`, settings, scripts, or docs. The MCP server reads it
+  from the environment.
 
 **Migrations**
 - Versioned in `supabase/migrations/`. Lineu applies them in the Supabase SQL
