@@ -7,16 +7,17 @@
  * double-counted against that account's balance anchor AND read as an
  * outflow by chequingLedgerNet, so the two reconcile paths simply stop
  * agreeing with no error anywhere. It is enforced in three independent
- * places now, and each is checked here:
+ * places now:
  *
  *   1. the API guard        — acceptsOpeningBalance(), used by both routes
  *   2. the database trigger — enforce_opening_balance_account_type
  *   3. the balance math     — nothing else counts a goal row as cash flow
+ *
+ * 1 and 3 are checked here. 2 is not: a regex over an applied migration file
+ * cannot see the live database. Verify it there with SELECT prosrc.
  */
 
 import { describe, it, expect } from 'vitest';
-import fs from 'node:fs';
-import path from 'node:path';
 import {
   acceptsOpeningBalance,
   computeGoalBalance,
@@ -25,11 +26,6 @@ import {
   type TxRow,
 } from '../dashboardHelpers';
 import { reconcileMonth, chequingLedgerNet, type ReconcileAccountRow, type ReconcileTxRow } from '../reconcileHelpers';
-
-const MIGRATION = fs.readFileSync(
-  path.join(process.cwd(), 'supabase', 'migrations', '20260831000000_transactions_is_opening_balance.sql'),
-  'utf8'
-);
 
 describe('acceptsOpeningBalance — the API guard', () => {
   it('accepts every goal account type', () => {
@@ -50,37 +46,6 @@ describe('acceptsOpeningBalance — the API guard', () => {
   it('refuses an unknown type rather than defaulting open', () => {
     expect(acceptsOpeningBalance('')).toBe(false);
     expect(acceptsOpeningBalance('brokerage')).toBe(false);
-  });
-});
-
-describe('the database enforces it too, not just the API', () => {
-  it('the trigger rejects any account type outside the goal set', () => {
-    expect(MIGRATION).toMatch(/CREATE TRIGGER trg_enforce_opening_balance_account_type/);
-    expect(MIGRATION).toMatch(/BEFORE INSERT OR UPDATE ON transactions/);
-    // The allow-list inside the trigger body must be the goal types, so a
-    // chequing row raises rather than inserting.
-    const body = MIGRATION.slice(MIGRATION.indexOf('enforce_opening_balance_account_type()'));
-    expect(body).toMatch(/NOT IN \('savings', 'tfsa', 'rrsp', 'debt'\)/);
-    expect(body).toMatch(/RAISE EXCEPTION/);
-  });
-
-  it('guards UPDATE as well as INSERT, so a row cannot be flipped later', () => {
-    expect(MIGRATION).toMatch(/BEFORE INSERT OR UPDATE/);
-  });
-
-  it('allows at most one opening balance per account', () => {
-    expect(MIGRATION).toMatch(
-      /CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_one_opening_balance_per_account[\s\S]*?ON transactions \(account_id\)[\s\S]*?WHERE is_opening_balance/
-    );
-  });
-
-  it('backfills only transfer rows on goal accounts', () => {
-    const backfill = MIGRATION.slice(MIGRATION.indexOf('UPDATE transactions t'), MIGRATION.indexOf('CREATE UNIQUE INDEX'));
-    expect(backfill).toMatch(/t\.type = 'transfer'/);
-    expect(backfill).toMatch(/a\.type IN \('savings', 'tfsa', 'rrsp', 'debt'\)/);
-    // 'Balance correction' is the debt re-baselining delta and means
-    // something different — it must not be swept up.
-    expect(backfill).not.toMatch(/Balance correction/);
   });
 });
 

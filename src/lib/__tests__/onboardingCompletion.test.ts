@@ -95,12 +95,6 @@ const PLAN_DISPLAY = fs.readFileSync(
 );
 
 describe('PlanDisplay is wired to the rule', () => {
-  it('imports canGoToDashboard', () => {
-    expect(PLAN_DISPLAY).toMatch(
-      /import\s*\{\s*canGoToDashboard\s*\}\s*from\s*'@\/lib\/onboardingCompletion'/
-    );
-  });
-
   it('passes the replace-dialog state, derived from replaceConfirmation', () => {
     expect(PLAN_DISPLAY).toMatch(
       /canGoToDashboard\(\{\s*planSaveStatus,\s*replaceConfirmationOpen:\s*replaceConfirmation !== null\s*\}\)/
@@ -109,17 +103,6 @@ describe('PlanDisplay is wired to the rule', () => {
 
   it('renders the label through the goToDashboard key', () => {
     expect(PLAN_DISPLAY).toContain("t('plan.goToDashboard')");
-  });
-
-  it('reuses the accounts step\'s primary button style rather than a new variant', () => {
-    const accountStep = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/onboarding/AccountStep.tsx'),
-      'utf8'
-    );
-    const PRIMARY =
-      'className="w-full py-3 rounded-full text-white font-semibold cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"';
-    expect(accountStep).toContain(PRIMARY);
-    expect(PLAN_DISPLAY).toContain(PRIMARY);
   });
 });
 

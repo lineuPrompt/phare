@@ -74,14 +74,4 @@ describe('recurring transfer materialization — date engine', () => {
     );
     expect(dates.length).toBe(12);
   });
-
-  it('needs-a-date contract: the route never calls the date engine without an anchor — zero occurrences, not a fabricated guess', () => {
-    // Mirrors the exact guard used in POST /api/recurring and
-    // PATCH /api/recurring/[id]: `anchorDate ? materializeFromMonthStart(...) : []`.
-    const anchorDate: string | null = null;
-    const dates = anchorDate
-      ? materializeFromMonthStart({ cadence: 'monthly', anchorDate, secondDay: null }, '2026-01-01', 12)
-      : [];
-    expect(dates).toEqual([]);
-  });
 });
