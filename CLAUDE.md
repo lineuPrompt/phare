@@ -42,7 +42,7 @@ Run from the repo root unless noted.
 | Web build | `pnpm build` |
 | Web + core tests | `pnpm vitest run` (the `test` script is watch mode; `apps/**` is excluded) |
 | Core tests only | `pnpm vitest run packages/core` |
-| Web typecheck | `pnpm exec tsc --noEmit` (no script; root tsconfig excludes `apps`) |
+| Web typecheck | `pnpm typecheck` (= `tsc --noEmit`; root tsconfig excludes `apps`) |
 | Lint (whole repo) | `pnpm lint` |
 | Lint mobile only | `pnpm exec eslint apps/mobile` |
 | Mobile tests | `pnpm --filter @phare/mobile test` |
