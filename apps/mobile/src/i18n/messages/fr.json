@@ -158,5 +158,8 @@
       "noChequing": "Phare a d'abord besoin d'un compte chèques. Vous pouvez en ajouter un sur phare.money.",
       "saveFailed": "Phare n'a pas pu enregistrer cette dépense, et rien n'a été enregistré. Veuillez réessayer."
     }
+  },
+  "terms": {
+    "updated": "Nos conditions ont été mises à jour. Consultez-les et acceptez-les sur phare.money, puis reconnectez-vous."
   }
 }

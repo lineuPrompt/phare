@@ -158,5 +158,8 @@
       "noChequing": "Phare needs a chequing account first. You can add one on phare.money.",
       "saveFailed": "Phare couldn't save this expense, and nothing was recorded. Please try again."
     }
+  },
+  "terms": {
+    "updated": "Our terms were updated. Review and accept them on phare.money, then sign in again."
   }
 }

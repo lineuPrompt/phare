@@ -19,15 +19,22 @@ export type ApiErrorKind = 'unauthorized' | 'rateLimited' | 'network' | 'server'
 export class ApiError extends Error {
   readonly kind: ApiErrorKind;
   readonly status: number | null;
-  /** The server's machine-readable `code`, when it sent one. For logs only. */
+  /**
+   * The server's machine-readable `code`, when it sent one. Screens that know
+   * a route's codes map them to their own messages (quickEntry.ts,
+   * onboardingFlow.ts); everything else uses `kind`.
+   */
   readonly code: string | null;
+  /** ONBOARDING_QUOTA_EXHAUSTED's refill date ('YYYY-MM-DD'), when sent. */
+  readonly resetsOn: string | null;
 
-  constructor(kind: ApiErrorKind, status: number | null, code: string | null) {
+  constructor(kind: ApiErrorKind, status: number | null, code: string | null, resetsOn: string | null = null) {
     super(`API ${kind}${status ? ` (${status})` : ''}${code ? ` [${code}]` : ''}`);
     this.name = 'ApiError';
     this.kind = kind;
     this.status = status;
     this.code = code;
+    this.resetsOn = resetsOn;
   }
 }
 

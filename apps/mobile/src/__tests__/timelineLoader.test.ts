@@ -216,10 +216,13 @@ describe('the auth gate on a deep link', () => {
     expect(source).toMatch(/export \{ default \} from '\.\.\/\.\.\/src\/components\/TabsLayout'/);
   });
 
-  it('TabsLayout wraps the whole navigator in the gate', () => {
+  it('TabsLayout wraps the whole navigator in both gates, auth outermost', () => {
     const source = fs.readFileSync(path.join(SRC_DIR, 'components', 'TabsLayout.tsx'), 'utf8');
     expect(source).toMatch(/import AuthGate from '\.\/AuthGate'/);
-    expect(source).toMatch(/<AuthGate>\s*<Tabs[\s\S]*<\/Tabs>\s*<\/AuthGate>/);
+    expect(source).toMatch(/import HouseholdGate from '\.\/HouseholdGate'/);
+    expect(source).toMatch(
+      /<AuthGate>\s*<HouseholdGate>\s*<Tabs[\s\S]*<\/Tabs>\s*<\/HouseholdGate>\s*<\/AuthGate>/
+    );
   });
 
   it('every route outside the tab group is gated itself or deliberately public', () => {
@@ -239,7 +242,8 @@ describe('the auth gate on a deep link', () => {
     );
     for (const file of routes) {
       const source = fs.readFileSync(path.join(APP_DIR, file), 'utf8');
-      expect(source, file).toMatch(/<AuthGate>[\s\S]*<\/AuthGate>/);
+      // Both gates: a deep link to a signed-in route must not skip the terms.
+      expect(source, file).toMatch(/<AuthGate>\s*<HouseholdGate>[\s\S]*<\/HouseholdGate>\s*<\/AuthGate>/);
     }
   });
 });

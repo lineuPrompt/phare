@@ -54,7 +54,8 @@ async function request<T>(
     throw new ApiError(
       kindForStatus(response.status),
       response.status,
-      typeof body?.code === 'string' ? body.code : null
+      typeof body?.code === 'string' ? body.code : null,
+      typeof body?.resetsOn === 'string' ? body.resetsOn : null
     );
   }
 
@@ -72,6 +73,19 @@ export function apiPost<T>(path: string, body: unknown): Promise<T> {
     path,
     {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+    { authenticated: true }
+  );
+}
+
+/** Authenticated PATCH with a JSON body. */
+export function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(
+    path,
+    {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     },
