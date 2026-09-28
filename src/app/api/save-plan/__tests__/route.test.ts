@@ -766,3 +766,115 @@ describe('POST /api/save-plan — goal accounts (Bug 2: target date persistence 
     expect(transactionInserts).toHaveLength(0);
   });
 });
+
+describe('POST /api/save-plan — category seeding never fails silently', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  // A household with no categories yet (a first onboarding). The category
+  // script is the variable; every other table is the zero-accounts scenario
+  // above, truncated to what runs before the category block.
+  async function runWithCategories(categories: Resolution[]) {
+    const { client, calls } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      household_members: [
+        { data: { id: 'mem-1' }, error: null },
+        { data: [], error: null },
+      ],
+      accounts: [
+        { data: [], error: null },
+        { data: null, error: null },
+        { data: { id: 'chq-new' }, error: null },
+      ],
+      recurring_items: [
+        { count: 0, error: null },
+        { data: [], error: null },
+      ],
+      budgets: [
+        { count: 0, error: null },
+        { error: null },
+      ],
+      sinking_funds: [
+        { count: 0, error: null },
+        { error: null },
+      ],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      categories,
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const { POST } = await import('../route');
+
+    const res = await POST(new Request('http://localhost/api/save-plan', {
+      method: 'POST',
+      body: JSON.stringify({
+        plan: {
+          monthlyBudget: {
+            categories: [
+              { name: 'Rent', budgeted: 1200, type: 'expense', isFixed: true, seedCategory: 'Housing' },
+            ],
+          },
+          sinkingFunds: [],
+          goals: [],
+          topRecommendation: 'Keep it up.',
+        },
+        reviewText: 'Looking good.',
+        locale: 'en',
+        cardNames: [],
+        fileMeta: null,
+      }),
+    }));
+    return { res, json: await res.json(), calls };
+  }
+
+  // Nothing after the category block may run: no recurring items, no
+  // transactions, no review, no completed_onboarding event.
+  function expectStoppedAtCategories(calls: Call[]) {
+    const after = calls.filter((c) =>
+      (c.table === 'recurring_items' && c.method === 'insert') ||
+      c.table === 'transactions' || c.table === 'conversations' || c.table === 'events');
+    expect(after).toEqual([]);
+  }
+
+  it('a failed seed insert returns 500 carrying the database reason, and saves nothing after it', async () => {
+    const { res, json, calls } = await runWithCategories([
+      { data: [], error: null },                                          // existing: none
+      { error: { message: 'new row violates row-level security policy' } }, // seed insert fails
+    ]);
+
+    expect(res.status).toBe(500);
+    expect(json.saved).toBeUndefined();
+    expect(json.error).toBe('Failed to create categories: new row violates row-level security policy');
+
+    const seedInserts = calls.filter((c) => c.table === 'categories' && c.method === 'insert');
+    expect(seedInserts).toHaveLength(1);
+    expect((seedInserts[0].args[0] as { name: string }[]).map((r) => r.name)).toEqual(SEED_CATEGORY_NAMES);
+    expectStoppedAtCategories(calls);
+  });
+
+  it('a failed read of existing categories returns 500 instead of seeding blind', async () => {
+    const { res, json, calls } = await runWithCategories([
+      { data: null, error: { message: 'permission denied for table categories' } },
+    ]);
+
+    expect(res.status).toBe(500);
+    expect(json.error).toBe('Failed to read categories: permission denied for table categories');
+    expect(calls.filter((c) => c.table === 'categories' && c.method === 'insert')).toEqual([]);
+    expectStoppedAtCategories(calls);
+  });
+
+  it('a failed re-read after seeding returns 500 instead of saving every line with no category', async () => {
+    const { res, json, calls } = await runWithCategories([
+      { data: [], error: null },                                   // existing: none
+      { error: null },                                             // seed insert ok
+      { data: null, error: { message: 'canceling statement due to statement timeout' } },
+    ]);
+
+    expect(res.status).toBe(500);
+    expect(json.error).toBe('Failed to read categories: canceling statement due to statement timeout');
+    expectStoppedAtCategories(calls);
+  });
+});

@@ -51,8 +51,9 @@ export async function POST(request: Request) {
     // already own, which would be taking something away rather than declining
     // to sell more of it.
     //
-    // There is no is_system column to lean on: the seeded ten come from the
-    // signup trigger and are otherwise ordinary rows. "Free uses system
+    // There is no is_system column to lean on: the seeded ten come from
+    // save-plan (the signup trigger inserts no categories) and are otherwise
+    // ordinary rows. "Free uses system
     // categories only" is therefore enforced as "free adds none", which is
     // the same rule for anyone starting free and strictly kinder to anyone
     // who lapses.

@@ -4,7 +4,8 @@
 why four households have no categories — they never saved a plan, which is
 correct).
 
-**Status:** OPEN.
+**Status:** CLOSED 2026-09-28. The seed insert and both category reads
+around it now return 500 with the database's message; comment corrected.
 
 **Severity:** medium. Without categories a household cannot record money out
 (category is required, and creating one is a paid feature).

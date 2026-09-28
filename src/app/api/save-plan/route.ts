@@ -374,10 +374,14 @@ export async function POST(request: Request) {
     // Categories are user-editable and referenced by manually-created
     // budgets/card-envelopes/transactions; wiping them on every re-onboarding
     // destroyed custom categories and cascade-deleted their envelope items.
-    const { data: existingCats } = await supabase
+    const { data: existingCats, error: existingCatsError } = await supabase
       .from('categories')
       .select('name')
       .eq('household_id', householdId);
+    if (existingCatsError) {
+      console.error('Save plan categories read error:', existingCatsError);
+      return NextResponse.json({ error: `Failed to read categories: ${existingCatsError.message}` }, { status: 500 });
+    }
 
     // ----- Seed the fixed category set (idempotent) -----
     const seedNames: string[] = plan.seedCategories ?? [
@@ -388,18 +392,28 @@ export async function POST(request: Request) {
 
     const toSeed = missingSeedCategories((existingCats ?? []).map((c) => c.name), seedNames);
     if (toSeed.length > 0) {
-      await supabase.from('categories').insert(toSeed.map((name) => ({
+      // Without categories a household cannot record money out, so a failed
+      // seed must fail the save — never a 200 over an empty category list.
+      const { error: seedError } = await supabase.from('categories').insert(toSeed.map((name) => ({
         household_id: householdId,
         name,
         type: 'expense',
         is_sinking_fund: false,
       })));
+      if (seedError) {
+        console.error('Save plan category seed error:', seedError);
+        return NextResponse.json({ error: `Failed to create categories: ${seedError.message}` }, { status: 500 });
+      }
     }
 
-    const { data: allCats } = await supabase
+    const { data: allCats, error: allCatsError } = await supabase
       .from('categories')
       .select('id, name')
       .eq('household_id', householdId);
+    if (allCatsError) {
+      console.error('Save plan categories read error:', allCatsError);
+      return NextResponse.json({ error: `Failed to read categories: ${allCatsError.message}` }, { status: 500 });
+    }
 
     const catByName = new Map<string, string>();
     for (const c of allCats ?? []) {
