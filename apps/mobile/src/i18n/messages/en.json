@@ -266,5 +266,57 @@
       "onboardingQuotaExhausted": "Your household has used all of this month's plan builds. More are available on {date}.",
       "planFailed": "Phare couldn't build your plan. Please try again."
     }
+  },
+  "deletion": {
+    "title": "Delete your account",
+    "selfBody": "Your login is removed and your name is taken off this household. The household itself, and every transaction recorded against you, stays with the people who remain.",
+    "soleMemberBody": "You are the only person with an account here, so deleting your account deletes this household and everything in it.",
+    "allPendingBody": "Nobody else has ever signed in to this household, so there is no one to hand it to. Deleting your account deletes the household and everything in it.",
+    "exportFirstTitle": "Save your data first",
+    "exportFirstBody": "This is your only chance. Once the deletion runs, none of it can be recovered.",
+    "exportButton": "Export transactions (CSV)",
+    "exportPreparing": "Preparing your export…",
+    "exportAgain": "Export again",
+    "exportFailed": "Couldn't build the export. Please try again.",
+    "exportShareTitle": "Phare transactions (CSV)",
+    "blastTitle": "Deleting {household} destroys:",
+    "blast": {
+      "transactions": "Transactions",
+      "months": "Months of history",
+      "accounts": "Accounts",
+      "recurring": "Recurring items",
+      "funds": "Reserve funds",
+      "reviews": "Monthly reviews",
+      "members": "Household members"
+    },
+    "noUndo": "There is no undo and no grace period. This happens immediately and permanently.",
+    "startSelf": "Delete my account",
+    "startHousehold": "Delete this household",
+    "confirmSelf": "Permanently delete my account",
+    "confirmHousehold": "Permanently delete this household",
+    "typeYourEmail": "Type your email address to confirm:",
+    "typeHouseholdName": "Type your household's name to confirm:",
+    "hatchAcknowledge": "I understand that nobody else can take over this household, and that deleting my account will delete it for everyone.",
+    "deleting": "Deleting…",
+    "cancel": "Cancel",
+    "blockedTitle": "You can't delete your account yet",
+    "blockedPromoteBody": "You are the only owner, and {names} still uses this household. Make them an owner, then delete your account.",
+    "blockedNoPathBody": "Another member still has access, but their role couldn't be read, so ownership can't be handed over safely. Please contact support@phare.money before deleting.",
+    "promote": "Make {name} an owner",
+    "promoting": "Updating…",
+    "promoteFailed": "Couldn't make them an owner. Please try again.",
+    "doneTitle": "Your account has been deleted",
+    "doneBody": "You've been signed out on this device.",
+    "partialTitle": "Deletion didn't fully finish",
+    "partialSelfBody": "Your access has been removed and your household data is no longer linked to you. Final removal of your login is still in progress.",
+    "partialHouseholdBody": "Phare recorded where the deletion stopped. If you can still sign in, open this screen and try again.",
+    "errors": {
+      "confirmationMismatch": "What you typed doesn't match. Type it exactly as shown.",
+      "promoteFirst": "You're the only owner. Make another member an owner first.",
+      "blockedNoPath": "Ownership can't be handed over safely yet. Please contact support@phare.money.",
+      "verdictChanged": "Your household changed since this screen opened. Close it and open it again.",
+      "paymentServiceFailed": "A payment service didn't respond, so nothing has been deleted. Please try again, or contact support@phare.money.",
+      "failed": "Couldn't complete the deletion. Please try again."
+    }
   }
 }

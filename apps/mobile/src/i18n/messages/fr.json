@@ -266,5 +266,57 @@
       "onboardingQuotaExhausted": "Votre ménage a utilisé toutes les constructions de plan de ce mois-ci. D'autres seront possibles le {date}.",
       "planFailed": "Phare n'a pas pu construire votre plan. Veuillez réessayer."
     }
+  },
+  "deletion": {
+    "title": "Supprimer votre compte",
+    "selfBody": "Votre accès est supprimé et votre nom est retiré de ce ménage. Le ménage lui-même, et chaque transaction enregistrée à votre nom, reste avec les personnes qui demeurent.",
+    "soleMemberBody": "Vous êtes la seule personne à avoir un compte ici : supprimer votre compte supprime donc ce ménage et tout ce qu'il contient.",
+    "allPendingBody": "Personne d'autre ne s'est jamais connecté à ce ménage, il n'y a donc personne à qui le confier. Supprimer votre compte supprime le ménage et tout ce qu'il contient.",
+    "exportFirstTitle": "Sauvegardez d'abord vos données",
+    "exportFirstBody": "C'est votre seule occasion. Une fois la suppression effectuée, rien ne peut être récupéré.",
+    "exportButton": "Exporter les transactions (CSV)",
+    "exportPreparing": "Préparation de votre export…",
+    "exportAgain": "Exporter de nouveau",
+    "exportFailed": "L'export n'a pas pu être créé. Veuillez réessayer.",
+    "exportShareTitle": "Transactions Phare (CSV)",
+    "blastTitle": "Supprimer {household} détruit :",
+    "blast": {
+      "transactions": "Transactions",
+      "months": "Mois d'historique",
+      "accounts": "Comptes",
+      "recurring": "Éléments récurrents",
+      "funds": "Fonds de réserve",
+      "reviews": "Bilans mensuels",
+      "members": "Membres du ménage"
+    },
+    "noUndo": "Il n'y a ni annulation ni délai de grâce. Cela se produit immédiatement et définitivement.",
+    "startSelf": "Supprimer mon compte",
+    "startHousehold": "Supprimer ce ménage",
+    "confirmSelf": "Supprimer définitivement mon compte",
+    "confirmHousehold": "Supprimer définitivement ce ménage",
+    "typeYourEmail": "Saisissez votre adresse courriel pour confirmer :",
+    "typeHouseholdName": "Saisissez le nom de votre ménage pour confirmer :",
+    "hatchAcknowledge": "Je comprends que personne d'autre ne peut reprendre ce ménage et que supprimer mon compte le supprimera pour tout le monde.",
+    "deleting": "Suppression…",
+    "cancel": "Annuler",
+    "blockedTitle": "Vous ne pouvez pas encore supprimer votre compte",
+    "blockedPromoteBody": "Vous êtes la seule personne propriétaire, et {names} utilise encore ce ménage. Nommez cette personne propriétaire, puis supprimez votre compte.",
+    "blockedNoPathBody": "Un autre membre a encore accès, mais son rôle n'a pas pu être lu, donc la propriété ne peut pas être transférée en toute sécurité. Veuillez écrire à support@phare.money avant de supprimer.",
+    "promote": "Nommer {name} propriétaire",
+    "promoting": "Mise à jour…",
+    "promoteFailed": "Impossible de nommer cette personne propriétaire. Veuillez réessayer.",
+    "doneTitle": "Votre compte a été supprimé",
+    "doneBody": "Votre session a été fermée sur cet appareil.",
+    "partialTitle": "La suppression n'est pas tout à fait terminée",
+    "partialSelfBody": "Votre accès a été retiré et les données de votre ménage ne sont plus liées à vous. La suppression définitive de votre identifiant est toujours en cours.",
+    "partialHouseholdBody": "Phare a noté où la suppression s'est arrêtée. Si vous pouvez encore vous connecter, rouvrez cet écran et réessayez.",
+    "errors": {
+      "confirmationMismatch": "Ce que vous avez saisi ne correspond pas. Saisissez-le exactement comme affiché.",
+      "promoteFirst": "Vous êtes la seule personne propriétaire. Nommez d'abord un autre membre propriétaire.",
+      "blockedNoPath": "La propriété ne peut pas encore être transférée en toute sécurité. Veuillez écrire à support@phare.money.",
+      "verdictChanged": "Votre ménage a changé depuis l'ouverture de cet écran. Fermez-le, puis rouvrez-le.",
+      "paymentServiceFailed": "Un service de paiement n'a pas répondu, donc rien n'a été supprimé. Veuillez réessayer ou écrire à support@phare.money.",
+      "failed": "Impossible de terminer la suppression. Veuillez réessayer."
+    }
   }
 }

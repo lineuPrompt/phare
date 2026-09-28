@@ -18,11 +18,12 @@ import { ApiError, kindForStatus } from './apiErrors';
 // retryAfterSeconds rather than showing the route's prose).
 // ---------------------------------------------------------------------------
 
-async function request<T>(
+/** The shared transport: auth, transport errors, and non-2xx → ApiError. */
+async function send(
   path: string,
   init: RequestInit,
   { authenticated }: { authenticated: boolean }
-): Promise<T> {
+): Promise<Response> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
     ...(init.headers as Record<string, string> | undefined),
@@ -59,6 +60,15 @@ async function request<T>(
     );
   }
 
+  return response;
+}
+
+async function request<T>(
+  path: string,
+  init: RequestInit,
+  options: { authenticated: boolean }
+): Promise<T> {
+  const response = await send(path, init, options);
   return (await response.json()) as T;
 }
 
@@ -78,6 +88,34 @@ export function apiPost<T>(path: string, body: unknown): Promise<T> {
     },
     { authenticated: true }
   );
+}
+
+/** Authenticated GET of a text body (the CSV export). */
+export async function apiGetText(path: string): Promise<string> {
+  const response = await send(
+    path,
+    { method: 'GET', headers: { Accept: 'text/csv, text/plain' } },
+    { authenticated: true }
+  );
+  return response.text();
+}
+
+/**
+ * Authenticated DELETE with a JSON body, returning the status alongside the
+ * body: the deletion routes answer 200 for "done" and 202 for "partly done",
+ * and the two must read differently.
+ */
+export async function apiDelete<T>(path: string, body: unknown): Promise<{ status: number; data: T }> {
+  const response = await send(
+    path,
+    {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+    { authenticated: true }
+  );
+  return { status: response.status, data: (await response.json().catch(() => null)) as T };
 }
 
 /** Authenticated PATCH with a JSON body. */

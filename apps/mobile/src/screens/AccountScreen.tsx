@@ -5,9 +5,10 @@ import { supabase } from '../lib/supabase';
 import { useSession } from '../lib/useSession';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
+import DeleteAccountSection from '../components/DeleteAccountSection';
 
 /**
- * The Account tab: who is signed in, and the way out.
+ * The Account tab: who is signed in, the way out, and account deletion.
  *
  * SIGN-OUT ERRORS ARE SHOWN, NOT SWALLOWED. supabase-js resolves signOut()
  * with an { error } rather than rejecting, and with the default 'global'
@@ -62,6 +63,9 @@ export default function AccountScreen() {
             {signingOut ? t('account.signingOut') : t('common.signOut')}
           </Text>
         </Pressable>
+
+        {/* Deletion must be doable in the app (App Store 5.1.1(v)). */}
+        <DeleteAccountSection />
       </ScrollView>
     </SafeAreaView>
   );
