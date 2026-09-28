@@ -3,6 +3,21 @@
 // whether an entry form may be submitted.
 // ---------------------------------------------------------------------------
 
+// ── Manual-entry limits ─────────────────────────────────────────────────────
+// Enforced by POST /api/expenses, which rejects anything past them — never
+// truncates. Here so a client can say so before it sends; the server's
+// refusal is still the one that counts.
+
+/** Longest description a manual entry may carry. Longest real one: 34. */
+export const MANUAL_ENTRY_DESCRIPTION_MAX_CHARS = 200;
+
+/** Largest amount a manual entry may carry — the same ceiling parseAmountInput reads. */
+export const MANUAL_ENTRY_MAX_AMOUNT = 999_999_999.99;
+
+/** Installment plans: 2 to 48 payments, the range the web form offers. */
+export const MANUAL_ENTRY_MIN_INSTALLMENTS = 2;
+export const MANUAL_ENTRY_MAX_INSTALLMENTS = 48;
+
 /**
  * Integer part capped at nine digits: $999,999,999.99 is far past any real
  * household figure. Past it, the input is refused, never clipped.

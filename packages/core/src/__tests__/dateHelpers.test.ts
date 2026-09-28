@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  isCalendarDate,
   formatLocalDate,
   formatLocalMonth,
   materializeFromMonthStart,
@@ -742,5 +743,31 @@ describe('sameAnchorSchedule', () => {
     expect(sameAnchorSchedule(null, null, 'monthly')).toBe(true);
     expect(sameAnchorSchedule(null, '2026-08-09', 'monthly')).toBe(false);
     expect(sameAnchorSchedule('2026-08-09', null, 'monthly')).toBe(false);
+  });
+});
+
+describe('isCalendarDate — a real day, not just the shape of one', () => {
+  it.each(['2026-09-27', '2024-02-29', '2026-12-31', '2026-01-01'])('accepts %s', (d) => {
+    expect(isCalendarDate(d)).toBe(true);
+  });
+
+  it.each([
+    ['2026-02-31', 'a day February does not have'],
+    ['2026-02-29', 'a leap day in a common year'],
+    ['2026-13-01', 'month 13'],
+    ['2026-00-10', 'month 0'],
+    ['2026-09-00', 'day 0'],
+    ['2026-9-27', 'an unpadded month'],
+    ['2026-09-27T00:00:00Z', 'a timestamp'],
+    [' 2026-09-27', 'surrounding whitespace'],
+    ['', 'empty'],
+  ])('refuses %j (%s)', (d) => {
+    expect(isCalendarDate(d)).toBe(false);
+  });
+
+  it('refuses anything that is not a string', () => {
+    expect(isCalendarDate(20260927)).toBe(false);
+    expect(isCalendarDate(null)).toBe(false);
+    expect(isCalendarDate(undefined)).toBe(false);
   });
 });

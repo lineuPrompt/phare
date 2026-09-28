@@ -190,6 +190,26 @@ export function businessToday(timezone: string, at: Date = new Date()): string {
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
+/**
+ * Whether `value` is a real calendar date written as 'YYYY-MM-DD'.
+ *
+ * The shape alone is not enough: '2026-02-31' matches \d{4}-\d{2}-\d{2} and
+ * Postgres refuses it, which a route would otherwise report as a 500. Built on
+ * Date.UTC round-tripping, so no local zone is involved.
+ */
+export function isCalendarDate(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return false;
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
 /** The household's current calendar month (YYYY-MM) — see businessToday(). */
 export function businessMonth(timezone: string, at: Date = new Date()): string {
   return businessToday(timezone, at).slice(0, 7);
