@@ -3,8 +3,12 @@
 **Filed** 2026-09-28, from the mobile V1 Phase 1 diagnosis
 ([docs/mobile-v1-phase1.md](../mobile-v1-phase1.md), out-of-scope bug 3).
 
-**Status:** API path CLOSED (37740fa). Database path: migration WRITTEN, NOT
-APPLIED — [supabase/migrations/20260928000000_transactions_same_household_refs.sql](../../supabase/migrations/20260928000000_transactions_same_household_refs.sql).
+**Status:** CLOSED. API path closed in 37740fa. Database path: migration APPLIED
+2026-09-28 — [supabase/migrations/20260928000000_transactions_same_household_refs.sql](../../supabase/migrations/20260928000000_transactions_same_household_refs.sql).
+Structure verified live (10/10). **Behaviour verified live 2026-09-28**
+(VERIFY section 4, run over PostgREST as the Zezinho Test user): foreign
+account, category and bridge-source inserts and a foreign-account update all
+refused with 403 / 42501; a valid route write accepted, then deleted.
 
 **Severity:** medium. Cross-tenant write, not read: a household cannot see
 another's data through this, but can put rows into another household's figures.
