@@ -3,7 +3,9 @@
 **Filed** 2026-09-28, from the mobile V1 Phase 1 diagnosis
 ([docs/mobile-v1-phase1.md](../mobile-v1-phase1.md), out-of-scope bug 1).
 
-**Status:** OPEN. Filed only — not fixed, by decision.
+**Status:** OPEN — READY. **Decided 2026-09-28 (Lineu):** send the bearer
+token; keep the probe as a manual, labelled button; one review generation per
+deliberate press is acceptable on a diagnostics screen. Do not retire it.
 
 **Severity:** low. A development aid, not a product surface. No household data
 is read or written.

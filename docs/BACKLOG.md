@@ -8,46 +8,47 @@ Last reconciled with `docs/tickets/` and the code: 2026-09-28.
 
 ## READY
 
-1. **Carry-forward: an older future card-envelope snapshot outranks a newer
+1. **save-plan seeds categories without checking the insert.** Moved to 1
+   by Lineu 2026-09-28: a silent failure that leaves a household unable to
+   record money out, with a 200 and no sign of why. Also a stale comment in
+   `/api/categories`. — [ticket](tickets/category-seed-insert-unchecked.md)
+2. **Carry-forward: an older future card-envelope snapshot outranks a newer
    edit to an earlier month.** Reaches the grid, the decision view, coaching
    and the Timeline plan. Diagnose which of the two existing rules (exact
    month vs. nearest-at-or-before) should win repo-wide. **STOP** before
    fixing. — [ticket](tickets/carry-forward-older-future-snapshot-outranks-newer-edit.md)
-2. **Onboarding review runs unguarded.** The sourcing, borrowed-cash and
+3. **Onboarding review runs unguarded.** The sourcing, borrowed-cash and
    token-leak guards exist only in `monthlyReviewService`; the first letter a
    household reads has none, and it is persisted. **STOP.** —
    [ticket](tickets/onboarding-review-unguarded.md)
-3. **splitRule duplicate materialization.** Rows detached without a
+4. **splitRule duplicate materialization.** Rows detached without a
    tombstone survive its delete-by-`recurring_item_id` and are materialized
    again (reported cost: 44 rows, once). **STOP.** —
    [ticket](tickets/splitrule-detached-duplicate-materialization.md)
-4. **Recurring expense/income divergence on the Timeline.** **STOP.** —
+5. **Recurring expense/income divergence on the Timeline.** **STOP.** —
    [ticket](tickets/recurring-expense-income-divergence.md)
-5. **Cards: month-by-month table gets its own month navigation**,
+6. **Cards: month-by-month table gets its own month navigation**,
    independent of the page-level selector. Reuse the existing month control.
    — [ticket](tickets/cards-grid-independent-month-nav.md)
-6. **Two safe Phase 2 tickets:** the diagnostics probe calling review-stream
+7. **Two safe Phase 2 tickets:** the diagnostics probe calling review-stream
    without a session ([ticket](tickets/diagnostics-probe-review-stream-401.md) —
-   choose: send the token and spend a review generation, or retire the probe),
+   decided 2026-09-28: send the bearer token; keep it a manual, labelled
+   button, one review generation per deliberate press; do not retire it),
    and the dashboard's divergent `formatResetDate`
    ([ticket](tickets/dashboard-format-reset-date-duplicate.md)).
-7. **Date-serial coercion:** an Excel date in a Household answer reaches the
+8. **Date-serial coercion:** an Excel date in a Household answer reaches the
    prompt as "46265.83". Read `cell.w` for that column. —
    [ticket](tickets/household-answer-date-serial.md)
-8. **`apps/mobile/app.json` → `app.config.ts`** reading the bundle id and
+9. **`apps/mobile/app.json` → `app.config.ts`** reading the bundle id and
    Android package from the same env vars the web's well-known routes use. —
    [ticket](tickets/mobile-app-config-from-env.md)
-9. **Android: verify `/diagnostics`** (Hermes timezone probe) on an EAS cloud
-   build — local builds fail on Windows path length. —
-   [ticket](tickets/android-diagnostics-verification.md)
-10. **Household info never reaches the review route**, so the Quebec /
+10. **Android: verify `/diagnostics`** (Hermes timezone probe) on an EAS cloud
+    build — local builds fail on Windows path length. —
+    [ticket](tickets/android-diagnostics-verification.md)
+11. **Household info never reaches the review route**, so the Quebec /
     out-of-province-employer tax gap can surface only in the onboarding plan.
     Product decision — diagnose and propose, **STOP.** —
     [ticket](tickets/household-info-missing-from-review.md)
-11. *(new 2026-09-28)* **save-plan seeds categories without checking the
-    insert** — a failure leaves a household unable to record money out, with
-    a 200 and no sign of why. Also a stale comment in `/api/categories`. —
-    [ticket](tickets/category-seed-insert-unchecked.md)
 
 ## LINEU (needs Lineu, not code)
 
