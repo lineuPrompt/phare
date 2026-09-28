@@ -161,5 +161,110 @@
   },
   "terms": {
     "updated": "Nos conditions ont été mises à jour. Consultez-les et acceptez-les sur phare.money, puis reconnectez-vous."
+  },
+  "onboarding": {
+    "form": {
+      "title": "Entrez vos chiffres",
+      "subtitle": "Ajoutez ce que vous connaissez — deux ou trois lignes suffisent pour commencer. Vous pourrez ajouter le reste à tout moment.",
+      "income": "Sources de revenus",
+      "incomeHint": "Entrez ce qui arrive dans votre compte à chaque paie, puis choisissez la fréquence. Phare calcule le montant mensuel.",
+      "expenses": "Dépenses",
+      "expenseHint": "Entrez ce que vous payez chaque fois, puis choisissez la fréquence. Commencez par les plus importantes.",
+      "sourcePlaceholder": "ex. Salaire",
+      "expensePlaceholder": "ex. Hypothèque",
+      "amountPerPay": "Montant par paie",
+      "expenseAmountPlaceholder": "Montant par paiement",
+      "freq": {
+        "weekly": "Hebdomadaire",
+        "biweekly": "Aux 2 semaines",
+        "semimonthly": "Deux fois dans le mois",
+        "monthly": "Mensuel"
+      },
+      "perMonthEquals": "= {amount} chaque mois",
+      "addLine": "+ Ajouter une ligne",
+      "combinedIncome": "Revenu annuel combiné du ménage (facultatif)",
+      "combinedIncomePlaceholder": "ex. 134000",
+      "combinedIncomeHint": "Sert uniquement à vérifier que vos lignes de revenu s'additionnent bien.",
+      "submit": "Construire mon plan",
+      "problems": {
+        "noIncome": "Ajoutez au moins une ligne de revenu.",
+        "labelMissing": "La ligne marquée a un montant, mais pas de nom. Nommez-la ou effacez le montant.",
+        "amountInvalid": "Le montant de la ligne marquée n'a pas pu être lu. Entrez un montant supérieur à zéro, par exemple 1250,50.",
+        "statedInvalid": "Le revenu combiné n'a pas pu être lu. Entrez un nombre ou laissez le champ vide."
+      }
+    },
+    "plausibility": {
+      "title": "Vérifiez vos revenus",
+      "incomeVsStated": "Vous avez indiqué un revenu combiné d'environ {stated} par année, mais vos lignes s'additionnent à environ {computed} par année. Est-ce exact?",
+      "deficitNotFinanced": "Votre plan affiche un manque à gagner de {deficit} chaque mois, sans marge de crédit ni paiement de dette pour l'expliquer. Si votre revenu est sous-estimé, corrigez-le maintenant.",
+      "correct": "Corriger mes revenus",
+      "confirm": "Ces chiffres sont exacts — continuer"
+    },
+    "accounts": {
+      "title": "Vos comptes",
+      "subtitle": "Combien de cartes de crédit Phare doit-il inclure? Votre compte chèques est configuré automatiquement.",
+      "howMany": "Nombre de cartes de crédit",
+      "nameThem": "Nommez vos cartes",
+      "defaultCardName": "Carte {n}",
+      "openingBalance": "Quel est le solde de votre compte chèques aujourd'hui?",
+      "openingBalancePlaceholder": "ex. 1250,00",
+      "openingBalanceHint": "Facultatif — mais c'est le chiffre sur lequel repose votre chronologie. Vous pourrez l'ajouter plus tard sur phare.money.",
+      "openingBalanceInvalid": "Ce solde n'a pas pu être lu. Entrez un nombre comme 1250,00 ou laissez le champ vide.",
+      "continue": "Construire mon plan"
+    },
+    "working": {
+      "plan": "Construction de votre plan…",
+      "review": "Rédaction de votre premier bilan…",
+      "save": "Enregistrement de votre plan…"
+    },
+    "plan": {
+      "reviewError": "Votre plan est enregistré. Votre premier bilan n'a pas pu être rédigé pour le moment.",
+      "reviewTooLarge": "Votre plan est enregistré. Le bilan écrit a été omis : il y avait plus de détails qu'une seule lettre peut en couvrir.",
+      "reviewUnavailableForSave": "Votre premier bilan n'a pas pu être rédigé, mais votre plan est enregistré.",
+      "saveErrorTitle": "Votre plan n'est pas encore enregistré",
+      "saveError": "Phare a construit votre plan, mais n'a pas pu l'enregistrer. Rien n'a été enregistré. Réessayez l'enregistrement."
+    },
+    "needsConfirmation": {
+      "title": "Vous avez déjà des données dans Phare",
+      "body": "Phare a trouvé des données d'un plan précédent. Pour l'instant, on ne peut les remplacer que sur phare.money. Rien n'a été modifié.",
+      "checkAgain": "Vérifier de nouveau"
+    },
+    "payDates": {
+      "title": "Quand ces montants sont-ils versés?",
+      "subtitle": "Ajoutez une vraie date pour chacun, afin qu'il apparaisse aux bons jours. Vous pouvez en passer et les définir plus tard sur phare.money.",
+      "nextPayDateLabel": "Date du prochain versement",
+      "nextPayDateWindow": "Dans les {days} prochains jours.",
+      "day1Label": "Premier jour du mois",
+      "day2Label": "Deuxième jour du mois",
+      "shortMonthNote": "Le 30 ou le 31? Dans les mois plus courts, cela tombe plutôt le dernier jour.",
+      "save": "Enregistrer cette date",
+      "saving": "Enregistrement…",
+      "saved": "Date définie.",
+      "continue": "Continuer",
+      "continueAnyway": "Continuer sans ces dates",
+      "confirmSkip": "Certains éléments n'ont pas encore de date. Ils n'apparaîtront pas dans votre vue du mois tant qu'ils n'en auront pas.",
+      "skipNote": "Tout élément laissé sans date reste signalé, et vous pourrez l'ajouter plus tard sur phare.money.",
+      "error": {
+        "past": "Cette date est déjà passée.",
+        "tooFar": "C'est à plus de {days} jours — le prochain versement devrait être plus proche.",
+        "range": "Entrez un jour entre 1 et 31.",
+        "same": "Les deux jours doivent être différents.",
+        "date": "Entrez une date valide, au format AAAA-MM-JJ.",
+        "cadence": "Celui-ci ne peut pas être daté ici. Vous pouvez le faire sur phare.money."
+      }
+    },
+    "done": {
+      "title": "Votre plan est prêt",
+      "anchorFailed": "Votre plan est enregistré, mais pas le solde de votre compte chèques. Vous pouvez le définir sur phare.money.",
+      "continue": "Continuer"
+    },
+    "errors": {
+      "payloadTooLarge": "C'est plus de détails que Phare peut en traiter d'un seul coup. Retirez quelques lignes et réessayez.",
+      "aiUnavailable": "Phare n'a pas pu joindre son service de planification. Vos chiffres sont toujours là — réessayez dans quelques minutes.",
+      "rateLimited": "Cela fait beaucoup de tentatives en peu de temps. Patientez un instant, puis réessayez.",
+      "notAuthenticated": "Votre session a pris fin. Veuillez vous reconnecter.",
+      "onboardingQuotaExhausted": "Votre ménage a utilisé toutes les constructions de plan de ce mois-ci. D'autres seront possibles le {date}.",
+      "planFailed": "Phare n'a pas pu construire votre plan. Veuillez réessayer."
+    }
   }
 }

@@ -161,5 +161,110 @@
   },
   "terms": {
     "updated": "Our terms were updated. Review and accept them on phare.money, then sign in again."
+  },
+  "onboarding": {
+    "form": {
+      "title": "Enter your numbers",
+      "subtitle": "Add what you know — two or three lines is enough to start. You can add the rest any time.",
+      "income": "Income sources",
+      "incomeHint": "Enter what lands in your bank account each pay, then pick how often. Phare works out the monthly figure.",
+      "expenses": "Expenses",
+      "expenseHint": "Enter what you pay each time, then pick how often. Start with the big ones.",
+      "sourcePlaceholder": "e.g. Salary",
+      "expensePlaceholder": "e.g. Mortgage",
+      "amountPerPay": "Amount per pay",
+      "expenseAmountPlaceholder": "Amount per payment",
+      "freq": {
+        "weekly": "Weekly",
+        "biweekly": "Every 2 weeks",
+        "semimonthly": "Twice a month",
+        "monthly": "Monthly"
+      },
+      "perMonthEquals": "= {amount} each month",
+      "addLine": "+ Add another line",
+      "combinedIncome": "Combined household income for the year (optional)",
+      "combinedIncomePlaceholder": "e.g. 134000",
+      "combinedIncomeHint": "Used only to check that your income lines add up.",
+      "submit": "Build my plan",
+      "problems": {
+        "noIncome": "Add at least one income line.",
+        "labelMissing": "The marked line has an amount but no name. Name it, or clear the amount.",
+        "amountInvalid": "The marked line's amount couldn't be read. Enter an amount above zero, like 1250.50.",
+        "statedInvalid": "The combined income couldn't be read. Enter a number, or leave it blank."
+      }
+    },
+    "plausibility": {
+      "title": "Double-check your income",
+      "incomeVsStated": "You mentioned a combined income around {stated} a year, but your lines add up to about {computed} a year. Does that look right?",
+      "deficitNotFinanced": "Your plan shows a shortfall of {deficit} each month with no credit line or debt payment to explain it. If your income is understated, correct it now.",
+      "correct": "Fix my income",
+      "confirm": "These numbers are right — continue"
+    },
+    "accounts": {
+      "title": "Your accounts",
+      "subtitle": "How many credit cards should Phare include? Your chequing account is set up automatically.",
+      "howMany": "Number of credit cards",
+      "nameThem": "Name your cards",
+      "defaultCardName": "Card {n}",
+      "openingBalance": "What's in your chequing account today?",
+      "openingBalancePlaceholder": "e.g. 1250.00",
+      "openingBalanceHint": "Optional — but it's the one number your timeline is built on. You can add it later on phare.money.",
+      "openingBalanceInvalid": "That balance couldn't be read. Enter a number like 1250.00, or leave it blank.",
+      "continue": "Build my plan"
+    },
+    "working": {
+      "plan": "Building your plan…",
+      "review": "Writing your first review…",
+      "save": "Saving your plan…"
+    },
+    "plan": {
+      "reviewError": "Your plan is saved. Your first review couldn't be written just now.",
+      "reviewTooLarge": "Your plan is saved. The written review was skipped because there was more detail than one letter can cover.",
+      "reviewUnavailableForSave": "Your first review couldn't be written, but your plan is saved.",
+      "saveErrorTitle": "Your plan isn't saved yet",
+      "saveError": "Phare built your plan but couldn't save it. Nothing was recorded. Try saving again."
+    },
+    "needsConfirmation": {
+      "title": "You already have data in Phare",
+      "body": "Phare found data from an earlier plan. Replacing it can only be done on phare.money for now. Nothing was changed.",
+      "checkAgain": "Check again"
+    },
+    "payDates": {
+      "title": "When do these get paid?",
+      "subtitle": "Add a real date for each so it shows up on the right days. You can skip any of them and set them later on phare.money.",
+      "nextPayDateLabel": "Next payment date",
+      "nextPayDateWindow": "Within the next {days} days.",
+      "day1Label": "First day of the month",
+      "day2Label": "Second day of the month",
+      "shortMonthNote": "30th or 31st? In shorter months it lands on the last day instead.",
+      "save": "Save this date",
+      "saving": "Saving…",
+      "saved": "Date set.",
+      "continue": "Continue",
+      "continueAnyway": "Continue without these dates",
+      "confirmSkip": "Some items still have no date. They won't appear in your month view until they do.",
+      "skipNote": "Anything left without a date stays flagged, and you can add it later on phare.money.",
+      "error": {
+        "past": "That date has already passed.",
+        "tooFar": "That's more than {days} days away — the next payment should be sooner.",
+        "range": "Enter a day between 1 and 31.",
+        "same": "The two days must be different.",
+        "date": "Enter a real date, written as YYYY-MM-DD.",
+        "cadence": "This one can't be dated here. You can set it on phare.money."
+      }
+    },
+    "done": {
+      "title": "Your plan is ready",
+      "anchorFailed": "Your plan is saved, but your chequing balance wasn't. You can set it on phare.money.",
+      "continue": "Continue"
+    },
+    "errors": {
+      "payloadTooLarge": "That's more detail than Phare can plan from in one pass. Remove a few lines and try again.",
+      "aiUnavailable": "Phare couldn't reach its planning service just now. Your numbers are still here — try again in a few minutes.",
+      "rateLimited": "That was a lot of attempts in a short time. Wait a moment, then try again.",
+      "notAuthenticated": "Your session has ended. Please sign in again.",
+      "onboardingQuotaExhausted": "Your household has used all of this month's plan builds. More are available on {date}.",
+      "planFailed": "Phare couldn't build your plan. Please try again."
+    }
   }
 }

@@ -13,9 +13,17 @@ import type { Getter } from './timelineLoader';
 // termsCurrent, this throws and the gate shows an error with a retry. Reading
 // `undefined` as "fine" would open the app to someone the server never
 // cleared; reading it as "outdated" would lock everyone out over a deploy.
+//
+// PLAN. A household with no saved plan gets onboarding in place of the tabs.
+// hasPlan comes from GET /api/dashboard, which is true once a file_imports
+// row exists — every save-plan run writes one, manual entry included. Asked
+// only once the terms are current: a blocked person should not trigger the
+// dashboard's side effects (its daily "returned" heartbeat, its bridge
+// materialisation) for a screen they cannot see. Same rule as the terms: a
+// missing boolean is an error, not a guess.
 // ---------------------------------------------------------------------------
 
-export type HouseholdState = { kind: 'termsOutdated' } | { kind: 'ready' };
+export type HouseholdState = { kind: 'termsOutdated' } | { kind: 'needsPlan' } | { kind: 'ready' };
 
 export async function loadHouseholdState(get: Getter): Promise<HouseholdState> {
   const me = await get<{ termsCurrent?: unknown }>('/api/me');
@@ -23,5 +31,10 @@ export async function loadHouseholdState(get: Getter): Promise<HouseholdState> {
     throw new Error('/api/me answered without a boolean termsCurrent');
   }
   if (!me.termsCurrent) return { kind: 'termsOutdated' };
-  return { kind: 'ready' };
+
+  const dashboard = await get<{ hasPlan?: unknown }>('/api/dashboard');
+  if (typeof dashboard?.hasPlan !== 'boolean') {
+    throw new Error('/api/dashboard answered without a boolean hasPlan');
+  }
+  return dashboard.hasPlan ? { kind: 'ready' } : { kind: 'needsPlan' };
 }

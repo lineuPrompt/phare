@@ -4,11 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiGet, messageKeyFor } from '../lib/api';
 import { loadHouseholdState, type HouseholdState } from '../lib/householdGate';
 import { supabase } from '../lib/supabase';
+import OnboardingScreen from '../screens/OnboardingScreen';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
 /**
- * The second gate, inside AuthGate: terms, then the household's content.
+ * The second gate, inside AuthGate: terms, then a plan, then the household's
+ * content. No plan means onboarding in place of the tabs.
  *
  * Rendered in place like AuthGate, for the same reason — no redirect to race.
  * Every blocked state offers sign-out, because "sign in again" is the only
@@ -64,6 +66,10 @@ export default function HouseholdGate({ children }: { children: React.ReactNode 
   const retry = async () => apply(await fetchState());
 
   if (state?.kind === 'ready') return <>{children}</>;
+
+  // No plan yet: onboarding replaces the tabs. Finishing it (or asking to
+  // check again) re-asks the server rather than assuming the save stuck.
+  if (state?.kind === 'needsPlan') return <OnboardingScreen onFinished={() => void retry()} />;
 
   return (
     <SafeAreaView style={styles.safe}>
