@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   isCalendarDate,
+  addCalendarDays,
   formatLocalDate,
   formatLocalMonth,
   materializeFromMonthStart,
@@ -769,5 +770,38 @@ describe('isCalendarDate — a real day, not just the shape of one', () => {
     expect(isCalendarDate(20260927)).toBe(false);
     expect(isCalendarDate(null)).toBe(false);
     expect(isCalendarDate(undefined)).toBe(false);
+  });
+});
+
+describe('addCalendarDays', () => {
+  it.each([
+    ['2026-09-27', -1, '2026-09-26'],
+    ['2026-10-01', -1, '2026-09-30'],
+    ['2026-01-01', -1, '2025-12-31'],
+    ['2024-03-01', -1, '2024-02-29'],
+    ['2026-03-08', 1, '2026-03-09'],
+    ['2026-11-01', 1, '2026-11-02'],
+    ['2026-09-27', 0, '2026-09-27'],
+  ])('%s %+d → %s', (iso, days, expected) => {
+    expect(addCalendarDays(iso, days)).toBe(expected);
+  });
+
+  it('refuses a value that is not a calendar date', () => {
+    expect(() => addCalendarDays('2026-02-31', -1)).toThrow('not a calendar date');
+  });
+
+  it('gives the same answer on a device far east of Greenwich', () => {
+    // Local-time date arithmetic would pass on this repo's Toronto machines
+    // and shift a day on a phone at UTC+14. Node applies TZ at runtime.
+    const saved = process.env.TZ;
+    process.env.TZ = 'Pacific/Kiritimati';
+    try {
+      expect(new Date(2026, 8, 27).getTimezoneOffset()).toBe(-840);
+      expect(addCalendarDays('2026-09-27', -1)).toBe('2026-09-26');
+      expect(addCalendarDays('2026-01-01', -1)).toBe('2025-12-31');
+    } finally {
+      if (saved === undefined) delete process.env.TZ;
+      else process.env.TZ = saved;
+    }
   });
 });

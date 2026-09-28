@@ -210,6 +210,18 @@ export function isCalendarDate(value: unknown): value is string {
   );
 }
 
+/**
+ * 'YYYY-MM-DD' shifted by whole calendar days, in UTC so no zone or DST
+ * transition can add or drop one. Throws on a value that is not a calendar
+ * date — shifting garbage would return plausible garbage.
+ */
+export function addCalendarDays(iso: string, days: number): string {
+  if (!isCalendarDate(iso)) throw new Error(`addCalendarDays: not a calendar date: ${iso}`);
+  const [year, month, day] = iso.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
+}
+
 /** The household's current calendar month (YYYY-MM) — see businessToday(). */
 export function businessMonth(timezone: string, at: Date = new Date()): string {
   return businessToday(timezone, at).slice(0, 7);

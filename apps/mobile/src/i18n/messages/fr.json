@@ -121,5 +121,42 @@
       "noGoal": "Aucun objectif"
     },
     "noCards": "Aucune carte de crédit pour l'instant. Vous pouvez en ajouter sur phare.money."
+  },
+  "entry": {
+    "title": "Ajouter une dépense",
+    "open": "Ajouter une dépense",
+    "account": "Compte",
+    "date": "Date",
+    "datePlaceholder": "AAAA-MM-JJ",
+    "today": "Aujourd'hui",
+    "yesterday": "Hier",
+    "description": "Description",
+    "category": "Catégorie",
+    "amount": "Montant",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "saved": "Enregistrée.",
+    "noAccounts": "Il n'y a ni compte chèques ni carte de crédit où l'ajouter. Vous pouvez en ajouter un sur phare.money.",
+    "noCategories": "Aucune catégorie à choisir.",
+    "problems": {
+      "accountRequired": "Choisissez un compte.",
+      "dateInvalid": "Entrez une date valide, au format AAAA-MM-JJ.",
+      "descriptionRequired": "Ajoutez une description.",
+      "descriptionTooLong": "Cette description est trop longue : {max} caractères au maximum.",
+      "categoryRequired": "Choisissez une catégorie.",
+      "amountInvalid": "Entrez un montant supérieur à zéro, par exemple 12,50."
+    },
+    "errors": {
+      "invalidAmount": "Phare n'a pas pu accepter ce montant. Entrez un montant supérieur à zéro, avec au plus deux décimales.",
+      "invalidDate": "Phare n'a pas pu accepter cette date. Entrez une date valide, au format AAAA-MM-JJ.",
+      "descriptionRequired": "Ajoutez une description.",
+      "descriptionTooLong": "Cette description est trop longue : {max} caractères au maximum.",
+      "categoryRequired": "Choisissez une catégorie.",
+      "categoryNotFound": "Cette catégorie n'est plus disponible. Fermez cet écran, puis rouvrez-le.",
+      "accountNotFound": "Ce compte n'est plus disponible. Fermez cet écran, puis rouvrez-le.",
+      "payloadTooLarge": "Cette entrée est trop volumineuse pour être enregistrée.",
+      "noChequing": "Phare a d'abord besoin d'un compte chèques. Vous pouvez en ajouter un sur phare.money.",
+      "saveFailed": "Phare n'a pas pu enregistrer cette dépense, et rien n'a été enregistré. Veuillez réessayer."
+    }
   }
 }

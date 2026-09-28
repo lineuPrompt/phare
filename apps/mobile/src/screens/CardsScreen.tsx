@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiGet, messageKeyFor } from '../lib/api';
+import { onEntrySaved } from '../lib/entryEvents';
+import AddEntryButton from '../components/AddEntryButton';
 import { cardFigure, loadCards, type CardRow, type CardStatus, type CardsLoad } from '../lib/cardsLoader';
 import { formatMonthLong } from '../lib/timelineView';
 import { useI18n } from '../i18n';
@@ -117,6 +119,21 @@ export default function CardsScreen() {
     setRefreshing(false);
   }, [fetchOutcome, apply]);
 
+  // A quick entry saved over this tab: refetch so Spent and Room include it.
+  useEffect(() => {
+    let cancelled = false;
+    const unsubscribe = onEntrySaved(() => {
+      void (async () => {
+        const outcome = await fetchOutcome();
+        if (!cancelled) apply(outcome);
+      })();
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [fetchOutcome, apply]);
+
   if (loading) {
     return (
       <SafeAreaView style={[styles.safe, styles.centred]} edges={['top']}>
@@ -131,9 +148,12 @@ export default function CardsScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>{t('cards.title')}</Text>
-          {load && <Text style={styles.month}>{formatMonthLong(load.month, locale)}</Text>}
+        <View style={styles.headerRow}>
+          <View style={styles.header}>
+            <Text style={styles.title}>{t('cards.title')}</Text>
+            {load && <Text style={styles.month}>{formatMonthLong(load.month, locale)}</Text>}
+          </View>
+          <AddEntryButton />
         </View>
 
         {errorKey && (
@@ -157,7 +177,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.color.background },
   centred: { alignItems: 'center', justifyContent: 'center' },
   content: { padding: theme.space.md, gap: theme.space.md },
-  header: { paddingHorizontal: theme.space.xs, gap: 2 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  header: { flex: 1, paddingHorizontal: theme.space.xs, gap: 2 },
   title: { fontSize: 24, fontWeight: '700', color: theme.color.heading },
   month: { fontSize: 14, color: theme.color.muted },
   card: {

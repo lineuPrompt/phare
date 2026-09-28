@@ -35,7 +35,10 @@ export default function RootLayout() {
             headerShown: false,
             contentStyle: { backgroundColor: theme.color.background },
           }}
-        />
+        >
+          {/* Quick entry slides up over the tabs and dismisses back to them. */}
+          <Stack.Screen name="add" options={{ presentation: 'modal' }} />
+        </Stack>
       </I18nProvider>
     </SafeAreaProvider>
   );

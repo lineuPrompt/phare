@@ -121,5 +121,42 @@
       "noGoal": "No goal"
     },
     "noCards": "No credit cards set up yet. You can add them on phare.money."
+  },
+  "entry": {
+    "title": "Add an expense",
+    "open": "Add an expense",
+    "account": "Account",
+    "date": "Date",
+    "datePlaceholder": "YYYY-MM-DD",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "description": "Description",
+    "category": "Category",
+    "amount": "Amount",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "noAccounts": "There's no chequing account or credit card to add this to. You can add one on phare.money.",
+    "noCategories": "No categories to choose from.",
+    "problems": {
+      "accountRequired": "Choose an account.",
+      "dateInvalid": "Enter a real date, written as YYYY-MM-DD.",
+      "descriptionRequired": "Add a description.",
+      "descriptionTooLong": "That description is too long. Keep it to {max} characters.",
+      "categoryRequired": "Choose a category.",
+      "amountInvalid": "Enter an amount above zero, like 12.50."
+    },
+    "errors": {
+      "invalidAmount": "Phare couldn't accept that amount. Enter an amount above zero, with at most two decimals.",
+      "invalidDate": "Phare couldn't accept that date. Enter a real date, written as YYYY-MM-DD.",
+      "descriptionRequired": "Add a description.",
+      "descriptionTooLong": "That description is too long. Keep it to {max} characters.",
+      "categoryRequired": "Choose a category.",
+      "categoryNotFound": "That category isn't available any more. Close this screen and open it again.",
+      "accountNotFound": "That account isn't available any more. Close this screen and open it again.",
+      "payloadTooLarge": "That entry is too large to save.",
+      "noChequing": "Phare needs a chequing account first. You can add one on phare.money.",
+      "saveFailed": "Phare couldn't save this expense, and nothing was recorded. Please try again."
+    }
   }
 }

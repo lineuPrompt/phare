@@ -11,6 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatCADLocale, type DipStatus, type TimelineEntry, type UnbalancedDay } from '@phare/core';
 import { apiGet, messageKeyFor } from '../lib/api';
+import { onEntrySaved } from '../lib/entryEvents';
+import AddEntryButton from '../components/AddEntryButton';
 import { createTimelineLoader, type LoadTrigger, type TimelineLoad } from '../lib/timelineLoader';
 import {
   buildTimelineView,
@@ -171,6 +173,22 @@ export default function TimelineScreen() {
     setRefreshing(false);
   }, [fetchOutcome, apply]);
 
+  // A quick entry saved over this tab: refetch so the new row is in the
+  // ledger. 'refresh' for the same reason as a pull.
+  useEffect(() => {
+    let cancelled = false;
+    const unsubscribe = onEntrySaved(() => {
+      void (async () => {
+        const outcome = await fetchOutcome('refresh');
+        if (!cancelled) apply(outcome);
+      })();
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [fetchOutcome, apply]);
+
   const view = useMemo(
     () => (load?.kind === 'ready' ? buildTimelineView(load.data, load.today) : null),
     [load]
@@ -193,6 +211,7 @@ export default function TimelineScreen() {
   const header = (
     <View style={styles.header}>
       <Text style={styles.title}>{t('timeline.title')}</Text>
+      <AddEntryButton />
     </View>
   );
 
