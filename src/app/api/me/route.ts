@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import { logEvent } from '@/lib/eventLogger';
 import { loadDeletionContext } from '@/lib/deletionContext';
 import { confirmationMatches } from '@/lib/accountDeletionHelpers';
+import { callerAccessToken } from '@/lib/callerAccessToken';
 import { CURRENT_LEGAL_VERSION, hasAcceptedCurrent } from '@/lib/legalVersions';
 import { loadEntitlement } from '@/lib/entitlementServer';
 import { isInternalHousehold } from '@/lib/internalAccess';
@@ -286,13 +287,15 @@ export async function DELETE(request: Request) {
     //
     // NOTE the argument: admin.signOut takes a JWT, NOT a user id
     // (`signOut(jwt: string, scope?: SignOutScope)`). Passing the user id here
-    // is a silent no-op that still resolves, so the session token is read from
-    // the caller's own session — which this route always has, because the
-    // subject is always the caller.
+    // is a silent no-op that still resolves, so the caller's own token is
+    // used — the subject is always the caller. From the Authorization header
+    // for a bearer (mobile) caller, whose client holds no session, and from
+    // the cookie session otherwise: getSession() alone returned null for every
+    // mobile caller, so they were never signed out.
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        await admin.auth.admin.signOut(session.access_token, 'global');
+      const accessToken = await callerAccessToken(request, supabase);
+      if (accessToken) {
+        await admin.auth.admin.signOut(accessToken, 'global');
       } else {
         console.error('Self-deletion — no access token available for global sign-out (non-fatal, requestId for ops):', reqRow.id);
       }

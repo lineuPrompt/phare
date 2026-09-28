@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { createClient as createTokenClient } from '@supabase/supabase-js';
 import { cookies, headers } from 'next/headers';
+import { BEARER } from '@/lib/callerAccessToken';
 
 // ---------------------------------------------------------------------------
 // ONE authenticated Supabase client for every API route, from either of the
@@ -72,14 +73,8 @@ import { cookies, headers } from 'next/headers';
 // should start.
 // ---------------------------------------------------------------------------
 
-/**
- * `Bearer <token>`, scheme matched case-insensitively per RFC 7235. Anything
- * else — `Basic`, a bare token, an empty scheme — deliberately fails to match
- * and falls through to the cookie path, so a request carrying some unrelated
- * Authorization header behaves exactly as it does today rather than being
- * diverted into a token flow it was never meant for.
- */
-const BEARER = /^Bearer\s+(\S+)\s*$/i;
+// BEARER (the transport test) lives in callerAccessToken.ts, shared with the
+// one route that needs the raw token, so the two cannot disagree.
 
 export async function createClient() {
   const headerStore = await headers();

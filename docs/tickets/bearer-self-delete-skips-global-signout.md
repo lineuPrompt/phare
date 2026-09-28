@@ -3,8 +3,11 @@
 **Filed** 2026-09-28, from the mobile V1 Phase 1 diagnosis
 ([docs/mobile-v1-phase1.md](../mobile-v1-phase1.md), out-of-scope bug 2).
 
-**Status:** FIX IN PROGRESS — approved to fix before the mobile deletion
-screen ships, as its own web commit.
+**Status:** FIXED in code 2026-09-28 (the commit that adds
+`src/lib/callerAccessToken.ts`). Live verification pending: it needs a
+throwaway-account deletion from the mobile app, then the `auth.sessions`
+check in the Phase 2 device checklist. The 202 branch itself cannot be forced
+in production; it is covered by the route tests.
 
 **Severity:** medium, on one path. Only the 202 "partial" outcome is exposed.
 

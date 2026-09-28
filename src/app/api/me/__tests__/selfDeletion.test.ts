@@ -135,10 +135,14 @@ vi.mock('@/lib/supabase-admin', () => ({
   }),
 }));
 
-async function deleteMe(body: unknown = { confirmEmail: 'departing@example.com' }) {
+async function deleteMe(
+  body: unknown = { confirmEmail: 'departing@example.com' },
+  headers: Record<string, string> = {}
+) {
   const { DELETE } = await import('../route');
   return DELETE(new Request('http://localhost/api/me', {
     method: 'DELETE',
+    headers,
     body: JSON.stringify(body),
   }));
 }
@@ -322,6 +326,40 @@ describe('DELETE /api/me — member self-deletion (Case B)', () => {
     expect(res.status).toBe(200);
     expect(ops).not.toContain('signOut');
     expect(ops).toContain('deleteUser');
+  });
+
+  // ---- Bearer (mobile) callers ------------------------------------------
+  // A bearer client is built with persistSession: false, so getSession()
+  // returns null for it — modelled here by sessionToken = null. Before the
+  // fix, every mobile self-deletion took the "no access token" branch.
+  // (docs/tickets/bearer-self-delete-skips-global-signout.md)
+
+  it('signs a bearer caller out with the token from the Authorization header', async () => {
+    sessionToken = null;
+    const res = await deleteMe(undefined, { Authorization: 'Bearer mobile-jwt-xyz' });
+    expect(res.status).toBe(200);
+    expect(signOutArgs).toEqual(['mobile-jwt-xyz', 'global']);
+  });
+
+  it('signs a bearer caller out on the 202 partial path too — the case that leaked', async () => {
+    sessionToken = null;
+    deleteUserResult = { error: { message: 'auth service unavailable' } };
+    const res = await deleteMe(undefined, { Authorization: 'Bearer mobile-jwt-xyz' });
+    expect(res.status).toBe(202);
+    expect(signOutArgs).toEqual(['mobile-jwt-xyz', 'global']);
+    // Revocation happens before the auth delete is attempted.
+    expect(ops.indexOf('signOut')).toBeLessThan(ops.indexOf('deleteUser'));
+  });
+
+  it('reads the scheme case-insensitively, as the server client does', async () => {
+    sessionToken = null;
+    await deleteMe(undefined, { Authorization: 'bearer mobile-jwt-xyz' });
+    expect(signOutArgs[0]).toBe('mobile-jwt-xyz');
+  });
+
+  it('a non-bearer Authorization header falls back to the cookie session', async () => {
+    await deleteMe(undefined, { Authorization: 'Basic abc123' });
+    expect(signOutArgs[0]).toBe('jwt-access-token-abc');
   });
 
   it('a failing global sign-out is non-fatal — it is defence in depth, not the mechanism', async () => {
