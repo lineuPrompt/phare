@@ -13,7 +13,6 @@ import { Link } from 'expo-router';
 import { formatCADLocale } from '@phare/core';
 import { fetchReviews, type ArchiveLetter, type ArchiveMonth, type ReviewArchive } from '../lib/reviews';
 import { messageKeyFor } from '../lib/api';
-import { supabase } from '../lib/supabase';
 import { useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import LockedNotice from '../components/LockedNotice';
@@ -161,7 +160,7 @@ export default function ReviewScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.safe, styles.centred]}>
+      <SafeAreaView style={[styles.safe, styles.centred]} edges={['top']}>
         <ActivityIndicator color={theme.color.heading} />
       </SafeAreaView>
     );
@@ -170,29 +169,16 @@ export default function ReviewScreen() {
   const hasContent = archive && (archive.months.length > 0 || archive.startingPlan);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {/* Sign-out and the link to the Timeline moved to the tab bar: the
+            Account tab and the Timeline tab. */}
         <View style={styles.header}>
           <Text style={styles.title}>{t('review.title')}</Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => void supabase.auth.signOut()}
-            hitSlop={8}
-          >
-            <Text style={styles.signOut}>{t('common.signOut')}</Text>
-          </Pressable>
         </View>
-
-        {/* The two screens are peers, so this REPLACES rather than pushes: a
-            back stack that grows every time you look at the other one is a
-            stack of the same two screens. Both routes carry the same auth
-            gate, so neither can be reached signed out. */}
-        <Link href="/timeline" replace style={styles.timelineLink}>
-          {t('timeline.title')} →
-        </Link>
 
         {errorKey && (
           <View style={styles.errorBox}>
@@ -234,7 +220,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.space.xs,
   },
   title: { fontSize: 24, fontWeight: '700', color: theme.color.heading },
-  signOut: { fontSize: 14, color: theme.color.muted },
   card: {
     backgroundColor: theme.color.surface,
     borderRadius: theme.radius.lg,
@@ -274,12 +259,6 @@ const styles = StyleSheet.create({
   },
   errorText: { color: theme.color.danger, fontSize: 14 },
   retry: { color: theme.color.danger, fontSize: 14, fontWeight: '700' },
-  timelineLink: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: theme.color.heading,
-    paddingHorizontal: theme.space.xs,
-  },
   diagnosticsLink: {
     fontSize: 13,
     color: theme.color.muted,

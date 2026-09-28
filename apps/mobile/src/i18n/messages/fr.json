@@ -39,7 +39,6 @@
   },
   "timeline": {
     "title": "Chronologie de trésorerie",
-    "backToReview": "Bilan mensuel",
     "noChequing": "Phare a besoin d'un compte chèques pour afficher votre chronologie. Vous pouvez en ajouter un sur phare.money.",
     "noAnchor": {
       "title": "Pour afficher votre chronologie, Phare a besoin d'un vrai chiffre : le solde de votre compte chèques à une date que vous connaissez.",
@@ -96,5 +95,17 @@
     "streamProbeRunning": "En cours…",
     "streamProbeOk": "{chars} caractères reçus en JSON",
     "streamProbeFailed": "Échec de la sonde : {reason}"
+  },
+  "tabs": {
+    "review": "Bilan",
+    "timeline": "Chronologie",
+    "account": "Compte"
+  },
+  "account": {
+    "title": "Compte",
+    "emailLabel": "Courriel du compte",
+    "emailUnknown": "Aucun courriel associé à cette session",
+    "signingOut": "Déconnexion…",
+    "signOutFailed": "La déconnexion n'a pas fonctionné : votre session est toujours ouverte sur cet appareil. Vérifiez votre connexion et réessayez."
   }
 }

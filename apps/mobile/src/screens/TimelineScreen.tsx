@@ -9,7 +9,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link } from 'expo-router';
 import { formatCADLocale, type DipStatus, type TimelineEntry, type UnbalancedDay } from '@phare/core';
 import { apiGet, messageKeyFor } from '../lib/api';
 import { createTimelineLoader, type LoadTrigger, type TimelineLoad } from '../lib/timelineLoader';
@@ -194,22 +193,19 @@ export default function TimelineScreen() {
   const header = (
     <View style={styles.header}>
       <Text style={styles.title}>{t('timeline.title')}</Text>
-      <Link href="/" replace style={styles.navLink}>
-        {t('timeline.backToReview')}
-      </Link>
     </View>
   );
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.safe, styles.centred]}>
+      <SafeAreaView style={[styles.safe, styles.centred]} edges={['top']}>
         <ActivityIndicator color={theme.color.heading} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.content}
@@ -427,7 +423,6 @@ const styles = StyleSheet.create({
     marginBottom: theme.space.xs,
   },
   title: { fontSize: 24, fontWeight: '700', color: theme.color.heading },
-  navLink: { fontSize: 14, color: theme.color.muted },
   card: {
     backgroundColor: theme.color.surface,
     borderRadius: theme.radius.lg,

@@ -5,6 +5,7 @@ import { createTimelineLoader, timelinePath } from '../lib/timelineLoader';
 import { gateView } from '../lib/authGate';
 
 const APP_DIR = path.resolve(__dirname, '..', '..', 'app');
+const SRC_DIR = path.resolve(__dirname, '..');
 
 // ---------------------------------------------------------------------------
 // Loading the screen, and the two rules that are easy to get wrong silently:
@@ -207,9 +208,38 @@ describe('the auth gate on a deep link', () => {
   // renders a component, so "the gate is wired to the route" is checked by
   // reading the route files. A render test needs a React Native renderer,
   // which this app does not have — stated in the handoff rather than implied.
-  it.each(['index.tsx', 'timeline.tsx'])('app/%s wraps its screen in the gate', (file) => {
-    const source = fs.readFileSync(path.join(APP_DIR, file), 'utf8');
-    expect(source).toMatch(/import AuthGate from '\.\.\/src\/components\/AuthGate'/);
-    expect(source).toMatch(/<AuthGate>[\s\S]*<\/AuthGate>/);
+  //
+  // Since the tab bar (2026-09-27) the gate wraps the whole tab navigator, so
+  // every route in app/(tabs)/ is gated by being in that group.
+  it('app/(tabs)/_layout.tsx is the gated tab layout', () => {
+    const source = fs.readFileSync(path.join(APP_DIR, '(tabs)', '_layout.tsx'), 'utf8');
+    expect(source).toMatch(/export \{ default \} from '\.\.\/\.\.\/src\/components\/TabsLayout'/);
+  });
+
+  it('TabsLayout wraps the whole navigator in the gate', () => {
+    const source = fs.readFileSync(path.join(SRC_DIR, 'components', 'TabsLayout.tsx'), 'utf8');
+    expect(source).toMatch(/import AuthGate from '\.\/AuthGate'/);
+    expect(source).toMatch(/<AuthGate>\s*<Tabs[\s\S]*<\/Tabs>\s*<\/AuthGate>/);
+  });
+
+  it('every route outside the tab group is gated itself or deliberately public', () => {
+    // A new top-level route (the /add modal, say) is outside the group and
+    // so outside its gate. This fails until the route is either wrapped or
+    // added to the public list with a reason.
+    const PUBLIC = new Set([
+      '_layout.tsx', //      the root: the time-zone gate and the Stack
+      'diagnostics.tsx', //  development aid; reads no household data
+    ]);
+    const entries = fs.readdirSync(APP_DIR) as string[];
+    // Guards the listing itself: an empty read would make the loop pass.
+    expect(entries).toContain('_layout.tsx');
+    expect(entries).toContain('(tabs)');
+    const routes = entries.filter(
+      (f) => f.endsWith('.tsx') && !PUBLIC.has(f)
+    );
+    for (const file of routes) {
+      const source = fs.readFileSync(path.join(APP_DIR, file), 'utf8');
+      expect(source, file).toMatch(/<AuthGate>[\s\S]*<\/AuthGate>/);
+    }
   });
 });
