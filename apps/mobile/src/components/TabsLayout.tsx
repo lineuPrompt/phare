@@ -4,7 +4,7 @@ import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
 /**
- * The signed-in shell: Review | Timeline | Account.
+ * The signed-in shell: Review | Timeline | Cards | Account.
  *
  * LIVES IN src/, NOT app/(tabs)/_layout.tsx, because the i18n parity test
  * extracts t() keys from src/ only. A tab label written in app/ would ship
@@ -38,6 +38,7 @@ export default function TabsLayout() {
       >
         <Tabs.Screen name="index" options={{ title: t('tabs.review') }} />
         <Tabs.Screen name="timeline" options={{ title: t('tabs.timeline') }} />
+        <Tabs.Screen name="cards" options={{ title: t('tabs.cards') }} />
         <Tabs.Screen name="account" options={{ title: t('tabs.account') }} />
       </Tabs>
     </AuthGate>

@@ -99,7 +99,8 @@
   "tabs": {
     "review": "Bilan",
     "timeline": "Chronologie",
-    "account": "Compte"
+    "account": "Compte",
+    "cards": "Cartes"
   },
   "account": {
     "title": "Compte",
@@ -107,5 +108,18 @@
     "emailUnknown": "Aucun courriel associé à cette session",
     "signingOut": "Déconnexion…",
     "signOutFailed": "La déconnexion n'a pas fonctionné : votre session est toujours ouverte sur cet appareil. Vérifiez votre connexion et réessayez."
+  },
+  "cards": {
+    "title": "Marge sur vos cartes",
+    "goal": "Objectif",
+    "spent": "Dépensé",
+    "room": "Marge",
+    "status": {
+      "over": "Dépassé",
+      "watch": "À surveiller",
+      "ok": "OK",
+      "noGoal": "Aucun objectif"
+    },
+    "noCards": "Aucune carte de crédit pour l'instant. Vous pouvez en ajouter sur phare.money."
   }
 }

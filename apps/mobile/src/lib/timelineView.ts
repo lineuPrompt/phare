@@ -178,6 +178,12 @@ export function formatDayShort(iso: string, locale: Locale): string {
   return intl(locale, { weekday: 'short', day: 'numeric', month: 'short' }).format(noonUTC(iso));
 }
 
+/** 'YYYY-MM' → "August 2026" / « août 2026 » — a month heading. Mid-month at noon,
+ *  so no zone can push it into the adjacent month. */
+export function formatMonthLong(month: string, locale: Locale): string {
+  return intl(locale, { month: 'long', year: 'numeric' }).format(noonUTC(`${month}-15`));
+}
+
 /** "30 September" / « 30 septembre » — the dip and payday in prose. */
 export function formatDayLong(iso: string, locale: Locale): string {
   return intl(locale, { day: 'numeric', month: 'long' }).format(noonUTC(iso));

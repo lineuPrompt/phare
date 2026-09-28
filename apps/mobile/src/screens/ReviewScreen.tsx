@@ -13,8 +13,8 @@ import { Link } from 'expo-router';
 import { formatCADLocale } from '@phare/core';
 import { fetchReviews, type ArchiveLetter, type ArchiveMonth, type ReviewArchive } from '../lib/reviews';
 import { messageKeyFor } from '../lib/api';
+import { formatMonthLong } from '../lib/timelineView';
 import { useI18n } from '../i18n';
-import type { Locale } from '../i18n';
 import LockedNotice from '../components/LockedNotice';
 import { theme } from '../theme';
 
@@ -35,19 +35,6 @@ import { theme } from '../theme';
  * comment says it exists for exactly this consumer. No second formatter is
  * introduced either way.
  */
-
-/** 'YYYY-MM' → "August 2026" / « août 2026 ». */
-function formatMonth(month: string, locale: Locale): string {
-  const [year, m] = month.split('-').map(Number);
-  // Noon UTC, so no time zone can push this into the adjacent month. The day
-  // is irrelevant — only the month and year are rendered.
-  const date = new Date(Date.UTC(year, m - 1, 15, 12));
-  return new Intl.DateTimeFormat(locale === 'fr' ? 'fr-CA' : 'en-CA', {
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(date);
-}
 
 function Letter({ letter }: { letter: ArchiveLetter }) {
   const { t } = useI18n();
@@ -74,7 +61,7 @@ function MonthCard({ month }: { month: ArchiveMonth }) {
 
   return (
     <View style={styles.card}>
-      <Text style={styles.monthTitle}>{formatMonth(month.month, locale)}</Text>
+      <Text style={styles.monthTitle}>{formatMonthLong(month.month, locale)}</Text>
 
       <View style={styles.figureRow}>
         <Text style={styles.figureLabel}>{t('review.netCashFlow')}</Text>

@@ -99,7 +99,8 @@
   "tabs": {
     "review": "Review",
     "timeline": "Timeline",
-    "account": "Account"
+    "account": "Account",
+    "cards": "Cards"
   },
   "account": {
     "title": "Account",
@@ -107,5 +108,18 @@
     "emailUnknown": "No email on this session",
     "signingOut": "Signing out…",
     "signOutFailed": "Couldn't sign out. You're still signed in on this device. Check your connection and try again."
+  },
+  "cards": {
+    "title": "Room on your cards",
+    "goal": "Goal",
+    "spent": "Spent",
+    "room": "Room",
+    "status": {
+      "over": "Over",
+      "watch": "Watch",
+      "ok": "OK",
+      "noGoal": "No goal"
+    },
+    "noCards": "No credit cards set up yet. You can add them on phare.money."
   }
 }
