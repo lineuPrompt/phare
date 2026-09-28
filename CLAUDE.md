@@ -130,6 +130,23 @@ Run from the repo root unless noted.
   script.
 - **Never run anything against the production database unprompted.**
 
+**Live test household**
+- The designated test household is **Zezinho Test** (`987c63c1…`). Its
+  credentials are in `apps/mobile/.env.test.local` (gitignored — confirm
+  before any change to it; never print the password, never copy it into any
+  other file). Sign in with the publishable key, never the service-role key.
+- **Live write tests are allowed only on Zezinho Test.** Every other
+  household is read-only, always — household `2be22642` included.
+- **Never delete Zezinho Test or cancel its Stripe subscription.** Deletion
+  tests use throwaway accounts (T1, T2) created for the test.
+- **Isolation tests** (cross-household writes, RLS, triggers) may write *from*
+  Zezinho Test only when the target is a throwaway household created for the
+  test — never a real household's rows. If the guard under test were wrong,
+  the test itself would corrupt someone else's data.
+- **Exclude Zezinho Test from every funnel and usage count.** Its events
+  include test traffic (e.g. a `created_first_expense` logged by a test
+  write on 2026-09-28).
+
 ## 6. Workflow
 
 - **Risky changes** (money math, dates/materialization, auth, AI output, schema):
@@ -203,3 +220,18 @@ Every completed task ends with these sections, in order:
   `pnpm.overrides` in `package.json`.
 - **Removing a member.** The member row cannot be deleted. A deleted member's
   tombstone must never count as a re-invite match.
+
+## 9. Backlog
+
+`docs/BACKLOG.md` is the single ordered list of what to work on next.
+
+- At the start of every session, read `docs/BACKLOG.md`.
+- When Lineu says "next", take the highest item marked READY that is not
+  marked LINEU, and do it.
+- Items touching money math, dates, auth, AI output, schema or deletion:
+  diagnose first and STOP for approval, as §6 already requires. Everything
+  else: build it and hand off.
+- At the end of every task: update `BACKLOG.md` (move the item to Done with
+  its commit hash, add anything new you found, re-order if needed) and commit
+  it with the work.
+- Never start an item marked FROZEN.

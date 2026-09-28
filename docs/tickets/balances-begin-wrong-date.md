@@ -5,7 +5,7 @@ being tracked (Phase 1 of the mobile Timeline diagnosis, then again in the
 mobile Timeline build handoff); filed so a third sighting would land on a
 ticket instead of another aside, then fixed on the same pass.
 
-**Status:** CLOSED. The fix is in the working tree, not yet committed.
+**Status:** CLOSED. Committed in 92ab3e7.
 
 **Severity:** cosmetic — an explanatory note beside a rare-case block, not
 money math. No balance, total, projection or dip was affected, and nothing is
