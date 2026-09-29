@@ -5,7 +5,16 @@ navigation diagnosis (finding "(c)") and deliberately kept out of that change,
 which made *closed* cycles snapshot-only but left the open/future carry-forward
 rule exactly as it was.
 
-**Status:** open, unscheduled. **Live in the founder's household today.**
+**Status:** CLOSED 2026-09-29 — 909f9c8 (read rule), 76927aa (save rule),
+60c9f5b (review check). Decisions (Lineu, 2026-09-29): carry-forward
+everywhere for open/future months through one function; closed months stay
+snapshot-only; saving asks about later months' own plans with no
+pre-selected answer (Yes removes them, No keeps them); order by month, never
+by save time; no repair for 2be22642 (Lineu re-saves the open month and
+answers Yes). Verified live on Zezinho Test the same day.
+
+(Re-checked live 2026-09-29: October has since been re-saved at Groceries
+$200, so only November and December still hold the Aug 6 $550 plans.)
 
 ---
 
