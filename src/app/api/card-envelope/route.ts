@@ -15,7 +15,7 @@ import {
 import { categoryDisplayName } from '@/lib/categoryTranslations';
 import { businessToday, statementCycleWindow } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
-import { fetchCardGoalForMonth } from '@/lib/cardPlanServer';
+import { fetchCardPlanForMonth } from '@/lib/cardPlanServer';
 
 async function resolveHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -66,19 +66,11 @@ export async function GET(request: Request) {
     const state = cycleState(monthParam, closeDay, businessToday(timezone));
     const closed = state === 'closed';
 
-    // Card's total monthly goal: that month's own row when closed, otherwise
-    // carried forward from the latest goal on or before this month.
-    const monthStart = `${monthParam}-01`;
-    const totalGoal = await fetchCardGoalForMonth(supabase, householdId, cardId, monthParam, closed);
-
-    // Envelope items saved for exactly this month (month-scoped: editing one
-    // month never touches another — see 20260714000000 migration).
-    const { data: items } = await supabase
-      .from('card_envelope_items')
-      .select('category_id, monthly_amount, categories(name, name_fr)')
-      .eq('household_id', householdId)
-      .eq('account_id', cardId)
-      .eq('month', monthStart);
+    // The card's plan for this month — goal and category budgets — by the
+    // one read rule (cardPlanServer.fetchCardPlanForMonth): closed → this
+    // month's own snapshot; open/future → carried forward. The grid, the
+    // cross-card strip and the monthly review resolve the same way.
+    const { goal: totalGoal, items } = await fetchCardPlanForMonth(supabase, householdId, cardId, monthParam, closed);
 
     // Transactions for this card's statement cycle — the window can spill
     // into the adjacent calendar month at either end, so the query is scoped
@@ -113,17 +105,18 @@ export async function GET(request: Request) {
       .order('name');
     const categoryById = new Map((categories ?? []).map((c) => [c.id, c]));
 
-    const envelopeItems = (items ?? []).map((item) => {
-      const cats = item.categories as unknown as { name: string; name_fr: string | null } | null;
-      const monthlyAmount = Number(item.monthly_amount);
-      const actual = byCategory.get(item.category_id) ?? 0;
+    const envelopeItems = items.map((item) => {
+      const cats = item.categories;
+      const monthlyAmount = item.monthlyAmount;
+      const actual = byCategory.get(item.categoryId) ?? 0;
       return {
-        categoryId: item.category_id,
+        categoryId: item.categoryId,
         categoryName: cats ? categoryDisplayName(cats, locale) : '?',
         monthlyAmount,
         actual,
         remaining: envelopeRemaining(monthlyAmount, actual),
         status: envelopeStatus(monthlyAmount, actual),
+        planned: true,
       };
     });
 
@@ -140,6 +133,7 @@ export async function GET(request: Request) {
         actual,
         remaining: envelopeRemaining(0, actual),
         status: envelopeStatus(0, actual),
+        planned: false,
       });
     }
 
@@ -162,8 +156,8 @@ export async function GET(request: Request) {
       uncategorizedEntries,
       cycleState: state,
       // Closed cycles only: what was saved for exactly this month. Items above
-      // are already exact-month, and totalGoal is exact-month when closed.
-      pastPlan: closed ? pastPlanState((items ?? []).length > 0, totalGoal !== null) : null,
+      // and totalGoal are that month's own snapshot when closed.
+      pastPlan: closed ? pastPlanState(items.length > 0, totalGoal !== null) : null,
     });
   } catch (error) {
     console.error('GET /api/card-envelope error:', error);

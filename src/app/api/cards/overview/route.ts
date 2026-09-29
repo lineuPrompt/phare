@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase-server';
 import { totalSpendForCard, envelopeStatus, cycleState, EnvTx } from '@/lib/envelopeHelpers';
 import { businessToday, statementCycleWindow } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
-import { fetchCardGoalForMonth } from '@/lib/cardPlanServer';
+import { fetchCardPlanForMonth } from '@/lib/cardPlanServer';
 
 // GET /api/cards/overview?month=YYYY-MM
 // The missing third question: which card has room, without opening any
@@ -55,8 +55,8 @@ export async function GET(request: Request) {
         const cycleWindow = statementCycleWindow(monthParam, closeDay);
         const closed = cycleState(monthParam, closeDay, today) === 'closed';
 
-        const [goal, { data: txns }] = await Promise.all([
-          fetchCardGoalForMonth(supabase, householdId, card.id, monthParam, closed),
+        const [{ goal }, { data: txns }] = await Promise.all([
+          fetchCardPlanForMonth(supabase, householdId, card.id, monthParam, closed),
           supabase
             .from('transactions')
             .select('account_id, amount, category_id, type, date, is_bridge')

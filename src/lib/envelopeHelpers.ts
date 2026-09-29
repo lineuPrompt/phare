@@ -254,6 +254,53 @@ export function cycleState(cycleMonth: string, closeDay: number | null, today: s
   return 'open';
 }
 
+// ---------------------------------------------------------------------------
+// THE card plan for one cycle month — the one read rule every surface uses
+// (decision view, cross-card strip, grid, monthly review). 2026-09-29.
+//
+//   closed        → that month's OWN snapshot only, or none. History is shown
+//                   exactly as it was saved, never filled in from elsewhere.
+//   open / future → the nearest saved month AT OR BEFORE it (carry-forward),
+//                   ordered by month, never by save time.
+//
+// The goal and the category budgets resolve independently, each to its own
+// nearest saved month — the rule the grid has always used (pinned in
+// envelopeHelpers.test.ts, "open and future columns still carry forward").
+// ---------------------------------------------------------------------------
+
+export type ResolvedCardPlan<I> = {
+  goal: number | null;
+  items: I[];
+};
+
+export function planForMonth<I>(
+  goalsByMonth: Map<string, number>,
+  itemsByMonth: Map<string, I[]>,
+  month: string,
+  closed: boolean
+): ResolvedCardPlan<I> {
+  if (closed) {
+    return { goal: goalsByMonth.get(month) ?? null, items: itemsByMonth.get(month) ?? [] };
+  }
+  return {
+    goal: carryForwardMap(goalsByMonth, month),
+    items: carryForwardMap(itemsByMonth, month) ?? [],
+  };
+}
+
+// What the plan editor starts from: the plan the decision view is showing —
+// its own or carried forward — and nothing else. A category that only has
+// spend (planned: false) is not part of the plan, so opening the editor and
+// pressing Save writes the shown plan back unchanged instead of adding $0
+// budgets for it.
+export function editorItemsFrom<T extends { categoryId: string; categoryName: string; monthlyAmount: number; planned?: boolean }>(
+  envelopeItems: T[]
+): { categoryId: string; categoryName: string; monthlyAmount: number }[] {
+  return envelopeItems
+    .filter((i) => i.planned !== false)
+    .map((i) => ({ categoryId: i.categoryId, categoryName: i.categoryName, monthlyAmount: i.monthlyAmount }));
+}
+
 // What was saved for a CLOSED cycle, read from that month's own snapshot only:
 //   saved    — category budgets exist for exactly that month
 //   goalOnly — a goal row exists for that month, but no category budgets
@@ -374,11 +421,10 @@ export function buildGrid(
   const isClosedAt = (i: number) => cycleStates[i] === 'closed';
   const isFuture = (month: string) => cycleState(month, closeDay, today) === 'future';
 
-  const effectiveItems = months.map((month, i) =>
-    isClosedAt(i)
-      ? (itemSnapshotsByMonth.get(month) ?? [])
-      : (carryForwardMap(itemSnapshotsByMonth, month) ?? [])
+  const plans = months.map((month, i) =>
+    planForMonth(goalsByMonth, itemSnapshotsByMonth, month, isClosedAt(i))
   );
+  const effectiveItems = plans.map((p) => p.items);
 
   // Row set: any category ever in an effective snapshot, union any category
   // with actual activity in an eligible (non-future) cycle — a refund in a
@@ -411,9 +457,7 @@ export function buildGrid(
     isFuture(month) ? null : totalSpendForCard(transactions, cardId, month, closeDay)
   );
 
-  const totalGoals = months.map((month, i) =>
-    isClosedAt(i) ? (goalsByMonth.get(month) ?? null) : carryForwardMap(goalsByMonth, month)
-  );
+  const totalGoals = plans.map((p) => p.goal);
 
   const pastPlans = months.map((month, i) =>
     isClosedAt(i)

@@ -27,6 +27,9 @@ export type EnvelopeItem = {
   actual: number;
   remaining: number;
   status: EnvelopeStatus;
+  // true = a budget in the month's plan (its own or carried forward);
+  // false = spend in a category the plan does not budget.
+  planned: boolean;
 };
 
 export type DecisionViewProps = {

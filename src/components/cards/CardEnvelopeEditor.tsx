@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/components/expenses/types';
-import { sumWarning } from '@/lib/envelopeHelpers';
+import { sumWarning, editorItemsFrom } from '@/lib/envelopeHelpers';
 
 type Category = { id: string; name: string };
 
@@ -13,7 +13,7 @@ export type CardEnvelopeEditorProps = {
   cardId: string;
   month: string;
   totalGoal: number | null;
-  envelopeItems: { categoryId: string; categoryName: string; monthlyAmount: number }[];
+  envelopeItems: { categoryId: string; categoryName: string; monthlyAmount: number; planned?: boolean }[];
   statementCloseDay: number | null;
   paymentDay: number | null;
   categories: Category[];
@@ -36,7 +36,7 @@ export default function CardEnvelopeEditor({
 }: CardEnvelopeEditorProps) {
   const t = useTranslations('cards');
   const [goalStr, setGoalStr] = useState(initialGoal?.toString() ?? '');
-  const [items, setItems] = useState<Item[]>(initialItems);
+  const [items, setItems] = useState<Item[]>(() => editorItemsFrom(initialItems));
   const [closeDay, setCloseDay] = useState(initialCloseDay?.toString() ?? '');
   const [payDay, setPayDay]     = useState(initialPayDay?.toString()   ?? '');
   const [addCatId, setAddCatId] = useState('');
@@ -47,7 +47,7 @@ export default function CardEnvelopeEditor({
   // Sync when parent data changes (e.g. card switch)
   useEffect(() => {
     setGoalStr(initialGoal?.toString() ?? '');
-    setItems(initialItems);
+    setItems(editorItemsFrom(initialItems));
     setCloseDay(initialCloseDay?.toString() ?? '');
     setPayDay(initialPayDay?.toString() ?? '');
   }, [cardId, initialGoal, initialItems, initialCloseDay, initialPayDay]);
