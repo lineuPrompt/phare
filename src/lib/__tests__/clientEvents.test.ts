@@ -7,6 +7,7 @@ import {
 } from '@/lib/clientEvents';
 import { PLAN_GENERATION_EVENT, REVIEW_GENERATION_EVENT } from '@/lib/onboardingQuota';
 import { REGENERATION_EVENT } from '@/lib/regenerationQuota';
+import { ONBOARDING_STEPS, PLAUSIBILITY_ACTIONS } from '@phare/core';
 
 // ---------------------------------------------------------------------------
 // The allowlist is a security boundary, not a config object: events.event_type
@@ -61,11 +62,25 @@ describe('CLIENT_EVENT_ALLOWLIST', () => {
     }
   });
 
-  it('ships exactly the two Phase 2 events — #3-#6 are held back on purpose', () => {
+  it('ships exactly the funnel trail — nothing else a client may write', () => {
     expect(Object.keys(CLIENT_EVENT_ALLOWLIST).sort()).toEqual([
       'onboarding_entry_viewed',
       'onboarding_path_chosen',
+      'onboarding_plausibility_resolved',
+      'onboarding_step_reached',
+      'onboarding_template_downloaded',
     ]);
+  });
+
+  it('never lets a client claim an upload refusal — the server writes that one', () => {
+    expect(Object.prototype.hasOwnProperty.call(CLIENT_EVENT_ALLOWLIST, 'onboarding_upload_rejected')).toBe(false);
+    expect(validateClientEvent({ type: 'onboarding_upload_rejected', metadata: { reason: 'wrong_file' } }))
+      .toEqual({ ok: false, reason: 'unknown_event_type' });
+  });
+
+  it('takes step and action values from @phare/core, the arrays web and mobile emit from', () => {
+    expect(CLIENT_EVENT_ALLOWLIST.onboarding_step_reached.step).toBe(ONBOARDING_STEPS);
+    expect(CLIENT_EVENT_ALLOWLIST.onboarding_plausibility_resolved.action).toBe(PLAUSIBILITY_ACTIONS);
   });
 
   it('declares every metadata value as a closed set, never a free string', () => {
@@ -123,7 +138,7 @@ describe('validateClientEvent — refuses everything else', () => {
     ['a server-only event type', { type: 'completed_onboarding' }],
     ['an invented type', { type: 'anything_at_all' }],
     ['an empty type', { type: '' }],
-    ['a held-back Phase 3 type', { type: 'onboarding_step_reached' }],
+    ['the server-only funnel type', { type: 'onboarding_upload_rejected' }],
   ])('%s', (_label, body) => {
     expect(validateClientEvent(body)).toEqual({ ok: false, reason: 'unknown_event_type' });
   });
@@ -190,5 +205,31 @@ describe('validateClientEvent — refuses everything else', () => {
   ])('refuses %s as metadata', (_label, metadata) => {
     expect(validateClientEvent({ type: 'onboarding_path_chosen', metadata }))
       .toEqual({ ok: false, reason: 'malformed_metadata' });
+  });
+});
+
+describe('validateClientEvent — the funnel trail (2026-09-29)', () => {
+  it.each(ONBOARDING_STEPS)('step_reached step=%s', (step) => {
+    expect(validateClientEvent({ type: 'onboarding_step_reached', metadata: { step } }))
+      .toEqual({ ok: true, type: 'onboarding_step_reached', metadata: { step } });
+  });
+
+  it.each(PLAUSIBILITY_ACTIONS)('plausibility_resolved action=%s', (action) => {
+    expect(validateClientEvent({ type: 'onboarding_plausibility_resolved', metadata: { action } }))
+      .toEqual({ ok: true, type: 'onboarding_plausibility_resolved', metadata: { action } });
+  });
+
+  it('template_downloaded, with no metadata', () => {
+    expect(validateClientEvent({ type: 'onboarding_template_downloaded' }))
+      .toEqual({ ok: true, type: 'onboarding_template_downloaded', metadata: null });
+  });
+
+  it('refuses a step that is not in the list, and any free text', () => {
+    expect(validateClientEvent({ type: 'onboarding_step_reached', metadata: { step: 'plan' } }))
+      .toEqual({ ok: false, reason: 'invalid_metadata_value' });
+    expect(validateClientEvent({ type: 'onboarding_plausibility_resolved', metadata: { action: 'confirm', amount: '5000' } }))
+      .toEqual({ ok: false, reason: 'unknown_metadata_key' });
+    expect(validateClientEvent({ type: 'onboarding_template_downloaded', metadata: { file: 'phare_template.xlsx' } }))
+      .toEqual({ ok: false, reason: 'unknown_metadata_key' });
   });
 });

@@ -90,6 +90,22 @@ export function apiPost<T>(path: string, body: unknown): Promise<T> {
   );
 }
 
+/**
+ * Authenticated POST whose answer has no body (a 204, e.g. POST /api/events).
+ * Non-2xx still throws an ApiError like every other call.
+ */
+export async function apiPostNoContent(path: string, body: unknown): Promise<void> {
+  await send(
+    path,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+    { authenticated: true }
+  );
+}
+
 /** Authenticated GET of a text body (the CSV export). */
 export async function apiGetText(path: string): Promise<string> {
   const response = await send(

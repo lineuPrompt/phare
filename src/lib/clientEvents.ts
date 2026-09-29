@@ -47,6 +47,7 @@
 
 import { PLAN_GENERATION_EVENT, REVIEW_GENERATION_EVENT } from '@/lib/onboardingQuota';
 import { REGENERATION_EVENT } from '@/lib/regenerationQuota';
+import { ONBOARDING_STEPS, PLAUSIBILITY_ACTIONS } from '@phare/core';
 
 /**
  * The event types that are ALSO quota counters. Imported from their real
@@ -64,10 +65,13 @@ export const QUOTA_EVENT_TYPES = [
  * permitted values. An empty object means "this event takes no metadata", and
  * any metadata at all is then a rejection.
  *
- * Phase 2 ships exactly two. Events #3–#6 from the funnel proposal
- * (onboarding_step_reached, onboarding_upload_rejected,
- * onboarding_plausibility_resolved, onboarding_template_downloaded) are
- * deliberately NOT here — they are conditional on what these two report.
+ * Phase 2 shipped the first two. The rest of the funnel trail followed on
+ * 2026-09-29, once those two showed households stopping on the entry screen.
+ * onboarding_upload_rejected is NOT here on purpose: it is written by
+ * /api/upload itself, so a client cannot claim a refusal that never happened.
+ *
+ * Step and action values come from @phare/core, the same arrays the web page
+ * and the mobile screen emit from, so the two cannot drift.
  */
 export const CLIENT_EVENT_ALLOWLIST = {
   /** The /upload entry screen rendered. Answers "did they reach it at all". */
@@ -77,6 +81,19 @@ export const CLIENT_EVENT_ALLOWLIST = {
   onboarding_path_chosen: {
     path: ['template', 'manual'],
   },
+
+  /** They reached a step between choosing a lane and seeing a plan. */
+  onboarding_step_reached: {
+    step: ONBOARDING_STEPS,
+  },
+
+  /** What they did with the plausibility warning: kept the numbers, or went back. */
+  onboarding_plausibility_resolved: {
+    action: PLAUSIBILITY_ACTIONS,
+  },
+
+  /** They clicked the template download on the entry screen. */
+  onboarding_template_downloaded: {},
 } as const satisfies Record<string, Record<string, readonly string[]>>;
 
 export type ClientEventType = keyof typeof CLIENT_EVENT_ALLOWLIST;

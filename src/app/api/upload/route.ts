@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
+import type { UploadRejectionReason } from '@phare/core';
 import * as XLSX from 'xlsx';
 import { parseTemplate, isPhareTemplate, isValidV3Template } from '@/lib/templateParser';
 import { createRateLimiter, clientIp } from '@/lib/rateLimit';
-import { requireOnboardingSession } from '@/lib/onboardingAuth';
+import { requireOnboardingSession, type OnboardingSession } from '@/lib/onboardingAuth';
+import { logEvent } from '@/lib/eventLogger';
 
 // AUTHENTICATED, but deliberately NOT quota'd.
 //
@@ -32,6 +34,19 @@ const rateLimit = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 20 });
  * silently collapsed to monthly is the exact failure this refuses to risk.
  */
 export async function POST(request: NextRequest) {
+  // FUNNEL (2026-09-29): every refusal of a signed-in household's file is
+  // recorded as onboarding_upload_rejected { reason }, after the response is
+  // sent (after(): off the user's path, but not lost when the function
+  // freezes). Enum only — never the file name, type or size. A refusal before
+  // the session is known (rate limit, no session) has no household to record
+  // it against and is not counted.
+  let session: OnboardingSession | null = null;
+  const rejected = (reason: UploadRejectionReason) => {
+    const s = session;
+    if (!s) return;
+    after(() => logEvent(s.supabase, s.householdId, s.userId, 'onboarding_upload_rejected', { reason }));
+  };
+
   try {
     const limit = rateLimit(clientIp(request));
     if (!limit.allowed) {
@@ -44,16 +59,19 @@ export async function POST(request: NextRequest) {
     // Identity only — no allowance is consumed here. See the header.
     const auth = await requireOnboardingSession();
     if (!auth.ok) return auth.response;
+    session = auth.session;
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
     if (!file) {
+      rejected('no_file');
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
     const fileName = file.name.toLowerCase();
     if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
+      rejected('unsupported_type');
       return NextResponse.json(
         { error: 'Unsupported file type. Please upload the Phare template (.xlsx).' },
         { status: 400 }
@@ -64,12 +82,14 @@ export async function POST(request: NextRequest) {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
     if (!isPhareTemplate(workbook.SheetNames)) {
+      rejected('wrong_file');
       return NextResponse.json({
         source: 'template_mismatch',
         reason: 'wrong_file',
       });
     }
     if (!isValidV3Template(workbook)) {
+      rejected('outdated_template');
       return NextResponse.json({
         source: 'template_mismatch',
         reason: 'outdated_template',
@@ -84,6 +104,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('File upload error:', error);
+    rejected('parse_failed');
     return NextResponse.json(
       { error: 'Failed to process file' },
       { status: 500 }

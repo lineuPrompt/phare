@@ -13,12 +13,14 @@ export default function UploadEntry({
   onDrop,
   onFileSelect,
   onManual,
+  onTemplateDownload,
 }: {
   dragOver: boolean;
   setDragOver: (b: boolean) => void;
   onDrop: (e: React.DragEvent) => void;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onManual: () => void;
+  onTemplateDownload: () => void;
 }) {
   const t = useTranslations('upload');
 
@@ -28,7 +30,7 @@ export default function UploadEntry({
         <div className="text-4xl mb-4">📝</div>
         <p className="text-lg font-medium mb-2" style={{ color: '#0F2044' }}>{t('noFile.title')}</p>
         <p className="text-sm mb-4" style={{ color: '#6B7280' }}>{t('noFile.description')}</p>
-        <a href="/phare_template.xlsx" download
+        <a href="/phare_template.xlsx" download onClick={onTemplateDownload}
           className="inline-block px-6 py-2.5 rounded-full font-medium cursor-pointer transition-all hover:opacity-90"
           style={{ background: '#2ABFBF', color: '#0F2044' }}>
           {t('noFile.cta')}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -11,8 +11,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { formatCADLocale, formatResetDate, monthlyEquivalent, parseAmountInput, type IncomeFrequency } from '@phare/core';
-import { apiGet, apiPatch, apiPost } from '../lib/api';
+import { formatCADLocale, formatResetDate, monthlyEquivalent, parseAmountInput, stepEntered, type IncomeFrequency } from '@phare/core';
+import { apiGet, apiPatch, apiPost, apiPostNoContent } from '../lib/api';
 import {
   buildForm,
   CARD_COUNTS,
@@ -31,6 +31,7 @@ import {
   type Plan,
 } from '../lib/onboardingFlow';
 import { ApiError } from '../lib/apiErrors';
+import { createFunnelEmitter, MOBILE_STEP_OF } from '../lib/funnelEvents';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
@@ -80,6 +81,23 @@ export default function OnboardingScreen({ onFinished }: { onFinished: () => voi
   const [cardNames, setCardNames] = useState<string[]>(['', '', '']);
   const [opening, setOpening] = useState('');
   const [openingInvalid, setOpeningInvalid] = useState(false);
+
+  // FUNNEL — the same events as the web /upload page. The screen opening is
+  // the entry (once per mount); each step fires on ENTERING its screen.
+  // The app has no template lane and no fork, so it sends no path_chosen.
+  const emitFunnelEvent = useMemo(() => createFunnelEmitter(apiPostNoContent), []);
+  const entrySent = useRef(false);
+  useEffect(() => {
+    if (entrySent.current) return;
+    entrySent.current = true;
+    emitFunnelEvent({ type: 'onboarding_entry_viewed' });
+  }, [emitFunnelEvent]);
+  const lastStepName = useRef<string | null>(null);
+  useEffect(() => {
+    const funnelStep = stepEntered(lastStepName.current, step.name, MOBILE_STEP_OF);
+    lastStepName.current = step.name;
+    if (funnelStep) emitFunnelEvent({ type: 'onboarding_step_reached', metadata: { step: funnelStep } });
+  }, [step.name, emitFunnelEvent]);
 
   // ── Form ──────────────────────────────────────────────────────────────────
   const submitForm = () => {
@@ -228,10 +246,19 @@ export default function OnboardingScreen({ onFinished }: { onFinished: () => voi
             </Text>
           </View>
         ))}
-        <PrimaryButton label={t('onboarding.plausibility.correct')} onPress={() => setStep({ name: 'form' })} />
+        <PrimaryButton
+          label={t('onboarding.plausibility.correct')}
+          onPress={() => {
+            emitFunnelEvent({ type: 'onboarding_plausibility_resolved', metadata: { action: 'correct' } });
+            setStep({ name: 'form' });
+          }}
+        />
         <SecondaryButton
           label={t('onboarding.plausibility.confirm')}
-          onPress={() => setStep({ name: 'accounts', built: step.built })}
+          onPress={() => {
+            emitFunnelEvent({ type: 'onboarding_plausibility_resolved', metadata: { action: 'confirm' } });
+            setStep({ name: 'accounts', built: step.built });
+          }}
         />
       </>
     );

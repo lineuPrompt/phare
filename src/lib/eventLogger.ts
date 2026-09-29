@@ -90,7 +90,12 @@ export type EventType =
   // it is written with an awaited insert in regenerationQuotaServer.ts rather
   // than through logEvent's deliberately-swallowed path. metadata.month is the
   // household's own calendar month, which is what the count matches on.
-  | 'review_regenerated';
+  | 'review_regenerated'
+  // FUNNEL (2026-09-29): /api/upload turned a file away. Written SERVER-side,
+  // in after(), and deliberately NOT in the client allowlist — a client
+  // cannot claim a refusal the server never made. metadata.reason is one of
+  // @phare/core's UPLOAD_REJECTION_REASONS; never the file name or size.
+  | 'onboarding_upload_rejected';
 
 /**
  * Insert one event row.

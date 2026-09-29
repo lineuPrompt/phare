@@ -6,6 +6,14 @@ import { POST } from '../route';
 // These routes became authenticated and quota'd. This file's assertions are
 // about prompt shape, caps and error codes — not the gate — so the caller is
 // mocked as a signed-in household with room. The gate has its own tests.
+// The route records refusals in after(), which throws outside a request
+// scope. Captured and dropped here: this file is about the parse contract;
+// uploadRejectedEvent.test.ts proves the events.
+vi.mock('next/server', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('next/server')>();
+  return { ...actual, after: () => {} };
+});
+
 vi.mock('@/lib/supabase-server', async () => {
   const { supabaseServerMock } = await import('@/lib/__tests__/helpers/onboardingSessionMock');
   return supabaseServerMock();

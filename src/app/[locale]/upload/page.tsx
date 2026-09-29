@@ -23,8 +23,10 @@ import { formatResetDate } from '@/lib/onboardingQuota';
 import SupportLine from '@/components/shared/SupportLine';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 import { emitClientEvent } from '@/lib/clientEvents';
+import { stepEntered } from '@phare/core';
+import { WEB_STEP_OF, type UploadPageStatus } from '@/lib/onboardingFunnelWeb';
 
-type Status = 'idle' | 'uploading' | 'analyzing' | 'error' | 'plan' | 'form' | 'accounts' | 'plausibility_check' | 'member_confirm' | 'anchor_dates';
+type Status = UploadPageStatus;
 
 export default function UploadPage() {
   const t = useTranslations('upload');
@@ -130,6 +132,20 @@ export default function UploadPage() {
     entryEventSent.current = true;
     emitClientEvent('onboarding_entry_viewed');
   }, []);
+
+  /**
+   * FUNNEL — each step between choosing a lane and seeing a plan, fired on
+   * ENTERING the step's screen (stepEntered ignores a re-render on the same
+   * step). Driven by the one piece of state every transition already goes
+   * through, so no call site has to remember to report its own step.
+   * 'upload_parsed' is emitted in handleFile instead — see WEB_STEP_OF.
+   */
+  const lastStatus = useRef<Status | null>(null);
+  useEffect(() => {
+    const step = stepEntered(lastStatus.current, status, WEB_STEP_OF);
+    lastStatus.current = status;
+    if (step) emitClientEvent('onboarding_step_reached', { step });
+  }, [status]);
 
   /**
    * Writes the chequing opening balance captured on the accounts step as a
@@ -486,6 +502,9 @@ export default function UploadPage() {
       }
 
       setFileMeta(detectedFileMeta);
+      // FUNNEL — the file was accepted and parsed. Refusals are recorded by
+      // /api/upload itself (onboarding_upload_rejected).
+      emitClientEvent('onboarding_step_reached', { step: 'upload_parsed' });
 
       const parsed = uploadData.parsed as TemplateParseResult;
 
@@ -580,6 +599,7 @@ export default function UploadPage() {
   /** User confirmed the plausibility warning — proceed with original numbers. */
   const confirmPlausibility = useCallback(() => {
     if (!pendingCalculated) return;
+    emitClientEvent('onboarding_plausibility_resolved', { action: 'confirm' });
     setPendingPlanBody(pendingCalculated);
     setPlausibilityResult(null);
     setPendingCalculated(null);
@@ -590,6 +610,7 @@ export default function UploadPage() {
 
   /** User wants to go back and fix income after seeing the plausibility warning. */
   const rejectPlausibility = useCallback(() => {
+    emitClientEvent('onboarding_plausibility_resolved', { action: 'correct' });
     setPlausibilityResult(null);
     setPendingCalculated(null);
     setSkippedIncomeRows(0);
@@ -653,6 +674,8 @@ export default function UploadPage() {
           <UploadEntry
             dragOver={dragOver} setDragOver={setDragOver}
             onDrop={onDrop} onFileSelect={onFileSelect}
+            // FUNNEL — the template download on the entry screen.
+            onTemplateDownload={() => emitClientEvent('onboarding_template_downloaded')}
             onManual={() => {
               // FUNNEL — the manual lane, the other half of the fork. Emitted
               // here rather than inside UploadEntry so that component stays

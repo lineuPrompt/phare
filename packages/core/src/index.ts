@@ -18,3 +18,4 @@ export * from './timezoneSupport';
 export * from './onboarding';
 export * from './accountDeletion';
 export * from './entry';
+export * from './onboardingFunnel';

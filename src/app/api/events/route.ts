@@ -49,7 +49,8 @@ import { validateClientEvent } from '@/lib/clientEvents';
 // react to it, and emitClientEvent ignores the status anyway.
 // ---------------------------------------------------------------------------
 
-// Generous relative to real use: a complete onboarding fires two of these.
+// Generous relative to real use: a complete onboarding fires up to about ten
+// of these (entry, path, template download, five steps, plausibility).
 // This is here to bound row-spam into a shared table by an authenticated
 // client, not to shape legitimate traffic. Per-instance like every other
 // limiter in this codebase (see rateLimit.ts's caveat) — a small multiple of
