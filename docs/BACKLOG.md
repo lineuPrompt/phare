@@ -20,20 +20,40 @@ Store submission waits until the approved minimal path ships on mobile.
    events. Verify with a throwaway T1 signup (template + manual on web,
    manual on mobile), read the whole trail through MCP, delete T1 through
    the app. Any gap is a finding.
+   *Built 80e6981; each new event's data path verified live on Zezinho
+   Test 2026-09-29. Waiting on the T1 run through the real screens (LINEU).*
 2. **Audit onboarding as a stranger — report only.** Both paths, web and
    mobile: minutes to finish for a two-income, two-card household; what
    they must have on hand; every required field (file:line); every screen
    and decision; what could wait until after first value, and what breaks
    if it's missing.
+   *Reported 2026-09-29.*
 3. **Propose a minimal first session (<5 min to a first useful view),
    unassisted, web and mobile. Don't build. STOP.** Say what degrades for
    each deferred input and how it's prompted later, and whether the AI plan
    and letter belong in the first session.
+   *Proposed 2026-09-29 — waiting on approval.*
 4. **Guard the onboarding letter — diagnose, STOP.** Same sourcing,
    borrowed-cash and token-leak guards (and retry) as
    `monthlyReviewService`; options for streaming vs guarding, trade-offs,
    retry quota cost. — [ticket](tickets/onboarding-review-unguarded.md).
    (4b, the category-seed check, shipped in 000196b.)
+   *Options reported 2026-09-29 — waiting on approval.*
+
+Found by the audit (2026-09-29), ahead of the older list because each sits
+on a first session:
+
+- **Template ships pre-filled with example figures** that parse as the
+  household's own. — [ticket](tickets/template-prefilled-sample-figures.md)
+- **save-plan: five more writes never read their error** — on every first
+  session's save step. — [ticket](tickets/save-plan-unchecked-writes.md)
+- **Web manual form builds a plan from nothing** and drops half-filled lines
+  silently. — [ticket](tickets/web-manual-form-accepts-empty.md)
+- **The AI chooses each expense's category and fixed/variable** (CLAUDE.md
+  §4), which decides whether a bill reaches the Timeline. **STOP.** —
+  [ticket](tickets/plan-ai-classifies-expense-lines.md)
+- **Every monthly bill and paycheque is dated the 1st.** **STOP.** —
+  [ticket](tickets/monthly-recurring-dated-first-of-month.md)
 
 5. **splitRule duplicate materialization.** Rows detached without a
    tombstone survive its delete-by-`recurring_item_id` and are materialized
@@ -63,16 +83,12 @@ Store submission waits until the approved minimal path ships on mobile.
     out-of-province-employer tax gap can surface only in the onboarding plan.
     Product decision — diagnose and propose, **STOP.** —
     [ticket](tickets/household-info-missing-from-review.md)
-13. **save-plan: five more writes never read their error** (budgets and
-    sinking_funds deletes and inserts, the review conversation) — same
-    silent 200 as the category seed. —
-    [ticket](tickets/save-plan-unchecked-writes.md)
-14. **Cards grid: plan reads never check their error.** A failed read renders
+13. **Cards grid: plan reads never check their error.** A failed read renders
     as "no plan" beside a decision view that shows a 500. —
     [ticket](tickets/cards-grid-plan-read-unchecked.md)
-15. **Card plan editor: three hardcoded English strings** ("Allocated:",
+14. **Card plan editor: three hardcoded English strings** ("Allocated:",
     two error fallbacks). — [ticket](tickets/card-editor-hardcoded-english.md)
-16. **Timeline plan chain resolves card goals with its own function**, which
+15. **Timeline plan chain resolves card goals with its own function**, which
     carries goals into closed cycles where Cards does not. Not a live wrong
     figure yet. **STOP.** — [ticket](tickets/timeline-card-plan-own-resolver.md)
 
@@ -96,6 +112,11 @@ Store submission waits until the approved minimal path ships on mobile.
   cycle — September closed on the 27th and is locked) and answer **Replace**
   when asked about November and December. They still hold the Aug 6 plan
   (Groceries $550).
+
+- *(new 2026-09-29)* **T1 funnel run** (backlog item 1): sign up a
+  throwaway T1 on web, run the template lane once and the manual lane once,
+  the manual lane on mobile if a device run is possible, then delete T1
+  through the app. Tell Claude when done; it reads the trail through MCP.
 
 ## WAITING ON DATA
 
@@ -126,3 +147,4 @@ delivery, referral, French currency formatting on web onboarding.
 | "Balances begin" date ([ticket](tickets/balances-begin-wrong-date.md)) | 92ab3e7 |
 | save-plan category seed checked ([ticket](tickets/category-seed-insert-unchecked.md), closed) | 000196b |
 | Carry-forward ([ticket](tickets/carry-forward-older-future-snapshot-outranks-newer-edit.md), closed): one read rule, save asks about later plans, review judges the carried plan; verified live on Zezinho Test | 909f9c8, 76927aa, 60c9f5b |
+| Funnel trail events built (web + mobile); data path verified live on Zezinho Test — T1 run pending | 80e6981 |
