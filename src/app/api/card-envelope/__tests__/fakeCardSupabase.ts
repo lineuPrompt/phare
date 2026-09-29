@@ -18,11 +18,12 @@ export type Write = { op: 'upsert' | 'insert' | 'delete' | 'update'; table: stri
 
 type Filter = (r: Row) => boolean;
 
-export function makeFakeCardSupabase(seed: Record<string, Row[]>, opts: { userId?: string; failTables?: string[] } = {}) {
+export function makeFakeCardSupabase(seed: Record<string, Row[]>, opts: { userId?: string; failTables?: string[]; failDeleteTables?: string[] } = {}) {
   const store: Record<string, Row[]> = {};
   for (const [table, rows] of Object.entries(seed)) store[table] = rows.map((r) => ({ ...r }));
   const writes: Write[] = [];
   const failTables = new Set(opts.failTables ?? []);
+  const failDeleteTables = new Set(opts.failDeleteTables ?? []);
 
   function rowsOf(table: string): Row[] {
     return (store[table] ??= []);
@@ -52,6 +53,7 @@ export function makeFakeCardSupabase(seed: Record<string, Row[]>, opts: { userId
       in(field: string, values: unknown[]) { filters.push((r) => values.includes(r[field])); return api; },
       gte(field: string, value: string) { filters.push((r) => String(r[field]) >= value); return api; },
       lte(field: string, value: string) { filters.push((r) => String(r[field]) <= value); return api; },
+      gt(field: string, value: string) { filters.push((r) => String(r[field]) > value); return api; },
       order(field: string, o?: { ascending?: boolean }) { orderBy = { field, ascending: o?.ascending !== false }; return api; },
       limit(n: number) { limitN = n; return api; },
       single() {
@@ -74,11 +76,17 @@ export function makeFakeCardSupabase(seed: Record<string, Row[]>, opts: { userId
 
   function mutationChain(table: string, op: 'delete' | 'update', payload?: Row) {
     const filters: [string, unknown][] = [];
+    const inFields = new Set<string>();
     const api = {
       eq(field: string, value: unknown) { filters.push([field, value]); return api; },
-      then(resolve: (v: { data: null; error: null }) => unknown) {
+      in(field: string, values: unknown[]) { inFields.add(field); filters.push([field, values]); return api; },
+      then(resolve: (v: { data: null; error: unknown }) => unknown) {
+        if (op === 'delete' && failDeleteTables.has(table)) {
+          return Promise.resolve({ data: null, error: { message: `simulated ${table} failure` } }).then(resolve);
+        }
         writes.push({ op, table, payload, filters });
-        const match = (r: Row) => filters.every(([f, v]) => r[f] === v);
+        const match = (r: Row) =>
+          filters.every(([f, v]) => (inFields.has(f) ? (v as unknown[]).includes(r[f]) : r[f] === v));
         if (op === 'delete') store[table] = rowsOf(table).filter((r) => !match(r));
         else rowsOf(table).forEach((r) => { if (match(r)) Object.assign(r, payload); });
         return Promise.resolve({ data: null, error: null }).then(resolve);

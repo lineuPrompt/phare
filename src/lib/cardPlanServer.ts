@@ -1,5 +1,5 @@
 import type { createClient } from './supabase-server';
-import { planForMonth } from './envelopeHelpers';
+import { planForMonth, cycleState } from './envelopeHelpers';
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -74,4 +74,41 @@ export async function fetchCardPlanForMonth(
   }
 
   return planForMonth(goalsByMonth, itemsByMonth, month, closed);
+}
+
+/**
+ * Months AFTER `month` that have a plan of their own (a goal row or category
+ * rows) and are not closed: the months a save of `month` would not carry
+ * into, because their own plan outranks it. Sorted YYYY-MM.
+ *
+ * When a household edits a month, these are the plans it is asked about
+ * ("Apply to later months too?"). Closed months are never included: their
+ * plans are history and never touched. Ordered by month, never by save time.
+ *
+ * Throws on a query error: an empty list means "nothing to ask about", and a
+ * failed read must not skip the question.
+ */
+export async function fetchLaterOwnPlanMonths(
+  supabase: Supabase,
+  householdId: string,
+  cardId: string,
+  month: string,
+  closeDay: number | null,
+  today: string
+): Promise<string[]> {
+  const after = `${month}-01`;
+  const [{ data: goalRows, error: goalErr }, { data: itemRows, error: itemErr }] = await Promise.all([
+    supabase.from('monthly_goals').select('month')
+      .eq('household_id', householdId).eq('account_id', cardId).gt('month', after),
+    supabase.from('card_envelope_items').select('month')
+      .eq('household_id', householdId).eq('account_id', cardId).gt('month', after),
+  ]);
+  if (goalErr) throw new Error(`monthly_goals read failed: ${goalErr.message}`);
+  if (itemErr) throw new Error(`card_envelope_items read failed: ${itemErr.message}`);
+
+  const months = new Set<string>();
+  for (const r of [...(goalRows ?? []), ...(itemRows ?? [])]) months.add((r.month as string).slice(0, 7));
+  return [...months]
+    .filter((m) => cycleState(m, closeDay, today) !== 'closed')
+    .sort();
 }

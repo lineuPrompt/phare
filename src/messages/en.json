@@ -602,7 +602,14 @@
       "copyNothingToCopy": "No envelope was saved for the previous month.",
       "copyFailed": "Couldn't load the previous month.",
       "daysUpdateFailed": "Your spending goal and categories saved, but the statement/payment day couldn't be saved. Please try again.",
-      "cycleClosed": "This statement has closed, so its plan can no longer be changed."
+      "cycleClosed": "This statement has closed, so its plan can no longer be changed.",
+      "laterPlansTitle": "{count, plural, one {A later month has its own plan} other {Later months have their own plans}}",
+      "laterPlansBody": "{count, plural, one {# later month ({months}) has its own plan, so it will not follow this one. Choose what happens to it when you save.} other {# later months ({months}) have their own plans, so they will not follow this one. Choose what happens to them when you save.}}",
+      "laterPlansApply": "{count, plural, one {Replace it with this plan} other {Replace all # with this plan}}",
+      "laterPlansKeep": "{count, plural, one {Keep its own plan} other {Keep their own plans}}",
+      "laterPlansChooseFirst": "Choose what happens to the later months to save.",
+      "laterPlansChanged": "The later months' plans changed since you opened this editor. Check the list and choose again.",
+      "laterPlansRemoveFailed": "This month's plan was saved, but the later months' plans could not be replaced. They still have their own plans. Please try again."
     },
     "grid": {
       "title": "Month by month",

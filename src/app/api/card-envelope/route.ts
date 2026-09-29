@@ -15,7 +15,7 @@ import {
 import { categoryDisplayName } from '@/lib/categoryTranslations';
 import { businessToday, statementCycleWindow } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
-import { fetchCardPlanForMonth } from '@/lib/cardPlanServer';
+import { fetchCardPlanForMonth, fetchLaterOwnPlanMonths } from '@/lib/cardPlanServer';
 
 async function resolveHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -71,6 +71,13 @@ export async function GET(request: Request) {
     // month's own snapshot; open/future → carried forward. The grid, the
     // cross-card strip and the monthly review resolve the same way.
     const { goal: totalGoal, items } = await fetchCardPlanForMonth(supabase, householdId, cardId, monthParam, closed);
+
+    // Later open/future months with a plan of their own: what the editor
+    // asks about before saving this month. A closed month is not editable,
+    // so it has nothing to ask.
+    const laterPlanMonths = closed
+      ? []
+      : await fetchLaterOwnPlanMonths(supabase, householdId, cardId, monthParam, closeDay, businessToday(timezone));
 
     // Transactions for this card's statement cycle — the window can spill
     // into the adjacent calendar month at either end, so the query is scoped
@@ -155,6 +162,7 @@ export async function GET(request: Request) {
       entriesByCategory,
       uncategorizedEntries,
       cycleState: state,
+      laterPlanMonths,
       // Closed cycles only: what was saved for exactly this month. Items above
       // and totalGoal are that month's own snapshot when closed.
       pastPlan: closed ? pastPlanState(items.length > 0, totalGoal !== null) : null,
@@ -176,7 +184,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { cardId, month, totalGoal, items, statementCloseDay, paymentDay } = body;
+    const { cardId, month, totalGoal, items, statementCloseDay, paymentDay, laterPlans, laterPlanMonths: seenLaterMonths } = body;
 
     if (!cardId || !month || !/^\d{4}-\d{2}$/.test(month)) {
       return NextResponse.json({ error: 'cardId and month required' }, { status: 400 });
@@ -186,6 +194,12 @@ export async function POST(request: Request) {
     }
     if (!Array.isArray(items)) {
       return NextResponse.json({ error: 'items must be an array' }, { status: 400 });
+    }
+    if (laterPlans !== undefined && laterPlans !== 'apply' && laterPlans !== 'keep') {
+      return NextResponse.json({ error: "laterPlans must be 'apply' or 'keep'" }, { status: 400 });
+    }
+    if (laterPlans !== undefined && !(Array.isArray(seenLaterMonths) && seenLaterMonths.every((m: unknown) => typeof m === 'string'))) {
+      return NextResponse.json({ error: 'laterPlanMonths must list the months the choice was made about' }, { status: 400 });
     }
 
     const supabase = await createClient();
@@ -215,11 +229,35 @@ export async function POST(request: Request) {
     // late-posted charge still belongs to its closed cycle.
     const storedCloseDay = (card.statement_close_day as number | null) ?? null;
     const timezone = await getHouseholdTimezone(supabase, householdId);
-    if (cycleState(month, storedCloseDay, businessToday(timezone)) === 'closed') {
+    const today = businessToday(timezone);
+    if (cycleState(month, storedCloseDay, today) === 'closed') {
       return NextResponse.json(
         { error: 'This statement has closed. Its plan can no longer be changed.', code: 'cycle_closed' },
         { status: 409 }
       );
+    }
+
+    // LATER PLANS (2026-09-29). A later open/future month with a plan of its
+    // own outranks this one (order is by month, never by save time), so
+    // saving this month does not reach it. The household decides, explicitly,
+    // for exactly the months it was shown: 'apply' removes those later plans
+    // so this month carries into them; 'keep' leaves them. No choice, or a
+    // choice made about a different set of months (the page went stale), is
+    // refused BEFORE any write. Closed months are never in the list, so they
+    // are never touched.
+    const laterOwnPlanMonths = await fetchLaterOwnPlanMonths(supabase, householdId, cardId, month, storedCloseDay, today);
+    if (laterOwnPlanMonths.length > 0) {
+      const seen = laterPlans !== undefined ? [...new Set(seenLaterMonths as string[])].sort() : null;
+      if (seen === null || seen.join(',') !== laterOwnPlanMonths.join(',')) {
+        return NextResponse.json(
+          {
+            error: 'Later months have their own plans. Choose whether this plan replaces them.',
+            code: 'later_plans_decision_required',
+            laterPlanMonths: laterOwnPlanMonths,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     const monthStart = `${month}-01`;
@@ -264,6 +302,33 @@ export async function POST(request: Request) {
       }
     }
 
+    // 2b. 'apply': remove the later months' own plans so this month carries
+    // into them. This month is already saved, so a failure here is partial
+    // and says so: the later months still hold their own plans.
+    let laterPlansRemoved = 0;
+    if (laterPlans === 'apply' && laterOwnPlanMonths.length > 0) {
+      const laterStarts = laterOwnPlanMonths.map((m) => `${m}-01`);
+      for (const table of ['monthly_goals', 'card_envelope_items'] as const) {
+        const { error: removeErr } = await supabase
+          .from(table)
+          .delete()
+          .eq('household_id', householdId)
+          .eq('account_id', cardId)
+          .in('month', laterStarts);
+        if (removeErr) {
+          console.error(`Later plans ${table} delete error:`, removeErr);
+          return NextResponse.json(
+            {
+              error: `This month's plan was saved, but the later months' plans could not be replaced: ${removeErr.message}`,
+              code: 'later_plans_remove_failed',
+            },
+            { status: 500 }
+          );
+        }
+      }
+      laterPlansRemoved = laterOwnPlanMonths.length;
+    }
+
     // 3. Update account statement days (only the fields provided). The goal
     // and category rows above are already committed at this point, so a
     // failure here is genuinely partial — not returning a plain
@@ -289,7 +354,7 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ saved: true, daysUpdateFailed });
+    return NextResponse.json({ saved: true, daysUpdateFailed, laterPlansRemoved });
   } catch (error) {
     console.error('POST /api/card-envelope error:', error);
     return NextResponse.json({ error: 'Failed to save envelope' }, { status: 500 });

@@ -602,7 +602,14 @@
       "copyNothingToCopy": "Aucune enveloppe enregistrée pour le mois précédent.",
       "copyFailed": "Impossible de charger le mois précédent.",
       "daysUpdateFailed": "Votre objectif de dépenses et vos catégories ont été enregistrés, mais le jour de relevé/paiement n'a pas pu être enregistré. Veuillez réessayer.",
-      "cycleClosed": "Ce relevé est fermé : son plan ne peut plus être modifié."
+      "cycleClosed": "Ce relevé est fermé : son plan ne peut plus être modifié.",
+      "laterPlansTitle": "{count, plural, one {Un mois à venir a déjà son propre plan} other {Des mois à venir ont déjà leur propre plan}}",
+      "laterPlansBody": "{count, plural, one {# mois à venir ({months}) a déjà son propre plan et ne suivra donc pas celui-ci. Choisissez ce qui lui arrive quand vous enregistrez.} other {# mois à venir ({months}) ont déjà leur propre plan et ne suivront donc pas celui-ci. Choisissez ce qui leur arrive quand vous enregistrez.}}",
+      "laterPlansApply": "{count, plural, one {Le remplacer par ce plan} other {Remplacer les # par ce plan}}",
+      "laterPlansKeep": "{count, plural, one {Garder son propre plan} other {Garder leur propre plan}}",
+      "laterPlansChooseFirst": "Choisissez ce qui arrive aux mois à venir pour pouvoir enregistrer.",
+      "laterPlansChanged": "Les plans des mois à venir ont changé depuis l'ouverture de l'éditeur. Vérifiez la liste et choisissez de nouveau.",
+      "laterPlansRemoveFailed": "Le plan de ce mois a été enregistré, mais ceux des mois à venir n'ont pas pu être remplacés. Ils gardent leur propre plan. Veuillez réessayer."
     },
     "grid": {
       "title": "Mois par mois",

@@ -28,6 +28,7 @@ type EnvelopeData = {
   uncategorizedEntries: CategoryEntryLine[];
   cycleState: CycleState;
   pastPlan: PastPlanState | null;
+  laterPlanMonths: string[];
 };
 
 // GET /api/cards/months — the reachable range, queried from real data.
@@ -323,6 +324,7 @@ export default function CardsPage() {
                         envelopeItems={envelopeData.envelopeItems}
                         statementCloseDay={envelopeData.card.statement_close_day ?? null}
                         paymentDay={envelopeData.card.payment_day ?? null}
+                        laterPlanMonths={envelopeData.laterPlanMonths}
                         categories={envelopeData.categories}
                         locale={locale}
                         onSaved={onEnvelopeSaved}

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/components/expenses/types';
 import { sumWarning, editorItemsFrom } from '@/lib/envelopeHelpers';
+import LaterPlansChoice, { type LaterPlansDecision } from './LaterPlansChoice';
 
 type Category = { id: string; name: string };
 
@@ -16,6 +17,8 @@ export type CardEnvelopeEditorProps = {
   envelopeItems: { categoryId: string; categoryName: string; monthlyAmount: number; planned?: boolean }[];
   statementCloseDay: number | null;
   paymentDay: number | null;
+  // Later open/future months with a plan of their own (GET /api/card-envelope).
+  laterPlanMonths: string[];
   categories: Category[];
   locale: string;
   onSaved: () => void;
@@ -29,6 +32,7 @@ export default function CardEnvelopeEditor({
   envelopeItems: initialItems,
   statementCloseDay: initialCloseDay,
   paymentDay: initialPayDay,
+  laterPlanMonths: initialLaterMonths,
   categories,
   locale,
   onSaved,
@@ -43,6 +47,11 @@ export default function CardEnvelopeEditor({
   const [saving, setSaving]     = useState(false);
   const [copying, setCopying]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
+  // The household's answer about later months' own plans. Never
+  // pre-selected: Save stays disabled until they choose.
+  const [laterMonths, setLaterMonths] = useState<string[]>(initialLaterMonths);
+  const [laterChoice, setLaterChoice] = useState<LaterPlansDecision | null>(null);
+  const needsLaterChoice = laterMonths.length > 0 && laterChoice === null;
 
   // Sync when parent data changes (e.g. card switch)
   useEffect(() => {
@@ -96,6 +105,7 @@ export default function CardEnvelopeEditor({
         items: items.map((i) => ({ categoryId: i.categoryId, monthlyAmount: i.monthlyAmount })),
         statementCloseDay: closeDay ? parseInt(closeDay, 10) : null,
         paymentDay:        payDay   ? parseInt(payDay, 10)   : null,
+        ...(laterMonths.length > 0 ? { laterPlans: laterChoice, laterPlanMonths: laterMonths } : {}),
       }),
     });
     setSaving(false);
@@ -113,6 +123,18 @@ export default function CardEnvelopeEditor({
       onSaved();
     } else {
       const d = await res.json().catch(() => ({}));
+      if (d.code === 'later_plans_decision_required') {
+        // The later months changed since this editor opened (or it opened
+        // without them). Show the current list and ask again.
+        setLaterMonths(Array.isArray(d.laterPlanMonths) ? d.laterPlanMonths : []);
+        setLaterChoice(null);
+        setError(t('editor.laterPlansChanged'));
+        return;
+      }
+      if (d.code === 'later_plans_remove_failed') {
+        setError(t('editor.laterPlansRemoveFailed'));
+        return;
+      }
       // The editor can still be open when a statement closes (page left open
       // across the close date); the server refuses the write — say why, in
       // the family's language, rather than echoing the English error.
@@ -283,12 +305,17 @@ export default function CardEnvelopeEditor({
         </div>
       </div>
 
+      {laterMonths.length > 0 && (
+        <LaterPlansChoice months={laterMonths} choice={laterChoice} onChoose={setLaterChoice} locale={locale} />
+      )}
+
       {error && <p className="text-sm" style={{ color: '#DC2626' }}>{error}</p>}
+      {needsLaterChoice && <p className="text-xs" style={{ color: '#6B7280' }}>{t('editor.laterPlansChooseFirst')}</p>}
 
       <div className="flex gap-3">
         <button
           onClick={save}
-          disabled={saving || !validGoal}
+          disabled={saving || !validGoal || needsLaterChoice}
           className="px-5 py-2 rounded-full text-sm font-medium cursor-pointer hover:opacity-90 disabled:opacity-50"
           style={{ background: '#0F2044', color: 'white' }}
         >

@@ -28,6 +28,8 @@ function makeFakeSupabase(opts: { failAccountUpdate?: boolean } = {}) {
     let result = rows;
     const api = {
       eq(field: string, value: unknown) { result = result.filter((r) => r[field] === value); return api; },
+      // Read by the later-plans check (fetchLaterOwnPlanMonths).
+      gt(field: string, value: string) { result = result.filter((r) => String(r[field]) > value); return api; },
       single() {
         return Promise.resolve(result[0] ? { data: { ...result[0] }, error: null } : { data: null, error: { message: 'not found' } });
       },
