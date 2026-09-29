@@ -4,52 +4,75 @@ The single ordered list of what to work on next. Rules: CLAUDE.md §9.
 "STOP" means diagnose, report, and wait for approval before changing
 anything (money math, dates, auth, AI output, schema, deletion — §6).
 
-Last reconciled with `docs/tickets/` and the code: 2026-09-29.
+Last reconciled with `docs/tickets/` and the code: 2026-09-29 (priority reset).
 
 ## READY
 
-1. **Onboarding review runs unguarded.** The sourcing, borrowed-cash and
-   token-leak guards exist only in `monthlyReviewService`; the first letter a
-   household reads has none, and it is persisted. **STOP.** —
-   [ticket](tickets/onboarding-review-unguarded.md)
-2. **splitRule duplicate materialization.** Rows detached without a
+**Priority reset (Lineu, 2026-09-29): the failure point is onboarding.**
+Three external households signed in and never entered data; none has ever
+reached a plan, Timeline or review. Items 1–4 come first, in order. The App
+Store submission waits until the approved minimal path ships on mobile.
+
+1. **Complete the onboarding funnel trail** (build, then verify): the held
+   events `onboarding_upload_rejected {reason}` (server, /api/upload),
+   `onboarding_step_reached {step}`, `onboarding_plausibility_resolved
+   {action}`, `onboarding_template_downloaded`; mobile emits the same step
+   events. Verify with a throwaway T1 signup (template + manual on web,
+   manual on mobile), read the whole trail through MCP, delete T1 through
+   the app. Any gap is a finding.
+2. **Audit onboarding as a stranger — report only.** Both paths, web and
+   mobile: minutes to finish for a two-income, two-card household; what
+   they must have on hand; every required field (file:line); every screen
+   and decision; what could wait until after first value, and what breaks
+   if it's missing.
+3. **Propose a minimal first session (<5 min to a first useful view),
+   unassisted, web and mobile. Don't build. STOP.** Say what degrades for
+   each deferred input and how it's prompted later, and whether the AI plan
+   and letter belong in the first session.
+4. **Guard the onboarding letter — diagnose, STOP.** Same sourcing,
+   borrowed-cash and token-leak guards (and retry) as
+   `monthlyReviewService`; options for streaming vs guarding, trade-offs,
+   retry quota cost. — [ticket](tickets/onboarding-review-unguarded.md).
+   (4b, the category-seed check, shipped in 000196b.)
+
+5. **splitRule duplicate materialization.** Rows detached without a
    tombstone survive its delete-by-`recurring_item_id` and are materialized
    again (reported cost: 44 rows, once). **STOP.** —
    [ticket](tickets/splitrule-detached-duplicate-materialization.md)
-3. **Recurring expense/income divergence on the Timeline.** **STOP.** —
+6. **Recurring expense/income divergence on the Timeline.** **STOP.** —
    [ticket](tickets/recurring-expense-income-divergence.md)
-4. **Cards: month-by-month table gets its own month navigation**,
+7. **Cards: month-by-month table gets its own month navigation**,
    independent of the page-level selector. Reuse the existing month control.
    — [ticket](tickets/cards-grid-independent-month-nav.md)
-5. **Two safe Phase 2 tickets:** the diagnostics probe calling review-stream
+8. **Two safe Phase 2 tickets:** the diagnostics probe calling review-stream
    without a session ([ticket](tickets/diagnostics-probe-review-stream-401.md) —
    decided 2026-09-28: send the bearer token; keep it a manual, labelled
    button, one review generation per deliberate press; do not retire it),
    and the dashboard's divergent `formatResetDate`
    ([ticket](tickets/dashboard-format-reset-date-duplicate.md)).
-6. **Date-serial coercion:** an Excel date in a Household answer reaches the
+9. **Date-serial coercion:** an Excel date in a Household answer reaches the
    prompt as "46265.83". Read `cell.w` for that column. —
    [ticket](tickets/household-answer-date-serial.md)
-7. **`apps/mobile/app.json` → `app.config.ts`** reading the bundle id and
+10. **`apps/mobile/app.json` → `app.config.ts`** reading the bundle id and
    Android package from the same env vars the web's well-known routes use. —
    [ticket](tickets/mobile-app-config-from-env.md)
-8. **Android: verify `/diagnostics`** (Hermes timezone probe) on an EAS cloud
+11. **Android: verify `/diagnostics`** (Hermes timezone probe) on an EAS cloud
     build — local builds fail on Windows path length. —
     [ticket](tickets/android-diagnostics-verification.md)
-9. **Household info never reaches the review route**, so the Quebec /
+12. **Household info never reaches the review route**, so the Quebec /
     out-of-province-employer tax gap can surface only in the onboarding plan.
     Product decision — diagnose and propose, **STOP.** —
     [ticket](tickets/household-info-missing-from-review.md)
-10. **save-plan: five more writes never read their error** (budgets and
+13. **save-plan: five more writes never read their error** (budgets and
     sinking_funds deletes and inserts, the review conversation) — same
     silent 200 as the category seed. —
     [ticket](tickets/save-plan-unchecked-writes.md)
-11. **Cards grid: plan reads never check their error.** A failed read renders
+14. **Cards grid: plan reads never check their error.** A failed read renders
     as "no plan" beside a decision view that shows a 500. —
     [ticket](tickets/cards-grid-plan-read-unchecked.md)
-12. **Card plan editor: three hardcoded English strings** ("Allocated:",
+15. **Card plan editor: three hardcoded English strings** ("Allocated:",
     two error fallbacks). — [ticket](tickets/card-editor-hardcoded-english.md)
-13. **Timeline plan chain resolves card goals with its own function**, which
+16. **Timeline plan chain resolves card goals with its own function**, which
     carries goals into closed cycles where Cards does not. Not a live wrong
     figure yet. **STOP.** — [ticket](tickets/timeline-card-plan-own-resolver.md)
 
@@ -59,7 +82,8 @@ Last reconciled with `docs/tickets/` and the code: 2026-09-29.
   share sheet, deletion + ticket 2 live check) — deletion steps on T1/T2
   only. Steps and SQL: [mobile-v1-phase2.md](mobile-v1-phase2.md).
 - Incorporation, then D-U-N-S, then Google Play organization account.
-- App Store submission: create the demo household per
+- App Store submission — **on hold until the approved minimal first session
+  ships on mobile** (2026-09-29). Then: create the demo household per
   [mobile-v1-phase2.md](mobile-v1-phase2.md), App Store Connect listing,
   TestFlight.
 - Check the onboarding funnel (signup / onboarding_entry_viewed /
