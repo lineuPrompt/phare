@@ -38,7 +38,7 @@ import { assembleCalculatedBudget, dedupeSinkingFunds } from '@phare/core';
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth, monthsBetween, GoalResult, DebtPayoffResult } from '@/lib/goalHelpers';
 import { detectWindfalls } from '@/lib/reviewContextHelpers';
-import { categoryActualsForCard } from '@/lib/envelopeHelpers';
+import { overTargetCategoriesForLiveCycles } from '@/lib/cardOverTarget';
 import { enforceDebtFigureInTopRecommendation, enforceBorrowedCashFraming, containsUnsubstitutedToken, DEBT_PAYMENT_PLACEHOLDER } from '@/lib/topRecommendationHelpers';
 import { logEvent } from '@/lib/eventLogger';
 import {
@@ -60,7 +60,7 @@ import {
 } from '@/lib/coachingHelpers';
 // businessMonth is deliberately NOT imported: the reviewed window comes from
 // the caller's `reviewMonth`, never from this service's own clock.
-import { businessToday, cycleMonthContaining } from '@phare/core';
+import { businessToday } from '@phare/core';
 
 const SEED_CATEGORIES = [
   'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
@@ -434,28 +434,15 @@ export async function generateMonthlyReview({
         is_bridge: (t as { is_bridge?: boolean | null }).is_bridge ?? false,
       }));
 
-      const categoryFigures: { categoryName: string; target: number; actual: number }[] = [];
-      for (const card of cardAccounts) {
-        const closeDay = (card as { statement_close_day?: number | null }).statement_close_day ?? null;
-        const liveCycleMonth = cycleMonthContaining(today, closeDay);
-
-        const { data: envelopeItemRows } = await supabase
-          .from('card_envelope_items')
-          .select('category_id, monthly_amount, categories(name, name_fr)')
-          .eq('household_id', householdId)
-          .eq('account_id', card.id)
-          .eq('month', `${liveCycleMonth}-01`);
-
-        const actualsMap = categoryActualsForCard(historyTxns, card.id, liveCycleMonth, closeDay);
-        for (const item of (envelopeItemRows ?? []) as unknown as { category_id: string; monthly_amount: number; categories: { name: string; name_fr: string | null } | null }[]) {
-          categoryFigures.push({
-            categoryName: item.categories?.name ?? '?',
-            target: Number(item.monthly_amount),
-            actual: actualsMap.get(item.category_id) ?? 0,
-          });
-        }
-      }
-      overTargetCategories = computeOverTargetCategories(categoryFigures);
+      // Judged against the plan the Cards page shows for each live cycle —
+      // its own, or carried forward (cardOverTarget.ts, the one read rule).
+      overTargetCategories = await overTargetCategoriesForLiveCycles(
+        supabase,
+        householdId,
+        cardAccounts as { id: string; statement_close_day?: number | null }[],
+        historyTxns,
+        today
+      );
     }
     const sourceCategory = selectTopOverTargetCategory(overTargetCategories);
 

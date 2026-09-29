@@ -837,12 +837,15 @@ describe('POST /api/regenerate-plan — the Coaching Layer', () => {
       card_envelope_items: [{
         data: [
           // Over its own $200 target.
-          { category_id: 'cat-hobby', monthly_amount: 200, categories: { name: 'Hobby Supplies', name_fr: null } },
+          { month: '2026-07-01', category_id: 'cat-hobby', monthly_amount: 200, categories: { name: 'Hobby Supplies', name_fr: null } },
           // Under its own $100 target — must never surface as a source.
-          { category_id: 'cat-book', monthly_amount: 100, categories: { name: 'Book Club', name_fr: null } },
+          { month: '2026-07-01', category_id: 'cat-book', monthly_amount: 100, categories: { name: 'Book Club', name_fr: null } },
         ],
         error: null,
       }],
+      // The review reads the live cycle's plan through fetchCardPlanForMonth
+      // (goal + categories); July's own plan here, so no goal row needed.
+      monthly_goals: [{ data: [], error: null }],
       recurring_items: [{ data: [], error: null }, { data: [], error: null }],
       conversations: [{ error: null }],
     });
@@ -1243,10 +1246,11 @@ describe('POST /api/regenerate-plan — Fix 2: coaching.insufficientHistory', ()
       sinking_funds: [{ data: [], error: null }],
       card_envelope_items: [{
         data: [
-          { category_id: 'cat-hobby', monthly_amount: 200, categories: { name: 'Hobby Supplies', name_fr: null } },
+          { month: '2026-07-01', category_id: 'cat-hobby', monthly_amount: 200, categories: { name: 'Hobby Supplies', name_fr: null } },
         ],
         error: null,
       }],
+      monthly_goals: [{ data: [], error: null }],
       recurring_items: [{ data: [], error: null }, { data: [], error: null }],
       conversations: [{ error: null }],
     });

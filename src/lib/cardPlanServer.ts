@@ -1,7 +1,7 @@
-import type { createClient } from './supabase-server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { planForMonth, cycleState } from './envelopeHelpers';
 
-type Supabase = Awaited<ReturnType<typeof createClient>>;
+type Supabase = SupabaseClient;
 
 export type CardPlanItem = {
   categoryId: string;
