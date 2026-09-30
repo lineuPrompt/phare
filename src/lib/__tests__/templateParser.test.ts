@@ -555,6 +555,24 @@ describe('the shipped public/phare_template.xlsx', () => {
     expect(result.household).toEqual({});
   });
 
+  it('carries NO household data: zero income, expense, sinking-fund and goal amounts (2026-09-29)', () => {
+    // It used to ship with example figures in the answer columns (groceries
+    // 800, property tax 3,106.18, goals 5,000–8,000…), which parsed as the
+    // household's own plan for anyone who left them in. Examples belong only
+    // in the Example / Notes columns the parser ignores.
+    const r = parseTemplate(shippedBuffer());
+    expect(r.income.lines).toEqual([]);
+    expect(r.income.total).toBe(0);
+    expect(r.fixedExpenses.lines).toEqual([]);
+    expect(r.variableExpenses.lines).toEqual([]);
+    expect(r.sinkingFunds.lines).toEqual([]);
+    expect(r.goals).toEqual([]);
+    // …and an untouched form reports nothing as unreadable.
+    expect(r.incomeSkippedRows).toBe(0);
+    expect(r.fixedExpenseSkippedRows).toBe(0);
+    expect(r.goalDateFlaggedRows).toBe(0);
+  });
+
   it('stays within the prompt cap: one filled answer per label is far below MAX_HOUSEHOLD_KEYS', () => {
     // Every label answered = the largest household an unmodified template can
     // produce. Guards the caps sizing in promptInputLimits.ts, whose comment
@@ -614,6 +632,18 @@ describe('parseTemplate — income parsing (end-to-end)', () => {
     expect(result.income.lines).toHaveLength(2);  // 2 valid rows
     expect(result.incomeSkippedRows).toBe(1);      // 1 row with bad frequency
     expect(result.income.total).toBeGreaterThan(0); // did NOT silently collapse to $0
+  });
+
+  it('a prompt row with no amount is not an entry: never counted as unreadable, whatever its frequency', () => {
+    const incomeRows = makeV3IncomeRows([
+      ['Salary', 3000, 'bi-weekly'],        // entry → contributes
+      ['Salary / Salaire', null, null],     // untouched prompt → ignored
+      ['Child benefit', 0, 'fortnightly'],  // no amount → ignored, not "unreadable"
+      ['Bonus', 500, null],                 // an amount with no frequency → counted
+    ]);
+    const result = parseTemplate(buildWorkbook(incomeRows, DEFAULT_EXPENSE_ROWS));
+    expect(result.income.lines.map((l) => l.label)).toEqual(['Salary']);
+    expect(result.incomeSkippedRows).toBe(1);
   });
 
   it('with ALL invalid frequency strings: incomeSkippedRows equals row count, income is $0', () => {
@@ -710,6 +740,16 @@ describe('parseTemplate — fixed-expense parsing (end-to-end)', () => {
 
     expect(result.fixedExpenses.lines).toHaveLength(1);
     expect(result.fixedExpenseSkippedRows).toBe(1);
+  });
+
+  it('a fixed-expense prompt row with no amount is not counted, even with a bad frequency', () => {
+    const fixedRows = makeV3FixedExpenseRows([
+      ['Mortgage', 'Housing', 1500, 'bi-weekly', 'Chequing', null],
+      ['Gym', 'Health & Personal', null, 'fortnightly', 'Chequing', null],
+    ]);
+    const result = parseTemplate(buildWorkbook(DEFAULT_INCOME_ROWS, fixedRows));
+    expect(result.fixedExpenses.lines).toHaveLength(1);
+    expect(result.fixedExpenseSkippedRows).toBe(0);
   });
 
   // The founder's fixture: three bi-weekly fixed expenses (mortgage + two car

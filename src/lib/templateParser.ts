@@ -228,19 +228,21 @@ function parseIncome(
     const low = label.toLowerCase();
     if (skipWords.some((w) => low.includes(w))) continue;
 
+    // No amount = not an entry: the shipped template's rows are prompts
+    // ("Salary / Salaire") with a blank amount and blank frequency, and an
+    // untouched prompt must not be reported as a row that "could not be read".
     const rawAmount = row[1];
+    if (!(typeof rawAmount === 'number' && Number.isFinite(rawAmount) && rawAmount !== 0)) continue;
     const freq = parseFrequencyCell(row[2]);
     if (freq === null) {
-      // Row has a label but an unrecognised (or missing) frequency — data entry error.
+      // An amount with an unrecognised (or missing) frequency — data entry error.
       skippedCount++;
       continue;
     }
     const memberCell = row[3];
     const member = typeof memberCell === 'string' && memberCell.trim() ? memberCell.trim() : undefined;
-    if (typeof rawAmount === 'number' && Number.isFinite(rawAmount) && rawAmount !== 0) {
-      const monthly = monthlyEquivalent(rawAmount, freq);
-      items.push({ label: label.trim(), amount: monthly, rawAmount, frequency: freq, member });
-    }
+    const monthly = monthlyEquivalent(rawAmount, freq);
+    items.push({ label: label.trim(), amount: monthly, rawAmount, frequency: freq, member });
   }
 
   return { lines: items, skippedCount };
@@ -270,17 +272,17 @@ function parseFixedExpenses(
     const low = label.toLowerCase();
     if (skipWords.some((w) => low.includes(w))) continue;
 
+    // No amount = not an entry (see parseIncome).
     const rawAmount = row[2];
+    if (!(typeof rawAmount === 'number' && Number.isFinite(rawAmount) && rawAmount !== 0)) continue;
     const freq = parseExpenseFrequencyCell(row[3]);
     if (freq === null) {
-      // Row has a label but an unrecognised, non-blank frequency — data entry error.
+      // An amount with an unrecognised, non-blank frequency — data entry error.
       skippedCount++;
       continue;
     }
-    if (typeof rawAmount === 'number' && Number.isFinite(rawAmount) && rawAmount !== 0) {
-      const monthly = monthlyEquivalent(rawAmount, freq);
-      items.push({ label: label.trim(), amount: monthly, rawAmount, frequency: freq });
-    }
+    const monthly = monthlyEquivalent(rawAmount, freq);
+    items.push({ label: label.trim(), amount: monthly, rawAmount, frequency: freq });
   }
 
   return { lines: items, skippedCount };
