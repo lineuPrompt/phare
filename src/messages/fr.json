@@ -181,7 +181,7 @@
     },
     "noFile": {
       "title": "Obtenez le modèle",
-      "description": "Téléchargez-le, remplissez vos chiffres et téléversez-le ci-dessous. Environ 10 minutes.",
+      "description": "Téléchargez-le, remplissez vos chiffres et téléversez-le ci-dessous.",
       "cta": "Télécharger le modèle",
       "manual": "Ou entrez vos chiffres manuellement"
     },

@@ -181,7 +181,7 @@
     },
     "noFile": {
       "title": "Get the template",
-      "description": "Download it, fill in your numbers, and upload it below. Takes about 10 minutes.",
+      "description": "Download it, fill in your numbers, and upload it below.",
       "cta": "Download template",
       "manual": "Or enter your numbers manually"
     },
