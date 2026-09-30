@@ -27,32 +27,40 @@ Store submission waits until the approved minimal path ships on mobile.
    they must have on hand; every required field (file:line); every screen
    and decision; what could wait until after first value, and what breaks
    if it's missing.
-   *Reported 2026-09-29.*
+   *Reported 2026-09-29; findings accepted by Lineu.*
 3. **Propose a minimal first session (<5 min to a first useful view),
    unassisted, web and mobile. Don't build. STOP.** Say what degrades for
    each deferred input and how it's prompted later, and whether the AI plan
    and letter belong in the first session.
-   *Proposed 2026-09-29 — waiting on approval.*
+   *Approved 2026-09-29 with changes (code decides category and
+   fixed/variable, real day of month, no AI and no letter in the first
+   session, deferred inputs prompted on their own pages, a deliberate
+   hasPlan). Build plan diagnosed 2026-09-30 — **STOP, waiting on
+   approval.** Held decisions prepared, not shipped: (a) session at signup
+   vs email confirmation, (b) price-free Terms wording for mobile signup.*
 4. **Guard the onboarding letter — diagnose, STOP.** Same sourcing,
    borrowed-cash and token-leak guards (and retry) as
    `monthlyReviewService`; options for streaming vs guarding, trade-offs,
    retry quota cost. — [ticket](tickets/onboarding-review-unguarded.md).
    (4b, the category-seed check, shipped in 000196b.)
-   *Options reported 2026-09-29 — waiting on approval.*
+   *Decided 2026-09-29: retire the onboarding letter; the first letter
+   comes from monthlyReviewService. Part of item 3's build.*
 
 Found by the audit (2026-09-29), ahead of the older list because each sits
 on a first session:
 
-- **Template ships pre-filled with example figures** that parse as the
-  household's own. — [ticket](tickets/template-prefilled-sample-figures.md)
 - **save-plan: five more writes never read their error** — on every first
   session's save step. — [ticket](tickets/save-plan-unchecked-writes.md)
 - **Web manual form builds a plan from nothing** and drops half-filled lines
-  silently. — [ticket](tickets/web-manual-form-accepts-empty.md)
+  silently. Superseded if item 3's build retires the manual lane. —
+  [ticket](tickets/web-manual-form-accepts-empty.md)
 - **The AI chooses each expense's category and fixed/variable** (CLAUDE.md
   §4), which decides whether a bill reaches the Timeline. **STOP.** —
   [ticket](tickets/plan-ai-classifies-expense-lines.md)
-- **Every monthly bill and paycheque is dated the 1st.** **STOP.** —
+- **Every monthly bill and paycheque is dated the 1st.** **STOP.**
+  Diagnosed 2026-09-30: only 2be22642 (7 lines: 2 on chequing, 5 on Visa
+  Avion) and Zezinho Test are affected; no external household. Repair
+  options reported, none applied. —
   [ticket](tickets/monthly-recurring-dated-first-of-month.md)
 
 5. **splitRule duplicate materialization.** Rows detached without a
@@ -148,3 +156,6 @@ delivery, referral, French currency formatting on web onboarding.
 | save-plan category seed checked ([ticket](tickets/category-seed-insert-unchecked.md), closed) | 000196b |
 | Carry-forward ([ticket](tickets/carry-forward-older-future-snapshot-outranks-newer-edit.md), closed): one read rule, save asks about later plans, review judges the carried plan; verified live on Zezinho Test | 909f9c8, 76927aa, 60c9f5b |
 | Funnel trail events built (web + mobile); data path verified live on Zezinho Test — T1 run pending | 80e6981 |
+| Template shipped with no household data ([ticket](tickets/template-prefilled-sample-figures.md), closed) | 57983b8 |
+| "Takes about 10 minutes" removed from the template card, EN/FR | 7abf46e |
+| Required `platform` ('web' \| 'mobile') on every funnel event | 1226134 |

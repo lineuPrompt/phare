@@ -2,7 +2,7 @@
 
 **Filed** 2026-09-29, from the onboarding stranger audit.
 
-**Status:** OPEN. **Severity:** high for the template lane.
+**Status:** CLOSED 2026-09-30 — 57983b8. **Severity:** high for the template lane.
 
 `public/phare_template.xlsx` is pre-filled with example figures that the
 parser reads as real data:
