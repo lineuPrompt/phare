@@ -7,7 +7,7 @@ import {
 } from '@/lib/clientEvents';
 import { PLAN_GENERATION_EVENT, REVIEW_GENERATION_EVENT } from '@/lib/onboardingQuota';
 import { REGENERATION_EVENT } from '@/lib/regenerationQuota';
-import { ONBOARDING_STEPS, PLAUSIBILITY_ACTIONS } from '@phare/core';
+import { CLIENT_PLATFORMS, ONBOARDING_STEPS, PLAUSIBILITY_ACTIONS } from '@phare/core';
 
 // ---------------------------------------------------------------------------
 // The allowlist is a security boundary, not a config object: events.event_type
@@ -94,26 +94,36 @@ describe('CLIENT_EVENT_ALLOWLIST', () => {
 });
 
 describe('validateClientEvent — accepts', () => {
-  it('an allowlisted event with no metadata', () => {
-    expect(validateClientEvent({ type: 'onboarding_entry_viewed' }))
-      .toEqual({ ok: true, type: 'onboarding_entry_viewed', metadata: null });
-  });
-
-  it('an explicit null metadata', () => {
-    expect(validateClientEvent({ type: 'onboarding_entry_viewed', metadata: null }))
-      .toEqual({ ok: true, type: 'onboarding_entry_viewed', metadata: null });
-  });
-
-  it('an empty metadata object, normalised to null', () => {
-    // jsonb null rather than {} so the column reads the same whichever shape
-    // the caller happened to send.
-    expect(validateClientEvent({ type: 'onboarding_entry_viewed', metadata: {} }))
-      .toEqual({ ok: true, type: 'onboarding_entry_viewed', metadata: null });
+  it.each(CLIENT_PLATFORMS)('an event carrying only its platform (%s)', (platform) => {
+    expect(validateClientEvent({ type: 'onboarding_entry_viewed', metadata: { platform } }))
+      .toEqual({ ok: true, type: 'onboarding_entry_viewed', metadata: { platform } });
   });
 
   it.each(['template', 'manual'])('path=%s', (path) => {
-    expect(validateClientEvent({ type: 'onboarding_path_chosen', metadata: { path } }))
-      .toEqual({ ok: true, type: 'onboarding_path_chosen', metadata: { path } });
+    expect(validateClientEvent({ type: 'onboarding_path_chosen', metadata: { path, platform: 'web' } }))
+      .toEqual({ ok: true, type: 'onboarding_path_chosen', metadata: { path, platform: 'web' } });
+  });
+});
+
+describe('validateClientEvent — platform is required on every event (2026-09-29)', () => {
+  it.each([
+    ['no metadata at all', { type: 'onboarding_entry_viewed' }],
+    ['null metadata', { type: 'onboarding_entry_viewed', metadata: null }],
+    ['empty metadata', { type: 'onboarding_entry_viewed', metadata: {} }],
+    ['other keys but no platform', { type: 'onboarding_path_chosen', metadata: { path: 'manual' } }],
+  ])('refuses %s', (_label, body) => {
+    expect(validateClientEvent(body)).toEqual({ ok: false, reason: 'missing_metadata_key' });
+  });
+
+  it('refuses a platform outside the enum', () => {
+    expect(validateClientEvent({ type: 'onboarding_entry_viewed', metadata: { platform: 'ios' } }))
+      .toEqual({ ok: false, reason: 'invalid_metadata_value' });
+  });
+
+  it('every allowlisted event declares platform from @phare/core', () => {
+    for (const spec of Object.values(CLIENT_EVENT_ALLOWLIST)) {
+      expect((spec as Record<string, unknown>).platform).toBe(CLIENT_PLATFORMS);
+    }
   });
 });
 
@@ -210,18 +220,18 @@ describe('validateClientEvent — refuses everything else', () => {
 
 describe('validateClientEvent — the funnel trail (2026-09-29)', () => {
   it.each(ONBOARDING_STEPS)('step_reached step=%s', (step) => {
-    expect(validateClientEvent({ type: 'onboarding_step_reached', metadata: { step } }))
-      .toEqual({ ok: true, type: 'onboarding_step_reached', metadata: { step } });
+    expect(validateClientEvent({ type: 'onboarding_step_reached', metadata: { step, platform: 'mobile' } }))
+      .toEqual({ ok: true, type: 'onboarding_step_reached', metadata: { step, platform: 'mobile' } });
   });
 
   it.each(PLAUSIBILITY_ACTIONS)('plausibility_resolved action=%s', (action) => {
-    expect(validateClientEvent({ type: 'onboarding_plausibility_resolved', metadata: { action } }))
-      .toEqual({ ok: true, type: 'onboarding_plausibility_resolved', metadata: { action } });
+    expect(validateClientEvent({ type: 'onboarding_plausibility_resolved', metadata: { action, platform: 'web' } }))
+      .toEqual({ ok: true, type: 'onboarding_plausibility_resolved', metadata: { action, platform: 'web' } });
   });
 
-  it('template_downloaded, with no metadata', () => {
-    expect(validateClientEvent({ type: 'onboarding_template_downloaded' }))
-      .toEqual({ ok: true, type: 'onboarding_template_downloaded', metadata: null });
+  it('template_downloaded, with only its platform', () => {
+    expect(validateClientEvent({ type: 'onboarding_template_downloaded', metadata: { platform: 'web' } }))
+      .toEqual({ ok: true, type: 'onboarding_template_downloaded', metadata: { platform: 'web' } });
   });
 
   it('refuses a step that is not in the list, and any free text', () => {

@@ -5,6 +5,7 @@ import { parseTemplate, isPhareTemplate, isValidV3Template } from '@/lib/templat
 import { createRateLimiter, clientIp } from '@/lib/rateLimit';
 import { requireOnboardingSession, type OnboardingSession } from '@/lib/onboardingAuth';
 import { logEvent } from '@/lib/eventLogger';
+import { requestPlatform } from '@/lib/requestPlatform';
 
 // AUTHENTICATED, but deliberately NOT quota'd.
 //
@@ -37,14 +38,15 @@ export async function POST(request: NextRequest) {
   // FUNNEL (2026-09-29): every refusal of a signed-in household's file is
   // recorded as onboarding_upload_rejected { reason }, after the response is
   // sent (after(): off the user's path, but not lost when the function
-  // freezes). Enum only — never the file name, type or size. A refusal before
+  // freezes). Enum only (reason, platform) — never the file name, type or size. A refusal before
   // the session is known (rate limit, no session) has no household to record
   // it against and is not counted.
   let session: OnboardingSession | null = null;
+  const platform = requestPlatform(request);
   const rejected = (reason: UploadRejectionReason) => {
     const s = session;
     if (!s) return;
-    after(() => logEvent(s.supabase, s.householdId, s.userId, 'onboarding_upload_rejected', { reason }));
+    after(() => logEvent(s.supabase, s.householdId, s.userId, 'onboarding_upload_rejected', { reason, platform }));
   };
 
   try {

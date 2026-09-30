@@ -24,7 +24,9 @@ export type NoContentPoster = (path: string, body: unknown) => Promise<void>;
 export function createFunnelEmitter(post: NoContentPoster): (event: FunnelEvent) => void {
   return (event) => {
     try {
-      void post('/api/events', event).catch(() => { /* telemetry never breaks onboarding */ });
+      // Every event says it came from the app — stamped here, not at call sites.
+      const body = { type: event.type, metadata: { ...('metadata' in event ? event.metadata : {}), platform: 'mobile' } };
+      void post('/api/events', body).catch(() => { /* telemetry never breaks onboarding */ });
     } catch {
       /* same, for a synchronous throw */
     }

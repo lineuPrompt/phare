@@ -67,10 +67,10 @@ const TEMPLATE_SHEETS = (expenseRows: unknown[][]) => ({
 const V3_FIXED = [['FIXED'], [null], ['Expense / Dépense', 'Category / Catégorie', 'Amount per payment / Montant par paiement', 'Frequency / Fréquence', 'Account / Compte', 'Notes'], ['Mortgage', 'Housing', 1500, 'bi-weekly', 'Chequing', null]];
 const V2_FIXED = [['FIXED'], [null], ['Expense / Dépense', 'Category / Catégorie', 'Amount / Montant', 'Account / Compte', 'Notes'], ['Mortgage', 'Housing', 1500, 'Chequing', null]];
 
-function post(buffer: Buffer | null, filename = 'template.xlsx') {
+function post(buffer: Buffer | null, filename = 'template.xlsx', headers: Record<string, string> = {}) {
   const formData = new FormData();
   if (buffer) formData.append('file', new File([new Uint8Array(buffer)], filename));
-  return POST(new Request('http://localhost/api/upload', { method: 'POST', body: formData }) as unknown as NextRequest);
+  return POST(new Request('http://localhost/api/upload', { method: 'POST', body: formData, headers }) as unknown as NextRequest);
 }
 
 const rejections = () => reservedEvents.filter((e) => e.event_type === 'onboarding_upload_rejected');
@@ -98,8 +98,14 @@ describe('POST /api/upload — onboarding_upload_rejected', () => {
       household_id: 'test-household',
       user_id: 'test-user',
       event_type: 'onboarding_upload_rejected',
-      metadata: { reason },
+      metadata: { reason, platform: 'web' },
     }]);
+  });
+
+  it('a bearer-token caller (the app) is recorded as platform mobile', async () => {
+    await post(workbook({ Sheet1: [['unrelated']] }), 'x.xlsx', { Authorization: 'Bearer abc.def.ghi' });
+    await drainAfter();
+    expect(rejections()[0].metadata).toEqual({ reason: 'wrong_file', platform: 'mobile' });
   });
 
   it('an accepted template records no rejection', async () => {

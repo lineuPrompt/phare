@@ -47,7 +47,7 @@
 
 import { PLAN_GENERATION_EVENT, REVIEW_GENERATION_EVENT } from '@/lib/onboardingQuota';
 import { REGENERATION_EVENT } from '@/lib/regenerationQuota';
-import { ONBOARDING_STEPS, PLAUSIBILITY_ACTIONS } from '@phare/core';
+import { CLIENT_PLATFORMS, ONBOARDING_STEPS, PLAUSIBILITY_ACTIONS } from '@phare/core';
 
 /**
  * The event types that are ALSO quota counters. Imported from their real
@@ -75,28 +75,41 @@ export const QUOTA_EVENT_TYPES = [
  */
 export const CLIENT_EVENT_ALLOWLIST = {
   /** The /upload entry screen rendered. Answers "did they reach it at all". */
-  onboarding_entry_viewed: {},
+  onboarding_entry_viewed: {
+    platform: CLIENT_PLATFORMS,
+  },
 
   /** They picked a lane: dropped/selected a file, or opened the manual form. */
   onboarding_path_chosen: {
+    platform: CLIENT_PLATFORMS,
     path: ['template', 'manual'],
   },
 
   /** They reached a step between choosing a lane and seeing a plan. */
   onboarding_step_reached: {
+    platform: CLIENT_PLATFORMS,
     step: ONBOARDING_STEPS,
   },
 
   /** What they did with the plausibility warning: kept the numbers, or went back. */
   onboarding_plausibility_resolved: {
+    platform: CLIENT_PLATFORMS,
     action: PLAUSIBILITY_ACTIONS,
   },
 
   /** They clicked the template download on the entry screen. */
-  onboarding_template_downloaded: {},
+  onboarding_template_downloaded: {
+    platform: CLIENT_PLATFORMS,
+  },
 } as const satisfies Record<string, Record<string, readonly string[]>>;
 
 export type ClientEventType = keyof typeof CLIENT_EVENT_ALLOWLIST;
+
+/**
+ * Keys every event must carry. `platform` is required rather than optional so
+ * a funnel read per platform never has to guess what an unlabelled row was.
+ */
+export const REQUIRED_METADATA_KEYS = ['platform'] as const;
 
 /**
  * Refuses an allowlist that contains a quota counter's event type.
@@ -128,7 +141,8 @@ export type ClientEventRejection =
   | 'unknown_event_type'
   | 'malformed_metadata'
   | 'unknown_metadata_key'
-  | 'invalid_metadata_value';
+  | 'invalid_metadata_value'
+  | 'missing_metadata_key';
 
 export type ClientEventValidation =
   | { ok: true; type: ClientEventType; metadata: Record<string, string> | null }
@@ -161,7 +175,7 @@ export function validateClientEvent(body: unknown): ClientEventValidation {
   const spec = CLIENT_EVENT_ALLOWLIST[type as ClientEventType] as Record<string, readonly string[]>;
 
   if (metadata === undefined || metadata === null) {
-    return { ok: true, type: type as ClientEventType, metadata: null };
+    return { ok: false, reason: 'missing_metadata_key' };
   }
 
   if (typeof metadata !== 'object' || Array.isArray(metadata)) {
@@ -169,9 +183,6 @@ export function validateClientEvent(body: unknown): ClientEventValidation {
   }
 
   const entries = Object.entries(metadata as Record<string, unknown>);
-  if (entries.length === 0) {
-    return { ok: true, type: type as ClientEventType, metadata: null };
-  }
 
   const clean: Record<string, string> = {};
   for (const [key, value] of entries) {
@@ -185,6 +196,12 @@ export function validateClientEvent(body: unknown): ClientEventValidation {
       return { ok: false, reason: 'invalid_metadata_value' };
     }
     clean[key] = value;
+  }
+
+  for (const required of REQUIRED_METADATA_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(clean, required)) {
+      return { ok: false, reason: 'missing_metadata_key' };
+    }
   }
 
   return { ok: true, type: type as ClientEventType, metadata: clean };
@@ -214,7 +231,8 @@ export function emitClientEvent(
     void fetch('/api/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(metadata ? { type, metadata } : { type }),
+      // The web app is always 'web'; stamped here so no call site can forget.
+      body: JSON.stringify({ type, metadata: { ...metadata, platform: 'web' } }),
       keepalive: true,
     }).catch(() => { /* telemetry must never break onboarding */ });
   } catch {

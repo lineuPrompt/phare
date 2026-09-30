@@ -142,7 +142,7 @@ describe('POST /api/events — quota event types are refused', () => {
 describe('POST /api/events — accepts allowlisted events', () => {
   it('records onboarding_entry_viewed and returns 204 with no body', async () => {
     const supabase = makeSupabase();
-    const res = await post({ type: 'onboarding_entry_viewed' }, supabase);
+    const res = await post({ type: 'onboarding_entry_viewed', metadata: { platform: 'web' } }, supabase);
 
     expect(res.status).toBe(204);
     expect(await res.text()).toBe('');
@@ -152,19 +152,19 @@ describe('POST /api/events — accepts allowlisted events', () => {
       household_id: 'household-1',
       user_id: 'user-1',
       event_type: 'onboarding_entry_viewed',
-      metadata: null,
+      metadata: { platform: 'web' },
     }]);
   });
 
   it.each(['template', 'manual'])('records onboarding_path_chosen path=%s', async (path) => {
     const supabase = makeSupabase();
-    const res = await post({ type: 'onboarding_path_chosen', metadata: { path } }, supabase);
+    const res = await post({ type: 'onboarding_path_chosen', metadata: { path, platform: 'web' } }, supabase);
 
     expect(res.status).toBe(204);
     await drainAfter();
     expect(supabase.inserts[0]).toMatchObject({
       event_type: 'onboarding_path_chosen',
-      metadata: { path },
+      metadata: { path, platform: 'web' },
     });
   });
 });
@@ -175,7 +175,7 @@ describe('POST /api/events — accepts allowlisted events', () => {
 describe('POST /api/events — the insert is deferred, not awaited', () => {
   it('responds 204 BEFORE the row exists, then writes it', async () => {
     const supabase = makeSupabase();
-    const res = await post({ type: 'onboarding_entry_viewed' }, supabase);
+    const res = await post({ type: 'onboarding_entry_viewed', metadata: { platform: 'web' } }, supabase);
 
     expect(res.status).toBe(204);
     // The response is fully resolved and the row does not exist yet. If the
@@ -192,7 +192,7 @@ describe('POST /api/events — the insert is deferred, not awaited', () => {
     // By the time after() runs the response is on the wire; there is no status
     // left to change, and emitClientEvent ignores it regardless.
     const supabase = makeSupabase({ insertError: { message: 'boom' } });
-    const res = await post({ type: 'onboarding_entry_viewed' }, supabase);
+    const res = await post({ type: 'onboarding_entry_viewed', metadata: { platform: 'web' } }, supabase);
 
     expect(res.status).toBe(204);
     await expect(drainAfter()).resolves.toBeUndefined();
@@ -205,7 +205,7 @@ describe('POST /api/events — the insert is deferred, not awaited', () => {
 describe('POST /api/events — auth and household derivation', () => {
   it('401s an unauthenticated caller and writes nothing', async () => {
     const supabase = makeSupabase({ user: null });
-    const res = await post({ type: 'onboarding_entry_viewed' }, supabase);
+    const res = await post({ type: 'onboarding_entry_viewed', metadata: { platform: 'web' } }, supabase);
 
     expect(res.status).toBe(401);
     expect(afterCallbacks).toHaveLength(0);
@@ -215,7 +215,7 @@ describe('POST /api/events — auth and household derivation', () => {
 
   it('400s a user with no household row', async () => {
     const supabase = makeSupabase({ householdId: null });
-    const res = await post({ type: 'onboarding_entry_viewed' }, supabase);
+    const res = await post({ type: 'onboarding_entry_viewed', metadata: { platform: 'web' } }, supabase);
 
     expect(res.status).toBe(400);
     await drainAfter();
@@ -227,6 +227,7 @@ describe('POST /api/events — auth and household derivation', () => {
     const res = await post(
       {
         type: 'onboarding_entry_viewed',
+        metadata: { platform: 'web' },
         household_id: 'attacker-household',
         householdId: 'attacker-household',
         user_id: 'attacker-user',
@@ -257,7 +258,7 @@ describe('POST /api/events — malformed input', () => {
   it('400s an undeclared metadata key', async () => {
     const supabase = makeSupabase();
     const res = await post(
-      { type: 'onboarding_path_chosen', metadata: { path: 'manual', fileName: 'budget.xlsx' } },
+      { type: 'onboarding_path_chosen', metadata: { path: 'manual', platform: 'web', fileName: 'budget.xlsx' } },
       supabase
     );
     expect(res.status).toBe(400);
@@ -269,7 +270,7 @@ describe('POST /api/events — malformed input', () => {
   it('400s a metadata value outside the declared set', async () => {
     const supabase = makeSupabase();
     const res = await post(
-      { type: 'onboarding_path_chosen', metadata: { path: 'someone@example.com' } },
+      { type: 'onboarding_path_chosen', metadata: { path: 'someone@example.com', platform: 'web' } },
       supabase
     );
     expect(res.status).toBe(400);
@@ -291,10 +292,10 @@ describe('POST /api/events — rate limit', () => {
   it('allows 30 in the window and 429s the 31st', async () => {
     const supabase = makeSupabase();
     for (let i = 0; i < 30; i++) {
-      const ok = await post({ type: 'onboarding_entry_viewed' }, supabase);
+      const ok = await post({ type: 'onboarding_entry_viewed', metadata: { platform: 'web' } }, supabase);
       expect(ok.status).toBe(204);
     }
-    const blocked = await post({ type: 'onboarding_entry_viewed' }, supabase);
+    const blocked = await post({ type: 'onboarding_entry_viewed', metadata: { platform: 'web' } }, supabase);
     expect(blocked.status).toBe(429);
     expect(blocked.headers.get('Retry-After')).toBeTruthy();
   });

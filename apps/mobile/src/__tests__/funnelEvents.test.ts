@@ -6,14 +6,14 @@ import { createFunnelEmitter, MOBILE_STEP_OF } from '../lib/funnelEvents';
 // page sends, fire-and-forget. 2026-09-29.
 
 describe('createFunnelEmitter', () => {
-  it('posts exactly the event body to /api/events', () => {
+  it('posts the event to /api/events, stamped platform: mobile', () => {
     const post = vi.fn(() => Promise.resolve());
     const emit = createFunnelEmitter(post);
     emit({ type: 'onboarding_step_reached', metadata: { step: 'accounts' } });
     emit({ type: 'onboarding_entry_viewed' });
     expect(post.mock.calls).toEqual([
-      ['/api/events', { type: 'onboarding_step_reached', metadata: { step: 'accounts' } }],
-      ['/api/events', { type: 'onboarding_entry_viewed' }],
+      ['/api/events', { type: 'onboarding_step_reached', metadata: { step: 'accounts', platform: 'mobile' } }],
+      ['/api/events', { type: 'onboarding_entry_viewed', metadata: { platform: 'mobile' } }],
     ]);
   });
 

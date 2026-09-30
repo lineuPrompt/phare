@@ -29,6 +29,14 @@ export const ONBOARDING_STEPS = [
 ] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
+/**
+ * Where a funnel event came from. Every onboarding event carries one, so the
+ * funnel can be read per platform (2026-09-29). Clients stamp it in their
+ * emitter; the server derives it from the transport for the events it writes.
+ */
+export const CLIENT_PLATFORMS = ['web', 'mobile'] as const;
+export type ClientPlatform = (typeof CLIENT_PLATFORMS)[number];
+
 /** What a household did with the plausibility warning. */
 export const PLAUSIBILITY_ACTIONS = ['confirm', 'correct'] as const;
 export type PlausibilityAction = (typeof PLAUSIBILITY_ACTIONS)[number];
