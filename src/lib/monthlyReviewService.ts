@@ -60,13 +60,10 @@ import {
 } from '@/lib/coachingHelpers';
 // businessMonth is deliberately NOT imported: the reviewed window comes from
 // the caller's `reviewMonth`, never from this service's own clock.
-import { businessToday } from '@phare/core';
+import { businessToday, SEED_EXPENSE_CATEGORIES } from '@phare/core';
 
-const SEED_CATEGORIES = [
-  'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
-  'Utilities & Subscriptions', 'Childcare', 'Shopping',
-  'Health & Personal', 'Installments', 'Unexpected',
-] as const;
+// One list, in @phare/core — the same ten every household is seeded with.
+const SEED_CATEGORIES = SEED_EXPENSE_CATEGORIES;
 
 type Category = { name: string; budgeted: number; type: string };
 

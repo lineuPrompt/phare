@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { anthropic } from '@/lib/anthropic';
 import { dedupeSinkingFunds, assembleCalculatedBudget } from '@phare/core';
 import { evaluateGoals, GoalResult, isDebtGoalName, computeDebtPayoff, DebtPayoffResult } from '@/lib/goalHelpers';
-import { businessToday, DEFAULT_HOUSEHOLD_TIMEZONE } from '@phare/core';
+import { businessToday, DEFAULT_HOUSEHOLD_TIMEZONE, SEED_EXPENSE_CATEGORIES } from '@phare/core';
 import { createRateLimiter, clientIp } from '@/lib/rateLimit';
 import { requireOnboardingGeneration } from '@/lib/onboardingAuth';
 import { PLAN_GENERATION_EVENT } from '@/lib/onboardingQuota';
@@ -32,11 +32,8 @@ import {
 // instances and must not be described as though it does.
 const rateLimit = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 8 });
 
-const SEED_CATEGORIES = [
-  'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
-  'Utilities & Subscriptions', 'Childcare', 'Shopping',
-  'Health & Personal', 'Installments', 'Unexpected',
-] as const;
+// One list, in @phare/core: save-plan and the first session seed the same ten.
+const SEED_CATEGORIES = SEED_EXPENSE_CATEGORIES;
 
 type Category = {
   name: string;

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { businessMonth, materializeRule, monthNameToNumber } from '@phare/core';
+import { businessMonth, materializeRule, monthNameToNumber, SEED_EXPENSE_CATEGORIES } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { logEvent } from '@/lib/eventLogger';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
@@ -384,11 +384,7 @@ export async function POST(request: Request) {
     }
 
     // ----- Seed the fixed category set (idempotent) -----
-    const seedNames: string[] = plan.seedCategories ?? [
-      'Housing', 'Transportation', 'Restaurants', 'Groceries & Pharmacy',
-      'Utilities & Subscriptions', 'Childcare', 'Shopping',
-      'Health & Personal', 'Installments', 'Unexpected',
-    ];
+    const seedNames: string[] = plan.seedCategories ?? [...SEED_EXPENSE_CATEGORIES];
 
     const toSeed = missingSeedCategories((existingCats ?? []).map((c) => c.name), seedNames);
     if (toSeed.length > 0) {
