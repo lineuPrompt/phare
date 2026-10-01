@@ -175,7 +175,9 @@ Run from the repo root unless noted.
   high-signal.
 - **Out-of-scope bugs:** flag them and file them under `docs/tickets/`. Do not fix
   them inside the current change.
-- Commit untracked work early. Only commit when Lineu asks.
+- **Never run git commit or git push. Leave every change uncommitted,
+  list the files, and give a suggested commit message. Lineu reviews
+  and commits.**
 - **Hiding a page does not hide its strings.** next-intl serializes the entire
   message tree into every page's HTML.
 
@@ -231,7 +233,9 @@ Every completed task ends with these sections, in order:
 - Items touching money math, dates, auth, AI output, schema or deletion:
   diagnose first and STOP for approval, as §6 already requires. Everything
   else: build it and hand off.
-- At the end of every task: update `BACKLOG.md` (move the item to Done with
-  its commit hash, add anything new you found, re-order if needed) and commit
-  it with the work.
+- At the end of every task: update `BACKLOG.md` (move the item to Done, add
+  anything new you found, re-order if needed) and leave it uncommitted with
+  the work. Never run git commit or git push. Leave every change
+  uncommitted, list the files, and give a suggested commit message. Lineu
+  reviews and commits (and fills in the Done table's commit hash).
 - Never start an item marked FROZEN.

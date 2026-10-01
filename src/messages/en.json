@@ -166,24 +166,27 @@
     }
   },
   "upload": {
-    "title": "Upload your financial data",
-    "subtitle": "Download the Phare template and fill in your numbers, or enter them manually.",
+    "title": "Build your plan",
+    "subtitle": "Enter your pay and your bills step by step, or import them from our spreadsheet template.",
+    "entry": {
+      "manualTitle": "Enter your numbers step by step",
+      "manualDescription": "Your pay, your bills and how often each one comes. A few lines is enough to start; you can add the rest any time.",
+      "manualCta": "Start",
+      "spreadsheetTitle": "Prefer a spreadsheet?",
+      "spreadsheetDescription": "Import from our template: download it, fill in your numbers, then drop it below."
+    },
     "planTitle": "Your plan",
     "dropzone": "Drag and drop your filled-in template here, or click to browse",
     "formats": "Supports .xlsx",
     "uploading": "Reading your file...",
     "analyzing": "Analyzing your finances...",
-    "or": "or",
     "tryAgain": "Try again",
     "mismatch": {
       "wrongFile": "This doesn't look like the Phare template. Download it below and fill in your numbers.",
       "outdatedTemplate": "This file doesn't match the current Phare template — download the latest version and copy your numbers in."
     },
     "noFile": {
-      "title": "Get the template",
-      "description": "Download it, fill in your numbers, and upload it below.",
-      "cta": "Download template",
-      "manual": "Or enter your numbers manually"
+      "cta": "Download template"
     },
     "memberConfirm": {
       "title": "Who's who?",

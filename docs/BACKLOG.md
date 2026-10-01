@@ -4,101 +4,68 @@ The single ordered list of what to work on next. Rules: CLAUDE.md §9.
 "STOP" means diagnose, report, and wait for approval before changing
 anything (money math, dates, auth, AI output, schema, deletion — §6).
 
-Last reconciled with `docs/tickets/` and the code: 2026-09-29 (priority reset).
+Last reconciled with `docs/tickets/` and the code: 2026-10-01 (mobile first; web functionality frozen).
 
 ## READY
 
-**Priority reset (Lineu, 2026-09-29): the failure point is onboarding.**
-Three external households signed in and never entered data; none has ever
-reached a plan, Timeline or review. Items 1–4 come first, in order. The App
-Store submission waits until the approved minimal path ships on mobile.
+**Direction (Lineu, 2026-10-01): no web functionality changes. Mobile goes
+first — iOS App Store submission. Every web functionality item is FROZEN
+(listed below with its ticket, so nothing is lost).**
 
-1. **Complete the onboarding funnel trail** (build, then verify): the held
-   events `onboarding_upload_rejected {reason}` (server, /api/upload),
-   `onboarding_step_reached {step}`, `onboarding_plausibility_resolved
-   {action}`, `onboarding_template_downloaded`; mobile emits the same step
-   events. Verify with a throwaway T1 signup (template + manual on web,
-   manual on mobile), read the whole trail through MCP, delete T1 through
-   the app. Any gap is a finding.
-   *Built 80e6981; each new event's data path verified live on Zezinho
-   Test 2026-09-29. Waiting on the T1 run through the real screens (LINEU).*
-2. **Audit onboarding as a stranger — report only.** Both paths, web and
-   mobile: minutes to finish for a two-income, two-card household; what
-   they must have on hand; every required field (file:line); every screen
-   and decision; what could wait until after first value, and what breaks
-   if it's missing.
-   *Reported 2026-09-29; findings accepted by Lineu.*
-3. **Propose a minimal first session (<5 min to a first useful view),
-   unassisted, web and mobile. Don't build. STOP.** Say what degrades for
-   each deferred input and how it's prompted later, and whether the AI plan
-   and letter belong in the first session.
-   *Approved 2026-09-29 with changes (code decides category and
-   fixed/variable, real day of month, no AI and no letter in the first
-   session, deferred inputs prompted on their own pages, a deliberate
-   hasPlan). Build plan diagnosed 2026-09-30 — **STOP, waiting on
-   approval.** Held decisions prepared, not shipped: (a) session at signup
-   vs email confirmation, (b) price-free Terms wording for mobile signup.*
-4. **Guard the onboarding letter — diagnose, STOP.** Same sourcing,
-   borrowed-cash and token-leak guards (and retry) as
-   `monthlyReviewService`; options for streaming vs guarding, trade-offs,
-   retry quota cost. — [ticket](tickets/onboarding-review-unguarded.md).
-   (4b, the category-seed check, shipped in 000196b.)
-   *Decided 2026-09-29: retire the onboarding letter; the first letter
-   comes from monthlyReviewService. Part of item 3's build.*
-
-Found by the audit (2026-09-29), ahead of the older list because each sits
-on a first session:
-
-- **save-plan: five more writes never read their error** — on every first
-  session's save step. — [ticket](tickets/save-plan-unchecked-writes.md)
-- **Web manual form builds a plan from nothing** and drops half-filled lines
-  silently. Superseded if item 3's build retires the manual lane. —
-  [ticket](tickets/web-manual-form-accepts-empty.md)
-- **The AI chooses each expense's category and fixed/variable** (CLAUDE.md
-  §4), which decides whether a bill reaches the Timeline. **STOP.** —
-  [ticket](tickets/plan-ai-classifies-expense-lines.md)
-- **Every monthly bill and paycheque is dated the 1st.** **STOP.**
-  Diagnosed 2026-09-30: only 2be22642 (7 lines: 2 on chequing, 5 on Visa
-  Avion) and Zezinho Test are affected; no external household. Repair
-  options reported, none applied. —
-  [ticket](tickets/monthly-recurring-dated-first-of-month.md)
-
-5. **splitRule duplicate materialization.** Rows detached without a
-   tombstone survive its delete-by-`recurring_item_id` and are materialized
-   again (reported cost: 44 rows, once). **STOP.** —
-   [ticket](tickets/splitrule-detached-duplicate-materialization.md)
-6. **Recurring expense/income divergence on the Timeline.** **STOP.** —
-   [ticket](tickets/recurring-expense-income-divergence.md)
-7. **Cards: month-by-month table gets its own month navigation**,
-   independent of the page-level selector. Reuse the existing month control.
-   — [ticket](tickets/cards-grid-independent-month-nav.md)
-8. **Two safe Phase 2 tickets:** the diagnostics probe calling review-stream
-   without a session ([ticket](tickets/diagnostics-probe-review-stream-401.md) —
-   decided 2026-09-28: send the bearer token; keep it a manual, labelled
-   button, one review generation per deliberate press; do not retire it),
-   and the dashboard's divergent `formatResetDate`
-   ([ticket](tickets/dashboard-format-reset-date-duplicate.md)).
-9. **Date-serial coercion:** an Excel date in a Household answer reaches the
-   prompt as "46265.83". Read `cell.w` for that column. —
-   [ticket](tickets/household-answer-date-serial.md)
-10. **`apps/mobile/app.json` → `app.config.ts`** reading the bundle id and
+1. **iOS App Store submission readiness — report only.** Everything left
+   between today and submission, in order, each marked Claude Code / Lineu /
+   needs a decision: device checklist, App Review demo household, EAS
+   production build and submit config, App Store Connect listing, App
+   Review notes, deep links, anything that would fail review.
+   *Reported 2026-10-01.* Blockers it found, in order:
+   - **Placeholder app icon and splash** (Expo template art) — Lineu
+     supplies final 1024×1024 art.
+   - **Universal link `/auth/callback` opens the app on a missing route** —
+     Apple's CDN already serves the association; every password-reset and
+     invite link on an iPhone with Phare installed dead-ends. Needs a
+     decision: an in-app route that hands off to Safari, or un-claim the
+     paths.
+   - **No privacy-policy link inside the app** (Apple 5.1.1(i)), and the
+     web privacy page carries prices and a pricing link. Needs a decision.
+   - **`/diagnostics` ships in production**, ungated, with its broken
+     review probe — gate it to development builds (Claude Code, after the
+     decision on item 3).
+   - **`supportsTablet: true`** forces iPad screenshots and iPad review —
+     decision (recommend false for v1). **Version 0.1.0** — decision
+     (recommend 1.0.0).
+   - **eas.json `submit.production` is empty** — ascAppId, Apple Team ID
+     (B749Y5BLQZ), App Store Connect API key (Lineu creates; never in the
+     repo).
+   - **`bundle:check` re-run** on the submission commit (Claude Code).
+2. **`apps/mobile/app.json` → `app.config.ts`** reading the bundle id and
    Android package from the same env vars the web's well-known routes use. —
    [ticket](tickets/mobile-app-config-from-env.md)
-11. **Android: verify `/diagnostics`** (Hermes timezone probe) on an EAS cloud
-    build — local builds fail on Windows path length. —
-    [ticket](tickets/android-diagnostics-verification.md)
-12. **Household info never reaches the review route**, so the Quebec /
-    out-of-province-employer tax gap can surface only in the onboarding plan.
-    Product decision — diagnose and propose, **STOP.** —
-    [ticket](tickets/household-info-missing-from-review.md)
-13. **Cards grid: plan reads never check their error.** A failed read renders
-    as "no plan" beside a decision view that shows a 500. —
-    [ticket](tickets/cards-grid-plan-read-unchecked.md)
-14. **Card plan editor: three hardcoded English strings** ("Allocated:",
-    two error fallbacks). — [ticket](tickets/card-editor-hardcoded-english.md)
-15. **Timeline plan chain resolves card goals with its own function**, which
-    carries goals into closed cycles where Cards does not. Not a live wrong
-    figure yet. **STOP.** — [ticket](tickets/timeline-card-plan-own-resolver.md)
+3. **The diagnostics probe calls review-stream without a session**
+   (decided 2026-09-28: send the bearer token; keep it a manual, labelled
+   button, one review generation per deliberate press; do not retire it). —
+   [ticket](tickets/diagnostics-probe-review-stream-401.md)
+4. **Android: verify `/diagnostics`** (Hermes timezone probe) on an EAS cloud
+   build — local builds fail on Windows path length. —
+   [ticket](tickets/android-diagnostics-verification.md)
+5. **Web onboarding entry screen — visual only** (Lineu, 2026-10-01): the
+   step-by-step form becomes the primary action on /upload; the template
+   download and file drop move below it as "Prefer a spreadsheet? Import
+   from our template." Same form, steps, routes and funnel events. EN/FR.
+   *Built 2026-10-01 (layout and copy only), uncommitted, awaiting review.*
+
+**Dropped by Lineu, 2026-10-01:**
+
+- ~~Minimal first session~~ — the existing onboarding stays as the only
+  onboarding. Its core rules (1abe296) are reverted; the unapplied
+  `save_first_session` migration is deleted (confirmed absent from the
+  database). Kept from that work: the seed-category list in `@phare/core`
+  (72e40d8).
+- ~~Web manual form: require an income line, refuse a half-filled line~~ —
+  [ticket](tickets/web-manual-form-accepts-empty.md) stays filed.
+- ~~Ask the day of month on monthly lines~~ — the 1st-of-month dating stays
+  as it is. Diagnosis kept in the
+  [ticket](tickets/monthly-recurring-dated-first-of-month.md); Lineu edits
+  2be22642's seven lines on the Recurring page himself.
 
 ## LINEU (needs Lineu, not code)
 
@@ -106,8 +73,7 @@ on a first session:
   share sheet, deletion + ticket 2 live check) — deletion steps on T1/T2
   only. Steps and SQL: [mobile-v1-phase2.md](mobile-v1-phase2.md).
 - Incorporation, then D-U-N-S, then Google Play organization account.
-- App Store submission — **on hold until the approved minimal first session
-  ships on mobile** (2026-09-29). Then: create the demo household per
+- App Store submission: create the demo household per
   [mobile-v1-phase2.md](mobile-v1-phase2.md), App Store Connect listing,
   TestFlight.
 - Check the onboarding funnel (signup / onboarding_entry_viewed /
@@ -121,20 +87,53 @@ on a first session:
   when asked about November and December. They still hold the Aug 6 plan
   (Groceries $550).
 
-- *(new 2026-09-29)* **T1 funnel run** (backlog item 1): sign up a
-  throwaway T1 on web, run the template lane once and the manual lane once,
-  the manual lane on mobile if a device run is possible, then delete T1
-  through the app. Tell Claude when done; it reads the trail through MCP.
-
 ## WAITING ON DATA
 
-- Invert the upload screen so manual entry is primary — only after the
-  funnel shows households reaching the entry screen and bouncing.
+- (none — the upload-screen inversion became READY item 5, visual only.)
 
 ## FROZEN (do not start)
 
 Weekly check-in, event-based coaching, chat, budget alerts, review email
 delivery, referral, French currency formatting on web onboarding.
+
+**Web functionality, frozen 2026-10-01 (Lineu: mobile first).** Order kept
+for when it thaws:
+
+- **Guard the onboarding letter** — options reported 2026-09-29; the letter
+  is still unguarded and needs a decision. **STOP.** —
+  [ticket](tickets/onboarding-review-unguarded.md)
+- **Onboarding funnel: the real-screen run** — events built (80e6981,
+  1226134) and verified on Zezinho Test; no run through the actual screens.
+- **save-plan: five more writes never read their error.** —
+  [ticket](tickets/save-plan-unchecked-writes.md)
+- **The AI chooses each expense's category and fixed/variable** (CLAUDE.md
+  §4). **STOP.** — [ticket](tickets/plan-ai-classifies-expense-lines.md)
+- **save-plan seeds whatever category names the request body sends.** —
+  [ticket](tickets/save-plan-client-chooses-seed-categories.md)
+- **POST /api/recurring attributes an expense rule's transactions to its
+  creator** (CLAUDE.md §4); 0 live rows. —
+  [ticket](tickets/recurring-post-expense-rows-attributed-to-creator.md)
+- **The manual-entry amount ceiling is above what the columns hold**
+  (999,999,999.99 vs `numeric(10,2)`). —
+  [ticket](tickets/manual-entry-max-amount-exceeds-column.md)
+- **splitRule duplicate materialization.** **STOP.** —
+  [ticket](tickets/splitrule-detached-duplicate-materialization.md)
+- **Recurring expense/income divergence on the Timeline.** **STOP.** —
+  [ticket](tickets/recurring-expense-income-divergence.md)
+- **Cards: month-by-month table gets its own month navigation.** —
+  [ticket](tickets/cards-grid-independent-month-nav.md)
+- **Dashboard's divergent `formatResetDate`.** —
+  [ticket](tickets/dashboard-format-reset-date-duplicate.md)
+- **Date-serial coercion** in Household answers. —
+  [ticket](tickets/household-answer-date-serial.md)
+- **Household info never reaches the review route.** **STOP.** —
+  [ticket](tickets/household-info-missing-from-review.md)
+- **Cards grid: plan reads never check their error.** —
+  [ticket](tickets/cards-grid-plan-read-unchecked.md)
+- **Card plan editor: three hardcoded English strings.** —
+  [ticket](tickets/card-editor-hardcoded-english.md)
+- **Timeline plan chain resolves card goals with its own function.**
+  **STOP.** — [ticket](tickets/timeline-card-plan-own-resolver.md)
 
 ## Done
 
@@ -155,7 +154,8 @@ delivery, referral, French currency formatting on web onboarding.
 | "Balances begin" date ([ticket](tickets/balances-begin-wrong-date.md)) | 92ab3e7 |
 | save-plan category seed checked ([ticket](tickets/category-seed-insert-unchecked.md), closed) | 000196b |
 | Carry-forward ([ticket](tickets/carry-forward-older-future-snapshot-outranks-newer-edit.md), closed): one read rule, save asks about later plans, review judges the carried plan; verified live on Zezinho Test | 909f9c8, 76927aa, 60c9f5b |
-| Funnel trail events built (web + mobile); data path verified live on Zezinho Test — T1 run pending | 80e6981 |
+| Funnel trail events built (web + mobile); data path verified live on Zezinho Test (real-screen run frozen) | 80e6981 |
+| Onboarding audit as a stranger (report, 2026-09-29; findings accepted) | — |
 | Template shipped with no household data ([ticket](tickets/template-prefilled-sample-figures.md), closed) | 57983b8 |
 | "Takes about 10 minutes" removed from the template card, EN/FR | 7abf46e |
 | Required `platform` ('web' \| 'mobile') on every funnel event | 1226134 |

@@ -166,24 +166,27 @@
     }
   },
   "upload": {
-    "title": "Téléversez vos données financières",
-    "subtitle": "Téléchargez le modèle Phare et remplissez vos chiffres, ou entrez-les manuellement.",
+    "title": "Créez votre plan",
+    "subtitle": "Entrez vos paies et vos factures étape par étape, ou importez-les à partir de notre modèle de tableur.",
+    "entry": {
+      "manualTitle": "Entrez vos chiffres étape par étape",
+      "manualDescription": "Vos paies, vos factures et leur fréquence. Quelques lignes suffisent pour commencer; vous pourrez ajouter le reste en tout temps.",
+      "manualCta": "Commencer",
+      "spreadsheetTitle": "Vous préférez un tableur?",
+      "spreadsheetDescription": "Importez notre modèle : téléchargez-le, remplissez vos chiffres, puis déposez-le ci-dessous."
+    },
     "planTitle": "Votre plan",
     "dropzone": "Glissez-déposez votre modèle rempli ici, ou cliquez pour parcourir",
     "formats": "Formats acceptés : .xlsx",
     "uploading": "Lecture de votre fichier...",
     "analyzing": "Analyse de vos finances...",
-    "or": "ou",
     "tryAgain": "Réessayer",
     "mismatch": {
       "wrongFile": "Ceci ne ressemble pas au modèle Phare. Téléchargez-le ci-dessous et remplissez vos chiffres.",
       "outdatedTemplate": "Ce fichier ne correspond pas au modèle Phare actuel — téléchargez la dernière version et copiez-y vos chiffres."
     },
     "noFile": {
-      "title": "Obtenez le modèle",
-      "description": "Téléchargez-le, remplissez vos chiffres et téléversez-le ci-dessous.",
-      "cta": "Télécharger le modèle",
-      "manual": "Ou entrez vos chiffres manuellement"
+      "cta": "Télécharger le modèle"
     },
     "memberConfirm": {
       "title": "Qui est qui?",
