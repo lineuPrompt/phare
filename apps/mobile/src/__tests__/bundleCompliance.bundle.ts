@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { extractStrings, findViolations } from './complianceScan';
+import { extractStrings, findViolations, OWN_COPY_ALLOWLIST } from './complianceScan';
 
 // ---------------------------------------------------------------------------
 // APP STORE COMPLIANCE, CHECKED OVER THE COMPILED BUNDLE.
@@ -93,12 +93,12 @@ describe('the compiled bundle carries no purchase-steering text', () => {
     expect(strings.some((s) => s.includes('Réessayer'))).toBe(true);
   });
 
-  it('contains no forbidden text outside the library allowlist', () => {
-    expect(findViolations(strings, LIBRARY_ALLOWLIST)).toEqual([]);
+  it('contains no forbidden text outside the library and own-copy allowlists', () => {
+    expect(findViolations(strings, [...LIBRARY_ALLOWLIST, ...OWN_COPY_ALLOWLIST])).toEqual([]);
   });
 
   it('every allowlist entry still matches something', () => {
-    for (const sentence of LIBRARY_ALLOWLIST) {
+    for (const sentence of [...LIBRARY_ALLOWLIST, ...OWN_COPY_ALLOWLIST]) {
       expect(strings.some((s) => s.includes(sentence)), sentence).toBe(true);
     }
   });

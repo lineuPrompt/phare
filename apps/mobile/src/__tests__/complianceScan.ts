@@ -48,12 +48,54 @@ export const CURRENCY_FIGURE = new RegExp(
  */
 export const FORBIDDEN_TEXT: readonly (readonly [label: string, pattern: RegExp])[] = [
   ['a currency figure', CURRENCY_FIGURE],
-  ['the word upgrade', /(?<![.\w])upgrade\b/i],
+  ['the word upgrade', /(?<![.\w])upgrade(s|d)?\b/i],
   ['the word pricing', /(?<![.\w])pricing\b/i],
-  ['subscribe/subscription', /(?<![.\w])subscri(be|ption)\b/i],
+  // Every form, plural included: "once paid subscriptions are available"
+  // slipped past the singular-only pattern until 2026-10-02.
+  ['subscribe/subscription', /(?<![.\w])subscri(be|bes|bed|bing|ption|ptions)\b/i],
+  ['a paid plan or feature', /(?<![.\w])paid\s+(plans?|tiers?|features?|versions?|subscriptions?|access)\b/i],
   ['a per-month price form', /\d\s*\/\s*(month|mo|mois)\b/i],
   ['the Pro plan name', /(?<![.\w])phare\s+pro\b/i],
+  // French. The English patterns are blind to these, and the app ships both.
+  ['abonnement (French: subscription)', /(?<![.\p{L}])abonne(ment|ments|r|z)?(?![\p{L}])/iu],
+  ['payant (French: paid plan or feature)', /(?<![.\p{L}])(forfaits?|versions?|fonctions?|fonctionnalités?|options?|accès|abonnements?)\s+payant(e|s|es)?(?![\p{L}])/iu],
+  ['tarif (French: pricing)', /(?<![.\p{L}])tarif(s|ication|ications)?(?![\p{L}])/iu],
+  ['mise à niveau (French: upgrade)', /(?<![.\p{L}])(mise|mettre|mettez|passer|passez)\s+à\s+(niveau|la\s+version\s+supérieure)(?![\p{L}])/iu],
 ];
+
+/**
+ * Sentences of OUR OWN copy that contain a forbidden word on purpose, excused
+ * by full sentence — the same rule as the bundle's library allowlist: a hit is
+ * excused only when it sits inside an occurrence of this exact sentence, so
+ * any other use of the word still fails.
+ *
+ * Today: the Privacy Policy's Stripe paragraph, EN and FR, shown on the app's
+ * Privacy screen (App Store 5.1.1(i)). It names who processes payments; the
+ * app links to nothing and sells nothing. Its wording ("once paid
+ * subscriptions are available") is stale — billing has been live since
+ * August — and goes to counsel with the Terms. Until it changes, it is
+ * excused exactly as written.
+ *
+ * Pinned by sourceCompliance.test.ts: each entry must appear verbatim in
+ * @phare/core's PRIVACY_POLICY, and must still contain a forbidden hit, so an
+ * entry fails the moment the sentence changes or stops needing an excuse.
+ */
+export const POLICY_SENTENCE_ALLOWLIST = [
+  '**Stripe** — payment processing, once paid subscriptions are available (receives your billing information; Phare does not store your card number)',
+  '**Stripe** — traitement des paiements, une fois les abonnements payants offerts (reçoit vos renseignements de facturation; Phare ne conserve pas votre numéro de carte)',
+] as const;
+
+/**
+ * The seed expense category "Utilities & Subscriptions" (@phare/core
+ * SEED_EXPENSE_CATEGORIES) — a household's own bills (streaming, software),
+ * not Phare's. Caught once the subscription pattern learned plurals
+ * (2026-10-02). Excused as this exact string only; pinned to the seed list by
+ * sourceCompliance.test.ts.
+ */
+export const CATEGORY_NAME_ALLOWLIST = ['Utilities & Subscriptions'] as const;
+
+/** Everything of our own that is excused, for the source and bundle scans. */
+export const OWN_COPY_ALLOWLIST: readonly string[] = [...POLICY_SENTENCE_ALLOWLIST, ...CATEGORY_NAME_ALLOWLIST];
 
 // ── Compiled-bundle string extraction ───────────────────────────────────────
 

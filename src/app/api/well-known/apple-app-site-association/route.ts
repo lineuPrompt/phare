@@ -37,23 +37,18 @@ export const dynamic = 'force-dynamic';
 /**
  * Paths the app is allowed to claim.
  *
- * DELIBERATELY NARROW. Whatever is listed here stops being a web page for
- * anyone who has the app installed — iOS opens the app instead. Claiming '/'
- * or '/*' would mean the landing page, pricing, the FAQ and both legal pages
- * silently stop being reachable from a link for exactly the people most
- * likely to share them.
+ * NONE, since 2026-10-01 (Lineu's decision). The app used to claim
+ * /auth/callback (and its /en, /fr forms), but it has no route for it: on an
+ * iPhone with Phare installed, every password-reset and member-invite link
+ * opened the app on a dead "unmatched route" screen instead of finishing in
+ * Safari. Claiming nothing sends those links back to Safari, where the web
+ * flow completes them.
  *
- * So this claims only the auth landing, which is the one URL a user follows
- * from an email expecting to end up signed in:
- *   - /auth/callback — what every redirectTo in the codebase actually emits
- *     (forgot-password, member invite, member resend all build
- *     `${appOrigin}/auth/callback?next=...`)
- *   - /en/auth/callback, /fr/auth/callback — the post-proxy shape, claimed
- *     only so a link copied out of a browser address bar behaves the same.
- *     iOS matches the URL as sent, before any server redirect, so these are
- *     belt-and-braces rather than the live path.
+ * The file itself stays served (same appID), so claiming a path later is a
+ * one-line change here once the app can handle it. Whatever is listed stops
+ * being a web page for anyone who has the app installed — keep it narrow.
  */
-const CLAIMED_PATHS = ['/auth/callback', '/en/auth/callback', '/fr/auth/callback'];
+const CLAIMED_PATHS: string[] = [];
 
 export async function GET() {
   const teamId = process.env.APPLE_TEAM_ID;

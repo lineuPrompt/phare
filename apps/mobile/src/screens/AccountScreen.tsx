@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useSession } from '../lib/useSession';
 import { useI18n } from '../i18n';
@@ -19,6 +20,7 @@ import DeleteAccountSection from '../components/DeleteAccountSection';
  */
 export default function AccountScreen() {
   const { t } = useI18n();
+  const router = useRouter();
   const session = useSession();
   const email = session.status === 'signedIn' ? session.session.user.email ?? null : null;
   const [signingOut, setSigningOut] = useState(false);
@@ -62,6 +64,15 @@ export default function AccountScreen() {
           <Text style={styles.buttonText}>
             {signingOut ? t('account.signingOut') : t('common.signOut')}
           </Text>
+        </Pressable>
+
+        {/* The policy must be readable in the app (App Store 5.1.1(i)). */}
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => router.push('/privacy')}
+          style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.value}>{t('account.privacyLink')}</Text>
         </Pressable>
 
         {/* Deletion must be doable in the app (App Store 5.1.1(v)). */}

@@ -16,32 +16,10 @@
  * section ids in the SAME order.
  */
 
-export type LegalSection = {
-  /**
-   * Stable, locale-independent identifier. It is the anchor in the URL, and it
-   * is what the parity test compares across locales — so it must NEVER be
-   * translated, and must not change once published (an external link or a
-   * regulator's citation may point at it).
-   */
-  id: string;
-  heading: string;
-  /** One string per paragraph. Rendered as separate <p> elements. */
-  body: string[];
-};
+// LegalSection and LegalDocument are defined once, in @phare/core
+// (privacyPolicy.ts), next to the Privacy Policy the mobile app also renders.
+export type { LegalSection, LegalDocument } from '@phare/core';
 
-export type LegalDocument = {
-  title: string;
-  /**
-   * Shown to the reader. Keep in step with CURRENT_LEGAL_VERSION in
-   * src/lib/legalVersions.ts when the substance changes — a document claiming
-   * one date while consent is recorded against another is the exact ambiguity
-   * the version column exists to remove.
-   */
-  lastUpdated: string;
-  /** Optional lead paragraphs before the first numbered section. */
-  intro?: string[];
-  sections: LegalSection[];
-};
 
 export type LegalDocumentKey = 'privacy' | 'terms' | 'faq';
 export type LegalLocale = 'en' | 'fr';

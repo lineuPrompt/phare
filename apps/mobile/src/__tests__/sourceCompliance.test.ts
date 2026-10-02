@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { FORBIDDEN_TEXT } from './complianceScan';
+import { FORBIDDEN_TEXT, findViolations, OWN_COPY_ALLOWLIST, POLICY_SENTENCE_ALLOWLIST, CATEGORY_NAME_ALLOWLIST } from './complianceScan';
+import { PRIVACY_POLICY, SEED_EXPENSE_CATEGORIES } from '@phare/core';
 
 // ---------------------------------------------------------------------------
 // APP STORE COMPLIANCE, CHECKED OVER ALL SOURCE — not just the catalogues.
@@ -66,7 +67,7 @@ describe('no purchase-steering surface anywhere in the app source', () => {
     expect(TABLE.map(([label]) => label)).toContain('a currency figure');
   });
 
-  it.each(TABLE)('contains no %s', (_label, pattern) => {
+  it.each(TABLE)('contains no %s', (label) => {
     const offenders: string[] = [];
 
     for (const file of FILES) {
@@ -75,7 +76,9 @@ describe('no purchase-steering surface anywhere in the app source', () => {
         : code(fs.readFileSync(file, 'utf8'));
 
       for (const line of source.split('\n')) {
-        if (pattern.test(line)) {
+        // Same rule as the bundle scan: a hit inside an excused sentence of
+        // our own copy (OWN_COPY_ALLOWLIST) passes; any other hit fails.
+        if (findViolations([line], OWN_COPY_ALLOWLIST).some((v) => v.label === label)) {
           offenders.push(`${path.relative(SRC_DIR, file)}: ${line.trim()}`);
         }
       }
@@ -100,6 +103,39 @@ describe('no purchase-steering surface anywhere in the app source', () => {
     }
 
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('our own excused copy is pinned (2026-10-02)', () => {
+  it('each Privacy Policy allowlist sentence appears verbatim in the policy, EN then FR', () => {
+    // Fails the moment the policy wording changes: the excuse is for this
+    // exact sentence, never for whatever replaces it.
+    const [en, fr] = POLICY_SENTENCE_ALLOWLIST;
+    expect(PRIVACY_POLICY.en.sections.flatMap((s) => s.body)).toContain(en);
+    expect(PRIVACY_POLICY.fr.sections.flatMap((s) => s.body)).toContain(fr);
+  });
+
+  it('each policy sentence still needs its excuse — it contains a forbidden hit', () => {
+    // If the sentence is ever reworded to pass on its own, its entry must go.
+    for (const sentence of POLICY_SENTENCE_ALLOWLIST) {
+      expect(findViolations([sentence]).length, sentence).toBeGreaterThan(0);
+      expect(findViolations([sentence], OWN_COPY_ALLOWLIST)).toEqual([]);
+    }
+  });
+
+  it('the excused category name is exactly a seed category, and still needs its excuse', () => {
+    for (const name of CATEGORY_NAME_ALLOWLIST) {
+      expect(SEED_EXPENSE_CATEGORIES as readonly string[]).toContain(name);
+      expect(findViolations([name]).length, name).toBeGreaterThan(0);
+    }
+  });
+
+  it('the excuse covers those exact strings only: the same words anywhere else still fail', () => {
+    expect(findViolations(['Unlock paid subscriptions today'], OWN_COPY_ALLOWLIST).map((v) => v.label))
+      .toContain('subscribe/subscription');
+    expect(findViolations(['Passez à un abonnement payant'], OWN_COPY_ALLOWLIST).map((v) => v.label))
+      .toEqual(expect.arrayContaining(['abonnement (French: subscription)', 'payant (French: paid plan or feature)']));
+    expect(findViolations(['Your Subscriptions'], OWN_COPY_ALLOWLIST).length).toBeGreaterThan(0);
   });
 });
 

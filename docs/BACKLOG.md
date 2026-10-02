@@ -17,26 +17,25 @@ first — iOS App Store submission. Every web functionality item is FROZEN
    needs a decision: device checklist, App Review demo household, EAS
    production build and submit config, App Store Connect listing, App
    Review notes, deep links, anything that would fail review.
-   *Reported 2026-10-01.* Blockers it found, in order:
-   - **Placeholder app icon and splash** (Expo template art) — Lineu
-     supplies final 1024×1024 art.
-   - **Universal link `/auth/callback` opens the app on a missing route** —
-     Apple's CDN already serves the association; every password-reset and
-     invite link on an iPhone with Phare installed dead-ends. Needs a
-     decision: an in-app route that hands off to Safari, or un-claim the
-     paths.
-   - **No privacy-policy link inside the app** (Apple 5.1.1(i)), and the
-     web privacy page carries prices and a pricing link. Needs a decision.
-   - **`/diagnostics` ships in production**, ungated, with its broken
-     review probe — gate it to development builds (Claude Code, after the
-     decision on item 3).
-   - **`supportsTablet: true`** forces iPad screenshots and iPad review —
-     decision (recommend false for v1). **Version 0.1.0** — decision
-     (recommend 1.0.0).
-   - **eas.json `submit.production` is empty** — ascAppId, Apple Team ID
-     (B749Y5BLQZ), App Store Connect API key (Lineu creates; never in the
-     repo).
-   - **`bundle:check` re-run** on the submission commit (Claude Code).
+   *Reported 2026-10-01; decisions 2026-10-02.* Built 2026-10-02,
+   uncommitted: universal links claim no path (reset/invite links open in
+   Safari again — confirm the live file after deploy); Privacy Policy
+   screen in the app (text moved verbatim to `@phare/core`); `/diagnostics`
+   development-only; `supportsTablet: false`; version 1.0.0; duplicate
+   applinks removed; dashboard button "Build your plan"; listing draft in
+   [app-store-listing.md](app-store-listing.md) awaiting approval.
+   Still open:
+   - **Placeholder app icon and splash** — Lineu supplies final art.
+   - **`submit.production`** — waits on the ascAppId from Lineu.
+   - **The Privacy Policy's Stripe sentence** — the scanner now catches
+     plurals and French (2026-10-02); the sentence passes by design through
+     a pinned full-sentence allowlist (EN and FR), as does the seed category
+     "Utilities & Subscriptions". **Stale wording:** "once paid
+     subscriptions are available" — billing has been live since August. It
+     goes to counsel with the Terms; when it changes, the allowlist entry
+     must change with it (a test fails until it does).
+   - **Demo household** — Lineu creates and comps it (steps in the listing
+     doc).
 2. **`apps/mobile/app.json` → `app.config.ts`** reading the bundle id and
    Android package from the same env vars the web's well-known routes use. —
    [ticket](tickets/mobile-app-config-from-env.md)
@@ -51,7 +50,7 @@ first — iOS App Store submission. Every web functionality item is FROZEN
    step-by-step form becomes the primary action on /upload; the template
    download and file drop move below it as "Prefer a spreadsheet? Import
    from our template." Same form, steps, routes and funnel events. EN/FR.
-   *Built 2026-10-01 (layout and copy only), uncommitted, awaiting review.*
+   *Built 2026-10-01 (layout and copy only); committed by Lineu in 2346046.*
 
 **Dropped by Lineu, 2026-10-01:**
 

@@ -107,7 +107,8 @@
     "emailLabel": "Courriel du compte",
     "emailUnknown": "Aucun courriel associé à cette session",
     "signingOut": "Déconnexion…",
-    "signOutFailed": "La déconnexion n'a pas fonctionné : votre session est toujours ouverte sur cet appareil. Vérifiez votre connexion et réessayez."
+    "signOutFailed": "La déconnexion n'a pas fonctionné : votre session est toujours ouverte sur cet appareil. Vérifiez votre connexion et réessayez.",
+    "privacyLink": "Politique de confidentialité"
   },
   "cards": {
     "title": "Marge sur vos cartes",
@@ -318,5 +319,9 @@
       "paymentServiceFailed": "Un service de paiement n'a pas répondu, donc rien n'a été supprimé. Veuillez réessayer ou écrire à support@phare.money.",
       "failed": "Impossible de terminer la suppression. Veuillez réessayer."
     }
+  },
+  "privacy": {
+    "back": "Retour",
+    "lastUpdated": "Dernière mise à jour : {date}"
   }
 }

@@ -2,22 +2,21 @@
   "expo": {
     "name": "Phare",
     "slug": "phare",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "phare",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FAFAF8"
+      "backgroundColor": "#02245E"
     },
     "ios": {
       "bundleIdentifier": "money.phare.app",
-      "supportsTablet": true,
+      "supportsTablet": false,
       "associatedDomains": [
-        "applinks:phare.money",
         "applinks:phare.money"
       ],
       "infoPlist": {
@@ -27,9 +26,8 @@
     "android": {
       "package": "money.phare.app",
       "adaptiveIcon": {
-        "backgroundImage": "./assets/android-icon-background.png",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#02245E"
       },
       "intentFilters": [
         {
