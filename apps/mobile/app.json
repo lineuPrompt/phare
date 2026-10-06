@@ -8,11 +8,6 @@
     "scheme": "phare",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#02245E"
-    },
     "ios": {
       "bundleIdentifier": "money.phare.app",
       "supportsTablet": false,
@@ -26,7 +21,7 @@
     "android": {
       "package": "money.phare.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/splash.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#02245E"
       },
       "intentFilters": [
@@ -50,7 +45,16 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#02245E"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

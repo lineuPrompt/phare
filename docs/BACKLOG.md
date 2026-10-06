@@ -25,7 +25,11 @@ first — iOS App Store submission. Every web functionality item is FROZEN
    applinks removed; dashboard button "Build your plan"; listing draft in
    [app-store-listing.md](app-store-listing.md) awaiting approval.
    Still open:
-   - **Placeholder app icon and splash** — Lineu supplies final art.
+   - **App icon and splash** — final art wired in 2026-10-05 (icon.png;
+     splash.png through the `expo-splash-screen` plugin, 200 pt on #02245E;
+     Android adaptive icon from adaptive-icon.png). The generated iOS launch
+     screen was checked in a throwaway prebuild. **Needs a new EAS build**
+     to appear; unverified on a device until then.
    - **`submit.production`** — waits on the ascAppId from Lineu.
    - **The Privacy Policy's Stripe sentence** — the scanner now catches
      plurals and French (2026-10-02); the sentence passes by design through
