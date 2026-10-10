@@ -21,7 +21,14 @@ import type { Getter } from './timelineLoader';
 // dashboard's side effects (its daily "returned" heartbeat, its bridge
 // materialisation) for a screen they cannot see. Same rule as the terms: a
 // missing boolean is an error, not a guess.
+//
+// snapshotOnly=1, ALWAYS (2026-10-09). The full load logs
+// `viewed_monthly_review` whenever the household has a review, and the gate
+// shows no review: every app launch was counted as a review read. The
+// snapshot load returns hasPlan the same way and returns before that event.
 // ---------------------------------------------------------------------------
+
+export const PLAN_GATE_PATH = '/api/dashboard?snapshotOnly=1';
 
 export type HouseholdState = { kind: 'termsOutdated' } | { kind: 'needsPlan' } | { kind: 'ready' };
 
@@ -32,7 +39,7 @@ export async function loadHouseholdState(get: Getter): Promise<HouseholdState> {
   }
   if (!me.termsCurrent) return { kind: 'termsOutdated' };
 
-  const dashboard = await get<{ hasPlan?: unknown }>('/api/dashboard');
+  const dashboard = await get<{ hasPlan?: unknown }>(PLAN_GATE_PATH);
   if (typeof dashboard?.hasPlan !== 'boolean') {
     throw new Error('/api/dashboard answered without a boolean hasPlan');
   }

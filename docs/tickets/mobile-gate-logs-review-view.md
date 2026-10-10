@@ -2,7 +2,9 @@
 
 **Filed** 2026-10-09, found while diagnosing the mobile Home tab.
 
-**Status:** OPEN. Not fixed — out of scope for the Home tab diagnosis.
+**Status:** CLOSED 2026-10-09. The gate asks for `/api/dashboard?snapshotOnly=1`.
+Verified live on Zezinho Test: `viewed_monthly_review` count 40 before a
+launch (gate, then Home) and 40 after; a full dashboard load then took it to 41.
 
 ---
 

@@ -58,23 +58,17 @@ first — iOS App Store submission. Every web functionality item is FROZEN
    download and file drop move below it as "Prefer a spreadsheet? Import
    from our template." Same form, steps, routes and funnel events. EN/FR.
    *Built 2026-10-01 (layout and copy only); committed by Lineu in 2346046.*
-6. **Mobile Home tab — the dashboard snapshot and the Plan card** (Lineu,
-   2026-10-09), as a new first tab: Home | Review | Timeline | Cards |
-   Account. *Diagnosed 2026-10-09; waiting on Lineu's approval before any
-   code.* Findings: the subtraction block comes from
-   `/api/dashboard?snapshotOnly=1`; the Plan card does not come from
-   `/api/dashboard` at all but from `/api/timeline?includePlan=1` plus
-   `buildMonthView` (already in `@phare/core`). Recommended: current month
-   only, which also keeps the horizon lock off the screen.
-7. **Monthly review quality — why the letters are shallow** (Lineu,
-   2026-10-09). *Report only, delivered 2026-10-09; the prompt is
-   unchanged.* Touches AI output: any change needs its own diagnosis and
-   approval. Defects found in September's letter for 2be22642, none fixed:
-   the over-target check reads the cycle containing the run date, so the
-   1st-of-month run always sees an empty cycle; the letter payload carries
-   no surplus, no savings total and no actual contributions; the "extra"
-   recommendation targets a reserve the plan already funds; a month with
-   three card-only rows counts as a real month in the typical surplus.
+6. **Monthly review fix — correctness and substance** (Lineu, 2026-10-09;
+   approved as a correctness exception to the freeze). **Must be live
+   before the 2026-11-01 cron run.** *Design delivered 2026-10-09; waiting
+   on Lineu's approval before any code.* Part A: over-target check on the
+   reviewed month's cycles; actual contribution rule and deposits separate
+   from the required amount; skip needs the plan already funds; a
+   card-only month is not a real month; real savings total. Part B: card
+   goal vs actual and top overspends, surplus and savings by destination,
+   month-over-month, the month ahead, goal and reserve progress. New guard:
+   every dollar figure in a letter must be in its payload, or the letter is
+   not saved. The same guard covers the onboarding letter (FROZEN list).
 
 **Dropped by Lineu, 2026-10-01:**
 
@@ -182,3 +176,4 @@ for when it thaws:
 | Template shipped with no household data ([ticket](tickets/template-prefilled-sample-figures.md), closed) | 57983b8 |
 | "Takes about 10 minutes" removed from the template card, EN/FR | 7abf46e |
 | Required `platform` ('web' \| 'mobile') on every funnel event | 1226134 |
+| Mobile Home tab — snapshot and Plan card, current month; household gate uses `snapshotOnly=1` ([ticket](tickets/mobile-gate-logs-review-view.md), closed) | |

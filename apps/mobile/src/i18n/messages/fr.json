@@ -97,6 +97,7 @@
     "streamProbeFailed": "Échec de la sonde : {reason}"
   },
   "tabs": {
+    "home": "Accueil",
     "review": "Bilan",
     "timeline": "Chronologie",
     "account": "Compte",
@@ -323,5 +324,40 @@
   "privacy": {
     "back": "Retour",
     "lastUpdated": "Dernière mise à jour : {date}"
+  },
+  "home": {
+    "snapshot": {
+      "title": "Votre portrait financier",
+      "question": "Ce mois s'est-il autofinancé?",
+      "actualsToDate": "Données réelles à ce jour ce mois-ci — pas des projections",
+      "income": "Revenu",
+      "expenses": "Dépenses",
+      "savings": "Épargne mensuelle",
+      "showBreakdown": "Voir le détail",
+      "hideBreakdown": "Masquer le détail",
+      "savingsOther": "Autre",
+      "savingsOtherHint": "Contributions dont le compte de destination n'existe plus.",
+      "debtPayments": "Paiements de dette",
+      "surplus": "Surplus mensuel",
+      "deficit": "Déficit mensuel",
+      "borrowedNote": "⚠ {amount} de l'encaisse de ce mois-ci a été emprunté. Cet argent est dans votre compte, mais vous ne l'avez pas gagné — il n'est donc pas inclus dans le montant ci-dessus.",
+      "monthOnlyNote": "Ceci reflète uniquement le flux de trésorerie de ce mois, pas votre solde réel. Votre solde réel se trouve dans l'onglet Chronologie."
+    },
+    "plan": {
+      "badge": "Plan",
+      "closesAt": "Solde réel à la fermeture de {month} : {amount} — le plan ci-dessous est comparé à ce montant",
+      "carriedIn": "Solde réel reporté d'avant {month} : {amount}",
+      "question": "L'argent que vous aurez réellement",
+      "labelRemainder": "Si le reste de {month} respecte le budget",
+      "labelFull": "Si {month} respecte le budget",
+      "basisActual": "{card} : {amount} — réel",
+      "basisBudget": "{card} : {amount} — budget",
+      "basisMax": "{card} : {amount} — dépassement de budget, montant réel utilisé",
+      "basisPosted": "{card} : déjà payé — inclus dans le solde d'aujourd'hui",
+      "borrowedNote": "{amount} de ce solde est emprunté — de l'argent réel que vous pouvez dépenser, et que vous devrez rembourser.",
+      "note": "Une estimation — suppose que les factures fixes, les transferts et les budgets de carte se déroulent comme prévu."
+    },
+    "awaitingDates": "Certains revenus ou certaines factures n'ont pas encore de date et ne sont donc pas comptés ici. Indiquez leurs dates sur phare.money.",
+    "noAnchor": "Pour afficher votre plan, Phare a besoin du solde de votre compte chèques à une date que vous connaissez. Indiquez-le sur phare.money."
   }
 }

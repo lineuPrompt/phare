@@ -5,7 +5,7 @@ import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
 /**
- * The signed-in shell: Review | Timeline | Cards | Account.
+ * The signed-in shell: Home | Review | Timeline | Cards | Account.
  *
  * LIVES IN src/, NOT app/(tabs)/_layout.tsx, because the i18n parity test
  * extracts t() keys from src/ only. A tab label written in app/ would ship
@@ -36,11 +36,14 @@ export default function TabsLayout() {
             tabBarActiveTintColor: theme.color.heading,
             tabBarInactiveTintColor: theme.color.muted,
             tabBarIconStyle: { display: 'none' },
-            tabBarLabelStyle: { fontSize: 14, fontWeight: '600' },
+            // 12, down from 14, when the fifth tab arrived: at 14 the longest
+            // French label, « Chronologie », no longer fits a fifth of a phone.
+            tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
             sceneStyle: { backgroundColor: theme.color.background },
           }}
         >
-          <Tabs.Screen name="index" options={{ title: t('tabs.review') }} />
+          <Tabs.Screen name="index" options={{ title: t('tabs.home') }} />
+          <Tabs.Screen name="review" options={{ title: t('tabs.review') }} />
           <Tabs.Screen name="timeline" options={{ title: t('tabs.timeline') }} />
           <Tabs.Screen name="cards" options={{ title: t('tabs.cards') }} />
           <Tabs.Screen name="account" options={{ title: t('tabs.account') }} />

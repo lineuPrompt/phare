@@ -97,6 +97,7 @@
     "streamProbeFailed": "Probe failed: {reason}"
   },
   "tabs": {
+    "home": "Home",
     "review": "Review",
     "timeline": "Timeline",
     "account": "Account",
@@ -323,5 +324,40 @@
   "privacy": {
     "back": "Back",
     "lastUpdated": "Last updated {date}"
+  },
+  "home": {
+    "snapshot": {
+      "title": "Your financial snapshot",
+      "question": "Did this month cover itself?",
+      "actualsToDate": "Actuals so far this month — not projections",
+      "income": "Income",
+      "expenses": "Expenses",
+      "savings": "Monthly savings",
+      "showBreakdown": "Show breakdown",
+      "hideBreakdown": "Hide breakdown",
+      "savingsOther": "Other",
+      "savingsOtherHint": "Contributions whose destination account no longer exists.",
+      "debtPayments": "Debt payments",
+      "surplus": "Monthly surplus",
+      "deficit": "Monthly deficit",
+      "borrowedNote": "⚠ {amount} of this month's cash was borrowed. It's in your account, but you didn't earn it — so it's not in the figure above.",
+      "monthOnlyNote": "This reflects this month's cash flow only, not your running balance. Your real balance is on the Timeline tab."
+    },
+    "plan": {
+      "badge": "Plan",
+      "closesAt": "Real balance at close of {month}: {amount} — the plan below is read against this",
+      "carriedIn": "Real balance carried in from before {month}: {amount}",
+      "question": "Cash you'll actually have",
+      "labelRemainder": "If the rest of {month} goes as budgeted",
+      "labelFull": "If {month} goes as budgeted",
+      "basisActual": "{card}: {amount} — actual",
+      "basisBudget": "{card}: {amount} — budget",
+      "basisMax": "{card}: {amount} — over budget, using actual",
+      "basisPosted": "{card}: already paid — included in today's balance",
+      "borrowedNote": "{amount} of this is borrowed — real cash you can spend, and you'll owe it back.",
+      "note": "An estimate — assumes fixed bills, transfers, and card budgets land as dated."
+    },
+    "awaitingDates": "Some income or bills don't have a date yet, so they aren't counted here. Set their dates on phare.money.",
+    "noAnchor": "To show your plan, Phare needs your chequing balance on a date you know. Set it on phare.money."
   }
 }

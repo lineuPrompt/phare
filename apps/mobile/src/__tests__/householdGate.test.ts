@@ -9,7 +9,7 @@ function getter(me: unknown, dashboard: unknown = { hasPlan: true }) {
   const get = (async (path: string) => {
     asked.push(path);
     if (path === '/api/me') return me;
-    if (path === '/api/dashboard') return dashboard;
+    if (path === '/api/dashboard?snapshotOnly=1') return dashboard;
     throw new Error(`unexpected ${path}`);
   }) as Getter;
   return { get, asked };
@@ -54,6 +54,14 @@ describe('the plan gate', () => {
     const g = getter({ termsCurrent: false }, { hasPlan: false });
     await loadHouseholdState(g.get);
     expect(g.asked).toEqual(['/api/me']);
+  });
+
+  it('asks for the snapshot only, so a launch never logs a review as read', async () => {
+    // The full /api/dashboard load logs viewed_monthly_review, and the gate
+    // shows no review. Exact path: a bare /api/dashboard here is the bug.
+    const g = getter({ termsCurrent: true });
+    await loadHouseholdState(g.get);
+    expect(g.asked).toEqual(['/api/me', '/api/dashboard?snapshotOnly=1']);
   });
 
   it.each<[unknown, string]>([
