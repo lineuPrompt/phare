@@ -43,6 +43,9 @@ first — iOS App Store submission. Every web functionality item is FROZEN
 2. **`apps/mobile/app.json` → `app.config.ts`** reading the bundle id and
    Android package from the same env vars the web's well-known routes use. —
    [ticket](tickets/mobile-app-config-from-env.md)
+   *Set aside by Lineu, 2026-10-09, in favour of items 6 and 7. Not
+   started. On iOS the ticket's failure mode cannot occur while the
+   association file claims no paths.*
 3. **The diagnostics probe calls review-stream without a session**
    (decided 2026-09-28: send the bearer token; keep it a manual, labelled
    button, one review generation per deliberate press; do not retire it). —
@@ -55,6 +58,23 @@ first — iOS App Store submission. Every web functionality item is FROZEN
    download and file drop move below it as "Prefer a spreadsheet? Import
    from our template." Same form, steps, routes and funnel events. EN/FR.
    *Built 2026-10-01 (layout and copy only); committed by Lineu in 2346046.*
+6. **Mobile Home tab — the dashboard snapshot and the Plan card** (Lineu,
+   2026-10-09), as a new first tab: Home | Review | Timeline | Cards |
+   Account. *Diagnosed 2026-10-09; waiting on Lineu's approval before any
+   code.* Findings: the subtraction block comes from
+   `/api/dashboard?snapshotOnly=1`; the Plan card does not come from
+   `/api/dashboard` at all but from `/api/timeline?includePlan=1` plus
+   `buildMonthView` (already in `@phare/core`). Recommended: current month
+   only, which also keeps the horizon lock off the screen.
+7. **Monthly review quality — why the letters are shallow** (Lineu,
+   2026-10-09). *Report only, delivered 2026-10-09; the prompt is
+   unchanged.* Touches AI output: any change needs its own diagnosis and
+   approval. Defects found in September's letter for 2be22642, none fixed:
+   the over-target check reads the cycle containing the run date, so the
+   1st-of-month run always sees an empty cycle; the letter payload carries
+   no surplus, no savings total and no actual contributions; the "extra"
+   recommendation targets a reserve the plan already funds; a month with
+   three card-only rows counts as a real month in the typical surplus.
 
 **Dropped by Lineu, 2026-10-01:**
 
