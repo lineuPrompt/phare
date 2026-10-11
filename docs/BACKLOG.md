@@ -176,4 +176,4 @@ for when it thaws:
 | Template shipped with no household data ([ticket](tickets/template-prefilled-sample-figures.md), closed) | 57983b8 |
 | "Takes about 10 minutes" removed from the template card, EN/FR | 7abf46e |
 | Required `platform` ('web' \| 'mobile') on every funnel event | 1226134 |
-| Mobile Home tab — snapshot and Plan card, current month; household gate uses `snapshotOnly=1` ([ticket](tickets/mobile-gate-logs-review-view.md), closed) | |
+| Mobile Home tab — snapshot and Plan card, current month; household gate uses `snapshotOnly=1` ([ticket](tickets/mobile-gate-logs-review-view.md), closed); verified on device by Lineu | 8afabd5 |
