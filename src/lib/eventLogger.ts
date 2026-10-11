@@ -36,6 +36,12 @@ export type EventType =
   // it and whether the retry passed or which deterministic fallback was
   // used. Never fired on the common (clean-first-attempt) path.
   | 'review_text_guard_retried'
+  // A generated letter failed the figure or name guard twice, so nothing was
+  // saved (monthlyReviewService.ts, 2026-10-10). Metadata: month, kind, the
+  // offending figures and names, and the first attempt's. SERVER ONLY: never
+  // in CLIENT_EVENT_ALLOWLIST (pinned in clientEvents.test.ts), so no client
+  // can write one through /api/events.
+  | 'review_guard_failed'
   // FUNNEL INSTRUMENTATION (2026-07-31) — these events look unused right
   // now; they aren't. They exist so that, once there's enough data (aimed
   // at November), someone can ask retention questions this app currently

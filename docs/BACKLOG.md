@@ -60,15 +60,27 @@ first — iOS App Store submission. Every web functionality item is FROZEN
    *Built 2026-10-01 (layout and copy only); committed by Lineu in 2346046.*
 6. **Monthly review fix — correctness and substance** (Lineu, 2026-10-09;
    approved as a correctness exception to the freeze). **Must be live
-   before the 2026-11-01 cron run.** *Design delivered 2026-10-09; waiting
-   on Lineu's approval before any code.* Part A: over-target check on the
-   reviewed month's cycles; actual contribution rule and deposits separate
-   from the required amount; skip needs the plan already funds; a
-   card-only month is not a real month; real savings total. Part B: card
-   goal vs actual and top overspends, surplus and savings by destination,
-   month-over-month, the month ahead, goal and reserve progress. New guard:
-   every dollar figure in a letter must be in its payload, or the letter is
-   not saved. The same guard covers the onboarding letter (FROZEN list).
+   before the 2026-11-01 cron run; deployable by 2026-10-25.** *Built
+   2026-10-10, uncommitted, as two patches (Part A, then Part B).* Part A:
+   over-target check on the reviewed month's cycles; actual contribution
+   rules and deposits apart from the required amount; needs the plan already
+   funds are skipped; a card-only month is not a real month; real savings
+   total. Part B: card goal vs actual and top overspends (same helpers as the
+   Cards page, proven equal), surplus and savings by destination,
+   month-over-month, the month ahead, goal and reserve progress at the actual
+   rules; figure guard and names guard, regenerate once then fail visibly
+   (`review_guard_failed` event, cron reason `guard_failed`, nothing saved).
+   Still open:
+   - **Live check (b) on Zezinho Test not done:** its password in
+     `apps/mobile/.env.test.local` is refused since 2026-10-10 (LINEU).
+   - **Onboarding letter guard: not switched on** — cannot be checked on
+     stored letters, and rounded figures are common. Decision needed. —
+     [ticket](tickets/onboarding-review-unguarded.md)
+   - **Top recommendation still unguarded.** —
+     [ticket](tickets/top-recommendation-unguarded-figures.md)
+   - **`events` is writable and deletable by any signed-in member** (RLS
+     `FOR ALL`), so "server only" holds for `/api/events` only. —
+     [ticket](tickets/events-rls-client-writable.md)
 
 **Dropped by Lineu, 2026-10-01:**
 

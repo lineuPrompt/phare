@@ -4,6 +4,7 @@ import { businessToday } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { decideReview } from '@/lib/reviewSchedule';
 import { generateMonthlyReview } from '@/lib/monthlyReviewService';
+import { LetterGuardError } from '@/lib/letterGuards';
 
 // ---------------------------------------------------------------------------
 // GET /api/cron/monthly-reviews — month-end review generation.
@@ -408,7 +409,15 @@ export async function GET(request: Request) {
             outcomes.push({ householdId, status: 'failed', month, reason: 'claim_stuck' });
           } else {
             console.error('Cron monthly-reviews — generation failed, claim released:', householdId, month, genErr);
-            outcomes.push({ householdId, status: 'failed', month, reason: 'generation_failed' });
+            // A letter that failed its figure or name guard twice is its own
+            // outcome, so the run's report says why this household has no
+            // letter; the review_guard_failed event holds the figures.
+            outcomes.push({
+              householdId,
+              status: 'failed',
+              month,
+              reason: genErr instanceof LetterGuardError ? 'guard_failed' : 'generation_failed',
+            });
           }
         }
       } catch (householdErr) {

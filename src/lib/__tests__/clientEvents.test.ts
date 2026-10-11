@@ -243,3 +243,14 @@ describe('validateClientEvent — the funnel trail (2026-09-29)', () => {
       .toEqual({ ok: false, reason: 'unknown_metadata_key' });
   });
 });
+
+describe('server-only events cannot be written through /api/events (2026-10-10)', () => {
+  // review_guard_failed records that a letter was NOT saved, and why. A client
+  // able to write it could fake a failure; one able to write
+  // review_text_guard_retried could skew the only signal of how often the
+  // model breaks the rules.
+  it.each(['review_guard_failed', 'review_text_guard_retried'])('%s is not in the allowlist and is refused', (type) => {
+    expect(Object.prototype.hasOwnProperty.call(CLIENT_EVENT_ALLOWLIST, type)).toBe(false);
+    expect(validateClientEvent({ type, metadata: { platform: 'web' } })).toEqual({ ok: false, reason: 'unknown_event_type' });
+  });
+});

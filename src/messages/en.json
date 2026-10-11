@@ -471,6 +471,7 @@
     "replaceConfirm": "Replace it",
     "replaceCancel": "Keep the current one",
     "regenerateInProgress": "A review is being written right now. Please try again in a minute.",
+    "regenerateGuardFailed": "This month's letter could not be written reliably, so nothing was saved and your previous letter is unchanged. Please try again later.",
     "snapshotNav": {
       "prev": "Previous month",
       "next": "Next month",

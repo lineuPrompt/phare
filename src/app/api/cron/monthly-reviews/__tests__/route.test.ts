@@ -24,6 +24,7 @@ let updatePayloads: Record<string, unknown>[] = [];
 let insertPayloads: Record<string, unknown>[] = [];
 let deleteError: unknown = null;
 let generateThrows = false;
+let guardFails = false;
 let ops: string[] = [];
 let deletedClaimIds: string[] = [];
 
@@ -89,6 +90,11 @@ vi.mock('@/lib/monthlyReviewService', () => ({
   generateMonthlyReview: async () => {
     ops.push('generate');
     if (generateThrows) throw new Error('anthropic down');
+    if (guardFails) {
+      // From the module the route itself loads, so instanceof holds.
+      const { LetterGuardError } = await import('@/lib/letterGuards');
+      throw new LetterGuardError(['$2,451'], []);
+    }
     return { topRecommendation: 'rec', reviewText: 'text' };
   },
 }));
@@ -107,6 +113,7 @@ describe('monthly review cron', () => {
     deletedClaimIds = [];
     deleteError = null;
     generateThrows = false;
+    guardFails = false;
     process.env.CRON_SECRET = 'test-secret';
     households = { data: [{ id: 'hh1', locale: 'en' }], error: null };
     // Data in August, the month reviewed on 1 September.
@@ -254,6 +261,16 @@ describe('monthly review cron', () => {
 
     expect(deletedClaimIds).toContain('claim-1');
     expect(json.outcomes[0]).toMatchObject({ status: 'failed', reason: 'generation_failed' });
+  });
+
+  it('a letter that failed its guards releases the claim and is reported as guard_failed', async () => {
+    // Nothing is saved; the run's report says why this household has no
+    // letter, distinct from the AI being down.
+    guardFails = true;
+    const json = await (await runCron()).json();
+
+    expect(deletedClaimIds).toContain('claim-1');
+    expect(json.outcomes[0]).toMatchObject({ status: 'failed', reason: 'guard_failed' });
   });
 
   it('reports claim_stuck when the release ITSELF fails', async () => {

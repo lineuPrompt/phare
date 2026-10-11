@@ -42,6 +42,7 @@ import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { requirePro } from '@/lib/proGate';
 import { reserveRegeneration } from '@/lib/regenerationQuotaServer';
 import { generateMonthlyReview } from '@/lib/monthlyReviewService';
+import { LetterGuardError } from '@/lib/letterGuards';
 
 // GENERATION LIVES IN src/lib/monthlyReviewService.ts. This route keeps only
 // what depends on there being a signed-in user asking: the session, the Pro
@@ -183,6 +184,17 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ saved: true, topRecommendation, reviewText, reviewMonth });
   } catch (error) {
+    // A letter that twice named a figure or a name its payload does not hold
+    // was not saved (monthlyReviewService.ts). Said as itself, with its own
+    // code, so the button can explain it in the household's language rather
+    // than reporting a generic failure.
+    if (error instanceof LetterGuardError) {
+      console.error('Regenerate plan — letter failed its guards, nothing saved:', error.message);
+      return NextResponse.json(
+        { error: error.message, code: 'review_guard_failed' },
+        { status: 502 }
+      );
+    }
     console.error('Regenerate plan error:', error);
     return NextResponse.json({ error: 'Failed to regenerate plan' }, { status: 500 });
   }

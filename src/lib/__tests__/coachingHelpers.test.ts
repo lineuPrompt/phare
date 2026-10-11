@@ -10,11 +10,8 @@ import {
   groupInstallmentSeries,
   computeStartingContribution,
   coachingFallbackApplies,
-  findUnsanctionedSourcingMention,
   buildFallbackReviewText,
   containsIllustrativeTokenLeak,
-  buildReviewPayload,
-  ReviewPayloadPlan,
   FundingNeed,
 } from '../coachingHelpers';
 
@@ -46,7 +43,7 @@ describe('rankFundingNeeds', () => {
   it('ranks a past-due goal first regardless of a sinking fund being nearer on the calendar', () => {
     const needs: FundingNeed[] = [
       { kind: 'sinkingFundAllocation', name: 'Christmas', monthlyProvision: 300, monthsUntilDue: 1, pastDue: false },
-      { kind: 'goal', name: 'Emergency fund', monthlyContribution: 400, monthsToTarget: null, pastDue: true, amountRemaining: 2400 },
+      { kind: 'goal', name: 'Emergency fund', monthlyShortfall: 400, monthsToTarget: null, pastDue: true, amountRemaining: 2400 },
     ];
     const ranked = rankFundingNeeds(needs);
     expect(ranked[0].name).toBe('Emergency fund');
@@ -55,7 +52,7 @@ describe('rankFundingNeeds', () => {
   it('orders by ascending months-until-due/target when nothing is past due', () => {
     const needs: FundingNeed[] = [
       { kind: 'sinkingFundAllocation', name: 'Property tax', monthlyProvision: 300, monthsUntilDue: 8, pastDue: false },
-      { kind: 'goal', name: 'RESP', monthlyContribution: 200, monthsToTarget: 2, pastDue: false, amountRemaining: 400 },
+      { kind: 'goal', name: 'RESP', monthlyShortfall: 200, monthsToTarget: 2, pastDue: false, amountRemaining: 400 },
       { kind: 'sinkingFundAllocation', name: 'Christmas', monthlyProvision: 258, monthsUntilDue: 4, pastDue: false },
     ];
     const ranked = rankFundingNeeds(needs);
@@ -65,7 +62,7 @@ describe('rankFundingNeeds', () => {
   it('breaks ties on months by larger monthly pressure first', () => {
     const needs: FundingNeed[] = [
       { kind: 'sinkingFundAllocation', name: 'Small fund', monthlyProvision: 50, monthsUntilDue: 3, pastDue: false },
-      { kind: 'goal', name: 'Big goal', monthlyContribution: 500, monthsToTarget: 3, pastDue: false, amountRemaining: 1500 },
+      { kind: 'goal', name: 'Big goal', monthlyShortfall: 500, monthsToTarget: 3, pastDue: false, amountRemaining: 1500 },
     ];
     const ranked = rankFundingNeeds(needs);
     expect(ranked[0].name).toBe('Big goal');
@@ -73,7 +70,7 @@ describe('rankFundingNeeds', () => {
 
   it('places items with no date (null months) last, ordered by pressure among themselves', () => {
     const needs: FundingNeed[] = [
-      { kind: 'goal', name: 'No-date goal', monthlyContribution: 0, monthsToTarget: null, pastDue: false, amountRemaining: 1000 },
+      { kind: 'goal', name: 'No-date goal', monthlyShortfall: 0, monthsToTarget: null, pastDue: false, amountRemaining: 1000 },
       { kind: 'sinkingFundAllocation', name: 'Dated fund', monthlyProvision: 100, monthsUntilDue: 6, pastDue: false },
     ];
     const ranked = rankFundingNeeds(needs);
@@ -235,7 +232,7 @@ describe('computeFreedCapacityEvents', () => {
 
 describe('computeStartingContribution', () => {
   it('never exceeds typical surplus even when the ranked need requires more', () => {
-    const topNeed = { kind: 'goal' as const, name: 'RESP', monthlyContribution: 500, monthsToTarget: 6, pastDue: false, amountRemaining: 3000, monthlyPressure: 500 };
+    const topNeed = { kind: 'goal' as const, name: 'RESP', monthlyShortfall: 500, monthsToTarget: 6, pastDue: false, amountRemaining: 3000, monthlyPressure: 500 };
     expect(computeStartingContribution(topNeed, 180)).toBe(180);
   });
 
@@ -246,12 +243,12 @@ describe('computeStartingContribution', () => {
 
   it('is 0 when there is no ranked need or surplus is null', () => {
     expect(computeStartingContribution(null, 1000)).toBe(0);
-    const topNeed = { kind: 'goal' as const, name: 'RESP', monthlyContribution: 500, monthsToTarget: 6, pastDue: false, amountRemaining: 3000, monthlyPressure: 500 };
+    const topNeed = { kind: 'goal' as const, name: 'RESP', monthlyShortfall: 500, monthsToTarget: 6, pastDue: false, amountRemaining: 3000, monthlyPressure: 500 };
     expect(computeStartingContribution(topNeed, null)).toBe(0);
   });
 
   it('never goes negative when typical surplus is a real trailing deficit', () => {
-    const topNeed = { kind: 'goal' as const, name: 'RESP', monthlyContribution: 500, monthsToTarget: 6, pastDue: false, amountRemaining: 3000, monthlyPressure: 500 };
+    const topNeed = { kind: 'goal' as const, name: 'RESP', monthlyShortfall: 500, monthsToTarget: 6, pastDue: false, amountRemaining: 3000, monthlyPressure: 500 };
     expect(computeStartingContribution(topNeed, -200)).toBe(0);
   });
 });
@@ -280,110 +277,6 @@ describe('coachingFallbackApplies', () => {
 
   it('is false when typical surplus is genuinely positive, even with no source/event', () => {
     expect(coachingFallbackApplies({ typicalSurplus: 180, sourceCategory: null, freedCapacityEvents: [] })).toBe(false);
-  });
-});
-
-describe('findUnsanctionedSourcingMention', () => {
-  const allCategories = ['Housing', 'Transportation', 'Restaurants', 'Shopping', 'Groceries & Pharmacy'];
-
-  it('does not flag a category mentioned purely as budget narration, with no sourcing phrase nearby', () => {
-    const text = 'Your spending on Shopping this month was $600, right in line with recent months.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, null)).toBeNull();
-  });
-
-  it('flags a disallowed category named as a money source', () => {
-    const text = 'There\'s room to work with this month — that could come from Shopping if you wanted.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, null)).toBe('Shopping');
-  });
-
-  it('does not flag the allowed sourceCategory even when used as a source', () => {
-    const text = 'Restaurants ran $680 against your own $450 target — that\'s one place it could come from.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, 'Restaurants')).toBeNull();
-  });
-
-  it('flags a different category as a source even when a real sourceCategory also exists', () => {
-    const text = 'Restaurants ran over target, but you could also pull from Groceries & Pharmacy if needed.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, 'Restaurants')).toBe('Groceries & Pharmacy');
-  });
-
-  it('recognizes several sourcing phrase variants', () => {
-    expect(findUnsanctionedSourcingMention('Consider directing money from Shopping toward the fund.', allCategories, null)).toBe('Shopping');
-    expect(findUnsanctionedSourcingMention('You could cut back on Shopping this month.', allCategories, null)).toBe('Shopping');
-    expect(findUnsanctionedSourcingMention('There\'s room in Shopping you could use.', allCategories, null)).toBe('Shopping');
-  });
-
-  it('returns null when no category is mentioned at all', () => {
-    expect(findUnsanctionedSourcingMention('This was a strong month overall.', allCategories, null)).toBeNull();
-  });
-
-  it('CONTROL (Codex finding 5ii): "room in your budget" followed much later by the ordinary verb "shopping" is not a sourcing construction', () => {
-    const text = 'There is room in your budget to keep shopping around for lower insurance premiums.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, null)).toBeNull();
-  });
-
-  it('still flags a genuine sourcing construction even when an unrelated later mention of the same category exists', () => {
-    const text = "That's one place it could come from Shopping — separately, shopping around for insurance is also worth doing.";
-    expect(findUnsanctionedSourcingMention(text, allCategories, null)).toBe('Shopping');
-  });
-
-  it('word-boundary: a category name embedded inside a longer unrelated word is not flagged', () => {
-    // "Housing" should not match inside an unrelated longer word.
-    const text = 'You could pull from Housingallowance this month.'; // not a real category name
-    expect(findUnsanctionedSourcingMention(text, ['Housing'], null)).toBeNull();
-  });
-
-  it('FR: does not flag a category mentioned purely as budget narration, with no sourcing phrase nearby', () => {
-    const text = 'Vos dépenses Shopping ce mois-ci étaient de 600 $, conformes aux mois précédents.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBeNull();
-  });
-
-  it('FR: flags a disallowed category named as a money source ("puiser dans")', () => {
-    const text = 'Vous pourriez puiser dans Shopping si nécessaire.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBe('Shopping');
-  });
-
-  it('FR: flags a disallowed category named as a money source ("provenir de")', () => {
-    const text = 'Cela pourrait provenir de Shopping, par exemple.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBe('Shopping');
-  });
-
-  it('FR: flags a disallowed category named as a money source ("utiliser … de")', () => {
-    const text = 'Vous pourriez utiliser une partie de Shopping pour ce fonds.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBe('Shopping');
-  });
-
-  it('FR: flags a disallowed category named as a money source ("pourriez prendre … de")', () => {
-    const text = 'Vous pourriez prendre un peu de Shopping ce mois-ci.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBe('Shopping');
-  });
-
-  it('FR: does not flag the allowed sourceCategory even when used as a source', () => {
-    const text = "Restaurants a dépassé de 680 $ votre propre cible de 450 $ — c'est un endroit où vous pourriez puiser dans Restaurants.";
-    expect(findUnsanctionedSourcingMention(text, allCategories, 'Restaurants', 'fr')).toBeNull();
-  });
-
-  it('FR: flags a different category as a source even when a real sourceCategory also exists', () => {
-    const text = 'Restaurants a dépassé la cible, mais vous pourriez aussi puiser dans Groceries & Pharmacy si nécessaire.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, 'Restaurants', 'fr')).toBe('Groceries & Pharmacy');
-  });
-
-  it('FR: returns null when no category is mentioned at all', () => {
-    expect(findUnsanctionedSourcingMention('Ce fut un mois solide dans l\'ensemble.', allCategories, null, 'fr')).toBeNull();
-  });
-
-  it('FR CONTROL (Codex finding 5ii analogue): a genuine French sourcing phrase followed much later by an unrelated neutral mention of the (English) category name is not a sourcing construction', () => {
-    const text = 'Vous pourriez prendre le temps de planifier votre budget ce mois-ci, car Shopping a été stable dernièrement.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBeNull();
-  });
-
-  it('FR CONTROL: another genuine phrase, unrelated later category mention', () => {
-    const text = 'Vous pourriez puiser dans vos économies avant la fin du mois, et Shopping reste une catégorie à surveiller.';
-    expect(findUnsanctionedSourcingMention(text, allCategories, null, 'fr')).toBeNull();
-  });
-
-  it('FR: word-boundary — a category name embedded inside a longer unrelated word is not flagged', () => {
-    const text = 'Vous pourriez puiser dans Housingallowance ce mois-ci.'; // not a real category name
-    expect(findUnsanctionedSourcingMention(text, ['Housing'], null, 'fr')).toBeNull();
   });
 });
 
@@ -455,89 +348,5 @@ describe('containsIllustrativeTokenLeak', () => {
     const text = 'Your plan sets aside $300/month for {name}, once it clears in {freesOn}.';
     // "{name}" is a real fund name here, but "{freesOn}" never was set up as one.
     expect(containsIllustrativeTokenLeak(text, tokens, ['{name}'])).toBe(true);
-  });
-});
-
-describe('buildReviewPayload (Part B, 2026-07-28)', () => {
-  function makePlan(sourceCategoryName: string | null): ReviewPayloadPlan {
-    return {
-      reviewMonth: 'July 2026',
-      monthlyBudget: {
-        totalIncome: 6000,
-        totalExpenses: 3100,
-        totalSavings: 0,
-        categories: [
-          { name: 'Salary', budgeted: 6000, type: 'income', isFixed: true, seedCategory: 'Income' },
-          { name: 'Rent', budgeted: 2200, type: 'expense', isFixed: true, seedCategory: 'Housing' },
-          { name: 'Winners', budgeted: 600, type: 'expense', isFixed: false, seedCategory: 'Shopping' },
-          { name: 'La Belle Province', budgeted: 300, type: 'expense', isFixed: false, seedCategory: 'Restaurants' },
-        ],
-      },
-      sinkingFunds: [{ name: 'Property Tax', monthlyProvision: 300 }],
-      sinkingFundBuffer: { fundedAlready: false, totalMonthlyProvision: 300 },
-      debtPayoff: null,
-      goals: [],
-      windfalls: [],
-      coaching: {
-        sourceCategory: sourceCategoryName
-          ? ({ categoryName: sourceCategoryName, target: 450, actual: 680, over: 230 } as { categoryName: string })
-          : null,
-        rankedNeeds: [],
-      },
-      topRecommendation: 'Keep going.',
-    };
-  }
-
-  it('omits the top-level seedCategories array — it is not part of the allow-list at all', () => {
-    const payload = buildReviewPayload(makePlan(null)) as { seedCategories?: unknown };
-    expect(payload.seedCategories).toBeUndefined();
-    expect(JSON.stringify(payload)).not.toContain('seedCategories');
-  });
-
-  it('strips seedCategory from every category when sourceCategory is null', () => {
-    const payload = buildReviewPayload(makePlan(null)) as { monthlyBudget: { categories: Record<string, unknown>[] } };
-    for (const cat of payload.monthlyBudget.categories) {
-      expect(cat.seedCategory).toBeUndefined();
-    }
-  });
-
-  it('keeps seedCategory ONLY on the one category matching coaching.sourceCategory when non-null', () => {
-    const payload = buildReviewPayload(makePlan('Restaurants')) as { monthlyBudget: { categories: { name: string; seedCategory?: string }[] } };
-    const withSeedCategory = payload.monthlyBudget.categories.filter((c) => c.seedCategory !== undefined);
-    expect(withSeedCategory).toHaveLength(1);
-    expect(withSeedCategory[0].name).toBe('La Belle Province');
-    expect(withSeedCategory[0].seedCategory).toBe('Restaurants');
-  });
-
-  it('applies the reduction ALWAYS, not only when sourceCategory is null — founder\'s explicit widening', () => {
-    const payload = buildReviewPayload(makePlan('Restaurants')) as { monthlyBudget: { categories: { name: string; seedCategory?: string }[] } };
-    const winners = payload.monthlyBudget.categories.find((c) => c.name === 'Winners')!;
-    // Winners' own seedCategory is "Shopping" — not the sanctioned "Restaurants" — so it's stripped even though a real sourceCategory exists.
-    expect(winners.seedCategory).toBeUndefined();
-  });
-
-  it('name/budgeted/type/isFixed remain present on every category, sourceCategory null or not', () => {
-    for (const plan of [makePlan(null), makePlan('Restaurants')]) {
-      const payload = buildReviewPayload(plan) as { monthlyBudget: { categories: { name: unknown; budgeted: unknown; type: unknown; isFixed: unknown }[] } };
-      for (const cat of payload.monthlyBudget.categories) {
-        expect(cat.name).toBeDefined();
-        expect(cat.budgeted).toBeDefined();
-        expect(cat.type).toBeDefined();
-        expect(cat.isFixed).toBeDefined();
-      }
-    }
-  });
-
-  it('carries every other allow-listed field through unchanged', () => {
-    const plan = makePlan('Restaurants');
-    const payload = buildReviewPayload(plan) as Record<string, unknown>;
-    expect(payload.reviewMonth).toBe('July 2026');
-    expect(payload.sinkingFunds).toBe(plan.sinkingFunds);
-    expect(payload.sinkingFundBuffer).toBe(plan.sinkingFundBuffer);
-    expect(payload.debtPayoff).toBe(plan.debtPayoff);
-    expect(payload.goals).toBe(plan.goals);
-    expect(payload.windfalls).toBe(plan.windfalls);
-    expect(payload.coaching).toBe(plan.coaching);
-    expect(payload.topRecommendation).toBe('Keep going.');
   });
 });

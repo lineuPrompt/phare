@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // The monthly review takes its over-target category from the shared check
-// (cardOverTarget.overTargetCategoriesForLiveCycles), which judges against the
+// (cardOverTarget.overTargetCategoriesForCycle), which judges the REVIEWED month's cycles against the
 // plan the Cards page shows — carried forward included. 2026-09-29.
 //
 // The check itself is tested in cardOverTarget.test.ts. This pins the wiring:
@@ -47,10 +47,24 @@ vi.mock('@/lib/anthropic', () => ({
   anthropic: { messages: { create: (...a: unknown[]) => createMock(...a) } },
 }));
 
+// loadCardCycleFacts is the one read; the source category and the letter's
+// cards are both derived from what it returns (2026-10-10).
 const overTargetMock = vi.fn();
-vi.mock('@/lib/cardOverTarget', () => ({
-  overTargetCategoriesForLiveCycles: (...a: unknown[]) => overTargetMock(...a),
-}));
+vi.mock('@/lib/cardOverTarget', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/cardOverTarget')>();
+  return { ...actual, loadCardCycleFacts: (...a: unknown[]) => overTargetMock(...a) };
+});
+
+/** Card facts carrying the given (category, plan, actual) figures, closed cycle. */
+function facts(categories: [string, number, number][]) {
+  return [{
+    cardId: CARD.id, cardName: CARD.name, cycleMonth: '2026-09', cycleStart: '2026-08-16', cycleEnd: '2026-09-15',
+    open: false, goal: null, spent: 0, previousCycleSpent: 0,
+    categories: categories.map(([name, plan, actual], i) => ({
+      categoryId: `c${i}`, name, nameFr: null, plan, actual, previousActual: 0,
+    })),
+  }];
+}
 
 async function generate() {
   const { generateMonthlyReview } = await import('@/lib/monthlyReviewService');
@@ -82,29 +96,30 @@ describe('generateMonthlyReview — over-target category comes from the shared c
   });
   afterEach(() => { vi.useRealTimers(); });
 
-  it('calls the check for the household\'s cards, on the household\'s today', async () => {
-    overTargetMock.mockResolvedValue([]);
+  it('calls the check for the household\'s cards, for the reviewed month, on the household\'s today', async () => {
+    overTargetMock.mockResolvedValue(facts([]));
     const client = await generate();
     expect(overTargetMock).toHaveBeenCalledTimes(1);
-    const [supabase, householdId, cards, , today] = overTargetMock.mock.calls[0];
+    const [supabase, householdId, cards, , cycleMonth, today] = overTargetMock.mock.calls[0];
     expect(supabase).toBe(client);
     expect(householdId).toBe('hh-A');
     expect(cards).toEqual([CARD]);
+    expect(cycleMonth).toBe('2026-09');
     expect(today).toBe('2026-09-29');
   });
 
   it('the largest overspend it reports becomes the review\'s source category', async () => {
-    overTargetMock.mockResolvedValue([
-      { categoryName: 'Restaurants', target: 150, actual: 170, over: 20 },
-      { categoryName: 'Groceries & Pharmacy', target: 500, actual: 620, over: 120 },
-    ]);
+    overTargetMock.mockResolvedValue(facts([
+      ['Restaurants', 150, 170],
+      ['Groceries & Pharmacy', 500, 620],
+    ]));
     await generate();
     const prompts = allPrompts();
-    expect(prompts).toContain('\\"sourceCategory\\":{\\"categoryName\\":\\"Groceries & Pharmacy\\",\\"target\\":500,\\"actual\\":620,\\"over\\":120}');
+    expect(prompts).toContain('\\"sourceCategory\\":{\\"categoryName\\":\\"Groceries & Pharmacy\\",\\"target\\":500,\\"actual\\":620,\\"over\\":120,\\"open\\":false}');
   });
 
   it('nothing over target: the source category is null', async () => {
-    overTargetMock.mockResolvedValue([]);
+    overTargetMock.mockResolvedValue(facts([]));
     await generate();
     expect(allPrompts()).toContain('\\"sourceCategory\\":null');
   });

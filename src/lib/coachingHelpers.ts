@@ -11,8 +11,9 @@
  * context.
  */
 
+import { monthlyEquivalent, type IncomeFrequency } from '@phare/core';
 import { monthsBetween } from './goalHelpers';
-import { escapeRegExp } from './textMatchHelpers';
+import { envelopeStatus } from './envelopeHelpers';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -36,7 +37,7 @@ export type FundingNeed =
   | {
       kind: 'goal';
       name: string;
-      monthlyContribution: number;
+      monthlyShortfall: number;
       monthsToTarget: number | null;
       pastDue: boolean;
       amountRemaining: number;
@@ -81,7 +82,7 @@ export function computeSinkingFundUrgency(
 export function rankFundingNeeds(needs: FundingNeed[]): RankedNeed[] {
   const withPressure: RankedNeed[] = needs.map((n) => ({
     ...n,
-    monthlyPressure: n.kind === 'sinkingFundAllocation' ? n.monthlyProvision : n.monthlyContribution,
+    monthlyPressure: n.kind === 'sinkingFundAllocation' ? n.monthlyProvision : n.monthlyShortfall,
   }));
 
   const monthsOf = (n: RankedNeed): number | null =>
@@ -142,11 +143,24 @@ export function computeInsufficientHistory(months: MonthHistoryAvailability[]): 
   return monthsWithData < 3;
 }
 
-export type OverTargetCategory = { categoryName: string; target: number; actual: number; over: number };
+export type OverTargetCategory = {
+  categoryName: string;
+  target: number;
+  actual: number;
+  over: number;
+  /**
+   * True when the card's cycle had not closed when the review was written
+   * (2026-10-10): its spend is not final, so it is "running ahead of its
+   * target so far", never "over". Absent from callers that predate it.
+   */
+  open?: boolean;
+};
 
 /**
- * A category qualifies ONLY when the family set a real target (target > 0
- * — never 0/unset) AND actual spend exceeds it. A category with no target,
+ * A category qualifies ONLY when it is 'over' by envelopeStatus — the Cards
+ * page's own rule (2026-10-10; it used to restate that rule here as
+ * `target > 0 && actual > target`). A target of 0 is 'unset' there, so a
+ * category with no real target never qualifies. A category with no target,
  * or one that's under/at target, cannot appear here — there is no path for
  * it to reach this array, which is what makes it structurally impossible
  * for the AI to fabricate a "source" category later (see
@@ -159,11 +173,44 @@ export type OverTargetCategory = { categoryName: string; target: number; actual:
  * anywhere in the schema. This can only ever surface card spending.
  */
 export function computeOverTargetCategories(
-  figures: { categoryName: string; target: number; actual: number }[]
+  figures: { categoryName: string; target: number; actual: number; open?: boolean }[]
 ): OverTargetCategory[] {
   return figures
-    .filter((f) => f.target > 0 && f.actual > f.target)
-    .map((f) => ({ ...f, over: round2(f.actual - f.target) }));
+    .filter((f) => envelopeStatus(f.target, f.actual) === 'over')
+    .map((f) => ({
+      categoryName: f.categoryName,
+      target: f.target,
+      actual: f.actual,
+      over: round2(f.actual - f.target),
+      ...(f.open === undefined ? {} : { open: f.open }),
+    }));
+}
+
+/** A recurring transfer into an account, as the review reports it: amount and frequency. */
+export type ContributionRuleFact = { amount: number; cadence: IncomeFrequency };
+
+const CADENCES: readonly string[] = ['weekly', 'biweekly', 'semimonthly', 'monthly'];
+
+/**
+ * A recurring_items row's cadence, checked. An unknown value throws: guessing
+ * a frequency would put a wrong monthly amount in a letter.
+ */
+export function contributionRuleFact(amount: number | string, cadence: string): ContributionRuleFact {
+  if (!CADENCES.includes(cadence)) throw new Error(`unknown contribution cadence "${cadence}"`);
+  return { amount: round2(Number(amount)), cadence: cadence as IncomeFrequency };
+}
+
+/**
+ * What a need still lacks each month once the household's own recurring
+ * transfers into it are counted (2026-10-10). 0 means the plan already funds
+ * it in full, and it is not a need to coach toward.
+ *
+ * The rules are converted with monthlyEquivalent, the app's one conversion
+ * point between a per-payment amount and a month.
+ */
+export function monthlyShortfall(required: number, rules: ContributionRuleFact[]): number {
+  const covered = rules.reduce((sum, r) => sum + monthlyEquivalent(r.amount, r.cadence), 0);
+  return round2(Math.max(0, required - covered));
 }
 
 /** Deterministic, code-only choice — the largest overspend. null if none qualify. */
@@ -273,167 +320,12 @@ export function coachingFallbackApplies(ctx: {
 }
 
 // ---------------------------------------------------------------------------
-// Post-generation guard: category-sourcing leak (Fix 3, 2026-07-28)
+// The category-sourcing guard (findUnsanctionedSourcingMention, 2026-07-28)
+// and buildReviewPayload (2026-07-28) were REPLACED on 2026-10-10 by the
+// letter guards in letterGuards.ts (every figure and every card or category
+// name must be in the payload) and the explicit letter payload built in
+// monthlyReviewService.ts. Their history is in git.
 // ---------------------------------------------------------------------------
-//
-// CONFIRMED LIVE (2026-07-28): plan.seedCategories and plan.monthlyBudget.
-// categories used to reach reviewPrompt in full regardless of
-// coaching.sourceCategory — a real data leak. Two live adversarial attempts
-// (including Shopping at 60% of income, no target at all) did not get the
-// model to exploit it, but "not yet observed" isn't "impossible".
-//
-// STATUS UPDATE (Part B, same day): buildReviewPayload now strips the
-// classification BUCKET NAME (seedCategory) for every category except the
-// one coaching.sourceCategory sanctions — that specific leak is closed at
-// the source. But category.name (the real transaction line label, e.g.
-// "Winners") is deliberately still sent, for the factual narration a real
-// review needs, and it is JUST AS usable by the model as a sourcing target
-// as seedCategory ever was. This function is checked against category.name
-// values, not only seedCategory — which means it is now the LOAD-BEARING
-// gate against that remaining surface, not merely defense-in-depth. Do not
-// describe category-sourcing leakage as fully closed by data reduction
-// alone; this prose guard is doing real, necessary work.
-//
-// Phrases the reviewPrompt itself teaches as the canonical way to describe
-// the ONE sanctioned money source (e.g. "that's one place it could come
-// from"). A DISALLOWED category name appearing shortly AFTER one of these
-// phrases means the model used a category outside coaching.sourceCategory
-// as a money source — a category mentioned purely as budget narration (no
-// sourcing phrase immediately before it) is not flagged, since that's
-// legitimate and happens in nearly every real review.
-const SOURCING_PHRASE_MARKERS_EN = [
-  'could come from',
-  'come from',
-  'consider directing',
-  'consider moving',
-  'pull from',
-  'move money from',
-  'take from',
-  'cut back on',
-  'reduce spending on',
-  'use that room',
-  'room in',
-];
-
-// French sourcing phrases (2026-07-28, Part C) — from Codex's actual repro
-// vocabulary only, NOT translation guesses of the English list above (the
-// founder's explicit instruction). "…" marks a bounded gap for a
-// verb-object-preposition construction ("pourriez prendre [some amount] de
-// [category]") — expanded to a small wildcard by phraseToRegexSource below,
-// not a literal ellipsis character. THIS IS A KNOWN-MINIMUM LIST, not a
-// full translation of SOURCING_PHRASE_MARKERS_EN — French equivalents of
-// "cut back on," "room in," etc. are not yet covered; extend this list once
-// more real French sourcing samples are observed live, per the same
-// discipline (measure, don't guess).
-const SOURCING_PHRASE_MARKERS_FR = [
-  'pourriez prendre … de',
-  'puiser dans',
-  'provenir de',
-  'utiliser … de',
-];
-
-// KNOWN, ACCEPTED LIMITATION (2026-07-29) — NOT IN SCOPE, do not expand this
-// list speculatively: French equivalents of "cut back on," "room in," etc.
-// ("transférer … de" and similar) are not covered. Enumerating every natural
-// French sourcing phrasing is unbounded and this guard is best-effort prose
-// matching, not the primary defense — reviewPrompt's own COACHING rule (only
-// coaching.sourceCategory may ever be named as a source) is the primary
-// defense; this is a net behind it. Real-world frequency of any missed
-// phrasing is measured via the review_text_guard_retried event, not by
-// further guessing at vocabulary ahead of observed failures.
-
-// PROXIMITY FIX (2026-07-28, Codex finding 5ii): confirmed false positive —
-// sourceCategory:null, "There is room in your budget to keep shopping
-// around for lower insurance premiums." tripped this guard, pairing "room
-// in" with "Shopping" (the SEED category) even though the sentence never
-// names a category as a source at all — "shopping" here is the ordinary verb
-// ("shop around for a better rate"), 21 characters after "room in" with
-// "your budget to keep " in between. Measured empirically against every
-// real true-positive phrasing already covered by tests: the sourcing phrase
-// always ends within 1-12 characters of the category name it actually
-// introduces (e.g. "pull from Groceries & Pharmacy", "consider directing
-// money from Shopping"). SOURCING_PROXIMITY_CHARS_EN sits comfortably inside
-// that gap, with margin on both sides. Also fixed: category names are now
-// matched by whole word (word-boundary regex, matchAll for every
-// occurrence), not by unbounded substring — "shopping" the verb and
-// "Shopping" the category are literally the same word, so word-boundary
-// alone doesn't fully separate them; requiring genuine PHRASE-then-CATEGORY
-// adjacency is what actually distinguishes "used as a source" from
-// "happened to appear nearby."
-const SOURCING_PROXIMITY_CHARS_EN = 15;
-
-// French measured separately (2026-07-28, Part C) — real constructions with
-// each of the 4 FR phrases above (e.g. "vous pourriez puiser dans Shopping")
-// all measured a 1-character gap (category name follows "de"/"dans"
-// immediately). A constructed French false positive (a genuine FR phrase
-// followed, much later in the sentence, by an unrelated neutral mention of
-// an English category name) measured ~40 characters away. 18 gives a little
-// extra headroom over the English constant given fewer real samples, while
-// staying nowhere near the 40-character false-positive gap.
-const SOURCING_PROXIMITY_CHARS_FR = 18;
-
-function sourcingPhrasesForLocale(locale: 'en' | 'fr'): string[] {
-  return locale === 'fr' ? SOURCING_PHRASE_MARKERS_FR : SOURCING_PHRASE_MARKERS_EN;
-}
-
-function sourcingProximityForLocale(locale: 'en' | 'fr'): number {
-  return locale === 'fr' ? SOURCING_PROXIMITY_CHARS_FR : SOURCING_PROXIMITY_CHARS_EN;
-}
-
-/** "a … b" → a regex source matching "a", then up to 20 of any character, then "b". Literal parts escaped. */
-function phraseToRegexSource(phrase: string): string {
-  return phrase.split('…').map(escapeRegExp).join('.{0,20}');
-}
-
-/**
- * Scans reviewText for a disallowed category name appearing shortly after
- * one of the canonical sourcing phrases — a genuine "phrase introduces this
- * category as a source" construction, not mere co-occurrence anywhere in a
- * wide window. Returns the first offending category name, or null if none
- * found. `allowedCategoryName` (coaching.sourceCategory's own name, or null
- * when there is none) is exempt — the model IS allowed to describe that one
- * as a source, per the prompt's COACHING rule.
- *
- * WIRING (2026-07-28, Part C): `locale` selects both the phrase list AND
- * proximity threshold by default — a call site passing only the first 3
- * arguments (every real call site in this codebase) automatically gets the
- * correct language's vocabulary, the same "safe by default" wiring as
- * enforceBorrowedCashFraming. `sourcingPhrases` stays overridable only for
- * tests that want to probe a specific list directly.
- */
-export function findUnsanctionedSourcingMention(
-  reviewText: string,
-  allCategoryNames: string[],
-  allowedCategoryName: string | null,
-  locale: 'en' | 'fr' = 'en',
-  sourcingPhrases: string[] = sourcingPhrasesForLocale(locale)
-): string | null {
-  const lowerText = reviewText.toLowerCase();
-  const proximity = sourcingProximityForLocale(locale);
-
-  const phraseEnds: number[] = [];
-  for (const phrase of sourcingPhrases) {
-    for (const m of lowerText.matchAll(new RegExp(phraseToRegexSource(phrase), 'gi'))) {
-      if (m.index !== undefined) phraseEnds.push(m.index + m[0].length);
-    }
-  }
-  if (phraseEnds.length === 0) return null;
-
-  for (const name of allCategoryNames) {
-    if (allowedCategoryName && name.toLowerCase() === allowedCategoryName.toLowerCase()) continue;
-    const nameRe = new RegExp(`\\b${escapeRegExp(name.toLowerCase())}\\b`, 'g');
-    for (const m of lowerText.matchAll(nameRe)) {
-      if (m.index === undefined) continue;
-      const nameStart = m.index;
-      const nearPhrase = phraseEnds.some((end) => {
-        const gap = nameStart - end;
-        return gap >= 0 && gap <= proximity;
-      });
-      if (nearPhrase) return name;
-    }
-  }
-  return null;
-}
 
 /**
  * Deterministic, minimal fallback used only when both the original
@@ -486,108 +378,4 @@ export function containsIllustrativeTokenLeak(
     if (!text.includes(token)) return false;
     return !realEntityNames.includes(token);
   });
-}
-
-// ---------------------------------------------------------------------------
-// Part B (2026-07-28): close the category leak at the source
-// ---------------------------------------------------------------------------
-//
-// DIAGNOSIS (reported, founder-approved): reviewPrompt's own rule text never
-// names "monthlyBudget" or "seedCategories" — grepped and confirmed. They
-// reach the model purely because reviewPrompt does JSON.stringify(plan)
-// wholesale. The only rule that touches category data at all is the generic
-// NO ARITHMETIC rule ("restate a figure exactly as given"), and every real
-// review sample narrates categories using name/budgeted ("$600 at Winners"),
-// never seedCategory (the bucket label, e.g. "Shopping"). Nothing downstream
-// re-reads `plan` either — the route's final response and the persisted
-// conversations row carry only topRecommendation/reviewText TEXT, never the
-// plan object — so reducing what's serialized here has zero side effects
-// elsewhere.
-//
-// WHY bucket names are withheld: seedCategory/seedCategories give the model
-// a vocabulary of category NAMES it could reach for as an unsanctioned
-// source, with no hard rule ever requiring that vocabulary for anything.
-// Withholding it for every category except the one coaching.sourceCategory
-// already sanctions (applied ALWAYS, not only when sourceCategory is null —
-// founder's explicit widening, 2026-07-28) removes that vocabulary
-// structurally rather than relying on the model not reaching for it.
-//
-// HONEST LIMIT — NOT A CLOSED HOLE: category.name (the real transaction
-// line label, e.g. "Winners") is NOT withheld and is NOT struck from this
-// payload. It is just as usable by the model as a sourcing target as
-// seedCategory ever was — findUnsanctionedSourcingMention already checks
-// against `category.name` values too, not only seedCategory, precisely
-// because of this. Stripping line labels would remove the factual
-// specificity that makes a review read as written about THIS family, which
-// is not worth the trade. findUnsanctionedSourcingMention therefore remains
-// LOAD-BEARING against the remaining surface, not merely defense-in-depth —
-// do not describe this function as having closed category-sourcing leakage
-// on its own.
-//
-// ALLOW-LIST BY CONSTRUCTION: every field below is named explicitly; a
-// field added to `plan` later for some other purpose does not silently
-// reach reviewPrompt just by existing on `plan` — it has to be added here
-// too, on purpose.
-
-export type ReviewPayloadCategory = {
-  name: string;
-  budgeted: number;
-  type: string;
-  isFixed: boolean;
-  seedCategory?: string;
-};
-
-export type ReviewPayloadPlan = {
-  reviewMonth: unknown;
-  monthlyBudget: {
-    totalIncome: unknown;
-    totalExpenses: unknown;
-    totalSavings: unknown;
-    categories: { name: string; budgeted: number; type: string; isFixed: boolean; seedCategory: string }[];
-  };
-  sinkingFunds: unknown;
-  sinkingFundBuffer: unknown;
-  debtPayoff: unknown;
-  goals: unknown;
-  windfalls: unknown;
-  coaching: { sourceCategory: { categoryName: string } | null } & Record<string, unknown>;
-  topRecommendation: unknown;
-};
-
-/**
- * Builds the EXACT object serialized into reviewPrompt — see the module
- * note above for the full diagnosis and the honest limit this does and
- * does not close. `plan.seedCategories` is never carried through (no rule
- * needs it); `monthlyBudget.categories[].seedCategory` is kept ONLY for the
- * one category matching `plan.coaching.sourceCategory.categoryName` (if
- * any) — every other category keeps name/budgeted/type/isFixed but loses
- * its bucket label.
- */
-export function buildReviewPayload(plan: ReviewPayloadPlan): Record<string, unknown> {
-  const allowedSeedCategory = plan.coaching.sourceCategory?.categoryName ?? null;
-
-  const categories: ReviewPayloadCategory[] = plan.monthlyBudget.categories.map((c) => {
-    const base: ReviewPayloadCategory = { name: c.name, budgeted: c.budgeted, type: c.type, isFixed: c.isFixed };
-    return allowedSeedCategory !== null && c.seedCategory === allowedSeedCategory
-      ? { ...base, seedCategory: c.seedCategory }
-      : base;
-  });
-
-  return {
-    reviewMonth: plan.reviewMonth,
-    monthlyBudget: {
-      totalIncome: plan.monthlyBudget.totalIncome,
-      totalExpenses: plan.monthlyBudget.totalExpenses,
-      totalSavings: plan.monthlyBudget.totalSavings,
-      categories,
-    },
-    sinkingFunds: plan.sinkingFunds,
-    sinkingFundBuffer: plan.sinkingFundBuffer,
-    debtPayoff: plan.debtPayoff,
-    goals: plan.goals,
-    windfalls: plan.windfalls,
-    coaching: plan.coaching,
-    topRecommendation: plan.topRecommendation,
-    // plan.seedCategories deliberately omitted — see module note above.
-  };
 }

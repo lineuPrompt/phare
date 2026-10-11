@@ -255,6 +255,13 @@ export default function DashboardPage() {
           setRegenerateError(t('regenerateInProgress'));
           return;
         }
+        // The letter twice held a figure or a name its data does not, so the
+        // server saved nothing (2026-10-10). Said plainly, in the household's
+        // language; the previous letter is still the one shown.
+        if (res.status === 502 && err.code === 'review_guard_failed') {
+          setRegenerateError(t('regenerateGuardFailed'));
+          return;
+        }
         throw new Error(err.error || 'Regeneration failed');
       }
       // Reload dashboard so the new review + top recommendation appear.

@@ -54,6 +54,8 @@ export function makeFakeCardSupabase(seed: Record<string, Row[]>, opts: { userId
       gte(field: string, value: string) { filters.push((r) => String(r[field]) >= value); return api; },
       lte(field: string, value: string) { filters.push((r) => String(r[field]) <= value); return api; },
       gt(field: string, value: string) { filters.push((r) => String(r[field]) > value); return api; },
+      lt(field: string, value: string) { filters.push((r) => String(r[field]) < value); return api; },
+      is(field: string, value: unknown) { filters.push((r) => (r[field] ?? null) === value); return api; },
       order(field: string, o?: { ascending?: boolean }) { orderBy = { field, ascending: o?.ascending !== false }; return api; },
       limit(n: number) { limitN = n; return api; },
       single() {

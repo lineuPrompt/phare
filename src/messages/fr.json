@@ -471,6 +471,7 @@
     "replaceConfirm": "Le remplacer",
     "replaceCancel": "Garder l’actuel",
     "regenerateInProgress": "Un bilan est en cours de rédaction. Veuillez réessayer dans une minute.",
+    "regenerateGuardFailed": "La lettre de ce mois-ci n'a pas pu être rédigée de façon fiable : rien n'a été enregistré et votre lettre précédente reste inchangée. Veuillez réessayer plus tard.",
     "snapshotNav": {
       "prev": "Mois précédent",
       "next": "Mois suivant",

@@ -293,3 +293,56 @@ export function projectedContribution(
   const occurrences = dates.filter((d) => d >= fromDate && d <= toDate).length;
   return round2(currentBalance + occurrences * amount);
 }
+
+// ---------------------------------------------------------------------------
+// When the household's OWN recurring transfers reach a target (2026-10-10).
+//
+// The monthly review used to report only what a goal's stated date requires.
+// This answers the other question: at what they actually put in, when does the
+// balance get there? Same contract as projectedContribution above — real
+// occurrence dates from the materializeRule engine, the balance plus each
+// occurrence's amount, never a rate of return.
+//
+// Returns the month (YYYY-MM) of the occurrence that first brings savedSoFar
+// to targetAmount, or null when that cannot be stated honestly: no rule, a
+// rule with no known date, or not reached within `maxMonths`. The caller then
+// leaves the figure out — it never passes an estimate.
+// ---------------------------------------------------------------------------
+
+export type ReachRule = ContributionRule & {
+  amount: number;
+  /** A rule split by an edit fires only from this date (splitRule). */
+  effectiveFrom?: string | null;
+};
+
+export function monthReachedByRules(
+  targetAmount: number,
+  savedSoFar: number,
+  rules: ReachRule[],
+  today: string,
+  maxMonths = 600
+): string | null {
+  if (targetAmount - savedSoFar <= 0) return today.slice(0, 7);
+  if (rules.length === 0 || rules.some((r) => !r.anchorDate || !(r.amount > 0))) return null;
+
+  const occurrences = rules
+    .flatMap((r) =>
+      materializeRule(
+        { cadence: r.cadence, anchorDate: r.anchorDate as string, secondDay: r.secondDay ?? null },
+        today.slice(0, 7),
+        maxMonths
+      )
+        .filter((d) => d > today && (!r.effectiveFrom || d >= r.effectiveFrom))
+        .map((date) => ({ date, amount: r.amount }))
+    )
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+  // Cents, so a long series of additions cannot drift past or short of the target.
+  const needCents = Math.round((targetAmount - savedSoFar) * 100);
+  let cents = 0;
+  for (const o of occurrences) {
+    cents += Math.round(o.amount * 100);
+    if (cents >= needCents) return o.date.slice(0, 7);
+  }
+  return null;
+}

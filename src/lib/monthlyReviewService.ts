@@ -36,9 +36,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { anthropic } from '@/lib/anthropic';
 import { assembleCalculatedBudget, dedupeSinkingFunds } from '@phare/core';
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
-import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth, monthsBetween, GoalResult, DebtPayoffResult } from '@/lib/goalHelpers';
+import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth, monthsBetween, monthReachedByRules, GoalResult, DebtPayoffResult, type ReachRule } from '@/lib/goalHelpers';
 import { detectWindfalls } from '@/lib/reviewContextHelpers';
-import { overTargetCategoriesForLiveCycles } from '@/lib/cardOverTarget';
+import { loadCardCycleFacts, overTargetFromCardFacts, cardLetterFacts, type CardCycleFacts } from '@/lib/cardOverTarget';
+import { loadMonthAhead, type MonthAheadFacts } from '@/lib/reviewMonthAhead';
+import { checkLetterFigures, findNamesNotInPayload, LetterGuardError } from '@/lib/letterGuards';
+import { categoryDisplayName } from '@/lib/categoryTranslations';
 import { enforceDebtFigureInTopRecommendation, enforceBorrowedCashFraming, containsUnsubstitutedToken, DEBT_PAYMENT_PLACEHOLDER } from '@/lib/topRecommendationHelpers';
 import { logEvent } from '@/lib/eventLogger';
 import {
@@ -46,17 +49,17 @@ import {
   rankFundingNeeds,
   computeTypicalSurplus,
   computeInsufficientHistory,
-  computeOverTargetCategories,
   selectTopOverTargetCategory,
   computeFreedCapacityEvents,
   groupInstallmentSeries,
   computeStartingContribution,
   coachingFallbackApplies,
-  findUnsanctionedSourcingMention,
   buildFallbackReviewText,
   containsIllustrativeTokenLeak,
-  buildReviewPayload,
+  contributionRuleFact,
+  monthlyShortfall,
   FundingNeed,
+  type ContributionRuleFact,
 } from '@/lib/coachingHelpers';
 // businessMonth is deliberately NOT imported: the reviewed window comes from
 // the caller's `reviewMonth`, never from this service's own clock.
@@ -168,7 +171,7 @@ export async function generateMonthlyReview({
 
       supabase
         .from('accounts')
-        .select('id, name, type, goal_target, goal_target_date, is_sinking_fund, statement_close_day')
+        .select('id, name, type, goal_target, goal_target_date, is_sinking_fund, statement_close_day, payment_day')
         .eq('household_id', householdId),
 
       supabase
@@ -204,7 +207,7 @@ export async function generateMonthlyReview({
     const historyRows = historyResult.data ?? [];
 
     // ── One call for all buckets (same function as Expenses page) ───────────
-    const { totalIncome: incomeTotal, totalExpenses: expenseTotal, totalSavings, totalDebtPayments, totalBorrowed, netCashFlow } =
+    const { totalIncome: incomeTotal, totalExpenses: expenseTotal, totalSavings, totalDebtPayments, totalBorrowed, netCashFlow, savingsByDestination } =
       computeMonthTotals(
         allTxns.map((tx) => ({
           id: tx.id,
@@ -236,17 +239,18 @@ export async function generateMonthlyReview({
     // for the sinkingFunds section below.
     const fundAccountIds = accounts.filter((a) => a.is_sinking_fund).map((a) => a.id);
     const goalIds = [...goalAccountList.map((a) => a.id), ...fundAccountIds];
-    let goalTxData: { amount: number | string; type: string; account_id: string | null; date?: string }[] = [];
+    let goalTxData: { amount: number | string; type: string; account_id: string | null; date?: string; is_opening_balance?: boolean | null }[] = [];
     if (goalIds.length > 0) {
       const { data } = await supabase
         .from('transactions')
-        .select('amount, type, account_id, date')
+        .select('amount, type, account_id, date, is_opening_balance')
         .eq('household_id', householdId)
         .in('account_id', goalIds);
       goalTxData = data ?? [];
     }
     const today = businessToday(timezone);
     const rawGoals = goalAccountList.map((a) => ({
+      accountId: a.id as string,
       name: a.name,
       targetAmount: Number(a.goal_target),
       // Today-cutoff balance: recurring transfers materialize future-dated
@@ -274,17 +278,108 @@ export async function generateMonthlyReview({
     // never a number the AI invents — it only narrates what's here.
     const { data: recurringTransferRows } = await supabase
       .from('recurring_items')
-      .select('amount, cadence, accounts:accounts!recurring_items_destination_account_id_fkey(name, type)')
+      .select('amount, cadence, anchor_date, second_day, effective_from, destination_account_id, accounts:accounts!recurring_items_destination_account_id_fkey(name, type)')
       .eq('household_id', householdId)
       .eq('type', 'transfer')
       .eq('active', true);
-    const committedTransfers = ((recurringTransferRows ?? []) as unknown as { amount: number | string; cadence: string; accounts: { name: string; type: string } | null }[])
+    const transferRuleRows = (recurringTransferRows ?? []) as unknown as {
+      amount: number | string;
+      cadence: string;
+      anchor_date?: string | null;
+      second_day?: number | null;
+      effective_from?: string | null;
+      destination_account_id?: string | null;
+      accounts: { name: string; type: string } | null;
+    }[];
+    const committedTransfers = transferRuleRows
       .map((r) => ({
         destination: r.accounts?.name ?? 'goal',
         isDebtPayment: r.accounts?.type === 'debt',
         amount: Number(r.amount),
         cadence: r.cadence,
       }));
+
+    // ── What the household actually puts into each account (2026-10-10) ──────
+    // The household's own recurring transfers into an account, and what landed
+    // there in the reviewed month — kept apart from what a goal REQUIRES. The
+    // September letter called the required $489.04 "your monthly
+    // contribution" while the real rule was $125 every two weeks and one $125
+    // had landed. A required amount is never a contribution.
+    const rulesInto = (accountId: string | null): ContributionRuleFact[] =>
+      accountId === null
+        ? []
+        : transferRuleRows
+            .filter((r) => r.destination_account_id === accountId)
+            .map((r) => contributionRuleFact(r.amount, r.cadence));
+    // Same sign rule as computeGoalBalance, over the reviewed month only, and
+    // never a future-dated row. A stated opening balance is a starting
+    // position, not a deposit.
+    const depositedInMonth = (accountId: string | null): number =>
+      accountId === null
+        ? 0
+        : computeGoalBalance(
+            goalTxData.filter(
+              (r) => !r.is_opening_balance && r.date !== undefined && r.date >= monthStart && r.date < monthEnd
+            ),
+            accountId,
+            today
+          );
+    // The same rules, with their dates, for monthReachedByRules: when the
+    // household's own transfers bring a balance to its target.
+    const reachRulesInto = (accountId: string | null): ReachRule[] =>
+      accountId === null
+        ? []
+        : transferRuleRows
+            .filter((r) => r.destination_account_id === accountId)
+            .map((r) => {
+              const fact = contributionRuleFact(r.amount, r.cadence);
+              return {
+                amount: fact.amount,
+                cadence: fact.cadence,
+                anchorDate: r.anchor_date ?? null,
+                secondDay: r.second_day ?? null,
+                effectiveFrom: r.effective_from ?? null,
+              };
+            });
+    // Saved, remaining, and when the actual rules get there. The reach month is
+    // left OUT when no helper can state it (no rule, a rule with no date, not
+    // within 50 years): an estimate is never passed.
+    const progressAtActual = (accountId: string | null, target: number, saved: number, targetDate: string | null) => {
+      const reached = monthReachedByRules(target, saved, reachRulesInto(accountId), today);
+      return {
+        remaining: Math.max(0, Math.round((target - saved) * 100) / 100),
+        ...(reached === null
+          ? {}
+          : {
+              reachedAtActualContribution: reached,
+              monthsLeftAtActualContribution: Math.max(0, monthsBetween(today, reached)),
+              ...(targetDate ? { onTrackAtActualContribution: reached <= targetDate.slice(0, 7) } : {}),
+            }),
+      };
+    };
+    const goalFacts = computedGoals.map((g, i) => {
+      const accountId = nonDebtGoals[i].accountId;
+      return {
+        name: g.name,
+        targetAmount: g.targetAmount,
+        savedSoFar: g.savedSoFar,
+        targetDate: g.targetDate,
+        fundedAlready: g.fundedAlready,
+        pastDue: g.pastDue,
+        // What the stated date needs each month. NOT what is contributed.
+        requiredMonthly: g.monthlyContribution,
+        // Whether requiredMonthly fits this month's surplus alongside the other
+        // goals (evaluateGoals). It does not say the goal is on track.
+        requiredFitsSurplus: g.onTrack,
+        // The stated month when requiredMonthly fits; otherwise the month this
+        // month's surplus would reach the target. Not a projection of the
+        // actual contribution rule.
+        estimatedDateAtRequired: g.estimatedDate,
+        contributionRules: rulesInto(accountId),
+        depositedThisMonth: depositedInMonth(accountId),
+        ...progressAtActual(accountId, g.targetAmount, g.savedSoFar, g.targetDate),
+      };
+    });
 
     // ── Windfall awareness (Part B.4) ────────────────────────────────────────
     // An extra biweekly paycheque or a third mortgage payment this month is a
@@ -315,8 +410,25 @@ export async function generateMonthlyReview({
     // or not set up yet, in which case the debt card's own verdict already
     // surfaces that; folding it in here would pose a false choice between a
     // bill already being paid and a need that isn't.
+    //
+    // NEEDS THE PLAN ALREADY FUNDS ARE NOT NEEDS (2026-10-10). September's
+    // letter proposed $258.85 "on top of what the plan already calls for"
+    // toward the property-tax reserve, which a $425.52 monthly rule already
+    // covered in full. A reserve whose shared buffer receives recurring
+    // transfers at least equal to every fund's provision is dropped, and so
+    // is a goal whose own rules meet its required monthly amount; a goal that
+    // is only partly covered ranks on what it still lacks (monthlyShortfall).
+    // A buffer that is only partly covered keeps its per-fund provisions: the
+    // rule cannot be attributed to one fund rather than another.
+    const bufferAccountIdForRules = sinkingFunds.find((sf) => sf.linked_account_id)?.linked_account_id ?? null;
+    const totalProvisionForRules = sinkingFunds.reduce((sum, sf) => sum + Number(sf.monthly_provision ?? 0), 0);
+    const reserveFundedInFull =
+      totalProvisionForRules > 0 &&
+      rulesInto(bufferAccountIdForRules).length > 0 &&
+      monthlyShortfall(totalProvisionForRules, rulesInto(bufferAccountIdForRules)) === 0;
     const fundingNeeds: FundingNeed[] = [
       ...sinkingFunds
+        .filter(() => !reserveFundedInFull)
         .filter((sf) => Number(sf.monthly_provision ?? 0) > 0)
         .map((sf) => ({
           kind: 'sinkingFundAllocation' as const,
@@ -329,20 +441,23 @@ export async function generateMonthlyReview({
           pastDue: false as const,
         })),
       ...computedGoals
-        .filter((g) => !g.fundedAlready)
-        .map((g) => {
+        .map((g, i) => ({ g, rules: rulesInto(nonDebtGoals[i].accountId) }))
+        .filter(({ g }) => !g.fundedAlready)
+        // Covered in full by the household's own rules: not a need.
+        .filter(({ g, rules }) => g.pastDue || g.monthlyContribution <= 0 || monthlyShortfall(g.monthlyContribution, rules) > 0)
+        .map(({ g, rules }) => {
           const amountRemaining = Math.max(0, g.targetAmount - g.savedSoFar);
           return {
             kind: 'goal' as const,
             name: g.name,
-            // For an on-track/behind goal this is the real required $/month
-            // (requiredMonthlyContribution). A past-due goal has no valid
-            // $/month against an already-passed target date — amountRemaining
+            // What the goal still lacks each month once its own recurring
+            // transfers are counted. A past-due goal has no valid $/month
+            // against an already-passed target date — amountRemaining
             // substitutes purely as a ranking/tie-break magnitude here; the
             // review is only ever given amountRemaining/targetDate/pastDue
             // for a past-due item, never told to narrate this as a literal
             // monthly figure.
-            monthlyContribution: g.pastDue ? amountRemaining : g.monthlyContribution,
+            monthlyShortfall: g.pastDue ? amountRemaining : monthlyShortfall(g.monthlyContribution, rules),
             monthsToTarget: g.hasTargetDate && g.targetDate ? monthsBetween(today, g.targetDate) : null,
             pastDue: g.pastDue,
             amountRemaining,
@@ -370,7 +485,12 @@ export async function generateMonthlyReview({
         (activeRecurringItems ?? []) as { id: string; description: string; cadence: string; type: string }[]
       );
       const windfallExtra = monthWindfalls.reduce((sum, w) => sum + w.amount, 0);
-      return { month: m, netCashFlow: monthTotals.netCashFlow, windfallExtra, hasRealData: monthRows.length > 0 };
+      // A REAL MONTH HAS A CHEQUING ROW (2026-10-10). netCashFlow is computed
+      // from chequing rows only, so a month holding nothing but card spend has
+      // a "surplus" of exactly 0 that never happened. June 2026 had three card
+      // rows and dragged 2be22642's typical surplus toward zero by a third.
+      const hasRealData = monthRows.some((r) => r.account_id !== null && chequingIds.has(r.account_id));
+      return { month: m, netCashFlow: monthTotals.netCashFlow, expenses: monthTotals.totalExpenses, windfallExtra, hasRealData };
     });
     // AVERAGE ONLY OVER MONTHS THAT HAPPENED (fixed 2026-08-08).
     //
@@ -409,18 +529,16 @@ export async function generateMonthlyReview({
     // MOST ONE candidate (the largest overspend) — the AI is never given the
     // full list and never chooses; it only narrates the one already chosen.
     //
-    // STATEMENT-CYCLE SCOPING (2026-07-31): the coach anchors to "the cycle
-    // whose window contains today" (cycleMonthContaining), resolved
-    // PER CARD since two cards can have different close days and therefore
-    // different live cycles right now. This is deliberately NOT tied to
-    // Cards' own tab-navigation labeling — the coach doesn't navigate, it
-    // just needs the live window, the same one the Cards page shows under
-    // its own "current" tab absent any navigation. Uses historyRows (a wide,
-    // already-fetched range) rather than allTxns (scoped to exactly the
-    // current calendar month, too narrow for a cycle that spills into the
-    // adjacent month at the boundary).
+    // STATEMENT-CYCLE SCOPING (2026-10-10): each card's cycle labelled with
+    // the REVIEWED month — the one that closes in it, the cycle the Cards page
+    // shows under that month. Until 2026-10-10 this was "the cycle whose
+    // window contains today", which on the 1st-of-month cron run is a cycle a
+    // few days old, so a month's letter never saw that month's overspends.
+    // Uses historyRows (a wide, already-fetched range) rather than allTxns
+    // (scoped to exactly the calendar month, too narrow for a cycle that
+    // starts in the previous month).
     const cardAccounts = accounts.filter((a) => a.type === 'credit_card');
-    let overTargetCategories: ReturnType<typeof computeOverTargetCategories> = [];
+    let cardFacts: CardCycleFacts[] = [];
     if (cardAccounts.length > 0) {
       const historyTxns = historyRows.map((t) => ({
         account_id: t.account_id as string,
@@ -431,16 +549,21 @@ export async function generateMonthlyReview({
         is_bridge: (t as { is_bridge?: boolean | null }).is_bridge ?? false,
       }));
 
-      // Judged against the plan the Cards page shows for each live cycle —
-      // its own, or carried forward (cardOverTarget.ts, the one read rule).
-      overTargetCategories = await overTargetCategoriesForLiveCycles(
+      // Each card's reviewed cycle, as the Cards page shows it (goal, spent,
+      // per-category plan and actual), judged against that cycle's plan — its
+      // own, or carried forward (cardOverTarget.ts, the one read rule). The
+      // letter's "cards" and the coaching source category are both derived
+      // from these same facts, never computed twice.
+      cardFacts = await loadCardCycleFacts(
         supabase,
         householdId,
-        cardAccounts as { id: string; statement_close_day?: number | null }[],
+        cardAccounts as { id: string; name: string; statement_close_day?: number | null }[],
         historyTxns,
+        reviewMonthLabel,
         today
       );
     }
+    const overTargetCategories = overTargetFromCardFacts(cardFacts);
     const sourceCategory = selectTopOverTargetCategory(overTargetCategories);
 
     // 2c. Freed-capacity events: the debt's own already-computed payoff date
@@ -559,7 +682,7 @@ export async function generateMonthlyReview({
       `Income lines: ${JSON.stringify(incomeLines)}\n` +
       `Expense lines (chequing, avoids card double-count): ${JSON.stringify(expenseLines)}\n` +
       `Their sinking funds (already set up, or none): ${JSON.stringify(sinkingFunds)}\n` +
-      `Their goals — ALREADY verified, do not recompute or contradict these numbers, just narrate them naturally where relevant: ${JSON.stringify(computedGoals)}\n` +
+      `Their goals — ALREADY verified, do not recompute or contradict these numbers, just narrate them naturally where relevant. "requiredMonthly" is what the target date needs each month, NEVER what the household contributes; what they actually put in is "contributionRules" (amount and frequency) and "depositedThisMonth": ${JSON.stringify(goalFacts)}\n` +
       `Their debt payoff — ALREADY verified (null means no debt evident or nothing computable), do not recompute or contradict: ${JSON.stringify(computedDebtPayoff)}\n` +
       `Their recurring contributions and debt payments (or none) — these are already deducted inside the ` +
       `savings figure and net cash flow above, NOT extra discretionary room: ${JSON.stringify(committedTransfers)}\n` +
@@ -625,11 +748,26 @@ export async function generateMonthlyReview({
     const bufferBalance = bufferAccountId
       ? computeGoalBalance(goalTxData, bufferAccountId, today)
       : 0;
+    const totalAnnualReserve = round(sinkingFunds.reduce((sum, sf) => sum + Number(sf.annual_amount ?? 0), 0));
+    // The reserve's progress (2026-10-10): its balance, the household's own
+    // transfers into it and what landed this month, and when those transfers
+    // bring it to every fund's annual amount. September's letter said the
+    // reserve was "in place and working as planned" in a month when nothing
+    // was deposited.
     const sinkingFundBuffer = {
       fundedAlready: bufferBalance > 0,
       totalMonthlyProvision: Math.round(
         sinkingFunds.reduce((sum, sf) => sum + Number(sf.monthly_provision ?? 0), 0) * 100
       ) / 100,
+      ...(bufferAccountId === null
+        ? {}
+        : {
+            balance: bufferBalance,
+            totalAnnualAmount: totalAnnualReserve,
+            contributionRules: rulesInto(bufferAccountId),
+            depositedThisMonth: depositedInMonth(bufferAccountId),
+            ...progressAtActual(bufferAccountId, totalAnnualReserve, bufferBalance, null),
+          }),
     };
 
     const classMap = new Map<string, { category: string; isFixed: boolean }>();
@@ -647,45 +785,104 @@ export async function generateMonthlyReview({
       const cls = classMap.get(cat.name.trim().toLowerCase());
       return {
         ...cat,
-        seedCategory: cat.type === 'income' ? 'Income' : (cls?.category ?? 'Unexpected'),
         isFixed: cat.type === 'income' ? true : (cls?.isFixed ?? false),
       };
     });
 
-    // Final review bugfix (2026-07-29): buildReviewPayload retains
-    // category.name (e.g. "Winners") for EVERY category, always — only
-    // seedCategory is stripped. These line labels are therefore just as
-    // reachable by reviewText as the seed categories are, and both guards
-    // below that need "every real category name in this payload" must be
-    // given this list, not just SEED_CATEGORIES.
+    // Every line label in the payload — real, user-facing names that the
+    // token-leak exemption below must know about.
     const retainedCategoryLineLabels = classifiedCategories.map((c) => c.name);
 
-    const plan = {
+    // ── The month, where its savings went, and the month before ─────────────
+    const accountNameById = new Map(accounts.map((a) => [a.id as string, a.name as string]));
+    const monthFacts = {
+      income: incomeTotal,
+      expenses: expenseTotal,
+      savings: totalSavings,
+      debtPayments: totalDebtPayments,
+      borrowed: totalBorrowed,
+      netCashFlow,
+      result: netCashFlow >= 0 ? ('surplus' as const) : ('deficit' as const),
+    };
+    // computeMonthTotals' own partition of the savings figure, named. A null
+    // name is a destination that can no longer be named ("Other").
+    const savingsLines = savingsByDestination.map((line) => ({
+      name: line.accountId ? (accountNameById.get(line.accountId) ?? null) : null,
+      amount: line.amount,
+    }));
+    const cardSpend = round(cardFacts.reduce((sum, c) => sum + c.spent, 0));
+    const previousCardSpend = round(cardFacts.reduce((sum, c) => sum + c.previousCycleSpent, 0));
+    const previous = monthlyFigures[0];
+    // Only a month that happened (a chequing row) is compared against.
+    const previousMonthFacts = previous && previous.hasRealData
+      ? {
+          name: new Date(`${previous.month}-01T00:00:00`).toLocaleDateString(
+            locale === 'fr' ? 'fr-CA' : 'en-CA',
+            { month: 'long', year: 'numeric' }
+          ),
+          expenses: previous.expenses,
+          expensesChange: round(expenseTotal - previous.expenses),
+          ...(cardFacts.length > 0
+            ? { cardSpend: previousCardSpend, cardSpendChange: round(cardSpend - previousCardSpend) }
+            : {}),
+        }
+      : null;
+
+    // ── The month ahead, as the Cash Timeline shows it ──────────────────────
+    const chequingAccount = accounts.find((a) => a.type === 'chequing');
+    const monthAhead: MonthAheadFacts | null = chequingAccount
+      ? await loadMonthAhead({
+          supabase,
+          householdId,
+          chequingId: chequingAccount.id as string,
+          cards: cardAccounts.map((a) => ({
+            id: a.id as string,
+            name: a.name as string,
+            payment_day: ((a as { payment_day?: number | null }).payment_day ?? null),
+            statement_close_day: (a.statement_close_day ?? null) as number | null,
+          })),
+          month: addMonthsToMonth(reviewMonthLabel, 1),
+          today,
+        })
+      : null;
+
+    const cards = cardFacts.map((c) => cardLetterFacts(c, locale));
+
+    // ── THE LETTER'S PAYLOAD (2026-10-10) ────────────────────────────────────
+    // Every number below is code-computed from the shared helpers; the letter
+    // may restate them and nothing else (the figure guard enforces it).
+    // "budgeted" is gone: the line amounts are this month's actuals and are
+    // named so.
+    const letterPayload = {
       reviewMonth: reviewMonthName,
-      monthlyBudget: { ...monthlyBudget, categories: classifiedCategories },
-      seedCategories: SEED_CATEGORIES,
+      month: monthFacts,
+      savingsByDestination: savingsLines,
+      recurringTransfers: committedTransfers,
+      previousMonth: previousMonthFacts,
+      cards,
+      monthAhead,
+      incomeLines: classifiedCategories
+        .filter((c) => c.type === 'income')
+        .map((c) => ({ name: c.name, actual: c.budgeted })),
+      expenseLines: classifiedCategories
+        .filter((c) => c.type !== 'income')
+        .map((c) => ({ name: c.name, actual: c.budgeted, isFixed: c.isFixed })),
       sinkingFunds: finalSinkingFunds,
       sinkingFundBuffer,
       // Code-computed from real goal accounts — never AI-emitted.
       debtPayoff: computedDebtPayoff,
-      goals: computedGoals,
+      goals: goalFacts,
       windfalls,
-      // The Coaching Layer — entirely code-computed (coachingHelpers.ts),
-      // same discipline as goals/debtPayoff above: the AI only narrates
-      // this, it never reorders rankedNeeds, never picks a different
-      // sourceCategory, never invents a freedCapacityEvent or a starting
-      // amount above startingContribution.
+      // The Coaching Layer — entirely code-computed (coachingHelpers.ts): the
+      // AI only narrates this, it never reorders rankedNeeds, never picks a
+      // different sourceCategory, never invents a freedCapacityEvent or a
+      // starting amount above startingContribution.
       coaching,
       // FIX 1 (2026-07-27): topRecommendation is planPrompt's free text — the
       // debt's own monthly payment figure inside it is never trusted as
-      // AI-authored digits. Either the model used the required placeholder
-      // (substituted with the real, code-computed amount) or it didn't (in
-      // which case the whole recommendation is replaced with a deterministic
-      // one) — see topRecommendationHelpers.ts for the full mechanism and the
-      // confirmed live failure this closes.
-      // FIX 4 (2026-07-28): separately, never let a real credit-line draw get
-      // labeled as surplus/extra/income — runs purely off totalBorrowed, not
-      // gated on computedDebtPayoff/a debt-payoff card existing at all.
+      // AI-authored digits (topRecommendationHelpers.ts).
+      // FIX 4 (2026-07-28): never let a real credit-line draw get labeled as
+      // surplus/extra/income.
       topRecommendation: enforceBorrowedCashFraming(
         enforceDebtFigureInTopRecommendation(
           aiPart.topRecommendation ?? '',
@@ -705,55 +902,64 @@ export async function generateMonthlyReview({
     //
     // KEEP THIS LIST IN SYNC WITH reviewPrompt's OWN TEXT BELOW (2026-07-28):
     // every illustrative single-brace example token reviewPrompt's hard rules
-    // use ("...toward {name} so the {month} bill...", "...clears in
-    // {freesOn}, that $Y/month could go toward {need}...") must be listed
-    // here too, or a leaked one goes undetected. This model has been observed
-    // echoing prompt example text verbatim before (the Build 4 Part B "Good
-    // tone" month-name fix), and the {{DEBT_PAYMENT}} leak confirmed it can
-    // happen with template-shaped tokens specifically — adding a new
-    // illustrative placeholder to a rule below without adding its name here
-    // is a silent gap, not a caught one. (planPrompt has none of these —
-    // checked; its only template token is the double-brace
-    // DEBT_PAYMENT_PLACEHOLDER, already covered by containsUnsubstitutedToken.)
+    // use must be listed here too, or a leaked one goes undetected.
     const REVIEW_PROMPT_ILLUSTRATIVE_TOKENS = ['name', 'month', 'need', 'freesOn'] as const;
 
     const reviewPrompt =
       `You are Phare, a financial planning system for Canadian households. Write this household's monthly review in ${lang}.\n\n` +
-      `Their plan:\n${JSON.stringify(buildReviewPayload(plan))}\n\n` +
-      `Write THREE paragraphs maximum. Specific numbers. One clear recommendation. Plain language. ` +
+      `Their plan:\n${JSON.stringify(letterPayload)}\n\n` +
+      `Write up to FOUR paragraphs. Specific numbers. One clear recommendation. Plain language. ` +
       `It must feel like a letter from a trusted financial advisor, not a report.\n\n` +
-      `Good tone: "${reviewMonthName} was a solid month overall. You stayed within budget in four of five categories..."\n` +
+      `Good tone: "${reviewMonthName} closed with a surplus, but two of your cards ran past the goals you set."\n` +
       `Bad tone: "Based on a comprehensive analysis of your financial data..."\n\n` +
-      `Start with what is going well, then what to watch, then the one thing to do this month — `+
-      `one paragraph each, and do not add a fourth. ` +
+      `Open with how the month actually went, as "month.result" and "cards" say it: do not open with praise ` +
+      `for a month that ran a deficit or went over its card goals. End with the one thing to do this month. ` +
       `Write ONLY the review text, no preamble, no headings.\n\n` +
       `Hard rules — every one of these caused a real, published mistake before, do not repeat any of them:\n` +
       `- The reviewed month is "reviewMonth" above: ${reviewMonthName}. Refer to it by exactly this name. ` +
       `Never name a different month (not last month, not a guess, not an example from your own training) — ` +
       `this field is the only source of truth for which period you are reviewing.\n` +
       `- NO ARITHMETIC: every number in "plan" is already fully computed. You may only restate a figure exactly ` +
-      `as given — you may NOT add, subtract, multiply, divide, average, or otherwise derive any number that is ` +
-      `not already present as a single value above. If no single given figure says what you want to say, don't ` +
-      `say it with a number.\n` +
+      `as given — you may NOT add, subtract, multiply, divide, average, round, or otherwise derive any number that ` +
+      `is not already present as a single value above. If no single given figure says what you want to say, don't ` +
+      `say it with a number. Write every dollar figure exactly as given, cents included when it has cents ` +
+      `("$1,157.77", never "about $1,158" or "roughly $1,200").\n` +
+      `- NO PERCENTAGES: never write a percentage or a ratio. Every number in the letter is a dollar figure ` +
+      `from the plan, a date, or a count of months from it.\n` +
+      `- CARDS AND CATEGORIES: you may name any card in "cards" and any category in a card's "topOverspends", ` +
+      `with their own figures exactly as given (goal, spent, overGoalBy, previousCycleSpent, spentChange; plan, ` +
+      `actual, over, previousActual, change). Write each name exactly as given. Never name any other card or ` +
+      `spending category. A card with "open": true has a statement cycle that has not closed yet: it and its ` +
+      `categories are "running ahead of the goal so far", never "over goal" or "went over". A card with no ` +
+      `"overGoalBy" did not go past its goal; a card whose "goal" is null has no goal.\n` +
+      `- THE MONTH AHEAD: "monthAhead" is the next month's chequing balance as dated today: its lowest point and ` +
+      `the day it is reached, and whether any day is dated below zero. If it is null, say nothing about next ` +
+      `month's balance with a number.\n` +
       `- ON-TRACK CLAIMS: for any goal or debt, you may state its status only by directly restating what "goals"/` +
-      `"debtPayoff" already say (onTrack, fundedAlready, pastDue, monthlyContribution, estimatedDate) — never ` +
-      `assert or imply "on track", "behind", or "funded" beyond exactly what those fields already say for that ` +
-      `specific goal.\n` +
+      `"debtPayoff" already say — never assert or imply "on track", "behind", or "funded" beyond exactly what ` +
+      `those fields say for that specific goal. "onTrackAtActualContribution" (present only when it can be ` +
+      `stated) says whether the household's own recurring transfers reach the target by its date; ` +
+      `"reachedAtActualContribution" is the month they get there. "requiredFitsSurplus" only means the required ` +
+      `amount would fit this month's surplus; it is NOT "on track".\n` +
+      `- CONTRIBUTIONS: a goal's "requiredMonthly" is what its target date needs each month. NEVER call it a ` +
+      `contribution, never say it is "in motion", "set up" or "being saved". What the household actually ` +
+      `contributes is "contributionRules" (each an amount and a frequency, e.g. "$125 every two weeks") and what ` +
+      `landed this month is "depositedThisMonth". If "contributionRules" is empty, they have no recurring ` +
+      `contribution to that goal. The same holds for "sinkingFundBuffer".\n` +
       `- ZERO-BALANCE GOALS: for any goal whose "savedSoFar" is 0 and "fundedAlready" is false, write about it as ` +
-      `forward-looking — e.g. "once your $X/month contribution begins" — never as if saving is already underway, ` +
-      `even when "onTrack" is true (onTrack only means the required contribution fits their capacity, not that ` +
-      `any money has moved yet).\n` +
+      `forward-looking — never as if saving is already underway.\n` +
       `- RESERVE FUNDS: every entry in "sinkingFunds" shares ONE cash buffer — "sinkingFundBuffer.fundedAlready" is ` +
       `the single real signal for ALL of them (never treat one fund as funded and another as not; there is only one ` +
       `account). When fundedAlready is false — meaning the buffer hasn't been started yet — describe each fund as a ` +
       `plan or recommendation only: "your plan sets aside $X/month for {name}" or "recommended: $X/month toward ` +
       `{name} so the {month} bill doesn't catch you off guard." NEVER say "you're setting aside $X/month" or ` +
-      `"you're saving $X/month" for any fund unless sinkingFundBuffer.fundedAlready is true. You may mention ` +
-      `"sinkingFundBuffer.totalMonthlyProvision" as the combined monthly amount across every fund, but never sum ` +
-      `the individual funds yourself — that figure is already given. "monthlyProvision"/"totalMonthlyProvision" are ` +
-      `the plan's OWN established figures and may always be restated using the phrasing above regardless of ` +
-      `"coaching.startingContribution" — that cap governs a different thing entirely: see COACHING below for ` +
-      `exactly what it bounds.\n` +
+      `"you're saving $X/month" for any fund unless sinkingFundBuffer.fundedAlready is true, and never say the ` +
+      `reserve is "working as planned" or "in place" in a month whose "sinkingFundBuffer.depositedThisMonth" is 0. ` +
+      `You may mention "sinkingFundBuffer.totalMonthlyProvision" as the combined monthly amount across every fund, ` +
+      `but never sum the individual funds yourself — that figure is already given. "monthlyProvision"/` +
+      `"totalMonthlyProvision" are the plan's OWN established figures and may always be restated using the ` +
+      `phrasing above regardless of "coaching.startingContribution" — that cap governs a different thing ` +
+      `entirely: see COACHING below for exactly what it bounds.\n` +
       `- WINDFALLS: if "windfalls" is non-empty, you MUST explicitly acknowledge each one by name and amount, ` +
       `framed as a one-time timing event that will NOT repeat next month (e.g. "${reviewMonthName} included a ` +
       `third biweekly paycheque — $X extra that won't repeat next month") — never described as a new normal ` +
@@ -763,33 +969,31 @@ export async function generateMonthlyReview({
       `"estimated: March 2027"), never "code-estimated" or "code-computed". A projected or computed amount ` +
       `(including a card/bridge payment total) reads as "expected", never "budgeted" — reserve "budgeted" only ` +
       `for a figure the household actually set as a budget themselves.\n` +
-      `- COACHING — WHERE THE MONEY COMES FROM: "coaching" is the ONLY source of any funding-priority or ` +
-      `money-source suggestion. Its "rankedNeeds" is already in the correct priority order — restate that order, ` +
-      `never re-rank it yourself and never suggest funding anything not in this list. SCOPE OF THE CAP: ` +
+      `- COACHING — WHERE THE MONEY COMES FROM: "coaching" is the ONLY source of any funding-priority ` +
+      `suggestion. Its "rankedNeeds" is already in the correct priority order — restate that order, ` +
+      `never re-rank it yourself and never suggest funding anything not in this list. A need the household's own ` +
+      `recurring transfers already cover in full is not in this list, on purpose: never suggest putting more toward ` +
+      `it. A goal's "monthlyShortfall" is what it still lacks each month after its own transfers. SCOPE OF THE CAP: ` +
       `"coaching.startingContribution" bounds only a DISCRETIONARY "extra"/"additional" amount YOU might suggest ` +
       `directing toward a need ON TOP OF what the plan already calls for — it does NOT cap restating a reserve ` +
-      `fund's own "monthlyProvision" or a goal's own "monthlyContribution" verbatim (those are the plan's existing, ` +
-      `already-established figures, governed by the RESERVE FUNDS and ON-TRACK CLAIMS rules above, not by this ` +
-      `cap; e.g. "your plan calls for $300/month toward Property Tax" is always fine to state even when ` +
-      `startingContribution is $0 — that number is not a new suggestion). What the cap DOES bound: ` +
-      `"coaching.startingContribution" is the most you may ever propose applying as NEW, additional, on-top-of-` +
-      `plan money — never recommend a larger discretionary figure than that. If "coaching.sourceCategory" ` +
-      `is non-null, you may name ONLY that one category as a possible source (its exact target/actual/over figures, ` +
-      `never any other category, never a target you were not given) — phrase it as an option the household can use if ` +
-      `they choose, e.g. "restaurants ran $X against your own $Y target — that's one place it could come from," ` +
-      `never a command like "cut back on X." If "coaching.sourceCategory" is null, do not name ANY category as a ` +
-      `money source. If "coaching.freedCapacityEvents" is non-empty, you may describe growth only from those exact ` +
-      `events (their own label/amount/freesOn) — e.g. "once X clears in {freesOn}, that $Y/month could go toward ` +
-      `{need}" — never invent a percentage, a schedule, or a growth event not in this list. If ` +
-      `"coaching.fallbackApplies" is true, you must state plainly, in your own natural words, that there is no ` +
+      `fund's own "monthlyProvision" or a goal's own "requiredMonthly" verbatim, named as what it is (those are ` +
+      `the plan's existing, already-established figures, governed by the RESERVE FUNDS and ON-TRACK CLAIMS rules ` +
+      `above, not by this cap; e.g. "your plan calls for $X/month toward Property Tax" is always fine to state ` +
+      `even when startingContribution is 0 — that number is not a new suggestion). What the cap DOES bound: ` +
+      `"coaching.startingContribution" is the most you may ever propose applying as NEW, additional, ` +
+      `on-top-of-plan money — never recommend a larger discretionary figure than that. ` +
+      `"coaching.sourceCategory", when non-null, is the largest overspend across the cards; you may offer it as ` +
+      `one place the money could come from — phrase it as an option the household can use if they choose, ` +
+      `never a command like "cut back on X." If "coaching.sourceCategory.open" is true, its card's cycle has not ` +
+      `closed: say it is "running ahead of its target so far". If "coaching.freedCapacityEvents" is non-empty, you ` +
+      `may describe growth only from those exact events (their own label/amount/freesOn) — e.g. "once X clears in ` +
+      `{freesOn}, that $Y/month could go toward {need}" — never invent a schedule or a growth event not in this ` +
+      `list. If "coaching.fallbackApplies" is true, you must state plainly, in your own natural words, that there is no ` +
       `clear extra room right now and that starting small / revisiting later is the move — never substitute a ` +
       `vaguer instruction like "look at your spending," and never name a category or event to fill the gap. If ` +
       `"coaching.insufficientHistory" is true, you may state plainly, in your own words, that a starting figure is ` +
-      `conservative because there isn't a full trailing history to draw on yet (e.g. "this is a cautious starting ` +
-      `point while we build a fuller picture of your typical months") — this is a DIFFERENT condition from ` +
-      `fallbackApplies and can be true even when fallbackApplies is false and a real sourceCategory/` +
-      `freedCapacityEvents exist; never treat the two as the same thing, and never invent a larger or different ` +
-      `number to fill the gap either way — the honest explanation is the only thing that changes. BORROWED CASH: ` +
+      `conservative because there isn't a full trailing history to draw on yet — this is a DIFFERENT condition ` +
+      `from fallbackApplies; never invent a larger or different number to fill the gap either way. BORROWED CASH: ` +
       `"coaching.totalBorrowed" is real money drawn from a credit line this month (0 means none) — it is NOT ` +
       `income, NOT savings, and NOT part of any surplus/capacity figure above (netCashFlow/typicalSurplus already ` +
       `exclude it entirely). If it is non-zero, you may disclose it honestly (e.g. "$X of this month's cash was ` +
@@ -801,33 +1005,9 @@ export async function generateMonthlyReview({
       `is ever singled out as more discretionary than another — the voice is a humble coach offering an option, not ` +
       `an auditor issuing a verdict.\n` +
       `- NO INVENTED TARGETS: never describe any category, fund, or line as having a "budget," "target," or ` +
-      `"limit" unless one is explicitly present in the given data for that specific item (e.g. a real target inside ` +
-      `"coaching.sourceCategory"). A category with no such figure given may be described only by its actual spend ` +
-      `("$X on Groceries this month") — never as "within budget," "on budget," or "over budget," since no budget ` +
-      `was ever set for it.`;
-
-    // ── Generate review, then two post-generation guards on reviewText ───────
-    // Fix 3 (2026-07-28): plan.seedCategories/monthlyBudget.categories reach
-    // this prompt in full regardless of coaching.sourceCategory (a confirmed,
-    // real leak) — if the model names a category other than the one
-    // sanctioned as a money source, that's a violation.
-    // Fix (2026-07-28, reviewText half of Fix 4): coaching.totalBorrowed is
-    // now visible to this prompt for the first time — if the model mislabels
-    // it as surplus/extra/income, that's also a violation. enforceBorrowed-
-    // CashFraming is reused exactly as built for topRecommendation (not
-    // forked) — its own "did it change the text" result IS the detection
-    // signal here, no separate detector needed.
-    //
-    // ONE shared retry loop evaluates BOTH checks on every attempt (not two
-    // sequential retry cycles): a retry that fixes one violation could
-    // introduce the other with no bound on the ping-pong, and each retry is
-    // a full call on the most expensive prompt in the app. Retry once if
-    // EITHER fires; if the retry still fails either check, borrowed-cash
-    // mislabeling takes priority for which fallback ships — describing debt
-    // as spendable money is the more materially dangerous error to leave
-    // uncorrected, so it wins over the category-sourcing fallback when both
-    // are present.
-    const allowedSourceCategoryName = sourceCategory?.categoryName ?? null;
+      `"limit" unless one is explicitly present in the given data for that specific item (a card's "goal", a ` +
+      `"topOverspends" entry's "plan"). An income or expense line has an actual amount only — never "within ` +
+      `budget," "on budget," or "over budget."`;
 
     async function generateReviewText(): Promise<string> {
       const reviewMessage = await anthropic.messages.create({
@@ -838,26 +1018,9 @@ export async function generateMonthlyReview({
       return reviewMessage.content[0].type === 'text' ? reviewMessage.content[0].text : '';
     }
 
-    // Follow-up (2026-07-28): reviewText carries no {{...}} placeholder
-    // instruction the way planPrompt's DEBT_PAYMENT_PLACEHOLDER does — but
-    // reviewPrompt's own COACHING/SINKING FUNDS rules use single-brace
-    // illustrative example syntax ("{name}", "{month}", "{need}",
-    // "{freesOn}") that the model could analogously echo literally. Added
-    // defensively (double-brace only, matching containsUnsubstitutedToken's
-    // scope) even though no real double-brace instruction reaches this
-    // prompt today — cheap insurance against any future template addition.
-    // A family's own real fund/goal/category name could coincidentally BE one
-    // of the illustrative token strings (e.g. a fund literally named
-    // "{name}") — that's real text, not a leak (Codex finding 5i). Collected
-    // from the same real rows already fetched above, nothing new queried.
-    //
-    // Final review bugfix (2026-07-29): this list previously omitted
-    // coaching.sourceCategory's own name and the retained category line
-    // labels (retainedCategoryLineLabels, computed above right after
-    // classifiedCategories) — both are real, user-facing names that reach
-    // reviewText via buildReviewPayload just like sinking funds/goals/debt
-    // do, so a household with a category literally named "{name}" had a
-    // perfectly valid review discarded. Both are now included.
+    // A household's own fund/goal/category name could coincidentally BE one
+    // of the illustrative token strings (e.g. a fund literally named "{name}")
+    // — that's real text, not a leak (Codex finding 5i).
     const realEntityNames = [
       ...sinkingFunds.map((sf) => sf.name),
       ...computedGoals.map((g) => g.name),
@@ -866,75 +1029,91 @@ export async function generateMonthlyReview({
       ...retainedCategoryLineLabels,
     ];
 
-    function checkReviewGuards(text: string): { category: boolean; borrowed: boolean; token: boolean } {
+    // NAMES (2026-10-10): every category this household has, and the ones the
+    // payload's "cards" carry. Replaces the category-sourcing check, which
+    // allowed one category near a few phrases. Card names are not listed:
+    // every credit card is in "cards", so a card name is always allowed.
+    const { data: categoryRows, error: categoryErr } = await supabase
+      .from('categories')
+      .select('name, name_fr')
+      .eq('household_id', householdId);
+    if (categoryErr) throw new Error(`categories read failed: ${categoryErr.message}`);
+    // Every way the household's categories are written, in both languages —
+    // including the seed translation the Cards page shows when name_fr is empty.
+    const knownNames = [
+      ...((categoryRows ?? []) as { name: string | null; name_fr: string | null }[])
+        .filter((c): c is { name: string; name_fr: string | null } => typeof c.name === 'string' && c.name.length > 0)
+        .flatMap((c) => [c.name, c.name_fr, categoryDisplayName(c, 'fr')])
+        .filter((n): n is string => typeof n === 'string' && n.length > 0),
+    ];
+    const payloadNames = cards.flatMap((c) => [c.name, ...c.topOverspends.map((o) => o.category)]);
+
+    type Violation = { figures: string[]; names: string[]; borrowed: boolean; token: boolean };
+    function checkReviewGuards(text: string): Violation {
       return {
-        // locale passed explicitly (2026-07-28, Part C wiring check) — this
-        // call site previously omitted it entirely, silently defaulting to
-        // the English phrase list/proximity even for French households.
-        //
-        // Final review bugfix (2026-07-29): this call previously scanned
-        // ONLY SEED_CATEGORIES (the classification bucket names), never the
-        // category.name line labels buildReviewPayload deliberately retains
-        // (e.g. "Winners") — the exact surface coachingHelpers.ts's own
-        // module note documents this guard as load-bearing against. Passing
-        // retainedCategoryLineLabels alongside SEED_CATEGORIES closes that
-        // gap; allowedSourceCategoryName still exempts the one sanctioned
-        // name from both.
-        category: findUnsanctionedSourcingMention(text, [...SEED_CATEGORIES, ...retainedCategoryLineLabels], allowedSourceCategoryName, locale) !== null,
+        figures: checkLetterFigures(text, letterPayload).offending,
+        names: findNamesNotInPayload(text, knownNames, payloadNames),
         borrowed: totalBorrowed > 0 && enforceBorrowedCashFraming(text, totalBorrowed, locale) !== text,
         // Same condition, two shapes of leak: a real {{...}} template token
-        // (containsUnsubstitutedToken) and reviewPrompt's own single-brace
-        // illustrative examples echoed verbatim (containsIllustrativeTokenLeak,
-        // REVIEW_PROMPT_ILLUSTRATIVE_TOKENS defined next to reviewPrompt above).
-        // realEntityNames exempts a token string that's coincidentally a
-        // real, user-chosen fund/goal name.
+        // and reviewPrompt's own single-brace illustrative examples echoed
+        // verbatim.
         token: containsUnsubstitutedToken(text) || containsIllustrativeTokenLeak(text, REVIEW_PROMPT_ILLUSTRATIVE_TOKENS, realEntityNames),
       };
     }
+    const anyViolation = (v: Violation) => v.figures.length > 0 || v.names.length > 0 || v.borrowed || v.token;
 
-    function violatedReasons(v: { category: boolean; borrowed: boolean; token: boolean }): string[] {
+    function violatedReasons(v: Violation): string[] {
       const reasons: string[] = [];
       if (v.borrowed) reasons.push('borrowed_cash');
       if (v.token) reasons.push('token_leak');
-      if (v.category) reasons.push('category_sourcing');
+      if (v.figures.length > 0) reasons.push('figures');
+      if (v.names.length > 0) reasons.push('names');
       return reasons;
     }
 
     let reviewText = await generateReviewText();
     const firstAttemptViolation = checkReviewGuards(reviewText);
 
-    if (firstAttemptViolation.category || firstAttemptViolation.borrowed || firstAttemptViolation.token) {
+    if (anyViolation(firstAttemptViolation)) {
       reviewText = await generateReviewText();
       const retryViolation = checkReviewGuards(reviewText);
 
-      // Priority when the retry still fails more than one check — stated as
-      // a rule, not an accident of which check happens to run first:
+      // A FIGURE OR A NAME THE PAYLOAD DOES NOT HOLD FAILS VISIBLY (2026-10-10).
+      // Regenerated once; if the second letter still fails, nothing is saved —
+      // the caller gets the error, and an event records the household, the
+      // month and exactly what failed, so it can be found by a query. A
+      // letter with a figure code never computed is never persisted.
+      if (retryViolation.figures.length > 0 || retryViolation.names.length > 0) {
+        void logEvent(supabase, householdId, userId, 'review_guard_failed', {
+          month: reviewMonthLabel,
+          kind: 'monthly_review',
+          figures: retryViolation.figures,
+          names: retryViolation.names,
+          firstAttempt: { figures: firstAttemptViolation.figures, names: firstAttemptViolation.names },
+        });
+        throw new LetterGuardError(retryViolation.figures, retryViolation.names);
+      }
+
+      // Otherwise, priority when the retry still fails — stated as a rule:
       // borrowed-cash (materially dangerous — debt described as spendable
-      // money) > a leaked template token (a visibly broken artifact that
-      // erodes trust, but not a financial misstatement) > category-sourcing
-      // (a plausible but unproven suggestion).
-      let outcome: 'retry_passed' | 'fallback_borrowed' | 'fallback_token' | 'fallback_category';
+      // money) > a leaked template token (a visibly broken artifact).
+      let outcome: 'retry_passed' | 'fallback_borrowed' | 'fallback_token';
       if (retryViolation.borrowed) {
         reviewText = enforceBorrowedCashFraming(reviewText, totalBorrowed, locale);
         outcome = 'fallback_borrowed';
       } else if (retryViolation.token) {
         reviewText = buildFallbackReviewText(reviewMonthName, locale);
         outcome = 'fallback_token';
-      } else if (retryViolation.category) {
-        reviewText = buildFallbackReviewText(reviewMonthName, locale);
-        outcome = 'fallback_category';
       } else {
         outcome = 'retry_passed';
       }
 
-      // Visibility (2026-07-28): the only production signal into how often
-      // the model actually violates these soft-instruction-backed rules —
-      // informs whether the Fix-1-audit-flagged items (goals/funds/headline
-      // figures, still unguarded) need real gates too, before this scales.
+      // Visibility (2026-07-28): how often the model actually violates these
+      // rules.
       void logEvent(supabase, householdId, userId, 'review_text_guard_retried', {
         triggeredBy: violatedReasons(firstAttemptViolation),
         outcome,
       });
     }
-  return { topRecommendation: plan.topRecommendation, reviewText };
+  return { topRecommendation: letterPayload.topRecommendation, reviewText };
 }

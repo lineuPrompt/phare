@@ -48,6 +48,11 @@ function makeSupabaseMock(script: Record<string, Resolution[]>) {
       // benign result rather than forcing every fixture to spell both out. The
       // persistence describe below scripts them explicitly.
       if (table === 'conversations') return makeResultChain({ data: null, error: null });
+      // The letter's month-ahead balance and name guard (2026-10-10) read
+      // these; unscripted, they answer "no anchored balance" and "no
+      // categories" — the month ahead is then null, and the suites below stay
+      // about what they test.
+      if (table === 'account_balance_anchors' || table === 'categories') return makeResultChain({ data: [], error: null });
       throw new Error(`No scripted response for table "${table}" call #${idx + 1} (method: ${method})`);
     }
     return makeResultChain(list[idx]);
@@ -862,7 +867,11 @@ describe('POST /api/regenerate-plan — the Coaching Layer', () => {
       expect(res.status).toBe(200);
 
       const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
-      expect(reviewPromptSent).toContain('"sourceCategory":{"categoryName":"Hobby Supplies","target":200,"actual":350,"over":150}');
+      // Regenerate reviews the CURRENT month (July, on Jul 17), whose cycle is
+      // still open — so the category is marked open, and the prompt is told
+      // an open cycle can only be "running ahead of its target so far".
+      expect(reviewPromptSent).toContain('"sourceCategory":{"categoryName":"Hobby Supplies","target":200,"actual":350,"over":150,"open":true}');
+      expect(reviewPromptSent).toContain('running ahead of its target so far');
       // The under-target category never reaches the AI's context at all —
       // there is no path for it to appear, structurally, not just by rule.
       expect(reviewPromptSent).not.toContain('Book Club');
@@ -1393,12 +1402,15 @@ describe('POST /api/regenerate-plan — Adversarial Fix 2: sinking-funds rule re
   });
 });
 
-// Adversarial-review Fix 3 (2026-07-28): plan.seedCategories/monthlyBudget.
-// categories reach reviewPrompt regardless of coaching.sourceCategory — a
-// confirmed, real (though not yet observed exploited) leak. Post-generation
-// guard: retry once if an unsanctioned category is used as a money source;
-// deterministic fallback if the retry also fails.
-describe('POST /api/regenerate-plan — Adversarial Fix 3: category-sourcing guard', () => {
+// NAMES GUARD (2026-10-10) — replaces the category-sourcing guard
+// (Adversarial Fix 3, 2026-07-28, and its line-label follow-up of 2026-07-29),
+// which allowed exactly one category, and only looked near phrases like
+// "could come from". The rule now: every card or spending category the letter
+// names must be one the payload's "cards" carry. A name it does not carry
+// triggers one retry; a second failure saves nothing and fails visibly.
+// Expense LINE labels ("Museum Membership") are not card or category names:
+// naming them is narrating a line the payload holds, not a violation.
+describe('POST /api/regenerate-plan — names guard: only cards and categories the payload carries', () => {
   beforeEach(() => {
     vi.resetModules();
     createMock.mockReset();
@@ -1413,78 +1425,101 @@ describe('POST /api/regenerate-plan — Adversarial Fix 3: category-sourcing gua
       { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
       { data: { timezone: 'America/Toronto' }, error: null },
     ],
-    transactions: [{ data: [], error: null }, { data: [], error: null }],
+    transactions: [
+      { data: [{ amount: 600, type: 'expense', description: 'Museum Membership', account_id: 'chq-1' }], error: null },
+      { data: [], error: null },
+    ],
     accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
     sinking_funds: [{ data: [], error: null }],
     recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+    // The household's own categories, English and French names.
+    categories: [{ data: [{ name: 'Shopping', name_fr: 'Magasinage' }], error: null }],
     conversations: [{ error: null }],
   };
 
-  it('retries once when the first attempt names an unsanctioned category as a source, and uses the clean retry', async () => {
-    createMock
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: "There's room to work with this month — that could come from Shopping if you wanted." }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
-
-    const { client } = makeSupabaseMock(noCardFixture);
+  async function post(fixture: Record<string, unknown>, locale = 'en') {
+    const { client, calls } = makeSupabaseMock(fixture as never);
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
-
     const { POST } = await import('../route');
     const res = await POST(new Request('http://localhost/api/regenerate-plan', {
       method: 'POST',
-      body: JSON.stringify({ locale: 'en' }),
+      body: JSON.stringify({ locale }),
     }));
-    const json = await res.json();
+    return { res, json: await res.json(), calls };
+  }
 
+  it('retries once when the first attempt names a category the payload does not carry, and uses the clean retry', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: "There's room to work with this month — Shopping is one place to look." }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
+
+    const { res, json, calls } = await post(noCardFixture);
     expect(res.status).toBe(200);
     expect(createMock).toHaveBeenCalledTimes(3);
     expect(json.reviewText).toBe('A fine, clean month overall.');
+    const retried = calls.find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried');
+    expect((retried!.args[0] as { metadata: { triggeredBy: string[] } }).metadata.triggeredBy).toEqual(['names']);
   });
 
-  it('falls back to deterministic text when BOTH attempts name an unsanctioned category as a source', async () => {
+  it('fails visibly when BOTH attempts name it: nothing is saved, and the failure is recorded with the name', async () => {
     createMock
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: "That could come from Shopping if you wanted." }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: "You could also pull from Shopping this time." }] });
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Shopping is one place to look.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'You could look at Shopping this time.' }] });
 
-    const { client } = makeSupabaseMock(noCardFixture);
-    const { createClient } = await import('@/lib/supabase-server');
-    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
-
-    const { POST } = await import('../route');
-    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
-      method: 'POST',
-      body: JSON.stringify({ locale: 'en' }),
-    }));
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    // Only 3 total AI calls — plan + 2 review attempts — never a 3rd retry.
+    const { res, json, calls } = await post(noCardFixture);
+    expect(res.status).toBe(502);
+    expect(json.code).toBe('review_guard_failed');
+    expect(json.error).toContain('Shopping');
+    // Only plan + 2 review attempts — never a third.
     expect(createMock).toHaveBeenCalledTimes(3);
-    expect(json.reviewText).not.toContain('Shopping');
-    expect(json.reviewText).toContain("couldn't be generated safely");
+    // Never persisted.
+    expect(calls.some((c) => c.table === 'conversations' && c.method === 'upsert')).toBe(false);
+    const failed = calls.find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_guard_failed');
+    const meta = (failed!.args[0] as { household_id: string; metadata: { month: string; names: string[]; figures: string[] } });
+    expect(meta.household_id).toBe('hh1');
+    expect(meta.metadata.names).toEqual(['Shopping']);
+    expect(meta.metadata.figures).toEqual([]);
+    expect(meta.metadata.month).toMatch(/^\d{4}-\d{2}$/);
   });
 
-  it('never retries when the first attempt is already clean — the common case stays a single review call', async () => {
+  it('FR: catches the French name of a category the payload does not carry', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Continuez.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Vous pourriez regarder du côté de Magasinage.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Un mois clair et simple.' }] });
+
+    const { res, json } = await post(noCardFixture, 'fr');
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(3);
+    expect(json.reviewText).toBe('Un mois clair et simple.');
+  });
+
+  it('control: the same word as ordinary lower-case prose is not the category', async () => {
     createMock
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall, nothing to flag.' }] });
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A quiet month, with less shopping than usual.' }] });
 
-    const { client } = makeSupabaseMock(noCardFixture);
-    const { createClient } = await import('@/lib/supabase-server');
-    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
-
-    const { POST } = await import('../route');
-    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
-      method: 'POST',
-      body: JSON.stringify({ locale: 'en' }),
-    }));
-    const json = await res.json();
-
+    const { res, json } = await post(noCardFixture);
     expect(res.status).toBe(200);
     expect(createMock).toHaveBeenCalledTimes(2);
-    expect(json.reviewText).toBe('A fine month overall, nothing to flag.');
+    expect(json.reviewText).toBe('A quiet month, with less shopping than usual.');
+  });
+
+  it('control: naming an expense line the payload carries is not a violation', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
+        lineClassifications: [{ label: 'Museum Membership', category: 'Unexpected', isFixed: false }],
+        topRecommendation: 'Keep going.',
+      }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Museum Membership came to $600 this month.' }] });
+
+    const { res, json } = await post(noCardFixture);
+    expect(res.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(2);
+    expect(json.reviewText).toBe('Museum Membership came to $600 this month.');
   });
 
   it('reviewPrompt carries the NO INVENTED TARGETS rule', async () => {
@@ -1492,96 +1527,50 @@ describe('POST /api/regenerate-plan — Adversarial Fix 3: category-sourcing gua
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
 
-    const { client } = makeSupabaseMock(noCardFixture);
-    const { createClient } = await import('@/lib/supabase-server');
-    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
-
-    const { POST } = await import('../route');
-    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
-      method: 'POST',
-      body: JSON.stringify({ locale: 'en' }),
-    }));
+    const { res } = await post(noCardFixture);
     expect(res.status).toBe(200);
-
     const reviewPromptSent = createMock.mock.calls[1][0].messages[0].content as string;
     expect(reviewPromptSent).toContain('NO INVENTED TARGETS');
     expect(reviewPromptSent).toContain('never describe any category, fund, or line as having a "budget," "target," or');
   });
 
-  it('FR: retries once when the first attempt names an unsanctioned category as a source in French, and uses the clean retry', async () => {
+  it('never retries when the first attempt is already clean — the common case stays a single review call', async () => {
     createMock
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Continuez.' }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Vous pourriez puiser dans Shopping si vous le souhaitez.' }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Un mois clair et simple.' }] });
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall, nothing to flag.' }] });
 
-    const { client } = makeSupabaseMock(noCardFixture);
-    const { createClient } = await import('@/lib/supabase-server');
-    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
-
-    const { POST } = await import('../route');
-    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
-      method: 'POST',
-      body: JSON.stringify({ locale: 'fr' }),
-    }));
-    const json = await res.json();
-
+    const { res, json } = await post(noCardFixture);
     expect(res.status).toBe(200);
-    expect(createMock).toHaveBeenCalledTimes(3);
-    expect(json.reviewText).toBe('Un mois clair et simple.');
-  });
-
-  it('FR CONTROL: a genuine French sourcing phrase followed much later by an unrelated neutral mention of a category never triggers a retry', async () => {
-    createMock
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Continuez.' }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Vous pourriez puiser dans vos économies avant la fin du mois, et Shopping reste stable dernièrement.' }] });
-
-    const { client } = makeSupabaseMock(noCardFixture);
-    const { createClient } = await import('@/lib/supabase-server');
-    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
-
-    const { POST } = await import('../route');
-    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
-      method: 'POST',
-      body: JSON.stringify({ locale: 'fr' }),
-    }));
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(createMock).toHaveBeenCalledTimes(2); // no retry — not a false positive
-    expect(json.reviewText).toBe('Vous pourriez puiser dans vos économies avant la fin du mois, et Shopping reste stable dernièrement.');
+    expect(createMock).toHaveBeenCalledTimes(2);
+    expect(json.reviewText).toBe('A fine month overall, nothing to flag.');
   });
 });
 
-// Final review bugfix 1 (2026-07-29): findUnsanctionedSourcingMention was
-// called with SEED_CATEGORIES only — never the retained category line
-// labels (category.name, e.g. "Winners") that buildReviewPayload deliberately
-// keeps for every category. coachingHelpers.ts's own module note documents
-// this guard as load-bearing against exactly that surface, but the guard was
-// never given it, so an unsanctioned LINE LABEL used as a money source could
-// never be caught. Fixed by passing retainedCategoryLineLabels alongside
-// SEED_CATEGORIES at the checkReviewGuards call site.
-describe('POST /api/regenerate-plan — Final review bugfix 1: unsanctioned line-label sourcing is now caught', () => {
+// FIGURE GUARD (2026-10-10): every dollar figure in the letter must be one the
+// payload holds, to the cent. September 2026's letter for a real household
+// said "roughly $2,451" — four lines added up by the model.
+describe('POST /api/regenerate-plan — figure guard: every dollar figure is one the payload holds', () => {
   beforeEach(() => {
     vi.resetModules();
     createMock.mockReset();
   });
 
-  // "Museum Membership" is a real expense line label — not one of
-  // SEED_CATEGORIES, and not coaching.sourceCategory (there is no card
-  // account here, so sourceCategory is null) — exactly the surface the bug
-  // left unguarded.
-  const lineLabelFixture = {
+  const fixture = {
     users: [{ data: { household_id: 'hh1' }, error: null }],
     households: [
-      // FIRST read is the Pro gate (requirePro runs before
-      // getHouseholdTimezone). These suites test plan generation, not
-      // entitlement, so they run as a paying household.
       { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
       { data: { timezone: 'America/Toronto' }, error: null },
     ],
     transactions: [
-      { data: [{ amount: 600, type: 'expense', description: 'Museum Membership', account_id: 'chq-1' }], error: null },
-      { data: [], error: null }, // Coaching Layer history window
+      {
+        data: [
+          { amount: 5000, type: 'income', description: 'Salary', account_id: 'chq-1' },
+          { amount: 975.47, type: 'expense', description: 'Groceries run', account_id: 'chq-1' },
+          { amount: 1475.38, type: 'expense', description: 'Rent share', account_id: 'chq-1' },
+        ],
+        error: null,
+      },
+      { data: [], error: null },
     ],
     accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
     sinking_funds: [{ data: [], error: null }],
@@ -1589,56 +1578,67 @@ describe('POST /api/regenerate-plan — Final review bugfix 1: unsanctioned line
     conversations: [{ error: null }],
   };
 
-  it('retries once when the first attempt names an unsanctioned LINE LABEL (not a seed category) as a source', async () => {
-    createMock
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
-        lineClassifications: [{ label: 'Museum Membership', category: 'Unexpected', isFixed: false }],
-        topRecommendation: 'Keep going.',
-      }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'You could pull from Museum Membership this month.' }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
-
-    const { client } = makeSupabaseMock(lineLabelFixture);
+  async function post(locale = 'en') {
+    const { client, calls } = makeSupabaseMock(fixture as never);
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
-
     const { POST } = await import('../route');
     const res = await POST(new Request('http://localhost/api/regenerate-plan', {
       method: 'POST',
-      body: JSON.stringify({ locale: 'en' }),
+      body: JSON.stringify({ locale }),
     }));
-    const json = await res.json();
+    return { res, json: await res.json(), calls };
+  }
 
+  it('a figure the payload holds passes, in English and in fr-CA formatting', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Continuez.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Revenu de 5\u00A0000,00\u00A0$ et 975,47\u00A0$ pour Groceries run.' }] });
+    const { res } = await post('fr');
     expect(res.status).toBe(200);
-    // A retry only happens if the guard actually caught it — before the fix,
-    // this shipped unchanged with no retry at all.
-    expect(createMock).toHaveBeenCalledTimes(3);
-    expect(json.reviewText).toBe('A fine, clean month overall.');
+    expect(createMock).toHaveBeenCalledTimes(2);
   });
 
-  it('FR: retries once when the first attempt names an unsanctioned line label as a source in French', async () => {
+  it('a sum the model made up is caught, retried, and the clean retry is used', async () => {
     createMock
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
-        lineClassifications: [{ label: 'Museum Membership', category: 'Unexpected', isFixed: false }],
-        topRecommendation: 'Continuez.',
-      }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Vous pourriez puiser dans Museum Membership.' }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Un mois clair et simple.' }] });
-
-    const { client } = makeSupabaseMock(lineLabelFixture);
-    const { createClient } = await import('@/lib/supabase-server');
-    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
-
-    const { POST } = await import('../route');
-    const res = await POST(new Request('http://localhost/api/regenerate-plan', {
-      method: 'POST',
-      body: JSON.stringify({ locale: 'fr' }),
-    }));
-    const json = await res.json();
-
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      // 975.47 + 1475.38 = 2450.85, written "roughly $2,451".
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Those two lines came to roughly $2,451.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Groceries run came to $975.47.' }] });
+    const { res, json, calls } = await post();
     expect(res.status).toBe(200);
-    expect(createMock).toHaveBeenCalledTimes(3);
-    expect(json.reviewText).toBe('Un mois clair et simple.');
+    expect(json.reviewText).toBe('Groceries run came to $975.47.');
+    const retried = calls.find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried');
+    expect((retried!.args[0] as { metadata: { triggeredBy: string[] } }).metadata.triggeredBy).toEqual(['figures']);
+  });
+
+  it('a percentage is refused — the payload carries dollars only', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Rent share was 30% of income.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Rent share was 29.5 % of income.' }] });
+    const { res, json, calls } = await post();
+    expect(res.status).toBe(502);
+    expect(json.code).toBe('review_guard_failed');
+    expect(calls.some((c) => c.table === 'conversations' && c.method === 'upsert')).toBe(false);
+    const failed = calls.find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_guard_failed');
+    expect((failed!.args[0] as { metadata: { figures: string[] } }).metadata.figures).toEqual(['29.5 %']);
+  });
+
+  it('a made-up figure on both attempts saves nothing and records the figure', async () => {
+    createMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Those two lines came to roughly $2,451.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'About $2,450 went to those two lines.' }] });
+    const { res, json, calls } = await post();
+    expect(res.status).toBe(502);
+    expect(json.error).toContain('$2,450');
+    expect(calls.some((c) => c.table === 'conversations' && c.method === 'upsert')).toBe(false);
+    const failed = calls.find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_guard_failed');
+    expect((failed!.args[0] as { metadata: { figures: string[]; firstAttempt: { figures: string[] } } }).metadata).toMatchObject({
+      figures: ['$2,450'],
+      firstAttempt: { figures: ['$2,451'] },
+    });
   });
 });
 
@@ -2050,13 +2050,15 @@ describe('POST /api/regenerate-plan — reviewText borrowed-cash guard (unified 
     expect(json.reviewText).toBe('Un mois clair et simple.');
   });
 
-  it('priority: when the retry still fails BOTH checks, the borrowed-cash fallback wins over the category fallback', async () => {
+  it('a name the payload does not carry on the retry fails visibly even when borrowed cash is also mislabelled', async () => {
+    // Borrowed-cash framing can repair a sentence; it cannot make an unknown
+    // category known. The figure/name guard outranks it.
     createMock
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'That could come from Shopping if you wanted.' }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'That could come from Shopping, and your $1,000 draw gives you $1,000 of surplus.' }] });
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Shopping is one place to look.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Shopping is one place to look, and your $1,000 draw gives you $1,000 of surplus.' }] });
 
-    const { client } = makeSupabaseMock(drawFixture);
+    const { client, calls } = makeSupabaseMock({ ...drawFixture, categories: [{ data: [{ name: 'Shopping', name_fr: null }], error: null }] });
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
@@ -2065,12 +2067,10 @@ describe('POST /api/regenerate-plan — reviewText borrowed-cash guard (unified 
       method: 'POST',
       body: JSON.stringify({ locale: 'en' }),
     }));
-    const json = await res.json();
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(502);
     expect(createMock).toHaveBeenCalledTimes(3); // never a 3rd retry
-    expect(json.reviewText).toContain('borrowed');
-    expect(json.reviewText).not.toContain("couldn't be generated safely");
+    expect(calls.some((c) => c.table === 'conversations' && c.method === 'upsert')).toBe(false);
   });
 });
 
@@ -2185,13 +2185,13 @@ describe('POST /api/regenerate-plan — reviewText token-leak guard (third condi
     expect(json.reviewText).toBe('Un mois clair et simple.');
   });
 
-  it('priority: a token leak beats a category-sourcing violation when both fail on retry', async () => {
+  it('a name the payload does not carry on the retry fails visibly even alongside a token leak', async () => {
     createMock
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'That could come from Shopping if you wanted.' }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'That could come from Shopping, and also {{EXTRA_ROOM}} if available.' }] });
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Shopping is one place to look.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Shopping is one place to look, and also {{EXTRA_ROOM}} if available.' }] });
 
-    const { client, calls } = makeSupabaseMock(noCardFixture);
+    const { client, calls } = makeSupabaseMock({ ...noCardFixture, categories: [{ data: [{ name: 'Shopping', name_fr: null }], error: null }] });
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
@@ -2200,19 +2200,11 @@ describe('POST /api/regenerate-plan — reviewText token-leak guard (third condi
       method: 'POST',
       body: JSON.stringify({ locale: 'en' }),
     }));
-    const json = await res.json();
 
-    expect(res.status).toBe(200);
-    expect(json.reviewText).toContain("couldn't be generated safely");
-
-    // Both fallbacks share the same generic text, but the outcome field
-    // must record token_leak as the deciding reason, not category_sourcing.
-    const eventCall = calls.find(
-      (c) => c.table === 'events' && c.method === 'insert' &&
-             (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
-    );
-    const eventPayload = eventCall!.args[0] as { metadata: { outcome: string } };
-    expect(eventPayload.metadata.outcome).toBe('fallback_token');
+    expect(res.status).toBe(502);
+    expect(calls.some((c) => c.table === 'conversations' && c.method === 'upsert')).toBe(false);
+    const failed = calls.find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_guard_failed');
+    expect((failed!.args[0] as { metadata: { names: string[] } }).metadata.names).toEqual(['Shopping']);
   });
 });
 
@@ -2248,7 +2240,7 @@ describe('POST /api/regenerate-plan — reviewText illustrative single-brace tok
   it.each(['name', 'month', 'need', 'freesOn'])('retries once when reviewText echoes the illustrative "{%s}" token verbatim', async (token) => {
     createMock
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: `Your plan sets aside $300/month for {${token}}, so plan around it.` }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: `Your plan sets money aside each month for {${token}}, so plan around it.` }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
 
     const { client, calls } = makeSupabaseMock(noCardFixture);
@@ -2277,7 +2269,7 @@ describe('POST /api/regenerate-plan — reviewText illustrative single-brace tok
   it('control: a legitimate brace in prose or a user-defined category name never triggers a retry', async () => {
     createMock
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Your Fun {Money} category ran $50 over this month, worth a look.' }] });
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Your Fun {Money} line ran higher this month, worth a look.' }] });
 
     const { client } = makeSupabaseMock(noCardFixture);
     const { createClient } = await import('@/lib/supabase-server');
@@ -2292,14 +2284,14 @@ describe('POST /api/regenerate-plan — reviewText illustrative single-brace tok
 
     expect(res.status).toBe(200);
     expect(createMock).toHaveBeenCalledTimes(2); // no retry
-    expect(json.reviewText).toBe('Your Fun {Money} category ran $50 over this month, worth a look.');
+    expect(json.reviewText).toBe('Your Fun {Money} line ran higher this month, worth a look.');
   });
 
   it('combined: an illustrative token leak AND a borrowed-cash issue on the same retry — borrowed-cash priority still holds', async () => {
     createMock
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Your plan sets aside $300/month for {name}.' }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Your plan sets aside $300/month for {name}, and your $1,000 draw gives you $1,000 of surplus.' }] });
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Your plan sets money aside each month for {name}.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Your plan sets money aside each month for {name}, and your $1,000 draw gives you $1,000 of surplus.' }] });
 
     const drawFixture = {
       ...noCardFixture,
@@ -2344,7 +2336,7 @@ describe('POST /api/regenerate-plan — reviewText illustrative single-brace tok
   it('catches the leak in French too', async () => {
     createMock
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ lineClassifications: [], topRecommendation: 'Continuez.' }) }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Votre plan met de côté 300$/mois pour {name}.' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Votre plan met de l’argent de côté chaque mois pour {name}.' }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Un mois clair et simple.' }] });
 
     const { client } = makeSupabaseMock(noCardFixture);

@@ -17,16 +17,27 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // to update a call site — not to re-verify guard behavior, which is already
 // covered exhaustively in coachingHelpers.test.ts / topRecommendationHelpers.test.ts.
 
-const findUnsanctionedSourcingMentionMock = vi.fn();
 const containsIllustrativeTokenLeakMock = vi.fn();
 vi.mock('@/lib/coachingHelpers', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/coachingHelpers')>();
-  findUnsanctionedSourcingMentionMock.mockImplementation(actual.findUnsanctionedSourcingMention);
   containsIllustrativeTokenLeakMock.mockImplementation(actual.containsIllustrativeTokenLeak);
   return {
     ...actual,
-    findUnsanctionedSourcingMention: findUnsanctionedSourcingMentionMock,
     containsIllustrativeTokenLeak: containsIllustrativeTokenLeakMock,
+  };
+});
+
+// The letter guards (2026-10-10), spied the same way.
+const findNamesNotInPayloadMock = vi.fn();
+const checkLetterFiguresMock = vi.fn();
+vi.mock('@/lib/letterGuards', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/letterGuards')>();
+  findNamesNotInPayloadMock.mockImplementation(actual.findNamesNotInPayload);
+  checkLetterFiguresMock.mockImplementation(actual.checkLetterFigures);
+  return {
+    ...actual,
+    findNamesNotInPayload: findNamesNotInPayloadMock,
+    checkLetterFigures: checkLetterFiguresMock,
   };
 });
 
@@ -75,6 +86,11 @@ function makeSupabaseMock(script: Record<string, Resolution[]>) {
       // exhausted script falls back to a benign result rather than making every
       // fixture spell out persistence it does not assert on.
       if (table === 'conversations') return makeResultChain({ data: null, error: null });
+      // The letter's month-ahead balance and name guard (2026-10-10) read
+      // these; unscripted, they answer "no anchored balance" and "no
+      // categories" — the month ahead is then null, and the suites below stay
+      // about what they test.
+      if (table === 'account_balance_anchors' || table === 'categories') return makeResultChain({ data: [], error: null });
       throw new Error(`No scripted response for table "${table}" call #${idx + 1}`);
     }
     return makeResultChain(list[idx]);
@@ -140,6 +156,7 @@ function guardWiringFixture() {
     }],
     sinking_funds: [{ data: [{ name: 'Vacation fund', annual_amount: 1200, monthly_provision: 100, due_month: 6, linked_account_id: null }], error: null }],
     recurring_items: [{ data: [], error: null }, { data: [], error: null }],
+    categories: [{ data: [{ name: 'Shopping', name_fr: 'Magasinage' }, { name: 'Housing', name_fr: null }], error: null }],
     conversations: [{ error: null }],
   };
 }
@@ -175,23 +192,36 @@ describe('POST /api/regenerate-plan — guard call-site argument wiring (structu
   beforeEach(() => {
     vi.resetModules();
     createMock.mockReset();
-    findUnsanctionedSourcingMentionMock.mockClear();
+    findNamesNotInPayloadMock.mockClear();
+    checkLetterFiguresMock.mockClear();
     containsIllustrativeTokenLeakMock.mockClear();
     enforceBorrowedCashFramingMock.mockClear();
     enforceDebtFigureInTopRecommendationMock.mockClear();
   });
 
-  it('findUnsanctionedSourcingMention receives the locale, SEED_CATEGORIES, and the retained category line labels', async () => {
+  it('the names guard receives every household category name, both languages, and only the payload cards as allowed', async () => {
     const res = await runGuardWiringFixture('fr');
     expect(res.status).toBe(200);
 
-    expect(findUnsanctionedSourcingMentionMock).toHaveBeenCalled();
-    const [, allCategoryNames, , locale] = findUnsanctionedSourcingMentionMock.mock.calls[0];
-    expect(locale).toBe('fr');
-    // SEED_CATEGORIES present...
-    expect(allCategoryNames).toEqual(expect.arrayContaining(['Housing', 'Shopping']));
-    // ...AND the retained line label Bug 1 proved was missing.
-    expect(allCategoryNames).toEqual(expect.arrayContaining(['Museum Membership']));
+    expect(findNamesNotInPayloadMock).toHaveBeenCalled();
+    const [, knownNames, allowedNames] = findNamesNotInPayloadMock.mock.calls[0];
+    expect(knownNames).toEqual(expect.arrayContaining(['Shopping', 'Magasinage', 'Housing']));
+    // No card here, so the payload's cards allow no name at all.
+    expect(allowedNames).toEqual([]);
+  });
+
+  it('the figure guard receives the exact payload the letter was written from', async () => {
+    const res = await runGuardWiringFixture('en');
+    expect(res.status).toBe(200);
+
+    expect(checkLetterFiguresMock).toHaveBeenCalled();
+    const [text, payload] = checkLetterFiguresMock.mock.calls[0];
+    expect(text).toBe('A fine month overall.');
+    const prompt = createMock.mock.calls[1][0].messages[0].content as string;
+    expect(prompt).toContain(`Their plan:
+${JSON.stringify(payload)}
+`);
+    expect((payload as { month: { borrowed: number } }).month.borrowed).toBe(1000);
   });
 
   it('containsIllustrativeTokenLeak receives a realEntityNames list containing the sinking fund, debt account, and retained line labels', async () => {
