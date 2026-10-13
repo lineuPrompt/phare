@@ -55,3 +55,12 @@ every dollar figure must equal, to the cent, a number in the payload) was
 Decision needed before wiring: where the check runs (save-plan, or a
 non-streamed generation), what a household sees when its first letter is
 refused, and whether the prompt first moves to exact figures.
+
+## Update, 2026-10-11: the rounding rule
+
+The figure guard now accepts a whole-dollar figure when a payload figure
+rounds to it ("$192" for 192.31; x.50 up); a figure written with cents must
+still match to the cent. The rounded figures seen in stored onboarding
+letters ("$5,417" for 5,416.67, « 1 733 $ ») are the kind this accepts, so
+the guard may be workable for the onboarding letter later. It stays OFF until
+the streaming and storage questions above are decided.

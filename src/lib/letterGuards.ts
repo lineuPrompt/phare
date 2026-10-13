@@ -6,12 +6,19 @@
 // for a real household contained "$2,451", a sum the model made by adding four
 // lines, two of them card payments, and called "food spending".
 //
-// 1. FIGURES. Every dollar amount in the letter must equal, to the cent, a
-//    number present in the payload the model was given. A whole-dollar figure
-//    ("$13,000") passes only when the payload holds that whole number; a
-//    rounded one ("roughly $2,451" for 2450.85) does not. Percentages are
-//    refused outright: the payload carries dollars only, so no percentage in
-//    a letter can be a figure code computed.
+// 1. FIGURES. Every dollar amount in the letter must be a number present in
+//    the payload the model was given:
+//      - written WITH cents ("$192.31", « 192,31 $ »): equal to a payload
+//        figure, to the cent;
+//      - written as whole dollars ("$192", « 192 $ »): equal to a payload
+//        figure rounded to the nearest dollar, x.50 up (2026-10-11 — the
+//        model rounds $192.31 to "$192" despite the prompt, and that is
+//        formatting, not a new number).
+//    A figure the model MADE is still refused either way: "roughly $2,451"
+//    was four lines added together, and no single payload figure is 2,451
+//    or rounds to it. Percentages are refused outright: the payload carries
+//    dollars only, so no percentage in a letter can be a figure code
+//    computed.
 //
 // 2. NAMES. Every card or spending category the letter names must be one the
 //    payload's "cards" section carries. Replaces the category-sourcing check
@@ -23,7 +30,8 @@
 // review: regenerate once, then fail visibly and save nothing.
 // ---------------------------------------------------------------------------
 
-export type DollarFigure = { raw: string; cents: number };
+/** `hasCents`: written with a decimal part, so it must match to the cent. */
+export type DollarFigure = { raw: string; cents: number; hasCents: boolean };
 
 const DIGITS_EN = String.raw`\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?`;
 const DIGITS_FR = String.raw`\d{1,3}(?:[ \u00A0\u202F]\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?`;
@@ -50,9 +58,9 @@ function toCentsFr(digits: string): number {
 /** Every dollar amount written in the text, in cents (sign dropped). */
 export function extractDollarFigures(text: string): DollarFigure[] {
   const out: DollarFigure[] = [];
-  for (const m of text.matchAll(EN_FIGURE)) out.push({ raw: m[0], cents: toCentsEn(m[1]) });
-  for (const m of text.matchAll(FR_FIGURE)) out.push({ raw: m[0], cents: toCentsFr(m[1]) });
-  for (const m of text.matchAll(WORD_FIGURE)) out.push({ raw: m[0], cents: toCentsEn(m[1]) });
+  for (const m of text.matchAll(EN_FIGURE)) out.push({ raw: m[0], cents: toCentsEn(m[1]), hasCents: m[1].includes('.') });
+  for (const m of text.matchAll(FR_FIGURE)) out.push({ raw: m[0], cents: toCentsFr(m[1]), hasCents: m[1].includes(',') });
+  for (const m of text.matchAll(WORD_FIGURE)) out.push({ raw: m[0], cents: toCentsEn(m[1]), hasCents: m[1].includes('.') });
   return out;
 }
 
@@ -70,10 +78,18 @@ export function payloadCents(payload: unknown): Set<number> {
 
 export type FigureGuardResult = { ok: boolean; offending: string[] };
 
+/** Each payload figure rounded to the nearest whole dollar (x.50 up), in cents. */
+export function payloadWholeDollars(exactCents: Set<number>): Set<number> {
+  return new Set([...exactCents].map((c) => Math.floor((c + 50) / 100) * 100));
+}
+
 export function checkLetterFigures(text: string, payload: unknown): FigureGuardResult {
-  const allowed = payloadCents(payload);
+  const exact = payloadCents(payload);
+  const whole = payloadWholeDollars(exact);
   const offending = [
-    ...extractDollarFigures(text).filter((f) => !allowed.has(f.cents)).map((f) => f.raw.trim()),
+    ...extractDollarFigures(text)
+      .filter((f) => !(f.hasCents ? exact.has(f.cents) : whole.has(f.cents)))
+      .map((f) => f.raw.trim()),
     ...[...text.matchAll(ABBREVIATED)].map((m) => m[0].trim()),
     ...[...text.matchAll(PERCENT)].map((m) => m[0].trim()),
   ];

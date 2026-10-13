@@ -47,8 +47,42 @@ describe('checkLetterFigures', () => {
       .toEqual({ ok: false, offending: ['$2,451'] });
   });
 
-  it('refuses a rounded figure: "$489" for 489.04, "$14,580" for 14580.42', () => {
-    expect(checkLetterFigures('About $489 a month, from $14,580 of income.', payload).offending).toEqual(['$489', '$14,580']);
+  it('a whole-dollar figure passes when a payload figure rounds to it (2026-10-11): "$192" for 192.31, EN and FR', () => {
+    const p = { goals: [{ requiredMonthly: 192.31 }] };
+    expect(checkLetterFigures('The date needs $192 a month.', p)).toEqual({ ok: true, offending: [] });
+    expect(checkLetterFigures('La date demande 192 $ par mois.', p)).toEqual({ ok: true, offending: [] });
+    expect(checkLetterFigures('La date demande 192 $ par mois.', p).ok).toBe(true);
+  });
+
+  it('x.50 rounds up', () => {
+    expect(checkLetterFigures('$193 a month.', { a: 192.5 }).ok).toBe(true);
+    expect(checkLetterFigures('$192 a month.', { a: 192.5 }).ok).toBe(false);
+  });
+
+  it('a whole-dollar figure one dollar away fails: "$193" against 192.31', () => {
+    expect(checkLetterFigures('The date needs $193 a month.', { goals: [{ requiredMonthly: 192.31 }] }).offending).toEqual(['$193']);
+    expect(checkLetterFigures('La date demande 193 $ par mois.', { goals: [{ requiredMonthly: 192.31 }] }).offending).toEqual(['193 $']);
+  });
+
+  it('a figure with cents must match to the cent: one cent off fails', () => {
+    const p = { goals: [{ requiredMonthly: 192.31 }] };
+    expect(checkLetterFigures('$192.31 a month.', p).ok).toBe(true);
+    expect(checkLetterFigures('$192.32 a month.', p).offending).toEqual(['$192.32']);
+    expect(checkLetterFigures('192,30 $ par mois.', p).offending).toEqual(['192,30 $']);
+    // Written with cents, so it is held to the cent: rounding does not apply.
+    expect(checkLetterFigures('$192.00 a month.', p).offending).toEqual(['$192.00']);
+  });
+
+  it('a sum the model made still fails though each part is in the payload: "$2,451" (the September 2026 shape)', () => {
+    // Four payload lines whose total, 2450.85, is in no payload field — the
+    // letter wrote their sum, rounded. No single figure rounds to 2,451.
+    const p = { expenseLines: [{ actual: 975.47 }, { actual: 449.6 }, { actual: 520.78 }, { actual: 505 }], month: { expenses: 12588.76 } };
+    expect(checkLetterFigures('Those four lines totalled roughly $2,451 combined.', p).offending).toEqual(['$2,451']);
+  });
+
+  it('a sum with cents still fails: "$207.49" from two installments (the August 2026 shape)', () => {
+    const p = { coaching: { freedCapacityEvents: [{ amount: 108 }, { amount: 99.49 }] } };
+    expect(checkLetterFigures('That combined $207.49 a month of freed capacity.', p).offending).toEqual(['$207.49']);
   });
 
   it('a whole-dollar figure passes only when the payload holds that whole number', () => {

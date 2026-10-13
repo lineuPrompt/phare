@@ -1567,6 +1567,9 @@ describe('POST /api/regenerate-plan — figure guard: every dollar figure is one
           { amount: 5000, type: 'income', description: 'Salary', account_id: 'chq-1' },
           { amount: 975.47, type: 'expense', description: 'Groceries run', account_id: 'chq-1' },
           { amount: 1475.38, type: 'expense', description: 'Rent share', account_id: 'chq-1' },
+          // A third line, so the two above sum (2450.85) to no payload figure:
+          // the month's expenses are 2510.85.
+          { amount: 60, type: 'expense', description: 'Phone', account_id: 'chq-1' },
         ],
         error: null,
       },

@@ -71,8 +71,9 @@ first — iOS App Store submission. Every web functionality item is FROZEN
    rules; figure guard and names guard, regenerate once then fail visibly
    (`review_guard_failed` event, cron reason `guard_failed`, nothing saved).
    Still open:
-   - **Live check (b) on Zezinho Test not done:** its password in
-     `apps/mobile/.env.test.local` is refused since 2026-10-10 (LINEU).
+   - Figure guard rounding rule (2026-10-11): a whole-dollar figure passes
+     when a payload figure rounds to it; cents must match to the cent.
+     Live check on Zezinho Test passed and saved (October, 2026-10-11).
    - **Onboarding letter guard: not switched on** — cannot be checked on
      stored letters, and rounded figures are common. Decision needed. —
      [ticket](tickets/onboarding-review-unguarded.md)
