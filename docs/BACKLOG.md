@@ -31,8 +31,10 @@ first — iOS App Store submission. Every web functionality item is FROZEN
      screen was checked in a throwaway prebuild. **Needs a new EAS build**
      to appear; unverified on a device until then.
    - **`submit.production`** — ascAppId **6812001209** set 2026-10-13. The
-     step-by-step for the remaining device checks, the app record and the
-     EAS API key is [ios-submission-runbook.md](ios-submission-runbook.md).
+     full step-by-step to submission (device checks, app record, EAS API
+     key, demo household and its comp script, screenshots, build and submit,
+     App Privacy and review notes) is
+     [ios-submission-runbook.md](ios-submission-runbook.md).
    - **The Privacy Policy's Stripe sentence** — the scanner now catches
      plurals and French (2026-10-02); the sentence passes by design through
      a pinned full-sentence allowlist (EN and FR), as does the seed category
