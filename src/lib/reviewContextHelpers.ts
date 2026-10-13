@@ -69,3 +69,62 @@ export function detectWindfalls(
   }
   return flags;
 }
+
+// ---------------------------------------------------------------------------
+// EXTRA INCOME AND EXTRA EXPENSES ARE DIFFERENT THINGS (2026-10-13).
+//
+// detectWindfalls flags any recurring item that landed more often than its
+// cadence's usual count — income and expense alike — and the review used to
+// pass both to the model in one list called "windfalls". Zezinho Test's
+// October letter then called a third biweekly car payment a "$350 windfall"
+// and recommended moving it to the emergency fund: an extra expense presented
+// as money available. The list is now split, and only income is ever extra
+// money.
+// ---------------------------------------------------------------------------
+
+export type ExtraOccurrence = {
+  name: string;
+  cadence: string;
+  /** How many times it landed in the reviewed month (counted in code). */
+  occurrences: number;
+  /** How many times its cadence usually lands in a month. */
+  usualOccurrences: number;
+  /** One occurrence's amount: the part that will not repeat. */
+  extraAmount: number;
+};
+
+function toExtra(f: WindfallFlag): ExtraOccurrence {
+  return {
+    name: f.label,
+    cadence: f.cadence,
+    occurrences: f.occurrences,
+    usualOccurrences: f.typicalOccurrences,
+    extraAmount: Number(f.amount),
+  };
+}
+
+export function splitExtraOccurrences(flags: WindfallFlag[]): {
+  extraIncome: ExtraOccurrence[];
+  extraExpenses: ExtraOccurrence[];
+} {
+  return {
+    extraIncome: flags.filter((f) => f.type === 'income').map(toExtra),
+    extraExpenses: flags.filter((f) => f.type === 'expense').map(toExtra),
+  };
+}
+
+/**
+ * The one-time part of a month's net cash flow, signed: extra income raised
+ * it, extra expenses lowered it. A typical month is netCashFlow MINUS this,
+ * so extra income is taken back out and extra expenses are added back.
+ *
+ * Until 2026-10-13 every flag was summed as positive and subtracted, so an
+ * extra expense was counted against the month twice.
+ */
+export function oneTimeNetEffect(flags: WindfallFlag[]): number {
+  const cents = flags.reduce(
+    (sum, f) => sum + (f.type === 'income' ? 1 : -1) * Math.round(Number(f.amount) * 100),
+    0
+  );
+  return cents / 100;
+}

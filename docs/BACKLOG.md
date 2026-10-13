@@ -30,7 +30,9 @@ first — iOS App Store submission. Every web functionality item is FROZEN
      Android adaptive icon from adaptive-icon.png). The generated iOS launch
      screen was checked in a throwaway prebuild. **Needs a new EAS build**
      to appear; unverified on a device until then.
-   - **`submit.production`** — waits on the ascAppId from Lineu.
+   - **`submit.production`** — ascAppId **6812001209** set 2026-10-13. The
+     step-by-step for the remaining device checks, the app record and the
+     EAS API key is [ios-submission-runbook.md](ios-submission-runbook.md).
    - **The Privacy Policy's Stripe sentence** — the scanner now catches
      plurals and French (2026-10-02); the sentence passes by design through
      a pinned full-sentence allowlist (EN and FR), as does the seed category
@@ -58,30 +60,6 @@ first — iOS App Store submission. Every web functionality item is FROZEN
    download and file drop move below it as "Prefer a spreadsheet? Import
    from our template." Same form, steps, routes and funnel events. EN/FR.
    *Built 2026-10-01 (layout and copy only); committed by Lineu in 2346046.*
-6. **Monthly review fix — correctness and substance** (Lineu, 2026-10-09;
-   approved as a correctness exception to the freeze). **Must be live
-   before the 2026-11-01 cron run; deployable by 2026-10-25.** *Built
-   2026-10-10, uncommitted, as two patches (Part A, then Part B).* Part A:
-   over-target check on the reviewed month's cycles; actual contribution
-   rules and deposits apart from the required amount; needs the plan already
-   funds are skipped; a card-only month is not a real month; real savings
-   total. Part B: card goal vs actual and top overspends (same helpers as the
-   Cards page, proven equal), surplus and savings by destination,
-   month-over-month, the month ahead, goal and reserve progress at the actual
-   rules; figure guard and names guard, regenerate once then fail visibly
-   (`review_guard_failed` event, cron reason `guard_failed`, nothing saved).
-   Still open:
-   - Figure guard rounding rule (2026-10-11): a whole-dollar figure passes
-     when a payload figure rounds to it; cents must match to the cent.
-     Live check on Zezinho Test passed and saved (October, 2026-10-11).
-   - **Onboarding letter guard: not switched on** — cannot be checked on
-     stored letters, and rounded figures are common. Decision needed. —
-     [ticket](tickets/onboarding-review-unguarded.md)
-   - **Top recommendation still unguarded.** —
-     [ticket](tickets/top-recommendation-unguarded-figures.md)
-   - **`events` is writable and deletable by any signed-in member** (RLS
-     `FOR ALL`), so "server only" holds for `/api/events` only. —
-     [ticket](tickets/events-rls-client-writable.md)
 
 **Dropped by Lineu, 2026-10-01:**
 
@@ -129,6 +107,20 @@ delivery, referral, French currency formatting on web onboarding.
 **Web functionality, frozen 2026-10-01 (Lineu: mobile first).** Order kept
 for when it thaws:
 
+- **Monthly review: the remaining letter-quality issues** (found 2026-10-13,
+  frozen when the review work closed). The figure, name and framing guards
+  hold; these are wording the guards cannot see:
+  - an open card cycle with $0 spent was called "running well ahead of that
+    target" (the open-cycle phrase is meant for spend past the goal so far);
+  - the letter called the month's expense lines "fixed expenses" — the AI
+    still classifies fixed/variable
+    ([ticket](tickets/plan-ai-classifies-expense-lines.md));
+  - the top recommendation suggests opening a TFSA, a product nothing in the
+    payload names.
+- **`events` is writable and deletable by any signed-in member** (RLS
+  `FOR ALL`), so quota counters can be reset and "server only" holds for
+  `/api/events` only. Schema change. —
+  [ticket](tickets/events-rls-client-writable.md)
 - **Guard the onboarding letter** — options reported 2026-09-29; the letter
   is still unguarded and needs a decision. **STOP.** —
   [ticket](tickets/onboarding-review-unguarded.md)
@@ -190,3 +182,6 @@ for when it thaws:
 | "Takes about 10 minutes" removed from the template card, EN/FR | 7abf46e |
 | Required `platform` ('web' \| 'mobile') on every funnel event | 1226134 |
 | Mobile Home tab — snapshot and Plan card, current month; household gate uses `snapshotOnly=1` ([ticket](tickets/mobile-gate-logs-review-view.md), closed); verified on device by Lineu | 8afabd5 |
+| Monthly review fix A+B — reviewed-month cycles, contributions apart from requirements, funded needs skipped, real months, real savings; cards, month-over-month, month ahead, goal and reserve progress; figure and names guards | b109f6d |
+| Figure guard: whole dollars a payload figure rounds to | 8e95933 |
+| Extra income vs extra expenses split; typical surplus adds extra expenses back; NO FORECASTS and recommendation-source rules; framing and top-recommendation guards ([ticket](tickets/top-recommendation-unguarded-figures.md), closed). Review work CLOSED 2026-10-13 | |

@@ -138,7 +138,7 @@ describe('generateMonthlyReview — golden output', () => {
     createMock
       .mockResolvedValueOnce(aiReturns(JSON.stringify({
         lineClassifications: [],
-        topRecommendation: 'Move $100 into your property tax fund this month.',
+        topRecommendation: 'Move this month\'s surplus into your property tax fund.',
       })))
       .mockResolvedValueOnce(aiReturns('July was steady. Nothing needs your attention this month.'));
   });
@@ -146,7 +146,7 @@ describe('generateMonthlyReview — golden output', () => {
   it('returns exactly the topRecommendation and reviewText it was given', async () => {
     const result = await generate();
     expect(result).toEqual({
-      topRecommendation: 'Move $100 into your property tax fund this month.',
+      topRecommendation: 'Move this month\'s surplus into your property tax fund.',
       reviewText: 'July was steady. Nothing needs your attention this month.',
     });
   });

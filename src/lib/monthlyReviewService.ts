@@ -37,10 +37,10 @@ import { anthropic } from '@/lib/anthropic';
 import { assembleCalculatedBudget, dedupeSinkingFunds } from '@phare/core';
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth, monthsBetween, monthReachedByRules, GoalResult, DebtPayoffResult, type ReachRule } from '@/lib/goalHelpers';
-import { detectWindfalls } from '@/lib/reviewContextHelpers';
+import { detectWindfalls, splitExtraOccurrences, oneTimeNetEffect } from '@/lib/reviewContextHelpers';
 import { loadCardCycleFacts, overTargetFromCardFacts, cardLetterFacts, type CardCycleFacts } from '@/lib/cardOverTarget';
 import { loadMonthAhead, type MonthAheadFacts } from '@/lib/reviewMonthAhead';
-import { checkLetterFigures, findNamesNotInPayload, LetterGuardError } from '@/lib/letterGuards';
+import { checkLetterFigures, checkTopRecommendationFigures, findExpenseMisframing, findNamesNotInPayload, LetterGuardError } from '@/lib/letterGuards';
 import { categoryDisplayName } from '@/lib/categoryTranslations';
 import { enforceDebtFigureInTopRecommendation, enforceBorrowedCashFraming, containsUnsubstitutedToken, DEBT_PAYMENT_PLACEHOLDER } from '@/lib/topRecommendationHelpers';
 import { logEvent } from '@/lib/eventLogger';
@@ -396,6 +396,8 @@ export async function generateMonthlyReview({
       allTxns.map((tx) => ({ recurring_item_id: tx.recurring_item_id ?? null, amount: tx.amount })),
       (activeRecurringItems ?? []) as { id: string; description: string; cadence: string; type: string }[]
     );
+    // Income and expenses apart (2026-10-13): only income is ever extra money.
+    const { extraIncome, extraExpenses } = splitExtraOccurrences(windfalls);
 
     // ── The Coaching Layer ────────────────────────────────────────────────────
     // Every figure below is code-computed (coachingHelpers.ts) and only ever
@@ -484,7 +486,9 @@ export async function generateMonthlyReview({
         monthRows.map((r) => ({ recurring_item_id: r.recurring_item_id ?? null, amount: r.amount })),
         (activeRecurringItems ?? []) as { id: string; description: string; cadence: string; type: string }[]
       );
-      const windfallExtra = monthWindfalls.reduce((sum, w) => sum + w.amount, 0);
+      // Signed (2026-10-13): extra income is taken back out of the month,
+      // extra expenses are added back. computeTypicalSurplus subtracts this.
+      const windfallExtra = oneTimeNetEffect(monthWindfalls);
       // A REAL MONTH HAS A CHEQUING ROW (2026-10-10). netCashFlow is computed
       // from chequing rows only, so a month holding nothing but card spend has
       // a "surplus" of exactly 0 that never happened. June 2026 had three card
@@ -686,9 +690,11 @@ export async function generateMonthlyReview({
       `Their debt payoff — ALREADY verified (null means no debt evident or nothing computable), do not recompute or contradict: ${JSON.stringify(computedDebtPayoff)}\n` +
       `Their recurring contributions and debt payments (or none) — these are already deducted inside the ` +
       `savings figure and net cash flow above, NOT extra discretionary room: ${JSON.stringify(committedTransfers)}\n` +
-      `Windfalls this month (or none) — a recurring item that landed MORE times than its usual cadence this ` +
+      `Extra income this month (or none) — income that landed MORE times than its usual cadence this ` +
       `specific month (e.g. a third biweekly paycheque instead of two). Each one MUST be acknowledged as a ` +
-      `one-time timing event, MUST NOT be treated as a new ongoing run-rate: ${JSON.stringify(windfalls)}`;
+      `one-time timing event, MUST NOT be treated as a new ongoing run-rate: ${JSON.stringify(extraIncome)}\n` +
+      `Extra expense occurrences this month (or none) — spending that landed more often than usual. This is ` +
+      `NOT money available and must never be directed anywhere: ${JSON.stringify(extraExpenses)}`;
 
     // ── Generate plan (AI interprets verified numbers only) ──────────────────
     // The AI may NEVER instantiate structured objects here either — same hard
@@ -698,6 +704,25 @@ export async function generateMonthlyReview({
     // monthly review — the single most important retention surface — so it
     // must be constitutionally incapable of inventing a fund, goal, or debt
     // plan the family never set up.
+    // Where the top recommendation's money may come from (2026-10-13): the
+    // month's net cash flow, the coaching starting contribution, a freed-
+    // capacity event — and the target need's own required amount, since the
+    // sentence names what it funds. Never an extra expense.
+    const topNeedOwnFigures: number[] = !topNeed
+      ? []
+      : topNeed.kind === 'sinkingFundAllocation'
+        ? [topNeed.monthlyProvision]
+        : [
+            topNeed.monthlyShortfall,
+            ...goalFacts.filter((g) => g.name === topNeed.name).map((g) => g.requiredMonthly),
+          ];
+    const topRecommendationSources: number[] = [
+      netCashFlow,
+      startingContribution,
+      ...freedCapacityEvents.map((e) => e.amount),
+      ...topNeedOwnFigures,
+    ];
+
     const categoryList = SEED_CATEGORIES.join(', ');
     const planPrompt =
       `You are Phare, a financial planning system for Canadian households. The numbers below are VERIFIED — ` +
@@ -720,16 +745,77 @@ export async function generateMonthlyReview({
       `- Vocabulary: never write "code", "computed in code", or similar internal/technical phrasing — a reader must never see the word "code" at all. An estimated date or figure should read as a plain estimate (e.g. "estimated: March 2027"), never "code-estimated". Never call a figure "budgeted" unless the household actually set that budget themselves — a computed or projected amount (including a card/bridge payment total) should read as "expected", not "budgeted".\n` +
       `- Canadian context: RRSP, RESP, TFSA, CESG.\n` +
       `- If net cash flow is negative, topRecommendation must address that first.\n` +
-      `- topRecommendation: one specific sentence with a dollar amount.`;
+      `- topRecommendation: one specific sentence with a dollar amount.\n` +
+      `- topRecommendation may direct money only from the month's net cash flow, the starting contribution, or a ` +
+      `freed-capacity event, and every dollar figure in it must be one of these, exactly or rounded to the ` +
+      `dollar: ${JSON.stringify(topRecommendationSources)}. An extra expense occurrence is spending, never money ` +
+      `available: never call it a windfall or a bonus, and never suggest moving it anywhere. Never predict a ` +
+      `future figure.`;
 
-    const planMessage = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
-      messages: [{ role: 'user', content: planPrompt }],
+    async function generatePlan(): Promise<{ lineClassifications?: { label?: string; category?: string; isFixed?: boolean }[]; topRecommendation?: string }> {
+      const planMessage = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: planPrompt }],
+      });
+      const planText = planMessage.content[0].type === 'text' ? planMessage.content[0].text : '';
+      return JSON.parse(planText.replace(/```json|```/g, '').trim());
+    }
+
+    // FIX 1 (2026-07-27): topRecommendation is planPrompt's free text — the
+    // debt's own monthly payment figure inside it is never trusted as
+    // AI-authored digits (topRecommendationHelpers.ts).
+    // FIX 4 (2026-07-28): never let a real credit-line draw get labeled as
+    // surplus/extra/income.
+    const finalTopRecommendation = (part: { topRecommendation?: string }) =>
+      enforceBorrowedCashFraming(
+        enforceDebtFigureInTopRecommendation(part.topRecommendation ?? '', computedDebtPayoff, locale),
+        totalBorrowed,
+        locale
+      );
+
+    // THE TOP RECOMMENDATION'S MONEY (2026-10-13). Checked on the final text,
+    // after code has put in the debt's real payment and reframed borrowed
+    // cash — those two figures are code's, so they are allowed alongside the
+    // sources of available money. It may not treat an extra expense as money.
+    // One retry; a second failure saves nothing, exactly as a failing letter
+    // does.
+    const topRecommendationAllowed = [
+      ...topRecommendationSources,
+      ...(computedDebtPayoff ? [computedDebtPayoff.monthlyPayment] : []),
+      ...(totalBorrowed > 0 ? [totalBorrowed] : []),
+    ];
+    const checkTopRecommendation = (text: string) => ({
+      figures: checkTopRecommendationFigures(text, topRecommendationAllowed).offending,
+      framing: findExpenseMisframing(text, extraIncome, extraExpenses),
     });
-
-    const planText = planMessage.content[0].type === 'text' ? planMessage.content[0].text : '';
-    const aiPart = JSON.parse(planText.replace(/```json|```/g, '').trim());
+    let aiPart = await generatePlan();
+    let topRecommendationText = finalTopRecommendation(aiPart);
+    const firstTopRec = checkTopRecommendation(topRecommendationText);
+    if (firstTopRec.figures.length > 0 || firstTopRec.framing.length > 0) {
+      aiPart = await generatePlan();
+      topRecommendationText = finalTopRecommendation(aiPart);
+      const retryTopRec = checkTopRecommendation(topRecommendationText);
+      if (retryTopRec.figures.length > 0 || retryTopRec.framing.length > 0) {
+        void logEvent(supabase, householdId, userId, 'review_guard_failed', {
+          month: reviewMonthLabel,
+          kind: 'top_recommendation',
+          figures: retryTopRec.figures,
+          names: [],
+          framing: retryTopRec.framing,
+          firstAttempt: firstTopRec,
+        });
+        throw new LetterGuardError(retryTopRec.figures, [], retryTopRec.framing);
+      }
+      void logEvent(supabase, householdId, userId, 'review_text_guard_retried', {
+        kind: 'top_recommendation',
+        triggeredBy: [
+          ...(firstTopRec.figures.length > 0 ? ['figures'] : []),
+          ...(firstTopRec.framing.length > 0 ? ['framing'] : []),
+        ],
+        outcome: 'retry_passed',
+      });
+    }
 
     // Sinking funds are DB-derived (real rows) or empty — never AI-invented.
     // aiPart is not consulted for them. Every row now shares ONE cash buffer
@@ -872,26 +958,15 @@ export async function generateMonthlyReview({
       // Code-computed from real goal accounts — never AI-emitted.
       debtPayoff: computedDebtPayoff,
       goals: goalFacts,
-      windfalls,
+      extraIncome,
+      extraExpenses,
       // The Coaching Layer — entirely code-computed (coachingHelpers.ts): the
       // AI only narrates this, it never reorders rankedNeeds, never picks a
       // different sourceCategory, never invents a freedCapacityEvent or a
       // starting amount above startingContribution.
       coaching,
-      // FIX 1 (2026-07-27): topRecommendation is planPrompt's free text — the
-      // debt's own monthly payment figure inside it is never trusted as
-      // AI-authored digits (topRecommendationHelpers.ts).
-      // FIX 4 (2026-07-28): never let a real credit-line draw get labeled as
-      // surplus/extra/income.
-      topRecommendation: enforceBorrowedCashFraming(
-        enforceDebtFigureInTopRecommendation(
-          aiPart.topRecommendation ?? '',
-          computedDebtPayoff,
-          locale
-        ),
-        totalBorrowed,
-        locale
-      ),
+      // The checked top recommendation (see finalTopRecommendation above).
+      topRecommendation: topRecommendationText,
     };
 
     // ── Generate review (blocking) ────────────────────────────────────────────
@@ -960,10 +1035,17 @@ export async function generateMonthlyReview({
       `"totalMonthlyProvision" are the plan's OWN established figures and may always be restated using the ` +
       `phrasing above regardless of "coaching.startingContribution" — that cap governs a different thing ` +
       `entirely: see COACHING below for exactly what it bounds.\n` +
-      `- WINDFALLS: if "windfalls" is non-empty, you MUST explicitly acknowledge each one by name and amount, ` +
-      `framed as a one-time timing event that will NOT repeat next month (e.g. "${reviewMonthName} included a ` +
-      `third biweekly paycheque — $X extra that won't repeat next month") — never described as a new normal ` +
-      `income/expense level going forward.\n` +
+      `- EXTRA OCCURRENCES: "extraIncome" lists income that landed more often than usual this month; ` +
+      `"extraExpenses" lists expenses that did. Acknowledge each by name, using its own "occurrences", ` +
+      `"usualOccurrences" and "extraAmount", as a one-time timing event. Extra income is money that won't ` +
+      `repeat. An extra expense is extra SPENDING: it reduced this month's surplus. It is never a windfall, a ` +
+      `bonus or money available, and you never suggest moving it anywhere.\n` +
+      `- NO FORECASTS: never predict a future figure ("next month should run closer to $X"). The only ` +
+      `forward-looking figures you may state are those in "monthAhead", a goal's dates, and ` +
+      `"freedCapacityEvents". A past month's figure is never a forecast.\n` +
+      `- THE RECOMMENDATION may direct money only from: the month's surplus ("month.netCashFlow"), ` +
+      `"coaching.startingContribution", or a "freedCapacityEvents" entry, and the amount must be one of those ` +
+      `figures. Never from an expense line, an extra expense occurrence, or any other figure.\n` +
       `- VOCABULARY: never write "code", "computed in code", or similar internal/technical phrasing anywhere — ` +
       `the reader must never see the word "code". An estimated date or figure reads as a plain estimate (e.g. ` +
       `"estimated: March 2027"), never "code-estimated" or "code-computed". A projected or computed amount ` +
@@ -1048,11 +1130,13 @@ export async function generateMonthlyReview({
     ];
     const payloadNames = cards.flatMap((c) => [c.name, ...c.topOverspends.map((o) => o.category)]);
 
-    type Violation = { figures: string[]; names: string[]; borrowed: boolean; token: boolean };
+    type Violation = { figures: string[]; names: string[]; framing: string[]; borrowed: boolean; token: boolean };
     function checkReviewGuards(text: string): Violation {
       return {
         figures: checkLetterFigures(text, letterPayload).offending,
         names: findNamesNotInPayload(text, knownNames, payloadNames),
+        // An extra expense called a windfall or directed as money (2026-10-13).
+        framing: findExpenseMisframing(text, extraIncome, extraExpenses),
         borrowed: totalBorrowed > 0 && enforceBorrowedCashFraming(text, totalBorrowed, locale) !== text,
         // Same condition, two shapes of leak: a real {{...}} template token
         // and reviewPrompt's own single-brace illustrative examples echoed
@@ -1060,7 +1144,7 @@ export async function generateMonthlyReview({
         token: containsUnsubstitutedToken(text) || containsIllustrativeTokenLeak(text, REVIEW_PROMPT_ILLUSTRATIVE_TOKENS, realEntityNames),
       };
     }
-    const anyViolation = (v: Violation) => v.figures.length > 0 || v.names.length > 0 || v.borrowed || v.token;
+    const anyViolation = (v: Violation) => v.figures.length > 0 || v.names.length > 0 || v.framing.length > 0 || v.borrowed || v.token;
 
     function violatedReasons(v: Violation): string[] {
       const reasons: string[] = [];
@@ -1068,6 +1152,7 @@ export async function generateMonthlyReview({
       if (v.token) reasons.push('token_leak');
       if (v.figures.length > 0) reasons.push('figures');
       if (v.names.length > 0) reasons.push('names');
+      if (v.framing.length > 0) reasons.push('framing');
       return reasons;
     }
 
@@ -1083,15 +1168,16 @@ export async function generateMonthlyReview({
       // the caller gets the error, and an event records the household, the
       // month and exactly what failed, so it can be found by a query. A
       // letter with a figure code never computed is never persisted.
-      if (retryViolation.figures.length > 0 || retryViolation.names.length > 0) {
+      if (retryViolation.figures.length > 0 || retryViolation.names.length > 0 || retryViolation.framing.length > 0) {
         void logEvent(supabase, householdId, userId, 'review_guard_failed', {
           month: reviewMonthLabel,
           kind: 'monthly_review',
           figures: retryViolation.figures,
           names: retryViolation.names,
-          firstAttempt: { figures: firstAttemptViolation.figures, names: firstAttemptViolation.names },
+          framing: retryViolation.framing,
+          firstAttempt: { figures: firstAttemptViolation.figures, names: firstAttemptViolation.names, framing: firstAttemptViolation.framing },
         });
-        throw new LetterGuardError(retryViolation.figures, retryViolation.names);
+        throw new LetterGuardError(retryViolation.figures, retryViolation.names, retryViolation.framing);
       }
 
       // Otherwise, priority when the retry still fails — stated as a rule:

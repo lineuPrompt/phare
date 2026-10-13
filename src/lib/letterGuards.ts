@@ -130,19 +130,89 @@ export function findNamesNotInPayload(text: string, knownNames: string[], allowe
   return found;
 }
 
+// ---------------------------------------------------------------------------
+// 3. AN EXTRA EXPENSE IS NEVER MONEY AVAILABLE (2026-10-13).
+//
+// Zezinho Test's October letter called a third biweekly car payment a "$350
+// windfall" and told the household to move it to the emergency fund. Two
+// checks, both on what the payload says:
+//   - with no extra INCOME this month, nothing may be called a windfall,
+//     bonus, aubaine or manne;
+//   - a sentence that names an extra EXPENSE (its name, or its extraAmount)
+//     may not also call it a windfall, or direct money ("toward", "put",
+//     "direct", "move", "set aside", « vers », « verser », « consacrer »,
+//     « mettre de côté »).
+// ---------------------------------------------------------------------------
+
+const WINDFALL_WORDS = /(?<![\p{L}])(windfalls?|bonus(?:es)?|aubaines?|manne)(?![\p{L}])/giu;
+const DIRECTING_WORDS = new RegExp(
+  String.raw`(?<![\p{L}])(towards?|put|puts|putting|direct|directs|directing|redirect|redirecting|move|moves|moving|set\s+aside|setting\s+aside|vers|verser|versez|consacrer|consacrez|mettre\s+de\s+côté|mettez\s+de\s+côté)(?![\p{L}])`,
+  'iu'
+);
+
+type ExtraLike = { name: string; extraAmount: number };
+
+/** Does a written figure stand for this amount, by the figure guard's own rule? */
+function figureMeans(f: DollarFigure, amount: number): boolean {
+  const cents = Math.abs(Math.round(amount * 100));
+  return f.hasCents ? f.cents === cents : f.cents === Math.floor((cents + 50) / 100) * 100;
+}
+
+function sentencesOf(text: string): string[] {
+  return text.split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * What the text gets wrong about extra occurrences: each entry is a short
+ * description of one violation, for the event and the error message.
+ */
+export function findExpenseMisframing(text: string, extraIncome: ExtraLike[], extraExpenses: ExtraLike[]): string[] {
+  const found: string[] = [];
+  if (extraIncome.length === 0) {
+    for (const m of text.matchAll(WINDFALL_WORDS)) found.push(`"${m[0]}" with no extra income this month`);
+  }
+  for (const sentence of sentencesOf(text)) {
+    const figures = extractDollarFigures(sentence);
+    const expense = extraExpenses.find(
+      (e) => sentence.includes(e.name) || figures.some((f) => figureMeans(f, e.extraAmount))
+    );
+    if (!expense) continue;
+    const short = sentence.length > 120 ? `${sentence.slice(0, 117)}...` : sentence;
+    if (new RegExp(WINDFALL_WORDS.source, 'iu').test(sentence)) found.push(`extra expense "${expense.name}" called a windfall: ${short}`);
+    else if (DIRECTING_WORDS.test(sentence)) found.push(`extra expense "${expense.name}" directed as money: ${short}`);
+  }
+  return [...new Set(found)];
+}
+
+// ---------------------------------------------------------------------------
+// 4. THE TOP RECOMMENDATION MOVES ONLY MONEY THAT IS AVAILABLE (2026-10-13).
+//
+// Its dollar figures must be among the sources of available money the
+// payload names — the month's surplus, coaching.startingContribution, a
+// freed-capacity event — or the target need's own required amount. Same
+// rounding rule as the letter. An extra expense is never one of them.
+// ---------------------------------------------------------------------------
+
+export function checkTopRecommendationFigures(text: string, allowedFigures: number[]): FigureGuardResult {
+  return checkLetterFigures(text, allowedFigures);
+}
+
 /** Thrown when a letter fails a guard twice. Carries what failed, for the event and the cron report. */
 export class LetterGuardError extends Error {
   readonly figures: string[];
   readonly names: string[];
-  constructor(figures: string[], names: string[]) {
+  readonly framing: string[];
+  constructor(figures: string[], names: string[], framing: string[] = []) {
     super(
       `letter failed its guards: ${[
         figures.length ? `figures not in the payload: ${figures.join(', ')}` : '',
         names.length ? `names not in the payload's cards: ${names.join(', ')}` : '',
+        framing.length ? `extra expenses treated as money: ${framing.join(' | ')}` : '',
       ].filter(Boolean).join('; ')}`
     );
     this.name = 'LetterGuardError';
     this.figures = figures;
     this.names = names;
+    this.framing = framing;
   }
 }

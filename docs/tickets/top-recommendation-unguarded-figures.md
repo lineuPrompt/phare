@@ -2,7 +2,11 @@
 
 **Filed** 2026-10-10, from the monthly review fix (BACKLOG item 6).
 
-**Status:** OPEN. AI output: diagnose and stop for approval.
+**Status:** CLOSED 2026-10-13. The final top recommendation's dollar figures must be
+the month's net cash flow, the coaching starting contribution, a freed-capacity
+event or the target need's own amount (exactly or rounded to the dollar; the
+debt payment and borrowed figures code inserts are allowed), and it may not
+treat an extra expense as money. One retry, then the review fails visibly.
 
 ---
 

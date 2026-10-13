@@ -443,7 +443,8 @@ describe('POST /api/regenerate-plan — the AI may never instantiate structured 
       const planPromptSent = createMock.mock.calls[0][0].messages[0].content as string;
       expect(planPromptSent).toContain("Lineu's paycheque");
       expect(planPromptSent).toContain('"occurrences":3');
-      expect(planPromptSent).toContain('"typicalOccurrences":2');
+      expect(planPromptSent).toContain('"usualOccurrences":2');
+      expect(planPromptSent).toContain('Extra income this month');
       expect(planPromptSent).toContain('one-time timing event');
     } finally {
       vi.useRealTimers();
@@ -1156,7 +1157,7 @@ describe('POST /api/regenerate-plan — Fix 1: topRecommendation debt-figure enf
     createMock
       .mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
         lineClassifications: [],
-        topRecommendation: 'Your Shopping category ran $200 over this month — worth a look.',
+        topRecommendation: 'Your Shopping spending is worth a look this month.',
       }) }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine month overall.' }] });
 
@@ -1187,7 +1188,7 @@ describe('POST /api/regenerate-plan — Fix 1: topRecommendation debt-figure enf
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(json.topRecommendation).toBe('Your Shopping category ran $200 over this month — worth a look.');
+    expect(json.topRecommendation).toBe('Your Shopping spending is worth a look this month.');
   });
 });
 
@@ -1863,7 +1864,8 @@ describe('POST /api/regenerate-plan — Adversarial Fix 4: borrowed cash framing
       { data: { subscription_status: 'active', subscription_current_period_end: '2099-01-01T00:00:00Z', comp_until: null }, error: null },
       { data: { timezone: 'America/Toronto' }, error: null },
     ],
-      transactions: [{ data: [], error: null }, { data: [], error: null }],
+      // A real $200 net cash flow, so the recommendation's "$200" is the month's own surplus.
+      transactions: [{ data: [{ amount: 200, type: 'income', description: 'Salary', account_id: 'chq-1' }], error: null }, { data: [], error: null }],
       accounts: [{ data: [{ id: 'chq-1', name: 'Chequing', type: 'chequing', goal_target: null, goal_target_date: null }], error: null }],
       sinking_funds: [{ data: [], error: null }],
       recurring_items: [{ data: [], error: null }, { data: [], error: null }],
