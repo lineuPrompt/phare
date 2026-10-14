@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
@@ -17,6 +17,12 @@ import DeleteAccountSection from '../components/DeleteAccountSection';
  * removed — auth-js 2.110 GoTrueClient._signOut. The device stays signed in.
  * The old header link ignored the result, so an offline tap did nothing and
  * said nothing. Here the person is told, and can try again.
+ *
+ * THE KEYBOARD (2026-10-14). The deletion confirmation field sits at the
+ * bottom of this screen, and it used to stay under the keyboard: on the
+ * device check, the email being typed could not be seen. The screen now
+ * shrinks above the keyboard, as sign-in, onboarding and quick entry do, and
+ * scrolls to the field when it is focused.
  */
 export default function AccountScreen() {
   const { t } = useI18n();
@@ -25,6 +31,7 @@ export default function AccountScreen() {
   const email = session.status === 'signedIn' ? session.session.user.email ?? null : null;
   const [signingOut, setSigningOut] = useState(false);
   const [signOutFailed, setSignOutFailed] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
 
   const signOut = async () => {
     setSigningOut(true);
@@ -39,7 +46,8 @@ export default function AccountScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>{t('account.title')}</Text>
 
         <View style={styles.card}>
@@ -76,14 +84,20 @@ export default function AccountScreen() {
         </Pressable>
 
         {/* Deletion must be doable in the app (App Store 5.1.1(v)). */}
-        <DeleteAccountSection />
+        <DeleteAccountSection
+          // The field is near the end of the screen; once the keyboard has
+          // shrunk the view, scroll so the field and the button below it show.
+          onConfirmFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
+        />
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.color.background },
+  flex: { flex: 1 },
   content: { padding: theme.space.md, gap: theme.space.md },
   title: {
     fontSize: 24,

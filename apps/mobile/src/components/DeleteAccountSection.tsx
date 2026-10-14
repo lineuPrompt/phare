@@ -30,7 +30,7 @@ import { theme } from '../theme';
  * nothing else from household management; the blast radius is label/count
  * rows, because this app has no ICU plurals.
  */
-export default function DeleteAccountSection() {
+export default function DeleteAccountSection({ onConfirmFocus }: { onConfirmFocus?: () => void } = {}) {
   const { t, locale } = useI18n();
   const [preview, setPreview] = useState<DeletionPreview | null>(null);
   const [loadErrorKey, setLoadErrorKey] = useState<string | null>(null);
@@ -249,6 +249,7 @@ export default function DeleteAccountSection() {
             style={styles.input}
             value={typed}
             onChangeText={setTyped}
+            onFocus={onConfirmFocus}
             autoCapitalize="none"
             autoCorrect={false}
             editable={!needsHatch || hatch}

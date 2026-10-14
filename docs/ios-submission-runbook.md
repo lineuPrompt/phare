@@ -135,7 +135,8 @@ Pass, all of:
 1. Tab **Cartes** → the **+** at top right.
    - Pass: **Ajouter une dépense**; the chequing account is preselected; the
      date is today.
-2. **Compte**: choose **Visa test**. **Date**: tap **Hier**.
+2. **Compte**: tap the card, **Visa test** (Chequing is selected by default —
+   the card must be tapped). **Date**: tap **Hier**.
    **Description**: **Épicerie test**. **Catégorie**: any. **Montant**: on
    the French keypad type **12,50** → **Enregistrer**.
    - Pass: « Enregistrée. »; account, category and date stay; description and
@@ -164,6 +165,7 @@ SELECT t.date, t.description, t.amount, t.type, t.source, t.member_id,
   LEFT JOIN categories c ON c.id = t.category_id
  WHERE t.household_id = (SELECT household_id FROM users WHERE lower(email) = lower('<T1 email>'))
    AND t.source = 'manual'
+   AND t.recurring_item_id IS NULL   -- onboarding's recurring rows are 'manual' too
  ORDER BY t.created_at DESC LIMIT 5;
 ```
 Pass: exactly **one** row — yesterday's date in Toronto time, amount

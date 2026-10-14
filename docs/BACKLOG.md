@@ -44,6 +44,15 @@ first — iOS App Store submission. Every web functionality item is FROZEN
      must change with it (a test fails until it does).
    - **Demo household** — Lineu creates and comps it (steps in the listing
      doc).
+   - **Device checklist (runbook part 1), run 2026-10-14 on T1/T2:** C
+     passed structurally (one plan, one letter, anchor today, pay dates within
+     14 days, no member on expenses) but was done in English with other
+     figures, so the French amount/refusal steps are unproven; B passed
+     (12.50 on the card, yesterday, no member; 12,345 and 201 characters
+     refused); D passed (T1: login, sessions, tokens gone, member row kept;
+     T2: household and every row gone). Found and fixed, uncommitted: the
+     Account screen's deletion field sat under the keyboard. Unverified on a
+     device until the next reload.
 2. **`apps/mobile/app.json` → `app.config.ts`** reading the bundle id and
    Android package from the same env vars the web's well-known routes use. —
    [ticket](tickets/mobile-app-config-from-env.md)
@@ -102,6 +111,26 @@ first — iOS App Store submission. Every web functionality item is FROZEN
 - (none — the upload-screen inversion became READY item 5, visual only.)
 
 ## FROZEN (do not start)
+
+**Mobile, after the iOS submission** (no new features before it):
+
+- **Onboarding pay-date step: a date picker instead of typed `YYYY-MM-DD`**
+  (Lineu, 2026-10-14, during device check C). Today the field is free text
+  checked against "within the next 14 days". A native picker
+  (`@react-native-community/datetimepicker`) is a native module: it needs a
+  new development build and an Expo-SDK-pinned version (see the pnpm/Expo
+  peer pinning rule). The quick-entry date field has the same shape.
+
+**Web, found 2026-10-14 during the device checklist:**
+
+- **Invite accepted in a browser already signed in as someone else:
+  possible session mix-up.** T2 (island.flora8040@…) followed its invite and
+  signed in at 18:35:17; ten seconds later the terms acceptance and the
+  dashboard load were recorded for T1 (`users.terms_accepted_at` re-set,
+  `viewed_monthly_review` with T1's user_id), and T2 stayed unaccepted. In a
+  fresh private window T2 accepted normally. Not yet known whether an old T1
+  tab was used or whether the set-password/accept-terms flow keeps the
+  previous session. Diagnose before any fix (auth).
 
 Weekly check-in, event-based coaching, chat, budget alerts, review email
 delivery, referral, French currency formatting on web onboarding.
