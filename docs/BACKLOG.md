@@ -28,8 +28,14 @@ first — iOS App Store submission. Every web functionality item is FROZEN
    - **App icon and splash** — final art wired in 2026-10-05 (icon.png;
      splash.png through the `expo-splash-screen` plugin, 200 pt on #02245E;
      Android adaptive icon from adaptive-icon.png). The generated iOS launch
-     screen was checked in a throwaway prebuild. **Needs a new EAS build**
-     to appear; unverified on a device until then.
+     screen was checked in a throwaway prebuild. **Production build 9**
+     (2026-10-15, from 9c6599f) is on TestFlight, installed on Lineu's
+     iPhone through the internal group "Team (Expo)"; device findings
+     pending. Built with the ASC API key (no Apple login): first production
+     build interactive, `EXPO_NO_CAPABILITY_SYNC=1`, and eas-cli's token
+     shortened to 19 minutes locally (eas-cli issue #4462 — reapply after any
+     eas-cli upgrade; steps in the runbook, part 6). Submit takes the key from
+     `eas.json`'s submit profile.
    - **`submit.production`** — ascAppId **6812001209** set 2026-10-13. The
      full step-by-step to submission (device checks, app record, EAS API
      key, demo household and its comp script, screenshots, build and submit,
