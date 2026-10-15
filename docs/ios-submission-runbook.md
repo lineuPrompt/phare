@@ -258,7 +258,7 @@ Pass: every count **0**.
 
 ---
 
-## Part 2 — The App Store Connect app record — Lineu (already done)
+## Part 2 — The App Store Connect app record — Lineu (done; checked 2026-10-14)
 
 You have created the record; its Apple ID **6812001209** is the `ascAppId`
 now in `apps/mobile/eas.json` under `submit.production.ios`. The steps are
@@ -273,7 +273,7 @@ kept here so the record can be recreated identically.
    - **Bundle ID**: choose **money.phare.app** from the list. (If it is not
      in the list, it has not been registered yet: the first `eas build` in
      part 6 registers it; come back afterwards.)
-   - **SKU**: `phare-ios`
+   - **SKU**: `phare-mobile-001` (the value the live record uses)
    - **User Access**: Full Access
    → **Create**.
 3. **[Lineu]** Left column **General → App Information**. Copy the number
@@ -287,47 +287,37 @@ kept here so the record can be recreated identically.
 
 ---
 
-## Part 3 — A new App Store Connect API key, stored with `eas credentials` — Lineu
+## Part 3 — The App Store Connect API key, no Apple login — Lineu
 
-EAS uses this key to upload builds without your Apple password. Make a new
-one and revoke any older one.
+Your Apple account signs in with your phone, not a password, and `eas
+credentials` insists on a password (it says "Only user authentication is
+supported"). So **never use `eas credentials`**: EAS signs in with the API
+key instead, through four settings in the PowerShell window you build from
+(part 6).
 
 1. **[Lineu]** https://appstoreconnect.apple.com → **Users and Access** (top
    right) → tab **Integrations** → left **App Store Connect API** → **Team
-   Keys**. If Apple asks you to request API access, click **Request Access**
-   and accept.
-2. **[Lineu]** Click **+** (Generate API Key). **Name**: `EAS Phare`.
-   **Access**: **App Manager** → **Generate**.
-3. **[Lineu]** In the new row, note the **Key ID** (10 characters). Above
-   the table, note the **Issuer ID** (long id with dashes).
-4. **[Lineu]** Click **Download API Key**. Apple allows this **once**. Save
-   `AuthKey_<KeyID>.p8` in a private folder **outside the repo**, e.g.
-   `C:\Users\lineu\Documents\keys\`. Never put it in the repo.
-5. **[Lineu]** If an older key for EAS or Phare is listed: click it →
-   **Revoke**.
-6. **[Lineu]** In a terminal:
-   ```
-   cd C:\Users\lineu\source\repos\phare\apps\mobile
-   eas credentials --platform ios
-   ```
-   The prompts and the answers (EAS CLI ≥ 16; if a line is worded slightly
-   differently in your version, pick the option with the same meaning):
-
-   | EAS asks | You answer |
-   |---|---|
-   | Which build profile do you want to configure? | **production** |
-   | Do you want to log in to your Apple account? | **Yes** → your Apple ID, password, then the 6-digit code on your phone |
-   | What do you want to do? | **App Store Connect: Manage your API Key** |
-   | What do you want to do? | **Set up your project to use an API Key for EAS Submit** |
-   | Select what to use for your project | **[Add a new ASC API Key]** (not "Generate", since you made it yourself) |
-   | Path to App Store Connect API Key | the full path of the `.p8`, e.g. `C:\Users\lineu\Documents\keys\AuthKey_ABC123DEFG.p8` |
-   | Key ID | the Key ID from step 3 (EAS may fill it from the file name — check it) |
-   | Issuer ID | the Issuer ID from step 3 |
-   | Apple Team | the team that owns the Phare record |
-
-   Then **Go back** / **Exit**.
-7. **[Lineu]** Send Claude Code: `ASC key stored in EAS`. Claude Code never
-   needs the key itself.
+   Keys**.
+2. **[Lineu]** Your key's row (you already have one): check the **Access**
+   column reads **Admin**. EAS uses the key to create the App Store signing
+   certificate, which needs Admin; App Manager can only upload. If it is not
+   Admin: **+** → Name `EAS Phare` → Access **Admin** → **Generate**, and use
+   that key below; revoke the old one.
+3. **[Lineu]** Note, from that row: the **Key ID** (10 characters — also the
+   part after `AuthKey_` in the file name) and, above the table, the
+   **Issuer ID** (long id with dashes).
+4. **[Lineu]** The key file `AuthKey_<KeyID>.p8` must be in a private folder
+   **outside the repo**, e.g. `C:\Users\lineu\Documents\keys\`. Apple lets
+   you download it once; never put it in the repo or paste it anywhere.
+5. **[Lineu]** Note your **Team ID** (developer.apple.com/account →
+   Membership details → **Team ID**) and **Entity Type** there: individual →
+   `INDIVIDUAL`, company → `COMPANY_OR_ORGANIZATION`. The Key ID and the Team
+   ID are different values, both 10 characters. For Phare the **Key ID** is
+   `ZHKR9CJT2H` (key "phare", Admin) and the **Issuer ID** is
+   `deb4af9b-c497-4363-9f63-ff3302d37bf6`; the **Team ID** is `B749Y5BLQZ`
+   (shown as "App ID Prefix" on the identifier).
+6. Nothing else to do now. These values are used in part 6. Send Claude
+   Code: `ASC key ready (Admin)` — never the key itself.
 
 ---
 
@@ -480,28 +470,63 @@ All signed in as the **demo household**, in this order:
 21. **[Claude Code]** Before any production build, on the commit you will
     build from: mobile tests, mobile typecheck, and `bundle:check` (the
     compiled-bundle price scan). Reports pass/fail. Do not build on a fail.
-22. **[Lineu]** Commit everything first. Then:
-    ```
+22. **[Lineu]** Commit everything first. Then, in **one** PowerShell window
+    (the `$env:` lines last only as long as that window):
+    ```powershell
     cd C:\Users\lineu\source\repos\phare\apps\mobile
+    Remove-Item Env:EXPO_APPLE_ID -ErrorAction SilentlyContinue
+    $env:EXPO_ASC_API_KEY_PATH   = "C:\Users\lineu\eas-keys\AuthKey_ZHKR9CJT2H.p8"
+    $env:EXPO_ASC_KEY_ID         = "ZHKR9CJT2H"
+    $env:EXPO_ASC_ISSUER_ID      = "deb4af9b-c497-4363-9f63-ff3302d37bf6"
+    $env:EXPO_APPLE_TEAM_ID      = "B749Y5BLQZ"
+    $env:EXPO_APPLE_TEAM_TYPE    = "INDIVIDUAL"
+    $env:EXPO_NO_CAPABILITY_SYNC = "1"
+    Test-Path $env:EXPO_ASC_API_KEY_PATH   # must print True
     eas build --profile production --platform ios
     ```
-    First production build only — the prompts and answers:
+    **The first production build must be interactive** (no
+    `--non-interactive`): it creates the App Store provisioning profile,
+    which the development builds never needed (Expo's CI guide; eas-cli issue
+    #3202). If it asks to log in to your Apple account, answer **No**; reuse
+    the distribution certificate → **Yes**; generate a provisioning profile →
+    **Yes**. `EXPO_NO_CAPABILITY_SYNC=1` skips the capability sync, which the
+    API key cannot do (eas-cli PR #1051), so **Associated Domains** must
+    already be ticked on the `money.phare.app` identifier (developer.apple.com
+    → Certificates, IDs & Profiles → Identifiers). An "Apple 401 … bearer
+    token" error means Apple rejected the key itself: the `.p8` file, Key ID
+    and Issuer ID don't match one another.
 
-    | EAS asks | You answer |
-    |---|---|
-    | Do you want to log in to your Apple account? | **Yes** → Apple ID, password, 6-digit code |
-    | Reuse this distribution certificate? / Generate a new Apple Distribution Certificate? | **Yes** (generate) if none exists |
-    | Generate a new Apple Provisioning Profile? | **Yes** |
-    | (remote version) buildNumber will be initialized… | just continue |
+    The build runs in the cloud (about 15–25 minutes) and ends with a link;
+    status **Finished**. Every later build can add `--non-interactive`.
+23. **[Lineu]** Only after the build says **Finished**, in the **same**
+    window:
+    ```powershell
+    eas submit --profile production --platform ios --latest --non-interactive
+    ```
+    It takes the `ascAppId` **and the API key** (`ascApiKeyPath`,
+    `ascApiKeyId`, `ascApiKeyIssuerId`) from the submit profile in
+    `apps/mobile/eas.json` — Expo's documented way to submit without an
+    Apple login. The key path there is on Lineu's computer
+    (`C:/Users/lineu/eas-keys/`); submitting from another machine needs it
+    changed. Without these fields, `--non-interactive` fails with "App Store
+    Connect API Keys cannot be set up in --non-interactive mode", and the
+    interactive form asks for the Apple login. Before a build exists it says
+    "Couldn't find any builds for this project" — expected, not an error. It
+    queues ("waiting for an available submitter" for a few minutes), then
+    reports the submission complete.
 
-    The build runs in the cloud (about 15–25 minutes). It ends with a link;
-    status **Finished**.
-23. **[Lineu]** Upload it to App Store Connect:
+    **eas-cli workaround (2026-10-15).** eas-cli signs the API-key token for
+    exactly 20 minutes, Apple's limit, so with a correctly set clock Apple
+    rejects it ("Apple 401 … bearer token") and EAS falls back to asking for
+    the Apple login (open eas-cli issue #4462). Until Expo fixes it, shorten
+    the token to 19 minutes in the installed eas-cli — again after every
+    `npm install -g eas-cli`:
+    ```powershell
+    $f = Join-Path (npm root -g) 'eas-cli\build\credentials\ios\appstore\authenticate.js'
+    Copy-Item $f "$f.bak-1200" -Force
+    (Get-Content $f -Raw).Replace('const jwtDurationSeconds = 1200;', 'const jwtDurationSeconds = 1140;') | Set-Content $f -NoNewline
+    Select-String -Path $f -Pattern 'jwtDurationSeconds = '   # must show 1140
     ```
-    eas submit --platform ios --profile production --latest
-    ```
-    It uses the `ascAppId` and the API key from part 3; no questions
-    expected. Ends with "Submitted your app to Apple App Store Connect".
 24. **[Lineu]** App Store Connect → **Apps → Phare → TestFlight**. The build
     shows **Processing** (10–30 minutes), then **Missing Compliance** →
     **Manage** → "What type of encryption algorithms does your app

@@ -39,7 +39,10 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": "6812001209"
+        "ascAppId": "6812001209",
+        "ascApiKeyPath": "C:/Users/lineu/eas-keys/AuthKey_ZHKR9CJT2H.p8",
+        "ascApiKeyId": "ZHKR9CJT2H",
+        "ascApiKeyIssuerId": "deb4af9b-c497-4363-9f63-ff3302d37bf6"
       }
     }
   }
