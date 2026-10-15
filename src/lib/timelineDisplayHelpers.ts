@@ -52,19 +52,6 @@ export function groupUnbalancedTransactions(
 }
 
 // ── Month navigation range ──────────────────────────────────────────────────
-
-/**
- * The full list of navigable YYYY-MM months for a fetched timeline result:
- * balancesStartDate's month through windowEnd's month, inclusive.
- */
-export function availableMonths(balancesStartDate: string, windowEnd: string): string[] {
-  const months: string[] = [];
-  let cursor = balancesStartDate.slice(0, 7);
-  const end = windowEnd.slice(0, 7);
-  while (cursor <= end) {
-    months.push(cursor);
-    const [y, m] = cursor.split('-').map(Number);
-    cursor = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
-  }
-  return months;
-}
+// availableMonths moved to @phare/core (2026-10-15), shared with the Expo
+// app's Timeline. Re-exported here so no web import site had to change.
+export { availableMonths } from '@phare/core';

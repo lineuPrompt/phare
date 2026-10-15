@@ -1,4 +1,10 @@
-import { buildMonthView, businessMonth, DEFAULT_HOUSEHOLD_TIMEZONE } from '@phare/core';
+import {
+  addMonthsToMonth,
+  availableMonths,
+  buildMonthView,
+  businessMonth,
+  DEFAULT_HOUSEHOLD_TIMEZONE,
+} from '@phare/core';
 import type { Getter } from './timelineLoader';
 import type { AccountsResponse, TimelineOk, TimezoneResponse } from './timeline';
 
@@ -23,9 +29,20 @@ import type { AccountsResponse, TimelineOk, TimezoneResponse } from './timeline'
 // real number before it reaches the screen; a payload without one throws, and
 // the screen shows the error with a retry.
 //
-// CURRENT MONTH ONLY. That is also what keeps the projection horizon off this
-// screen: the current month is always the first month of the chain, which
-// every household receives.
+// MONTH NAVIGATION (2026-10-15), with the web dashboard's range and states:
+//   - back to the month of the chequing account's earliest anchor
+//     (`earliestAnchorMonth`, which /api/dashboard returns for exactly this);
+//     with none, the current month is the floor. The web page has no floor
+//     at all then; a month before any known balance has nothing true to say.
+//   - forward to the current month + 11 (the web page's maxNavigableMonth),
+//     capped at the timeline's horizonEndMonth when it sends one, so the Plan
+//     card never goes silent past the horizon. The web page explains that
+//     gap with an upgrade prompt; this app may not (Guideline 3.1.1), so it
+//     does not navigate into it.
+//   - a past month: its actuals, and the Plan card's "already happened"
+//     note — the chain starts at the current month, as on the web.
+// Paging fetches only that month's snapshot (snapshotOnly), as the web page
+// does; the timeline and its plan chain are fetched once per load and reused.
 // ---------------------------------------------------------------------------
 
 /** How a card's cost entered the plan. Mirrors CardCostBasis on the web. */
@@ -49,6 +66,8 @@ type HomeTimelineResponse =
 type SnapshotResponse = {
   hasPlan?: unknown;
   month?: unknown;
+  /** YYYY-MM of the chequing account's earliest anchor, or null. */
+  earliestAnchorMonth?: unknown;
   summary?: {
     totalIncome?: unknown;
     totalExpenses?: unknown;
@@ -81,6 +100,8 @@ export type HomeSnapshot = {
 export type HomePlan =
   /** No chequing account, or no real balance set yet. Both are set on the web. */
   | { kind: 'noAnchor' }
+  /** A month before the current one: the plan looks forward, as on the web. */
+  | { kind: 'past' }
   /** The route sent no plan for this month. Nothing is shown, as on the web. */
   | { kind: 'hidden' }
   | {
@@ -96,7 +117,20 @@ export type HomePlan =
       awaitingDates: boolean;
     };
 
-export type HomeLoad = { month: string; snapshot: HomeSnapshot; plan: HomePlan };
+/** One month of Home. */
+export type HomeMonth = { month: string; isPastMonth: boolean; snapshot: HomeSnapshot; plan: HomePlan };
+
+/** What paging needs, fetched once per load. */
+export type HomeContext = {
+  /** The household's month (businessMonth), YYYY-MM. */
+  currentMonth: string;
+  /** Ascending YYYY-MM months Home may page through. */
+  months: string[];
+  /** The timeline with its plan chain; null without a chequing account. */
+  timeline: HomeTimelineResponse | null;
+};
+
+export type HomeLoad = HomeMonth & { context: HomeContext };
 
 export function homeSnapshotPath(month: string): string {
   return `/api/dashboard?month=${encodeURIComponent(month)}&snapshotOnly=1`;
@@ -184,7 +218,60 @@ function planFrom(data: HomeTimelineResponse, month: string): HomePlan {
   };
 }
 
-export async function loadHome(get: Getter, at: () => Date = () => new Date()): Promise<HomeLoad> {
+/**
+ * The months Home pages through. `horizonEndMonth` caps the forward end when
+ * the timeline sends one; `earliestAnchorMonth` sets the back end.
+ */
+export function homeMonths(
+  currentMonth: string,
+  earliestAnchorMonth: string | null,
+  horizonEndMonth: string | null
+): string[] {
+  const floor = earliestAnchorMonth !== null && earliestAnchorMonth < currentMonth ? earliestAnchorMonth : currentMonth;
+  const webEnd = addMonthsToMonth(currentMonth, 11);
+  const end = horizonEndMonth !== null && horizonEndMonth < webEnd ? horizonEndMonth : webEnd;
+  return availableMonths(floor, end);
+}
+
+function earliestAnchorMonthFrom(data: SnapshotResponse): string | null {
+  const value = data?.earliestAnchorMonth;
+  if (value === null || value === undefined) return null;
+  // A malformed value would move the floor silently; refuse it instead.
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}$/.test(value)) {
+    throw new Error(`home: earliestAnchorMonth is not a month: ${String(value)}`);
+  }
+  return value;
+}
+
+function monthFrom(data: SnapshotResponse, context: HomeContext, month: string): HomeMonth {
+  const isPastMonth = month < context.currentMonth;
+  return {
+    month,
+    isPastMonth,
+    snapshot: snapshotFrom(data, month),
+    plan: isPastMonth
+      ? { kind: 'past' }
+      : context.timeline
+        ? planFrom(context.timeline, month)
+        : { kind: 'noAnchor' },
+  };
+}
+
+/** Paging: one month's snapshot over the context already loaded. */
+export async function loadHomeMonth(get: Getter, context: HomeContext, month: string): Promise<HomeMonth> {
+  return monthFrom(await get<SnapshotResponse>(homeSnapshotPath(month)), context, month);
+}
+
+/**
+ * The opening load: the current month, and the context for paging. With
+ * `month`, the same load lands on that month instead (a refresh while paged
+ * away) — falling back to the current month if it is no longer reachable.
+ */
+export async function loadHome(
+  get: Getter,
+  at: () => Date = () => new Date(),
+  month: string | null = null
+): Promise<HomeLoad> {
   const [accounts, timezone] = await Promise.all([
     get<AccountsResponse>('/api/accounts'),
     get<TimezoneResponse>('/api/household/timezone'),
@@ -192,17 +279,23 @@ export async function loadHome(get: Getter, at: () => Date = () => new Date()): 
 
   // The household's month, never the device's. Timezone failure propagates,
   // for the reason timelineLoader.ts gives.
-  const month = businessMonth(timezone.timezone || DEFAULT_HOUSEHOLD_TIMEZONE, at());
+  const currentMonth = businessMonth(timezone.timezone || DEFAULT_HOUSEHOLD_TIMEZONE, at());
   const chequing = accounts.accounts.find((account) => account.type === 'chequing');
 
   const [dashboard, timeline] = await Promise.all([
-    get<SnapshotResponse>(homeSnapshotPath(month)),
+    get<SnapshotResponse>(homeSnapshotPath(currentMonth)),
     chequing ? get<HomeTimelineResponse>(homeTimelinePath(chequing.id)) : Promise.resolve(null),
   ]);
 
-  return {
-    month,
-    snapshot: snapshotFrom(dashboard, month),
-    plan: timeline ? planFrom(timeline, month) : { kind: 'noAnchor' },
+  const horizonEndMonth = timeline && timeline.ok ? timeline.horizonEndMonth ?? null : null;
+  const context: HomeContext = {
+    currentMonth,
+    months: homeMonths(currentMonth, earliestAnchorMonthFrom(dashboard), horizonEndMonth),
+    timeline,
   };
+
+  if (month !== null && month !== currentMonth && context.months.includes(month)) {
+    return { ...(await loadHomeMonth(get, context, month)), context };
+  }
+  return { ...monthFrom(dashboard, context, currentMonth), context };
 }

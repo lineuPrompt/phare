@@ -4,7 +4,12 @@
     "retry": "Try again",
     "loading": "Loading…",
     "signOut": "Sign out",
-    "dismiss": "Close"
+    "dismiss": "Close",
+    "monthNav": {
+      "previous": "Previous month",
+      "next": "Next month",
+      "thisMonth": "This month"
+    }
   },
   "timezone": {
     "title": "This device can't tell Phare what day it is",
@@ -341,7 +346,8 @@
       "surplus": "Monthly surplus",
       "deficit": "Monthly deficit",
       "borrowedNote": "⚠ {amount} of this month's cash was borrowed. It's in your account, but you didn't earn it — so it's not in the figure above.",
-      "monthOnlyNote": "This reflects this month's cash flow only, not your running balance. Your real balance is on the Timeline tab."
+      "monthOnlyNote": "This reflects this month's cash flow only, not your running balance. Your real balance is on the Timeline tab.",
+      "actualsForMonth": "Actuals for {month} — not projections"
     },
     "plan": {
       "badge": "Plan",
@@ -355,7 +361,8 @@
       "basisMax": "{card}: {amount} — over budget, using actual",
       "basisPosted": "{card}: already paid — included in today's balance",
       "borrowedNote": "{amount} of this is borrowed — real cash you can spend, and you'll owe it back.",
-      "note": "An estimate — assumes fixed bills, transfers, and card budgets land as dated."
+      "note": "An estimate — assumes fixed bills, transfers, and card budgets land as dated.",
+      "pastMonth": "The plan looks forward from {currentMonth} — {month} has already happened."
     },
     "awaitingDates": "Some income or bills don't have a date yet, so they aren't counted here. Set their dates on phare.money.",
     "noAnchor": "To show your plan, Phare needs your chequing balance on a date you know. Set it on phare.money."

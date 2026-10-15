@@ -10,6 +10,7 @@ import DayLedger from '@/components/timeline/DayLedger';
 import AnchorForm from '@/components/timeline/AnchorForm';
 import TimelineEntryForm from '@/components/timeline/TimelineEntryForm';
 import { buildMonthView, availableMonths, type UnbalancedDay } from '@/lib/timelineDisplayHelpers';
+import { timelineNavMonths } from '@phare/core';
 import type { TimelineDay, DipInfo } from '@/lib/timelineHelpers';
 import type { Account, ExpenseCategory } from '@/components/expenses/types';
 import { formatCurrency } from '@/components/expenses/types';
@@ -208,7 +209,9 @@ export default function TimelinePage() {
   // reachable, and nothing about what was computed or materialised changes.
   const allMonths = availableMonths(data.balancesStartDate, windowEndDate);
   const horizonEnd = data.horizonEndMonth ?? null;
-  const months = horizonEnd ? allMonths.filter((m) => m <= horizonEnd) : allMonths;
+  // Shared with the Expo app's Timeline (@phare/core), so the two page through
+  // the same months.
+  const months = timelineNavMonths(data.balancesStartDate, windowEndDate, horizonEnd);
   const horizonTrimmed = months.length < allMonths.length;
 
   // A month can be selected that the cap has just removed — a ?month= link, or

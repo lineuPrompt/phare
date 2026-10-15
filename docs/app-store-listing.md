@@ -145,6 +145,37 @@ Notes for the questionnaire:
 >
 > **Privacy policy:** Account → Privacy policy (also at https://phare.money/en/privacy).
 
+The notes above are for **v1.0**. Use §3b from 1.1 onward.
+
+## 3b. App Review notes from v1.1 (standalone, early access)
+
+Use these from the first update that includes sign-up in the app
+(standalone piece 1). Before pasting, check that `EARLY_ACCESS=true` is
+live in production: these notes are only true while it is.
+
+> **Demo account**
+> Email: `<DEMO_EMAIL>`
+> Password: `<DEMO_PASSWORD>`
+> This household has several months of example data, two credit cards and a monthly plan, so every screen has something to show. You can also create a new account in the app (Sign in → Create an account).
+>
+> **What the app is**
+> Phare is a household planning system. The iOS app is complete on its own: a household can create its account, build its plan, record its spending and run its plan month after month without ever visiting our website. The website offers the same planning on a larger screen.
+>
+> **No purchasing**
+> Phare is free during early access: every feature is available to every household, in the app and on the web alike. There is no purchasing of any kind in the app, no price, no plan name, and no link or call to action to purchase outside it.
+>
+> **Account deletion**
+> Account → Delete my account. Deletion is immediate and permanent; the app offers a transaction export first. If the signed-in person shares a household with another member, the app first asks them to make that member an owner, then deletes only their own account.
+>
+> **Please do not delete the demo account** — it would remove the demo household and its history. To test deletion, please create a new account in the app.
+>
+> **Privacy policy:** Account → Privacy policy (also at https://phare.money/en/privacy).
+
+**Don't use these notes after early access ends.** Once `EARLY_ACCESS` is
+off, features in the app depend on a subscription again. Guideline
+3.1.3(b) then requires that subscription to be sold in the app too, so
+in-app purchase must ship first (BACKLOG, before any public launch).
+
 ---
 
 ## 4. Demo household — setup steps (Lineu)

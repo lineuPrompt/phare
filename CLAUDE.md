@@ -8,6 +8,13 @@ Standing instructions for every session in this repo. Rules, not suggestions.
   https://phare.money.
 - Never call it a budgeting app, an expense tracker, or a financial dashboard.
 - Say **"household"**, never "family", in product copy, AI prompts, and docs.
+- **The mobile app must work without the web app.** A household that installs
+  from the App Store and never opens phare.money must be able to run its plan
+  month after month. The web is a plus, not a requirement. Only two things
+  stay web-only: buying or managing a subscription (App Store rules) and
+  spreadsheet import. A mobile string that sends people to phare.money for
+  anything else is a gap to close, not a design. The gaps and their order:
+  `docs/mobile-standalone-audit.md`.
 
 ## 2. Repo layout
 

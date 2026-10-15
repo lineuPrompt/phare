@@ -12,6 +12,57 @@ Last reconciled with `docs/tickets/` and the code: 2026-10-01 (mobile first; web
 first — iOS App Store submission. Every web functionality item is FROZEN
 (listed below with its ticket, so nothing is lost).**
 
+**Direction (Lineu, 2026-10-15): the mobile app must work without the web
+(CLAUDE.md §1). Submit v1.0 as tested (build 9). Standalone ships as
+updates (1.1, 1.2…), in the order below. Pre-approved: existing routes only,
+shared helpers moved into `@phare/core` (never copied), no DB change, no new
+money math. STOP only if one of those would break or a live check fails.
+One handoff per item, with the rebuild line. Gaps and estimates:
+[mobile-standalone-audit.md](mobile-standalone-audit.md). Lineu approves
+the v1.1 list separately.**
+
+- **S0. Early access: `EARLY_ACCESS=true` makes the derived entitlement Pro
+  for every household** (web and mobile, one server-side switch). Web hides
+  upgrade buttons, pricing and the horizon lock while it is on; Stripe, the
+  webhook and existing subscriptions are untouched; AI guards stay
+  (onboarding 10/month, regenerate quota, Anthropic's $20 cap). The only
+  web change allowed. **STOP: diagnosed 2026-10-15, awaiting approval.**
+  The diagnosis is in this item's handoff.
+- **S1. Sign-up, in-app password reset, accepting updated terms.**
+  **STOP, blocked 2026-10-15.** Three things fall outside the
+  pre-approval:
+  - the `signup` event needs `platform: 'mobile'`: a `handle_new_user`
+    change, which is a DB change;
+  - confirmation, reset and invite links open phare.money pages:
+    in-app links need Supabase redirect config plus `redirectTo` in 3
+    routes (auth);
+  - the Terms state the Pro price (`terms.en.ts:68`), so consent text
+    can't show them in the app: a copy decision with counsel.
+
+  Details in the audit, steps 1–3 and 24–25.
+- ~~**S2. Month navigation: Home, Timeline, Cards.**~~ Built 2026-10-15,
+  uncommitted (handoff "S2"). Device test pending.
+- **S3. Accounts and opening balance.**
+- **`GET /api/anchors` swallows a failed read** (found during S2): a failed
+  read answers `{ anchors: [] }` and hides every past month on both
+  Timelines. — [ticket](tickets/anchors-get-swallows-read-error.md)
+- **S4. Income and bill dates, and editing them (effective-dated, as on web).**
+- **S5. Cards: setup, detail, goal and category budgets** (Lineu: edit goal AND
+  budgets, as on web; same closed-cycle and later-plans 409s; live write
+  tests on Zezinho Test only).
+- **S6. Entries: edit and delete, income, transfers.**
+- **S7. Household members: list, invite, remove (owner only).**
+- **S8. Savings goals and sinking funds** (read-only first round, then
+  creation).
+- **S9. Generating a new monthly review / regenerating the plan.**
+- **In-app purchase (Option A): required before any public launch.** The
+  day `EARLY_ACCESS` is turned off, the app again unlocks features bought
+  on the web, and Guideline 3.1.3(b) requires that subscription to be sold
+  as an in-app purchase too. Apple's Small Business Program takes 15%
+  instead of 30% for developers under US$1M a year; enrol before the first
+  in-app sale. The entitlement must stay derived (Stripe OR Apple), never
+  stored. Not started.
+
 1. **iOS App Store submission readiness — report only.** Everything left
    between today and submission, in order, each marked Claude Code / Lineu /
    needs a decision: device checklist, App Review demo household, EAS
@@ -198,6 +249,8 @@ for when it thaws:
 
 | Item | Commit |
 |---|---|
+| Standalone S2 — month navigation (Home, Timeline, Cards); month helpers moved to `@phare/core` | _(Lineu)_ |
+| Mobile standalone audit (`docs/mobile-standalone-audit.md`), CLAUDE.md product rule, 1.1 review notes | _(Lineu)_ |
 | Mobile V1 Phase 2, step 0 — core moves | a82271a |
 | Step 1 — tab navigation + Account tab | 1e9b8cc |
 | Step 2 — card room | 78b2342 |

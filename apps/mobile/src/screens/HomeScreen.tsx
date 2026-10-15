@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,20 +13,29 @@ import { formatCADLocale } from '@phare/core';
 import { apiGet, messageKeyFor } from '../lib/api';
 import { onEntrySaved } from '../lib/entryEvents';
 import AddEntryButton from '../components/AddEntryButton';
-import { loadHome, type CardBasis, type HomeLoad, type HomePlan, type HomeSnapshot } from '../lib/homeLoader';
+import MonthNav from '../components/MonthNav';
+import {
+  loadHome,
+  loadHomeMonth,
+  type CardBasis,
+  type HomeLoad,
+  type HomePlan,
+  type HomeSnapshot,
+} from '../lib/homeLoader';
 import { formatMonthLong } from '../lib/timelineView';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
 /**
- * Home: the web dashboard's snapshot and Plan card, for the current month.
+ * Home: the web dashboard's snapshot and Plan card, month by month.
  * Read-only.
  *
  * Differences from the web card (SnapshotCard / PlanChainTile), on purpose:
- *   - current month only. No month navigation, so no past-month or
- *     end-of-horizon states, and the projection horizon never comes up.
+ *   - the month range stops at the entitled horizon rather than showing an
+ *     upgrade prompt past it (homeLoader.ts), and there is no "horizon ends
+ *     here" line, which on a free household would point at what it lacks.
  *   - no links. The web card links to Timeline and to Recurring; here the
- *     Timeline is a tab away and dates are set on the web.
+ *     Timeline is a tab away.
  *
  * Every figure is the server's (see homeLoader.ts).
  */
@@ -92,7 +101,15 @@ function Row({
   return <View style={[styles.row, emphasis && styles.rowEmphasis]}>{content}</View>;
 }
 
-function SnapshotCard({ snapshot }: { snapshot: HomeSnapshot }) {
+function SnapshotCard({
+  snapshot,
+  month,
+  isPastMonth,
+}: {
+  snapshot: HomeSnapshot;
+  month: string;
+  isPastMonth: boolean;
+}) {
   const { t, locale } = useI18n();
   const [savingsOpen, setSavingsOpen] = useState(false);
   const money = (value: number) => formatCADLocale(value, locale);
@@ -108,7 +125,11 @@ function SnapshotCard({ snapshot }: { snapshot: HomeSnapshot }) {
 
       <View>
         <Text style={styles.question}>{t('home.snapshot.question')}</Text>
-        <Text style={styles.caption}>{t('home.snapshot.actualsToDate')}</Text>
+        <Text style={styles.caption}>
+          {isPastMonth
+            ? t('home.snapshot.actualsForMonth', { month: formatMonthLong(month, locale) })
+            : t('home.snapshot.actualsToDate')}
+        </Text>
       </View>
 
       <View style={styles.subtraction}>
@@ -168,12 +189,33 @@ function SnapshotCard({ snapshot }: { snapshot: HomeSnapshot }) {
   );
 }
 
-function PlanCard({ plan, month, borrowed }: { plan: HomePlan; month: string; borrowed: number }) {
+function PlanCard({
+  plan,
+  month,
+  currentMonth,
+  borrowed,
+}: {
+  plan: HomePlan;
+  month: string;
+  currentMonth: string;
+  borrowed: number;
+}) {
   const { t, locale } = useI18n();
   const money = (value: number) => formatCADLocale(value, locale);
   const monthLabel = formatMonthLong(month, locale);
 
   if (plan.kind === 'hidden') return null;
+
+  if (plan.kind === 'past') {
+    return (
+      <View style={styles.planCard}>
+        <Text style={styles.badge}>{t('home.plan.badge')}</Text>
+        <Text style={styles.planLabel}>
+          {t('home.plan.pastMonth', { currentMonth: formatMonthLong(currentMonth, locale), month: monthLabel })}
+        </Text>
+      </View>
+    );
+  }
 
   if (plan.kind === 'noAnchor') {
     return (
@@ -248,16 +290,20 @@ const SAVINGS_COLOR = '#0284C7';
 const DEBT_COLOR = '#7C3AED';
 
 export default function HomeScreen() {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const [load, setLoad] = useState<HomeLoad | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [paging, setPaging] = useState(false);
+  // The month on screen, kept across refreshes and saved entries. null = the
+  // current month.
+  const monthRef = useRef<string | null>(null);
 
   const loading = load === null && errorKey === null;
 
   const fetchOutcome = useCallback(async (): Promise<Outcome> => {
     try {
-      return { load: await loadHome(apiGet) };
+      return { load: await loadHome(apiGet, undefined, monthRef.current) };
     } catch (err) {
       console.error('Home load error:', err);
       return { errorKey: messageKeyFor(err) };
@@ -291,6 +337,29 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, [fetchOutcome, apply]);
 
+  // Paging fetches just that month's snapshot over the loaded context. On a
+  // failure the error shows and the old month stays — its figures are still
+  // true for the month its heading names.
+  const selectMonth = useCallback(
+    async (month: string) => {
+      if (!load) return;
+      const context = load.context;
+      setPaging(true);
+      try {
+        const next = await loadHomeMonth(apiGet, context, month);
+        monthRef.current = month === context.currentMonth ? null : month;
+        setLoad({ ...next, context });
+        setErrorKey(null);
+      } catch (err) {
+        console.error('Home month load error:', err);
+        setErrorKey(messageKeyFor(err));
+      } finally {
+        setPaging(false);
+      }
+    },
+    [load]
+  );
+
   // A quick entry saved over this tab: refetch so the month includes it.
   useEffect(() => {
     let cancelled = false;
@@ -323,10 +392,19 @@ export default function HomeScreen() {
         <View style={styles.headerRow}>
           <View style={styles.header}>
             <Text style={styles.title}>{t('tabs.home')}</Text>
-            {load && <Text style={styles.month}>{formatMonthLong(load.month, locale)}</Text>}
           </View>
           <AddEntryButton />
         </View>
+
+        {load && (
+          <MonthNav
+            months={load.context.months}
+            month={load.month}
+            currentMonth={load.context.currentMonth}
+            onSelect={(month) => void selectMonth(month)}
+          />
+        )}
+        {paging && <ActivityIndicator color={theme.color.heading} />}
 
         {errorKey && (
           <View style={styles.errorBox}>
@@ -337,8 +415,15 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {load && <SnapshotCard snapshot={load.snapshot} />}
-        {load && <PlanCard plan={load.plan} month={load.month} borrowed={load.snapshot.borrowed} />}
+        {load && <SnapshotCard snapshot={load.snapshot} month={load.month} isPastMonth={load.isPastMonth} />}
+        {load && (
+          <PlanCard
+            plan={load.plan}
+            month={load.month}
+            currentMonth={load.context.currentMonth}
+            borrowed={load.snapshot.borrowed}
+          />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -351,7 +436,6 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   header: { flex: 1, paddingHorizontal: theme.space.xs, gap: 2 },
   title: { fontSize: 24, fontWeight: '700', color: theme.color.heading },
-  month: { fontSize: 14, color: theme.color.muted },
   card: {
     backgroundColor: theme.color.surface,
     borderRadius: theme.radius.lg,

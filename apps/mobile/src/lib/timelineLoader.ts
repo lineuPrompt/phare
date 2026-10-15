@@ -9,11 +9,18 @@ import type { AccountsResponse, TimelineResponse, TimezoneResponse } from './tim
 // anything touching it is unreachable from a Node test runner. The `get` here
 // is injected, which is what lets the pageView rule below be tested at all.
 //
-// WHY THREE REQUESTS. /api/timeline needs `account=<chequing id>`, which only
+// WHY FOUR REQUESTS. /api/timeline needs `account=<chequing id>`, which only
 // /api/accounts knows, and it does not return the household's "today" — the
 // route resolves that server-side from the household timezone and keeps it.
 // So the timezone route supplies what businessToday() needs, exactly as the
 // web app's useBusinessToday() hook does for the web page.
+//
+// The fourth, /api/anchors, is for MONTH NAVIGATION (2026-10-15). The route's
+// window starts at the current month unless the caller pulls it back with
+// windowStart; the web page pulls it back to the month of the chequing
+// account's earliest anchor, so every past month with a known balance can be
+// paged to. Same request, same rule, here. One fetch per load: the screen then
+// pages through the returned days without another request, as the web does.
 //
 // TIMEZONE FAILURE IS NOT SWALLOWED. The web hook falls back to
 // America/Toronto on any error. Here it propagates: every screen state below
@@ -35,8 +42,32 @@ export type TimelineLoad =
 /** 'open' sends the funnel marker; 'refresh' never does. See createTimelineLoader. */
 export type LoadTrigger = 'open' | 'refresh';
 
-export function timelinePath(accountId: string, pageView: boolean): string {
-  return `/api/timeline?account=${encodeURIComponent(accountId)}${pageView ? '&pageView=1' : ''}`;
+/** GET /api/anchors?account=<chequing id> — ascending by date. Only the field used here. */
+type AnchorsResponse = { anchors: { anchor_date: string }[] };
+
+/**
+ * `windowStart` (YYYY-MM-01) pulls the window back for month navigation;
+ * omitted when there is nothing earlier than the current month to reach.
+ */
+export function timelinePath(accountId: string, pageView: boolean, windowStart: string | null = null): string {
+  return (
+    `/api/timeline?account=${encodeURIComponent(accountId)}` +
+    (windowStart ? `&windowStart=${windowStart}` : '') +
+    (pageView ? '&pageView=1' : '')
+  );
+}
+
+/**
+ * The web page's rule (timeline/page.tsx): start the window at the month of
+ * the earliest anchor when that month is before the current one. The minimum
+ * is taken here rather than trusting the route's sort order, because a wrong
+ * order would silently hide history rather than fail.
+ */
+export function timelineWindowStart(anchors: { anchor_date: string }[], currentMonth: string): string | null {
+  if (anchors.length === 0) return null;
+  const earliest = anchors.reduce((min, a) => (a.anchor_date < min ? a.anchor_date : min), anchors[0].anchor_date);
+  const month = earliest.slice(0, 7);
+  return month < currentMonth ? `${month}-01` : null;
 }
 
 /**
@@ -77,10 +108,15 @@ export function createTimelineLoader(get: Getter, at: () => Date = () => new Dat
       const zone = timezone.timezone || DEFAULT_HOUSEHOLD_TIMEZONE;
       const today = businessToday(zone, at());
 
+      // Before the marker is claimed: a failure here never reached the
+      // timeline route, so the next attempt still owes the open.
+      const anchors = await get<AnchorsResponse>(`/api/anchors?account=${encodeURIComponent(chequing.id)}`);
+      const windowStart = timelineWindowStart(anchors.anchors, today.slice(0, 7));
+
       const withMarker = trigger === 'open' && !pageViewSent;
       if (withMarker) pageViewSent = true;
 
-      const data = await get<TimelineResponse>(timelinePath(chequing.id, withMarker));
+      const data = await get<TimelineResponse>(timelinePath(chequing.id, withMarker, windowStart));
       if (!data.ok) return { kind: 'noAnchor' };
 
       return { kind: 'ready', data, today, timezone: zone };

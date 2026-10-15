@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createTimelineLoader, timelinePath } from '../lib/timelineLoader';
+import { createTimelineLoader, timelinePath, timelineWindowStart } from '../lib/timelineLoader';
 import { gateView } from '../lib/authGate';
 
 const APP_DIR = path.resolve(__dirname, '..', '..', 'app');
@@ -44,6 +44,7 @@ function recorder(overrides: Record<string, unknown> = {}) {
     }
     if (path === '/api/accounts') return ACCOUNTS as T;
     if (path === '/api/household/timezone') return TIMEZONE as T;
+    if (path === '/api/anchors?account=chq-1') return { anchors: [] } as T;
     if (path.startsWith('/api/timeline')) return TIMELINE as T;
     throw new Error(`unexpected path ${path}`);
   };
@@ -107,6 +108,7 @@ describe('the timeline_opened marker', () => {
         return ACCOUNTS as T;
       }
       if (path === '/api/household/timezone') return TIMEZONE as T;
+      if (path.startsWith('/api/anchors')) return { anchors: [] } as T;
       return TIMELINE as T;
     };
 
@@ -132,6 +134,48 @@ describe('the timeline_opened marker', () => {
 describe('timelinePath', () => {
   it('escapes the account id rather than pasting it into the query', () => {
     expect(timelinePath('a b&pageView=1', false)).toBe('/api/timeline?account=a%20b%26pageView%3D1');
+  });
+
+  it('puts windowStart between the account and the marker, as the web page does', () => {
+    expect(timelinePath('chq-1', true, '2026-07-01')).toBe('/api/timeline?account=chq-1&windowStart=2026-07-01&pageView=1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Month navigation's window (2026-10-15): the web page pulls the window back to
+// the earliest anchor's month so past months can be paged to.
+// ---------------------------------------------------------------------------
+
+describe('the window start', () => {
+  it('starts at the earliest anchor month when it is before the current month', async () => {
+    const r = recorder({
+      '/api/anchors?account=chq-1': { anchors: [{ anchor_date: '2026-07-12' }, { anchor_date: '2026-09-01' }] },
+    });
+    await createTimelineLoader(r.get, AT).load('open');
+    expect(r.timelineCalls()).toEqual(['/api/timeline?account=chq-1&windowStart=2026-07-01&pageView=1']);
+  });
+
+  it('takes the earliest anchor even when the list arrives out of order', () => {
+    expect(timelineWindowStart([{ anchor_date: '2026-09-01' }, { anchor_date: '2026-06-30' }], '2026-09')).toBe('2026-06-01');
+  });
+
+  it('sends no windowStart when the earliest anchor is in the current month', () => {
+    // The route's default window already starts there; and a later start is
+    // refused by the route anyway ("never later than the default").
+    expect(timelineWindowStart([{ anchor_date: '2026-09-03' }], '2026-09')).toBeNull();
+  });
+
+  it('sends no windowStart when there are no anchors', () => {
+    expect(timelineWindowStart([], '2026-09')).toBeNull();
+  });
+
+  it('a failed anchors read is an error, and the open is still owed', async () => {
+    // Guessing "no history" would hide every past month with no sign of it.
+    const r = recorder({ '/api/anchors?account=chq-1': new Error('server') });
+    const loader = createTimelineLoader(r.get, AT);
+    await expect(loader.load('open')).rejects.toThrow('server');
+    expect(loader.pageViewSent).toBe(false);
+    expect(r.timelineCalls()).toEqual([]);
   });
 });
 

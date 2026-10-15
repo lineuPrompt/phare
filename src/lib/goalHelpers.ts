@@ -8,7 +8,7 @@
  * for save-plan to persist, but only the month/year matter to this module.
  */
 
-import { monthNameToNumber, materializeRule } from '@phare/core';
+import { addMonthsToMonth, monthNameToNumber, materializeRule } from '@phare/core';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -21,14 +21,9 @@ export function monthsBetween(from: string, to: string): number {
   return (ty - fy) * 12 + (tm - fm);
 }
 
-/** Adds `months` calendar months to a YYYY-MM (or YYYY-MM-DD) month, returning YYYY-MM. */
-export function addMonthsToMonth(month: string, months: number): string {
-  const [y, m] = month.slice(0, 7).split('-').map(Number);
-  const idx = (m - 1) + months;
-  const targetYear = y + Math.floor(idx / 12);
-  const targetMonth = ((idx % 12) + 12) % 12;
-  return `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}`;
-}
+// Moved to @phare/core (2026-10-15), shared with the Expo app's month
+// navigation. Re-exported here so no web import site had to change.
+export { addMonthsToMonth } from '@phare/core';
 
 /** Excel serial date (days since 1899-12-30) → YYYY-MM-DD. null if not a sane serial. */
 export function excelSerialToISODate(serial: number): string | null {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cardFigure, cardsOverviewPath, loadCards, type CardRow } from '../lib/cardsLoader';
+import { cardFigure, cardsOverviewPath, loadCardMonths, loadCards, type CardRow } from '../lib/cardsLoader';
 import { formatMonthLong } from '../lib/timelineView';
 import type { Getter } from '../lib/timelineLoader';
 
@@ -122,5 +122,50 @@ describe('formatMonthLong', () => {
     ['2026-12', 'fr', 'décembre 2026'],
   ] as const)('%s in %s → %s', (month, locale, expected) => {
     expect(formatMonthLong(month, locale)).toBe(expected);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Month navigation (2026-10-15).
+// ---------------------------------------------------------------------------
+
+describe('loadCards for a chosen month', () => {
+  it('asks for that month and does not re-derive it from the clock', async () => {
+    const r = recorder({ [cardsOverviewPath('2026-08')]: { month: '2026-08', cards: [VISA] } });
+    const load = await loadCards(r.get, LATE_SEPT_TORONTO, '2026-08');
+    expect(r.asked).toEqual(['/api/cards/overview?month=2026-08']);
+    expect(load).toEqual({ kind: 'ready', month: '2026-08', cards: [VISA] });
+  });
+
+  it('still refuses figures for a different month than the one chosen', async () => {
+    const r = recorder({ [cardsOverviewPath('2026-08')]: { month: '2026-09', cards: [VISA] } });
+    await expect(loadCards(r.get, LATE_SEPT_TORONTO, '2026-08')).rejects.toThrow('answered for 2026-09, asked for 2026-08');
+  });
+});
+
+describe("loadCardMonths: the web picker's own range", () => {
+  it("passes the route's months and current month through", async () => {
+    const r = recorder({
+      '/api/cards/months': {
+        months: ['2026-07', '2026-08', '2026-09', '2026-10'],
+        floorMonth: '2026-07', currentMonth: '2026-09', horizonEndMonth: '2026-10', isPro: false, lockedMonthCount: 9,
+      },
+    });
+    expect(await loadCardMonths(r.get)).toEqual({ months: ['2026-07', '2026-08', '2026-09', '2026-10'], currentMonth: '2026-09' });
+  });
+
+  it('refuses a months list that is not months', async () => {
+    const r = recorder({ '/api/cards/months': { months: ['2026-7'], currentMonth: '2026-09' } });
+    await expect(loadCardMonths(r.get)).rejects.toThrow('months is not a list of months');
+  });
+
+  it('refuses a missing months list rather than showing no range', async () => {
+    const r = recorder({ '/api/cards/months': { currentMonth: '2026-09' } });
+    await expect(loadCardMonths(r.get)).rejects.toThrow('months is not a list of months');
+  });
+
+  it('refuses a missing current month', async () => {
+    const r = recorder({ '/api/cards/months': { months: ['2026-09'] } });
+    await expect(loadCardMonths(r.get)).rejects.toThrow('currentMonth is not a month');
   });
 });

@@ -9,7 +9,7 @@
  *
  * WHAT MOVED AND WHAT DID NOT. Only what a client renders: the result types,
  * classifyDip and its threshold, and buildMonthView. buildCashTimeline (the
- * walk itself), selectAnchorsForTimeline, signAmount, availableMonths and
+ * walk itself), selectAnchorsForTimeline, signAmount and
  * groupUnbalancedTransactions stay in the web app — the server computes the
  * ledger, and no client recomputes it.
  *

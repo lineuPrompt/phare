@@ -44,9 +44,19 @@ export function cardsOverviewPath(month: string): string {
   return `/api/cards/overview?month=${encodeURIComponent(month)}`;
 }
 
-export async function loadCards(get: Getter, at: () => Date = () => new Date()): Promise<CardsLoad> {
-  const timezone = await get<TimezoneResponse>('/api/household/timezone');
-  const month = businessMonth(timezone.timezone || DEFAULT_HOUSEHOLD_TIMEZONE, at());
+/**
+ * `month` (YYYY-MM) loads that month instead of the current one — month
+ * navigation. Without it, the household's current month, as before.
+ */
+export async function loadCards(
+  get: Getter,
+  at: () => Date = () => new Date(),
+  month: string | null = null
+): Promise<CardsLoad> {
+  if (month === null) {
+    const timezone = await get<TimezoneResponse>('/api/household/timezone');
+    month = businessMonth(timezone.timezone || DEFAULT_HOUSEHOLD_TIMEZONE, at());
+  }
 
   const data = await get<CardsOverviewResponse>(cardsOverviewPath(month));
   if (data.cards.length === 0) return { kind: 'noCards', month };
@@ -59,6 +69,32 @@ export async function loadCards(get: Getter, at: () => Date = () => new Date()):
   }
 
   return { kind: 'ready', month, cards: data.cards };
+}
+
+// ---------------------------------------------------------------------------
+// Month navigation (2026-10-15). GET /api/cards/months is the web Cards
+// page's own picker range: back to the earliest cycle with a real card
+// transaction or a saved plan, forward to the entitled horizon. The route
+// decides both ends; this only checks the answer is usable. A free
+// household's range simply ends at its horizon — the route's isPro and
+// lockedMonthCount (for the web's upgrade note) are deliberately not read.
+// ---------------------------------------------------------------------------
+
+export type CardMonths = { months: string[]; currentMonth: string };
+
+const MONTH = /^\d{4}-\d{2}$/;
+
+export async function loadCardMonths(get: Getter): Promise<CardMonths> {
+  const data = await get<{ months?: unknown; currentMonth?: unknown }>('/api/cards/months');
+  const months = data?.months;
+  const currentMonth = data?.currentMonth;
+  if (!Array.isArray(months) || !months.every((m) => typeof m === 'string' && MONTH.test(m))) {
+    throw new Error('cards months: months is not a list of months');
+  }
+  if (typeof currentMonth !== 'string' || !MONTH.test(currentMonth)) {
+    throw new Error('cards months: currentMonth is not a month');
+  }
+  return { months: months as string[], currentMonth };
 }
 
 /**

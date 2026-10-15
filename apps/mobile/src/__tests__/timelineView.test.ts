@@ -3,6 +3,7 @@ import {
   buildMonthView,
   classifyDip,
   DIP_AMBER_THRESHOLD,
+  availableMonths,
   type TimelineDay,
   type TimelineEntry,
 } from '@phare/core';
@@ -11,8 +12,11 @@ import {
 // to two copies that agree today. Test files are excluded from the compliance
 // scan that forbids app code reaching into the web src/.
 import { classifyDip as classifyDipViaWebPath, DIP_AMBER_THRESHOLD as WEB_THRESHOLD } from '../../../../src/lib/timelineHelpers';
-import { buildMonthView as buildMonthViewViaWebPath } from '../../../../src/lib/timelineDisplayHelpers';
-import { buildTimelineView, entryAmount, formatDayLong, formatDayShort } from '../lib/timelineView';
+import {
+  buildMonthView as buildMonthViewViaWebPath,
+  availableMonths as availableMonthsViaWebPath,
+} from '../../../../src/lib/timelineDisplayHelpers';
+import { buildTimelineView, entryAmount, formatDayLong, formatDayShort, timelineMonths } from '../lib/timelineView';
 import type { TimelineOk } from '../lib/timeline';
 
 // ---------------------------------------------------------------------------
@@ -70,6 +74,8 @@ describe('the amber tier is the web app\'s amber tier', () => {
     expect(classifyDipViaWebPath).toBe(classifyDip);
     expect(WEB_THRESHOLD).toBe(DIP_AMBER_THRESHOLD);
     expect(buildMonthViewViaWebPath).toBe(buildMonthView);
+    // The month range the two Timelines page through (2026-10-15).
+    expect(availableMonthsViaWebPath).toBe(availableMonths);
   });
 
   it.each([
@@ -219,6 +225,70 @@ describe('the current month and the run-on to next pay', () => {
     // The date is balancesStartDate, NOT the 1st of the month. The web page
     // passes the 1st here, which is the one date the note is never about.
     expect(view.rows[1]).toEqual({ kind: 'balancesBegin', date: '2026-09-10' });
+  });
+});
+
+describe('month navigation', () => {
+  const aug = [
+    day('2026-08-10', 1500, [entry({ id: 'g', date: '2026-08-10' })]),
+    day('2026-08-20', 1400, [entry({ id: 'h', date: '2026-08-20' })]),
+  ];
+  const sep = [
+    day('2026-09-15', 900, [entry({ id: 'b', date: '2026-09-15' })]),
+    day('2026-09-30', 300, [entry({ id: 'c', date: '2026-09-30' })]),
+  ];
+  const oct = [day('2026-10-01', 100, [entry({ id: 'd', date: '2026-10-01' })])];
+  const nov = [day('2026-11-05', 50, [entry({ id: 'n', date: '2026-11-05' })])];
+  const data = payload({
+    balancesStartDate: '2026-08-01',
+    days: [...aug, ...sep, ...oct, ...nov],
+    nextIncomeDate: '2026-10-01',
+  });
+
+  it("a past month shows that month's days and its own opens/closes", () => {
+    const view = buildTimelineView(data, '2026-09-15', '2026-08');
+    expect(view.month).toBe('2026-08');
+    expect(view.rows.filter((r) => r.kind === 'day').map((r) => r.day.date)).toEqual(['2026-08-10', '2026-08-20']);
+    // The same core slice the web page shows for August, not September's.
+    expect(view.monthView).toEqual(buildMonthView(data.days, data.unbalancedDays, data.openingBalance, data.balancesStartDate, '2026-08'));
+  });
+
+  it('a past month has no today, no projection divider and no run-on', () => {
+    const view = buildTimelineView(data, '2026-09-15', '2026-08');
+    expect(view.rows.some((r) => r.kind === 'day' && r.isToday)).toBe(false);
+    expect(view.rows.some((r) => r.kind === 'projection')).toBe(false);
+    expect(view.rows.some((r) => r.kind === 'runOn')).toBe(false);
+  });
+
+  it('a later month does not run on to the next pay, which belongs to today', () => {
+    // nextIncomeDate is 1 October; from October the run-on would otherwise
+    // reach nothing, but from a month before it, it must not reach forward.
+    const view = buildTimelineView(payload({ ...data, nextIncomeDate: '2026-11-05' }), '2026-09-15', '2026-10');
+    expect(view.rows.some((r) => r.kind === 'runOn')).toBe(false);
+    expect(view.rows.filter((r) => r.kind === 'day').map((r) => r.day.date)).toEqual(['2026-10-01']);
+  });
+
+  it('a later month is all projection, divider first', () => {
+    const view = buildTimelineView(data, '2026-09-15', '2026-10');
+    expect(view.rows[0]).toEqual({ kind: 'projection' });
+  });
+
+  it('with no month given, it is the current month, run-on included', () => {
+    const view = buildTimelineView(data, '2026-09-15');
+    expect(view.month).toBe('2026-09');
+    expect(view.rows.some((r) => r.kind === 'runOn')).toBe(true);
+  });
+
+  it('pages from the first month with a balance to the last returned day', () => {
+    expect(timelineMonths(data)).toEqual(['2026-08', '2026-09', '2026-10', '2026-11']);
+  });
+
+  it('stops paging forward at the entitled horizon, keeping every past month', () => {
+    expect(timelineMonths(payload({ ...data, horizonEndMonth: '2026-10' }))).toEqual(['2026-08', '2026-09', '2026-10']);
+  });
+
+  it('with no days returned, the only month is the one balances start in', () => {
+    expect(timelineMonths(payload({ balancesStartDate: '2026-12-01', days: [] }))).toEqual(['2026-12']);
   });
 });
 

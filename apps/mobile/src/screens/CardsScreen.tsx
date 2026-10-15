@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -12,8 +12,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiGet, messageKeyFor } from '../lib/api';
 import { onEntrySaved } from '../lib/entryEvents';
 import AddEntryButton from '../components/AddEntryButton';
-import { cardFigure, loadCards, type CardRow, type CardStatus, type CardsLoad } from '../lib/cardsLoader';
-import { formatMonthLong } from '../lib/timelineView';
+import MonthNav from '../components/MonthNav';
+import {
+  cardFigure,
+  loadCardMonths,
+  loadCards,
+  type CardMonths,
+  type CardRow,
+  type CardStatus,
+  type CardsLoad,
+} from '../lib/cardsLoader';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
@@ -24,13 +32,14 @@ import { theme } from '../theme';
  *   - shown for ONE card or more; the web shows it only beside 2+ card tabs,
  *     because there it sits above a per-card detail view. Here it is the whole
  *     screen, and one card's room is still the question.
- *   - current month only. No month picker, envelope editor or 12-month grid.
+ *   - month by month through the web picker's own range (/api/cards/months),
+ *     but no envelope editor or 12-month grid yet.
  *
  * Every figure is the server's (see cardsLoader.ts). A null goal or room
  * renders as "—", never $0.
  */
 
-type Outcome = { load: CardsLoad } | { errorKey: string };
+type Outcome = { load: CardsLoad; range: CardMonths } | { errorKey: string };
 
 const STATUS_COLOR: Record<CardStatus, string> = {
   over: theme.color.danger,
@@ -76,16 +85,26 @@ function CardRowView({ card }: { card: CardRow }) {
 }
 
 export default function CardsScreen() {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const [load, setLoad] = useState<CardsLoad | null>(null);
+  const [range, setRange] = useState<CardMonths | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [paging, setPaging] = useState(false);
+  // The month on screen, kept across refreshes and saved entries. null = the
+  // current month.
+  const monthRef = useRef<string | null>(null);
 
   const loading = load === null && errorKey === null;
 
   const fetchOutcome = useCallback(async (): Promise<Outcome> => {
     try {
-      return { load: await loadCards(apiGet) };
+      const nextRange = await loadCardMonths(apiGet);
+      // A month that fell out of the range (the horizon moved) goes back to
+      // the current month rather than showing an unreachable one.
+      const month = monthRef.current !== null && nextRange.months.includes(monthRef.current) ? monthRef.current : null;
+      if (month === null) monthRef.current = null;
+      return { load: await loadCards(apiGet, undefined, month), range: nextRange };
     } catch (err) {
       console.error('Cards load error:', err);
       return { errorKey: messageKeyFor(err) };
@@ -95,6 +114,7 @@ export default function CardsScreen() {
   const apply = useCallback((outcome: Outcome) => {
     if ('load' in outcome) {
       setLoad(outcome.load);
+      setRange(outcome.range);
       setErrorKey(null);
     } else {
       setLoad(null);
@@ -118,6 +138,23 @@ export default function CardsScreen() {
     apply(await fetchOutcome());
     setRefreshing(false);
   }, [fetchOutcome, apply]);
+
+  // On a failure the error shows and the old month stays on screen — its
+  // figures are still true for the month its heading names.
+  const selectMonth = useCallback(async (month: string) => {
+    setPaging(true);
+    try {
+      const next = await loadCards(apiGet, undefined, month);
+      monthRef.current = month;
+      setLoad(next);
+      setErrorKey(null);
+    } catch (err) {
+      console.error('Cards month load error:', err);
+      setErrorKey(messageKeyFor(err));
+    } finally {
+      setPaging(false);
+    }
+  }, []);
 
   // A quick entry saved over this tab: refetch so Spent and Room include it.
   useEffect(() => {
@@ -151,10 +188,19 @@ export default function CardsScreen() {
         <View style={styles.headerRow}>
           <View style={styles.header}>
             <Text style={styles.title}>{t('cards.title')}</Text>
-            {load && <Text style={styles.month}>{formatMonthLong(load.month, locale)}</Text>}
           </View>
           <AddEntryButton />
         </View>
+
+        {load && range && (
+          <MonthNav
+            months={range.months}
+            month={load.month}
+            currentMonth={range.currentMonth}
+            onSelect={(month) => void selectMonth(month)}
+          />
+        )}
+        {paging && <ActivityIndicator color={theme.color.heading} />}
 
         {errorKey && (
           <View style={styles.errorBox}>
@@ -180,7 +226,6 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   header: { flex: 1, paddingHorizontal: theme.space.xs, gap: 2 },
   title: { fontSize: 24, fontWeight: '700', color: theme.color.heading },
-  month: { fontSize: 14, color: theme.color.muted },
   card: {
     backgroundColor: theme.color.surface,
     borderRadius: theme.radius.lg,

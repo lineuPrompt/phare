@@ -2,6 +2,7 @@ import {
   buildMonthView,
   classifyDip,
   formatCADLocale,
+  timelineNavMonths,
   type DipStatus,
   type MonthView,
   type TimelineDay,
@@ -21,10 +22,10 @@ import type { Locale } from '../i18n';
 // Both surfaces therefore colour the same dip the same way and cannot drift —
 // that is why they moved into the package rather than being copied here.
 //
-// Not shared: this file. The web page renders a month at a time with
-// Previous/Next navigation; this screen renders THE CURRENT MONTH ONLY, plus
-// a run-on to the next pay date (below). Month navigation is deliberately out
-// of V1 scope.
+// Not shared: this file. Like the web page, it renders one month at a time,
+// and since 2026-10-15 any month the web page can reach (timelineMonths,
+// below — the same @phare/core range). The CURRENT month adds a run-on to the
+// next pay date (below); other months show their own days only.
 //
 // THE RUN-ON, AND WHY IT EXISTS. The header's dip answers "will I dip before
 // payday" and is anchored to today, not to the month — so when the next pay
@@ -61,7 +62,7 @@ export type LedgerRow =
   | { kind: 'day'; day: TimelineDay; isToday: boolean };
 
 export type TimelineView = {
-  /** The household's current month, YYYY-MM. */
+  /** The month on screen, YYYY-MM. */
   month: string;
   /** Null when this month has no days in the payload at all. */
   monthView: MonthView | null;
@@ -74,8 +75,21 @@ export type TimelineView = {
   lowestStatus: DipStatus | null;
 };
 
-export function buildTimelineView(data: TimelineOk, today: string): TimelineView {
-  const month = today.slice(0, 7);
+/**
+ * The months this Timeline can page through: the web page's range, from the
+ * first month with a known balance to the last returned day, capped forward
+ * at the entitled horizon (@phare/core's timelineNavMonths, which the web
+ * page calls too). The last day stands in for the window end exactly as the
+ * web page takes it.
+ */
+export function timelineMonths(data: TimelineOk): string[] {
+  const windowEnd = data.days.length > 0 ? data.days[data.days.length - 1].date : data.balancesStartDate;
+  return timelineNavMonths(data.balancesStartDate, windowEnd, data.horizonEndMonth ?? null);
+}
+
+/** `month` defaults to today's month — the screen's opening view. */
+export function buildTimelineView(data: TimelineOk, today: string, month: string = today.slice(0, 7)): TimelineView {
+  const isCurrentMonth = month === today.slice(0, 7);
   const monthView = buildMonthView(
     data.days,
     data.unbalancedDays,
@@ -93,8 +107,10 @@ export function buildTimelineView(data: TimelineOk, today: string): TimelineView
   );
 
   // The run-on: later months, up to the next pay, never past the horizon.
+  // Current month only — the pay it runs to is the next one from TODAY, which
+  // says nothing about a past month or a later one.
   const horizon = data.horizonEndMonth ?? null;
-  const payday = data.nextIncomeDate;
+  const payday = isCurrentMonth ? data.nextIncomeDate : null;
   // NO SEPARATE "is the pay next month?" TEST. The `> month` below already
   // empties the run-on whenever the pay falls inside this month, and a second
   // condition restating that was provably redundant — inverting it changed no

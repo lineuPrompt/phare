@@ -13,9 +13,11 @@ import { formatCADLocale, type DipStatus, type TimelineEntry, type UnbalancedDay
 import { apiGet, messageKeyFor } from '../lib/api';
 import { onEntrySaved } from '../lib/entryEvents';
 import AddEntryButton from '../components/AddEntryButton';
+import MonthNav from '../components/MonthNav';
 import { createTimelineLoader, type LoadTrigger, type TimelineLoad } from '../lib/timelineLoader';
 import {
   buildTimelineView,
+  timelineMonths,
   entryAmount,
   formatDayLong,
   formatDayShort,
@@ -34,19 +36,20 @@ import { theme } from '../theme';
  * messageKeyFor() are ReviewScreen's, deliberately unchanged — see that file
  * for why each is the way it is.
  *
- * WHAT IT DOES NOT DO, all of it scope rather than omission: no month
- * navigation (the current month plus a run-on to the next pay — see
- * timelineView.ts), no editing or deleting entries, no adding an entry, no
- * re-anchoring, and no links out of a row. The web page's rows link to
+ * MONTH NAVIGATION (2026-10-15): the web page's months, from one fetch —
+ * paging re-slices the days already loaded, as the web page does, so it
+ * sends no request and logs no second open. The current month adds the
+ * run-on to the next pay (timelineView.ts).
+ *
+ * WHAT IT DOES NOT DO, all of it scope rather than omission: no editing or
+ * deleting entries, no re-anchoring, and no links out of a row. The web page's rows link to
  * /recurring, /savings, /cards and /reconcile, none of which exist here, and
  * /reconcile is internal-only.
  *
  * NO PRICE, NO PLAN NAME, NO UPGRADE PATH — Guideline 3.1.1, same as every
  * other screen. The web page shows an upgrade block when its month navigation
- * reaches the free horizon; this screen cannot reach that boundary, because
- * the current month is always inside it, so the paywall surface simply does
- * not exist here. `isPro` and `horizonEndMonth` arrive in the payload and only
- * ever cap how far the run-on may go.
+ * reaches the free horizon. Here the Next arrow simply stops at
+ * horizonEndMonth, with nothing said about what lies past it (MonthNav).
  */
 
 type Outcome = { load: TimelineLoad } | { errorKey: string };
@@ -122,6 +125,9 @@ export default function TimelineScreen() {
   const [load, setLoad] = useState<TimelineLoad | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // null = the current month. Kept across refreshes, so a pull on a past
+  // month stays on that month.
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
 
   const loading = load === null && errorKey === null;
 
@@ -189,9 +195,26 @@ export default function TimelineScreen() {
     };
   }, [fetchOutcome, apply]);
 
+  const currentMonth = load?.kind === 'ready' ? load.today.slice(0, 7) : null;
+  const months = useMemo(() => (load?.kind === 'ready' ? timelineMonths(load.data) : []), [load]);
   const view = useMemo(
-    () => (load?.kind === 'ready' ? buildTimelineView(load.data, load.today) : null),
-    [load]
+    () =>
+      load?.kind === 'ready'
+        ? buildTimelineView(load.data, load.today, selectedMonth ?? load.today.slice(0, 7))
+        : null,
+    [load, selectedMonth]
+  );
+
+  // A new month is a new ledger: back to the top, then let the one-shot
+  // scroll find that month's own target (today, or the projection divider).
+  const selectMonth = useCallback(
+    (month: string) => {
+      setSelectedMonth(month === currentMonth ? null : month);
+      rowOffsets.current = {};
+      hasScrolled.current = false;
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    },
+    [currentMonth]
   );
 
   // Today is mid-month by definition, so the rows above it are spent days.
@@ -250,8 +273,10 @@ export default function TimelineScreen() {
           </View>
         )}
 
-        {load?.kind === 'ready' && view && (
+        {load?.kind === 'ready' && view && currentMonth && (
           <>
+            <MonthNav months={months} month={view.month} currentMonth={currentMonth} onSelect={selectMonth} />
+
             <DipHeader
               todayBalance={load.data.todayBalance}
               dip={load.data.dip}

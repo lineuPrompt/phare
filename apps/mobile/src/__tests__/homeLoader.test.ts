@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { TimelineDay } from '@phare/core';
-import { homeSnapshotPath, homeTimelinePath, loadHome } from '../lib/homeLoader';
+import { homeMonths, homeSnapshotPath, homeTimelinePath, loadHome, loadHomeMonth } from '../lib/homeLoader';
 import type { Getter } from '../lib/timelineLoader';
 
 /** A getter answering from a table; an Error value is thrown. Records every path asked for. */
@@ -234,5 +234,97 @@ describe('loadHome: the plan card', () => {
       }),
     }));
     await expect(loadHome(r.get, MID_OCT)).rejects.toThrow('unknown card basis "forecast"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Month navigation (2026-10-15): the web dashboard's range and past-month state.
+// ---------------------------------------------------------------------------
+
+describe('homeMonths: the range Home pages through', () => {
+  it('runs from the earliest anchor month to the current month + 11', () => {
+    const months = homeMonths('2026-10', '2026-07', null);
+    expect(months[0]).toBe('2026-07');
+    expect(months[months.length - 1]).toBe('2027-09');
+    expect(months).toHaveLength(15);
+  });
+
+  it('with no anchor, the current month is the floor', () => {
+    expect(homeMonths('2026-10', null, '2026-12')).toEqual(['2026-10', '2026-11', '2026-12']);
+  });
+
+  it('an anchor after today does not move the floor past the current month', () => {
+    expect(homeMonths('2026-10', '2026-11', '2026-11')).toEqual(['2026-10', '2026-11']);
+  });
+
+  it('stops at the entitled horizon when it ends before current + 11', () => {
+    expect(homeMonths('2026-10', '2026-09', '2026-12')).toEqual(['2026-09', '2026-10', '2026-11', '2026-12']);
+  });
+
+  it('never goes past current + 11, even if a horizon claims more', () => {
+    const months = homeMonths('2026-10', null, '2028-01');
+    expect(months[months.length - 1]).toBe('2027-09');
+  });
+});
+
+describe('loadHome: the paging context', () => {
+  it('takes the floor from the dashboard and the cap from the timeline', async () => {
+    const r = recorder(table({
+      [homeSnapshotPath('2026-10')]: dashboard({ earliestAnchorMonth: '2026-08' }),
+      [homeTimelinePath('chq')]: timeline({ horizonEndMonth: '2026-12' }),
+    }));
+    const load = await loadHome(r.get, MID_OCT);
+    expect(load.context.months).toEqual(['2026-08', '2026-09', '2026-10', '2026-11', '2026-12']);
+    expect(load.context.currentMonth).toBe('2026-10');
+  });
+
+  it('refuses an earliestAnchorMonth that is not a month, rather than moving the floor', async () => {
+    const r = recorder(table({ [homeSnapshotPath('2026-10')]: dashboard({ earliestAnchorMonth: '2026-8' }) }));
+    await expect(loadHome(r.get, MID_OCT)).rejects.toThrow('earliestAnchorMonth is not a month');
+  });
+
+  it('a refresh lands on the month being viewed', async () => {
+    const r = recorder(table({
+      [homeSnapshotPath('2026-08')]: dashboard({ month: '2026-08-01' }),
+    }));
+    const load = await loadHome(r.get, MID_OCT, '2026-08');
+    expect(load.month).toBe('2026-08');
+    expect(load.plan).toEqual({ kind: 'past' });
+  });
+
+  it('a refresh on a month no longer reachable falls back to the current month', async () => {
+    const r = recorder(table());
+    const load = await loadHome(r.get, MID_OCT, '2025-01');
+    expect(load.month).toBe('2026-10');
+    expect(r.asked).not.toContain(homeSnapshotPath('2025-01'));
+  });
+});
+
+describe('loadHomeMonth: one month over the loaded context', () => {
+  async function context() {
+    return (await loadHome(recorder(table()).get, MID_OCT)).context;
+  }
+
+  it("a past month: its own actuals, the plan's 'already happened' state, and no timeline request", async () => {
+    const ctx = await context();
+    const r = recorder({ [homeSnapshotPath('2026-08')]: dashboard({ month: '2026-08-01' }) });
+    const month = await loadHomeMonth(r.get, ctx, '2026-08');
+    expect(r.asked).toEqual(['/api/dashboard?month=2026-08&snapshotOnly=1']);
+    expect(month).toMatchObject({ month: '2026-08', isPastMonth: true, plan: { kind: 'past' } });
+    expect(month.snapshot.netCashFlow).toBe(SUMMARY.netCashFlow);
+  });
+
+  it("a later month: that month's chain entry, not the current one's", async () => {
+    const ctx = await context();
+    const r = recorder({ [homeSnapshotPath('2026-11')]: dashboard({ month: '2026-11-01' }) });
+    const month = await loadHomeMonth(r.get, ctx, '2026-11');
+    expect(month.isPastMonth).toBe(false);
+    expect(month.plan).toMatchObject({ kind: 'ready', balance: 1, isPartialMonth: false });
+  });
+
+  it('refuses a snapshot computed for another month', async () => {
+    const ctx = await context();
+    const r = recorder({ [homeSnapshotPath('2026-11')]: dashboard({ month: '2026-10-01' }) });
+    await expect(loadHomeMonth(r.get, ctx, '2026-11')).rejects.toThrow('asked for 2026-11');
   });
 });

@@ -4,7 +4,12 @@
     "retry": "Réessayer",
     "loading": "Chargement…",
     "signOut": "Se déconnecter",
-    "dismiss": "Fermer"
+    "dismiss": "Fermer",
+    "monthNav": {
+      "previous": "Mois précédent",
+      "next": "Mois suivant",
+      "thisMonth": "Ce mois-ci"
+    }
   },
   "timezone": {
     "title": "Cet appareil n'arrive pas à indiquer la date à Phare",
@@ -341,7 +346,8 @@
       "surplus": "Surplus mensuel",
       "deficit": "Déficit mensuel",
       "borrowedNote": "⚠ {amount} de l'encaisse de ce mois-ci a été emprunté. Cet argent est dans votre compte, mais vous ne l'avez pas gagné — il n'est donc pas inclus dans le montant ci-dessus.",
-      "monthOnlyNote": "Ceci reflète uniquement le flux de trésorerie de ce mois, pas votre solde réel. Votre solde réel se trouve dans l'onglet Chronologie."
+      "monthOnlyNote": "Ceci reflète uniquement le flux de trésorerie de ce mois, pas votre solde réel. Votre solde réel se trouve dans l'onglet Chronologie.",
+      "actualsForMonth": "Données réelles pour {month} — pas des projections"
     },
     "plan": {
       "badge": "Plan",
@@ -355,7 +361,8 @@
       "basisMax": "{card} : {amount} — dépassement de budget, montant réel utilisé",
       "basisPosted": "{card} : déjà payé — inclus dans le solde d'aujourd'hui",
       "borrowedNote": "{amount} de ce solde est emprunté — de l'argent réel que vous pouvez dépenser, et que vous devrez rembourser.",
-      "note": "Une estimation — suppose que les factures fixes, les transferts et les budgets de carte se déroulent comme prévu."
+      "note": "Une estimation — suppose que les factures fixes, les transferts et les budgets de carte se déroulent comme prévu.",
+      "pastMonth": "Le plan se projette à partir de {currentMonth} — {month} est déjà passé."
     },
     "awaitingDates": "Certains revenus ou certaines factures n'ont pas encore de date et ne sont donc pas comptés ici. Indiquez leurs dates sur phare.money.",
     "noAnchor": "Pour afficher votre plan, Phare a besoin du solde de votre compte chèques à une date que vous connaissez. Indiquez-le sur phare.money."
