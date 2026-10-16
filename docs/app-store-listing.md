@@ -149,6 +149,12 @@ The notes above are for **v1.0**. Use §3b from 1.1 onward.
 
 ## 3b. App Review notes from v1.1 (standalone, early access)
 
+> **WITHDRAWN 2026-10-16. Do not paste.** Lineu dropped early access and
+> chose in-app purchase. These notes say nothing is sold in the app, which
+> will be false. They will be rewritten for in-app purchase (subscription
+> group, Restore Purchases, where Terms and Privacy are linked) once that is
+> designed. Kept below only as a record.
+
 Use these from the first update that includes sign-up in the app
 (standalone piece 1). Before pasting, check that `EARLY_ACCESS=true` is
 live in production: these notes are only true while it is.

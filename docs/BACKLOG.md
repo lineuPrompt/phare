@@ -21,13 +21,9 @@ One handoff per item, with the rebuild line. Gaps and estimates:
 [mobile-standalone-audit.md](mobile-standalone-audit.md). Lineu approves
 the v1.1 list separately.**
 
-- **S0. Early access: `EARLY_ACCESS=true` makes the derived entitlement Pro
-  for every household** (web and mobile, one server-side switch). Web hides
-  upgrade buttons, pricing and the horizon lock while it is on; Stripe, the
-  webhook and existing subscriptions are untouched; AI guards stay
-  (onboarding 10/month, regenerate quota, Anthropic's $20 cap). The only
-  web change allowed. **STOP: diagnosed 2026-10-15, awaiting approval.**
-  The diagnosis is in this item's handoff.
+- ~~**S0. Early access (`EARLY_ACCESS` flag)**~~ — **dropped by Lineu,
+  2026-10-16** ("that was a mistake"). The business model ($15/$150 CAD)
+  stays. No free-for-all switch is to be built.
 - **S1. Sign-up, in-app password reset, accepting updated terms.**
   **STOP, blocked 2026-10-15.** Three things fall outside the
   pre-approval:
@@ -60,13 +56,22 @@ the v1.1 list separately.**
 - **S8. Savings goals and sinking funds** (read-only first round, then
   creation).
 - **S9. Generating a new monthly review / regenerating the plan.**
-- **In-app purchase (Option A): required before any public launch.** The
-  day `EARLY_ACCESS` is turned off, the app again unlocks features bought
-  on the web, and Guideline 3.1.3(b) requires that subscription to be sold
-  as an in-app purchase too. Apple's Small Business Program takes 15%
-  instead of 30% for developers under US$1M a year; enrol before the first
-  in-app sale. The entitlement must stay derived (Stripe OR Apple), never
-  stored. Not started.
+- **SECURITY, FIRST: any signed-in member can give their own household Pro**
+  (found 2026-10-16). The live `households` policy allows ALL commands and
+  `authenticated` may UPDATE `comp_until` and the Stripe columns through the
+  public REST API. No abuse found (every comp has a known reason). Fix =
+  revoke client writes + SELECT-only policy. **APPLIED and verified
+  2026-10-16** (`20261016000000_households_read_only_for_clients.sql`):
+  VERIFY 7/7 PASS (it gave 4 FAIL before applying). PostgREST behaviour check
+  (a refused PATCH as Zezinho Test) pending Lineu's permission. Blocks in-app purchase (its columns would share the
+  hole). — [ticket](tickets/households-billing-columns-client-writable.md)
+- **In-app purchase — chosen by Lineu 2026-10-16, replaces early access.**
+  Pro is sold in the iOS app through Apple (StoreKit), alongside Stripe on
+  the web; one derived entitlement (Stripe OR Apple OR comp), never stored.
+  Required before the standalone app can unlock or sell Pro (Guidelines
+  3.1.1, 3.1.3(b)). Billing + schema + auth: **diagnose and STOP** before
+  building. Apple's Small Business Program: 15% instead of 30% under
+  US$1M/year — enrol before the first sale.
 
 1. **iOS App Store submission readiness — report only.** Everything left
    between today and submission, in order, each marked Claude Code / Lineu /

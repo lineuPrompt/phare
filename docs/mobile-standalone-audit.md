@@ -1,6 +1,13 @@
 # Mobile standalone audit
 
 **Date:** 2026-10-15
+
+> **Superseded in part, 2026-10-16:** Lineu dropped early access
+> (`EARLY_ACCESS`) and chose **in-app purchase**. Every mention of early
+> access below is out of date. Pro features in the app (steps 23, 27, 30)
+> are unlocked by an Apple or Stripe subscription. The sign-up section's
+> App Review notes will be rewritten for in-app purchase. See the BACKLOG item
+> "In-app purchase".
 **Against:** `main` at bd4194e, and the live database (read-only)
 
 The rule this audits (CLAUDE.md §1): a household that installs from the
