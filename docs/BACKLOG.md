@@ -81,7 +81,15 @@ the v1.1 list separately.**
     Migration `20261016010000_apple_subscription_columns.sql` APPLIED and
     VERIFIED LIVE 2026-10-16 (14/14 PASS; the entitlement select runs live).
     Safe to deploy the code now.
-  - Piece 2: Apple notification webhook + purchase verification route.
+  - **Piece 2, server: BUILT 2026-10-16, uncommitted.**
+    `POST /api/apple/verify` (app → server after a purchase or restore) and
+    `POST /api/apple/notifications` (Apple → server). Uses
+    `@apple/app-store-server-library@3.1.0`, Apple root CA G3/G2 embedded
+    (fingerprints pinned by a test), and re-asks Apple for the live status
+    every time. 503 `apple_not_configured` until Lineu sets the five
+    `APPLE_*` env vars in Vercel (list in `src/lib/apple/appleConfig.ts`) and
+    the notification URL in App Store Connect. Not exercised against Apple
+    yet: needs the In-App Purchase key and a sandbox purchase (piece 3).
   - Piece 3: the app's subscribe screen (expo-iap, Restore Purchases,
     manage subscription). Native module, so a new dev build.
   - Piece 4: web display of an Apple subscription (Subscription section,
