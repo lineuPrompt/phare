@@ -13,6 +13,8 @@ import { apiGet, messageKeyFor } from '../lib/api';
 import { onEntrySaved } from '../lib/entryEvents';
 import AddEntryButton from '../components/AddEntryButton';
 import MonthNav from '../components/MonthNav';
+import ActionButton from '../components/ActionButton';
+import { useRouter } from 'expo-router';
 import {
   cardFigure,
   loadCardMonths,
@@ -86,6 +88,7 @@ function CardRowView({ card }: { card: CardRow }) {
 
 export default function CardsScreen() {
   const { t } = useI18n();
+  const router = useRouter();
   const [load, setLoad] = useState<CardsLoad | null>(null);
   const [range, setRange] = useState<CardMonths | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
@@ -211,7 +214,15 @@ export default function CardsScreen() {
           </View>
         )}
 
-        {load?.kind === 'noCards' && <Text style={styles.empty}>{t('cards.noCards')}</Text>}
+        {load?.kind === 'noCards' && (
+          <View style={styles.card}>
+            <Text style={styles.empty}>{t('cards.noCards')}</Text>
+            <ActionButton
+              label={t('cards.addCard')}
+              onPress={() => router.push({ pathname: '/account-new', params: { type: 'credit_card' } })}
+            />
+          </View>
+        )}
 
         {load?.kind === 'ready' && load.cards.map((card) => <CardRowView key={card.id} card={card} />)}
       </ScrollView>

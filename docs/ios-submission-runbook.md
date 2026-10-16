@@ -545,6 +545,13 @@ All signed in as the **demo household**, in this order:
     - **Build**: **+** → select the TestFlight build from step 24.
     - **App Review Information**: from part 7.
     - **Version Release**: **Manually release this version**.
+    - **STOP before the next line. [Claude Code] asks Lineu: "Is this
+      build ready for submission?"** It names the build number and lists
+      what the build still cannot do (`docs/mobile-standalone-audit.md`).
+      Only a yes from Lineu continues. Passing tests, a passing bundle scan
+      or an earlier "submit now" are not that yes. (Added 2026-10-16: v1.0
+      went to review without this question and was not the app Lineu
+      wanted.)
     - **Save** → **Add for Review** → **Submit to App Review**.
 27. **[Lineu]** Send Claude Code: `Submitted` — and later Apple's verdict,
     word for word, if anything is rejected.

@@ -1,0 +1,68 @@
+import { StyleSheet } from 'react-native';
+import { theme } from '../theme';
+
+/** The modal form look shared by the balance and account screens (same values as quick entry). */
+export const formStyles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: theme.color.background },
+  flex: { flex: 1 },
+  content: { padding: theme.space.md, gap: theme.space.sm },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.space.xs,
+    marginBottom: theme.space.sm,
+  },
+  title: { fontSize: 22, fontWeight: '700', color: theme.color.heading },
+  close: { fontSize: 15, color: theme.color.muted },
+  intro: { fontSize: 14, lineHeight: 21, color: theme.color.muted, paddingHorizontal: theme.space.xs },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.color.muted,
+    marginTop: theme.space.sm,
+    paddingHorizontal: theme.space.xs,
+  },
+  hint: { fontSize: 13, lineHeight: 19, color: theme.color.muted, paddingHorizontal: theme.space.xs },
+  input: {
+    backgroundColor: theme.color.surface,
+    borderWidth: 1.5,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.space.md,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: theme.color.body,
+  },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.space.sm },
+  errorBox: {
+    backgroundColor: theme.color.dangerSurface,
+    borderWidth: 1,
+    borderColor: theme.color.dangerBorder,
+    borderRadius: theme.radius.md,
+    padding: theme.space.md,
+    gap: theme.space.sm,
+    marginTop: theme.space.sm,
+  },
+  errorText: { color: theme.color.danger, fontSize: 14 },
+  retry: { color: theme.color.danger, fontSize: 14, fontWeight: '700' },
+  saved: { color: theme.color.positive, fontSize: 15, fontWeight: '600', marginTop: theme.space.sm },
+  button: {
+    backgroundColor: theme.color.heading,
+    borderRadius: 999,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: theme.space.md,
+  },
+  buttonPressed: { opacity: 0.6 },
+  buttonText: { fontSize: 16, fontWeight: '700', color: theme.color.surface },
+  secondaryButton: {
+    borderWidth: 1.5,
+    borderColor: theme.color.heading,
+    borderRadius: 999,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: theme.space.sm,
+  },
+  secondaryButtonText: { fontSize: 15, fontWeight: '700', color: theme.color.heading },
+});

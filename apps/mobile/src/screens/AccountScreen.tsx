@@ -7,9 +7,11 @@ import { useSession } from '../lib/useSession';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
 import DeleteAccountSection from '../components/DeleteAccountSection';
+import AccountsSection from '../components/AccountsSection';
 
 /**
- * The Account tab: who is signed in, the way out, and account deletion.
+ * The Account tab: who is signed in, the household's accounts, the way out,
+ * and account deletion.
  *
  * SIGN-OUT ERRORS ARE SHOWN, NOT SWALLOWED. supabase-js resolves signOut()
  * with an { error } rather than rejecting, and with the default 'global'
@@ -56,6 +58,9 @@ export default function AccountScreen() {
               rather than render an empty line that reads as a layout bug. */}
           <Text style={styles.value}>{email ?? t('account.emailUnknown')}</Text>
         </View>
+
+        {/* Accounts and the chequing balance, without the web (standalone S3). */}
+        <AccountsSection />
 
         {signOutFailed && (
           <View style={styles.errorBox}>

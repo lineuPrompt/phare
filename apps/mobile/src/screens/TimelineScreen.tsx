@@ -14,6 +14,8 @@ import { apiGet, messageKeyFor } from '../lib/api';
 import { onEntrySaved } from '../lib/entryEvents';
 import AddEntryButton from '../components/AddEntryButton';
 import MonthNav from '../components/MonthNav';
+import ActionButton from '../components/ActionButton';
+import { useRouter } from 'expo-router';
 import { createTimelineLoader, type LoadTrigger, type TimelineLoad } from '../lib/timelineLoader';
 import {
   buildTimelineView,
@@ -122,6 +124,7 @@ function UnbalancedCard({ day, locale }: { day: UnbalancedDay; locale: Locale })
 
 export default function TimelineScreen() {
   const { t, locale } = useI18n();
+  const router = useRouter();
   const [load, setLoad] = useState<TimelineLoad | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -264,12 +267,21 @@ export default function TimelineScreen() {
           </View>
         )}
 
-        {load?.kind === 'noChequing' && <Text style={styles.empty}>{t('timeline.noChequing')}</Text>}
+        {load?.kind === 'noChequing' && (
+          <View style={styles.card}>
+            <Text style={styles.cardBody}>{t('timeline.noChequing')}</Text>
+            <ActionButton
+              label={t('timeline.addChequing')}
+              onPress={() => router.push({ pathname: '/account-new', params: { type: 'chequing' } })}
+            />
+          </View>
+        )}
 
         {load?.kind === 'noAnchor' && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>{t('timeline.noAnchor.title')}</Text>
             <Text style={styles.cardBody}>{t('timeline.noAnchor.body')}</Text>
+            <ActionButton label={t('timeline.setBalance')} onPress={() => router.push('/balance')} />
           </View>
         )}
 

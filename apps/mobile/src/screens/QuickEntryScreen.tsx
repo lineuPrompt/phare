@@ -23,6 +23,8 @@ import {
   type EntryForm,
 } from '../lib/quickEntry';
 import { emitEntrySaved } from '../lib/entryEvents';
+import Chip from '../components/Chip';
+import ActionButton from '../components/ActionButton';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
@@ -161,7 +163,10 @@ export default function QuickEntryScreen() {
           {header}
 
           {form.accounts.length === 0 ? (
-            <Text style={styles.empty}>{t('entry.noAccounts')}</Text>
+            <View>
+              <Text style={styles.empty}>{t('entry.noAccounts')}</Text>
+              <ActionButton label={t('entry.addAccount')} onPress={() => router.replace('/account-new')} />
+            </View>
           ) : (
             <>
               <Text style={styles.label}>{t('entry.account')}</Text>
@@ -255,19 +260,6 @@ export default function QuickEntryScreen() {
   );
 }
 
-function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={[styles.chip, selected && styles.chipSelected]}
-    >
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.color.background },
   flex: { flex: 1 },
@@ -300,17 +292,6 @@ const styles = StyleSheet.create({
     color: theme.color.body,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.space.sm },
-  chip: {
-    borderWidth: 1.5,
-    borderColor: theme.color.border,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: theme.color.surface,
-  },
-  chipSelected: { borderColor: theme.color.accent, backgroundColor: theme.color.accentSurface },
-  chipText: { fontSize: 14, color: theme.color.muted },
-  chipTextSelected: { color: theme.color.heading, fontWeight: '600' },
   empty: { fontSize: 15, lineHeight: 23, color: theme.color.muted, padding: theme.space.md },
   errorBox: {
     backgroundColor: theme.color.dangerSurface,

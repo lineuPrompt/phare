@@ -42,9 +42,9 @@ facts live:
 | 4 | Onboarding: income, bills, cards, plan, letter | **W** | Built. Three escape hatches point to the web: opening balance "later" (step 7), undated bills (step 12), and "replacing an earlier plan" (only reachable after a re-onboarding, so rare). |
 | 5 | Pick pay dates | **W** | Free-text `YYYY-MM-DD` today; the date picker is FROZEN, after submission. |
 | 6 | First expense | **W** | Quick entry: expense on chequing or a card, no member attached. |
-| 7 | Set the chequing opening balance later | **S** | `POST /api/anchors`. Without it the Timeline and the Plan card say "set it on phare.money". |
+| 7 | Set the chequing opening balance later | **W** (S3, 2026-10-16) | `POST /api/anchors`. Without it the Timeline and the Plan card say "set it on phare.money". |
 | 8 | See the month: Home, Timeline, Cards | **W** | Current month only. |
-| 9 | Look at last month or ahead | **S** | Existing routes (`/api/dashboard?month`, `/api/timeline?windowStart`, `/api/cards/overview?month`, `/api/cards/months`). `availableMonths` moves from `src/lib/timelineDisplayHelpers.ts` into `@phare/core`. |
+| 9 | Look at last month or ahead | **W** (S2, 2026-10-15) | Existing routes (`/api/dashboard?month`, `/api/timeline?windowStart`, `/api/cards/overview?month`, `/api/cards/months`). `availableMonths` moves from `src/lib/timelineDisplayHelpers.ts` into `@phare/core`. |
 | 10 | Fix a wrong entry (amount, category, date, delete) | **S** | `PATCH`/`DELETE /api/expenses/[id]`. Needs a list of the month's entries to tap (Timeline rows). |
 | 11 | One-off income (a refund, a bonus) | **S** | `POST /api/expenses` with `type: 'income'`. |
 | 12 | Date the recurring lines onboarding left undated | **S** | `PATCH /api/recurring/[id]`. |
@@ -56,7 +56,7 @@ facts live:
 |---|---|---|---|
 | 14 | A raise | **S** | `PATCH /api/recurring/[id]`, effective-dated (`splitRule`), so past months keep the old figure. The screen asks "from which date". |
 | 15 | A new recurring bill | **S** | `POST /api/recurring`. |
-| 16 | A new credit card, with close and payment days | **S** | `POST /api/accounts`, then `PATCH /api/accounts/[id]` for the days. |
+| 16 | A new credit card, with close and payment days | **W** for the card (S3); **S** for the days (S5) | `POST /api/accounts`, then `PATCH /api/accounts/[id]` for the days. |
 | 17 | Card detail, goal and category budgets | **S** | `GET`/`POST /api/card-envelope`, with its closed-cycle 409 and the "apply to later months?" 409. |
 | 18 | Invite a spouse | **S + N** | Sending is `POST /api/household/members`. The invite email's link is `phare.money/auth/callback?next=…/dashboard`, so the spouse sets a password on the web page. Keeping that in the app is the same redirect work as 1(b) and 24. |
 | 19 | List members, remove one, make one owner | **S** | `GET /api/household/members`, `DELETE /api/household/members/[id]`, `POST …/promote`, `POST …/resend`. Owner-only actions as on web. |

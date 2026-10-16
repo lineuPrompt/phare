@@ -44,10 +44,10 @@
   },
   "timeline": {
     "title": "Chronologie de trésorerie",
-    "noChequing": "Phare a besoin d'un compte chèques pour afficher votre chronologie. Vous pouvez en ajouter un sur phare.money.",
+    "noChequing": "Phare a besoin d'un compte chèques pour afficher votre chronologie.",
     "noAnchor": {
       "title": "Pour afficher votre chronologie, Phare a besoin d'un vrai chiffre : le solde de votre compte chèques à une date que vous connaissez.",
-      "body": "Indiquez le solde initial de votre compte chèques sur phare.money : tout le reste en découle."
+      "body": "Indiquez le solde de votre compte chèques : tout le reste en découle."
     },
     "header": {
       "balanceToday": "Solde aujourd'hui",
@@ -70,7 +70,9 @@
       "today": "Aujourd'hui",
       "endOfDay": "Fin de journée",
       "untitled": "Entrée"
-    }
+    },
+    "setBalance": "Indiquer votre solde",
+    "addChequing": "Ajouter un compte chèques"
   },
   "errors": {
     "network": "Impossible de joindre Phare. Vérifiez votre connexion et réessayez.",
@@ -127,7 +129,8 @@
       "ok": "OK",
       "noGoal": "Aucun objectif"
     },
-    "noCards": "Aucune carte de crédit pour l'instant. Vous pouvez en ajouter sur phare.money."
+    "noCards": "Aucune carte de crédit pour l'instant.",
+    "addCard": "Ajouter une carte"
   },
   "entry": {
     "title": "Ajouter une dépense",
@@ -143,7 +146,7 @@
     "save": "Enregistrer",
     "saving": "Enregistrement…",
     "saved": "Enregistrée.",
-    "noAccounts": "Il n'y a ni compte chèques ni carte de crédit où l'ajouter. Vous pouvez en ajouter un sur phare.money.",
+    "noAccounts": "Il n'y a encore ni compte chèques ni carte de crédit où l'ajouter.",
     "noCategories": "Aucune catégorie à choisir.",
     "problems": {
       "accountRequired": "Choisissez un compte.",
@@ -162,9 +165,10 @@
       "categoryNotFound": "Cette catégorie n'est plus disponible. Fermez cet écran, puis rouvrez-le.",
       "accountNotFound": "Ce compte n'est plus disponible. Fermez cet écran, puis rouvrez-le.",
       "payloadTooLarge": "Cette entrée est trop volumineuse pour être enregistrée.",
-      "noChequing": "Phare a d'abord besoin d'un compte chèques. Vous pouvez en ajouter un sur phare.money.",
+      "noChequing": "Phare a d'abord besoin d'un compte chèques. Ajoutez-en un dans Compte → Comptes.",
       "saveFailed": "Phare n'a pas pu enregistrer cette dépense, et rien n'a été enregistré. Veuillez réessayer."
-    }
+    },
+    "addAccount": "Ajouter un compte"
   },
   "terms": {
     "updated": "Nos conditions ont été mises à jour. Consultez-les et acceptez-les sur phare.money, puis reconnectez-vous."
@@ -215,7 +219,7 @@
       "defaultCardName": "Carte {n}",
       "openingBalance": "Quel est le solde de votre compte chèques aujourd'hui?",
       "openingBalancePlaceholder": "ex. 1250,00",
-      "openingBalanceHint": "Facultatif — mais c'est le chiffre sur lequel repose votre chronologie. Vous pourrez l'ajouter plus tard sur phare.money.",
+      "openingBalanceHint": "Facultatif — mais c'est le chiffre sur lequel repose votre chronologie. Vous pourrez l'ajouter plus tard dans Compte → Mettre à jour le solde.",
       "openingBalanceInvalid": "Ce solde n'a pas pu être lu. Entrez un nombre comme 1250,00 ou laissez le champ vide.",
       "continue": "Construire mon plan"
     },
@@ -262,7 +266,7 @@
     },
     "done": {
       "title": "Votre plan est prêt",
-      "anchorFailed": "Votre plan est enregistré, mais pas le solde de votre compte chèques. Vous pouvez le définir sur phare.money.",
+      "anchorFailed": "Votre plan est enregistré, mais pas le solde de votre compte chèques. Vous pouvez l'indiquer dans Compte → Mettre à jour le solde.",
       "continue": "Continuer"
     },
     "errors": {
@@ -365,6 +369,61 @@
       "pastMonth": "Le plan se projette à partir de {currentMonth} — {month} est déjà passé."
     },
     "awaitingDates": "Certains revenus ou certaines factures n'ont pas encore de date et ne sont donc pas comptés ici. Indiquez leurs dates sur phare.money.",
-    "noAnchor": "Pour afficher votre plan, Phare a besoin du solde de votre compte chèques à une date que vous connaissez. Indiquez-le sur phare.money."
+    "noAnchor": "Pour afficher votre plan, Phare a besoin du solde de votre compte chèques à une date que vous connaissez.",
+    "setBalance": "Indiquer votre solde"
+  },
+  "accounts": {
+    "title": "Comptes",
+    "add": "Ajouter un compte",
+    "updateBalance": "Mettre à jour le solde",
+    "empty": "Aucun compte pour l'instant.",
+    "types": {
+      "chequing": "Compte chèques",
+      "credit_card": "Carte de crédit",
+      "savings": "Épargne",
+      "tfsa": "CELI",
+      "rrsp": "REER",
+      "debt": "Dette",
+      "line_of_credit": "Marge de crédit",
+      "other": "Compte"
+    },
+    "new": {
+      "title": "Ajouter un compte",
+      "type": "Type",
+      "name": "Nom",
+      "namePlaceholder": "p. ex. Visa, Fonds d'urgence",
+      "openingBalance": "Solde de départ (facultatif)",
+      "openingBalanceHint": "Ce que contient ce compte aujourd'hui. Laissez vide s'il est vide.",
+      "save": "Ajouter le compte",
+      "saving": "Ajout en cours…",
+      "balanceFailed": "{name} a été ajouté, mais son solde de départ n'a pas été enregistré.",
+      "retryBalance": "Enregistrer de nouveau le solde de départ",
+      "done": "Terminé"
+    },
+    "problems": {
+      "nameRequired": "Donnez un nom au compte.",
+      "balanceInvalid": "Entrez le solde en chiffres, comme 1250 ou 1250,50 — sans $ ni espaces."
+    }
+  },
+  "balance": {
+    "title": "Solde du compte chèques",
+    "intro": "Le solde de votre compte chèques à une date que vous connaissez. La chronologie et votre plan en découlent.",
+    "amount": "Solde",
+    "amountHint": "Mettez un signe moins si le compte est à découvert.",
+    "date": "En date du",
+    "datePlaceholder": "AAAA-MM-JJ",
+    "today": "Aujourd'hui",
+    "save": "Enregistrer le solde",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré. L'accueil et la chronologie partent maintenant de ce solde.",
+    "last": "Dernier solde : {amount} le {date}",
+    "none": "Aucun solde pour l'instant.",
+    "noChequing": "Il n'y a pas encore de compte chèques.",
+    "addChequing": "Ajouter un compte chèques",
+    "problems": {
+      "amountInvalid": "Entrez le solde en chiffres, comme 1250 ou -40,25 — sans $ ni espaces.",
+      "dateInvalid": "Entrez la date au format AAAA-MM-JJ.",
+      "dateInFuture": "La date ne peut pas être dans le futur."
+    }
   }
 }

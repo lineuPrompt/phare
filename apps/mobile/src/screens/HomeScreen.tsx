@@ -14,6 +14,8 @@ import { apiGet, messageKeyFor } from '../lib/api';
 import { onEntrySaved } from '../lib/entryEvents';
 import AddEntryButton from '../components/AddEntryButton';
 import MonthNav from '../components/MonthNav';
+import ActionButton from '../components/ActionButton';
+import { useRouter } from 'expo-router';
 import {
   loadHome,
   loadHomeMonth,
@@ -201,6 +203,7 @@ function PlanCard({
   borrowed: number;
 }) {
   const { t, locale } = useI18n();
+  const router = useRouter();
   const money = (value: number) => formatCADLocale(value, locale);
   const monthLabel = formatMonthLong(month, locale);
 
@@ -222,6 +225,7 @@ function PlanCard({
       <View style={styles.planCard}>
         <Text style={styles.badge}>{t('home.plan.badge')}</Text>
         <Text style={styles.planLabel}>{t('home.noAnchor')}</Text>
+        <ActionButton label={t('home.setBalance')} onPress={() => router.push('/balance')} onDark />
       </View>
     );
   }

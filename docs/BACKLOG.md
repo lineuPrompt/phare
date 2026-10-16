@@ -42,7 +42,12 @@ the v1.1 list separately.**
   Details in the audit, steps 1–3 and 24–25.
 - ~~**S2. Month navigation: Home, Timeline, Cards.**~~ Built 2026-10-15,
   uncommitted (handoff "S2"). Device test pending.
-- **S3. Accounts and opening balance.**
+- ~~**S3. Accounts and opening balance.**~~ Built 2026-10-16, uncommitted
+  (handoff "S3"). Device test pending. Card statement/payment days stay with
+  S5; debt and line-of-credit accounts are not offered yet.
+- **`/api/accounts` silent failures** (found during S3): POST answers 200
+  when the opening balance fails; GET answers `[]` on a failed read. —
+  [ticket](tickets/accounts-route-silent-failures.md)
 - **`GET /api/anchors` swallows a failed read** (found during S2): a failed
   read answers `{ anchors: [] }` and hides every past month on both
   Timelines. — [ticket](tickets/anchors-get-swallows-read-error.md)
@@ -249,6 +254,7 @@ for when it thaws:
 
 | Item | Commit |
 |---|---|
+| Standalone S3 — accounts list, add account, chequing balance in the app; opening-balance rule moved to `@phare/core` | _(Lineu)_ |
 | Standalone S2 — month navigation (Home, Timeline, Cards); month helpers moved to `@phare/core` | _(Lineu)_ |
 | Mobile standalone audit (`docs/mobile-standalone-audit.md`), CLAUDE.md product rule, 1.1 review notes | _(Lineu)_ |
 | Mobile V1 Phase 2, step 0 — core moves | a82271a |

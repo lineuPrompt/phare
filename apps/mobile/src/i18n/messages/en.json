@@ -44,10 +44,10 @@
   },
   "timeline": {
     "title": "Cash Timeline",
-    "noChequing": "Phare needs a chequing account before it can show your timeline. You can add one on phare.money.",
+    "noChequing": "Phare needs a chequing account before it can show your timeline.",
     "noAnchor": {
       "title": "To show your timeline, Phare needs one real number: your chequing balance on a date you know.",
-      "body": "Set your chequing account's opening balance on phare.money, and everything else follows from it."
+      "body": "Set your chequing balance, and everything else follows from it."
     },
     "header": {
       "balanceToday": "Balance today",
@@ -70,7 +70,9 @@
       "today": "Today",
       "endOfDay": "End of day",
       "untitled": "Entry"
-    }
+    },
+    "setBalance": "Set your balance",
+    "addChequing": "Add a chequing account"
   },
   "errors": {
     "network": "Couldn't reach Phare. Check your connection and try again.",
@@ -127,7 +129,8 @@
       "ok": "OK",
       "noGoal": "No goal"
     },
-    "noCards": "No credit cards set up yet. You can add them on phare.money."
+    "noCards": "No credit cards set up yet.",
+    "addCard": "Add a card"
   },
   "entry": {
     "title": "Add an expense",
@@ -143,7 +146,7 @@
     "save": "Save",
     "saving": "Saving…",
     "saved": "Saved.",
-    "noAccounts": "There's no chequing account or credit card to add this to. You can add one on phare.money.",
+    "noAccounts": "There's no chequing account or credit card to add this to yet.",
     "noCategories": "No categories to choose from.",
     "problems": {
       "accountRequired": "Choose an account.",
@@ -162,9 +165,10 @@
       "categoryNotFound": "That category isn't available any more. Close this screen and open it again.",
       "accountNotFound": "That account isn't available any more. Close this screen and open it again.",
       "payloadTooLarge": "That entry is too large to save.",
-      "noChequing": "Phare needs a chequing account first. You can add one on phare.money.",
+      "noChequing": "Phare needs a chequing account first. Add one in Account → Accounts.",
       "saveFailed": "Phare couldn't save this expense, and nothing was recorded. Please try again."
-    }
+    },
+    "addAccount": "Add an account"
   },
   "terms": {
     "updated": "Our terms were updated. Review and accept them on phare.money, then sign in again."
@@ -215,7 +219,7 @@
       "defaultCardName": "Card {n}",
       "openingBalance": "What's in your chequing account today?",
       "openingBalancePlaceholder": "e.g. 1250.00",
-      "openingBalanceHint": "Optional — but it's the one number your timeline is built on. You can add it later on phare.money.",
+      "openingBalanceHint": "Optional — but it's the one number your timeline is built on. You can add it later in Account → Update balance.",
       "openingBalanceInvalid": "That balance couldn't be read. Enter a number like 1250.00, or leave it blank.",
       "continue": "Build my plan"
     },
@@ -262,7 +266,7 @@
     },
     "done": {
       "title": "Your plan is ready",
-      "anchorFailed": "Your plan is saved, but your chequing balance wasn't. You can set it on phare.money.",
+      "anchorFailed": "Your plan is saved, but your chequing balance wasn't. You can set it in Account → Update balance.",
       "continue": "Continue"
     },
     "errors": {
@@ -365,6 +369,61 @@
       "pastMonth": "The plan looks forward from {currentMonth} — {month} has already happened."
     },
     "awaitingDates": "Some income or bills don't have a date yet, so they aren't counted here. Set their dates on phare.money.",
-    "noAnchor": "To show your plan, Phare needs your chequing balance on a date you know. Set it on phare.money."
+    "noAnchor": "To show your plan, Phare needs your chequing balance on a date you know.",
+    "setBalance": "Set your balance"
+  },
+  "accounts": {
+    "title": "Accounts",
+    "add": "Add an account",
+    "updateBalance": "Update balance",
+    "empty": "No accounts yet.",
+    "types": {
+      "chequing": "Chequing",
+      "credit_card": "Credit card",
+      "savings": "Savings",
+      "tfsa": "TFSA",
+      "rrsp": "RRSP",
+      "debt": "Debt",
+      "line_of_credit": "Line of credit",
+      "other": "Account"
+    },
+    "new": {
+      "title": "Add an account",
+      "type": "Type",
+      "name": "Name",
+      "namePlaceholder": "e.g. Visa, Emergency fund",
+      "openingBalance": "Starting balance (optional)",
+      "openingBalanceHint": "What's in this account today. Leave it blank if it's empty.",
+      "save": "Add account",
+      "saving": "Adding…",
+      "balanceFailed": "{name} was added, but its starting balance wasn't saved.",
+      "retryBalance": "Save the starting balance again",
+      "done": "Done"
+    },
+    "problems": {
+      "nameRequired": "Give the account a name.",
+      "balanceInvalid": "Enter the balance as a number, like 1250 or 1250.50 — no $ or spaces."
+    }
+  },
+  "balance": {
+    "title": "Chequing balance",
+    "intro": "Your chequing balance on a date you know. The Timeline and your plan are worked out from it.",
+    "amount": "Balance",
+    "amountHint": "Use a minus sign if the account is overdrawn.",
+    "date": "On",
+    "datePlaceholder": "YYYY-MM-DD",
+    "today": "Today",
+    "save": "Save balance",
+    "saving": "Saving…",
+    "saved": "Saved. Home and the Timeline now start from it.",
+    "last": "Last set: {amount} on {date}",
+    "none": "No balance set yet.",
+    "noChequing": "There's no chequing account yet.",
+    "addChequing": "Add a chequing account",
+    "problems": {
+      "amountInvalid": "Enter the balance as a number, like 1250 or -40.25 — no $ or spaces.",
+      "dateInvalid": "Enter the date as YYYY-MM-DD.",
+      "dateInFuture": "The date can't be in the future."
+    }
   }
 }

@@ -38,6 +38,9 @@ export default function RootLayout() {
         >
           {/* Quick entry slides up over the tabs and dismisses back to them. */}
           <Stack.Screen name="add" options={{ presentation: 'modal' }} />
+          {/* The chequing balance and a new account, the same way. */}
+          <Stack.Screen name="balance" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="account-new" options={{ presentation: 'modal' }} />
         </Stack>
       </I18nProvider>
     </SafeAreaProvider>
