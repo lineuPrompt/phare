@@ -32,6 +32,19 @@ export type EntitlementInput = {
   subscription_cancel_at_period_end?: boolean | null;
   /** Founder-granted access, independent of Stripe entirely. YYYY-MM-DD. */
   comp_until?: string | null;
+
+  // ── Apple (in-app purchase, 2026-10-16) ─────────────────────────────────
+  // Mirrored by the server from Apple's verified signed data
+  // (20261016010000_apple_subscription_columns.sql). Same doctrine as the
+  // Stripe columns: copies of Apple's truth, never an is_pro flag.
+  /** 'active' | 'expired' | 'billing_retry' | 'grace_period' | 'revoked' */
+  apple_status?: string | null;
+  /** When the current paid period ends (Apple's expiresDate). */
+  apple_expires_at?: string | null;
+  /** During a billing grace period, when access stops (gracePeriodExpiresDate). */
+  apple_grace_period_expires_at?: string | null;
+  /** false = renewal turned off: Pro until apple_expires_at, then not. */
+  apple_auto_renew?: boolean | null;
 };
 
 export type EntitlementReason =
@@ -41,6 +54,12 @@ export type EntitlementReason =
   | 'active_ending'
   | 'grace_past_due'
   | 'cancelled_paid_through'
+  /** Paid through Apple and renewing. */
+  | 'apple_active'
+  /** Paid through Apple, renewal turned off: Pro until the period ends. */
+  | 'apple_ending'
+  /** Apple is retrying a failed renewal inside its billing grace period. */
+  | 'apple_grace'
   | 'none';
 
 export type Entitlement = {
@@ -127,13 +146,20 @@ export function entitlementFor(
     return { isPro: true, reason: 'comp' };
   }
 
+  // Stripe, then Apple. Either one is enough; Stripe is asked first only so a
+  // household that somehow pays through both reads with its Stripe sentence.
+  return stripeEntitlement(household, now) ?? appleEntitlement(household, now) ?? { isPro: false, reason: 'none' };
+}
+
+/** The Stripe path, or null when Stripe grants nothing. */
+function stripeEntitlement(household: EntitlementInput, now: Date): Entitlement | null {
   const status = household.subscription_status ?? null;
   const paidThrough = isFuture(household.subscription_current_period_end, now);
 
   // Every remaining branch requires a period end in the future. Without one
   // there is nothing to be entitled by — including for `active`, which protects
   // against a stale row that says active long after Stripe moved on.
-  if (!paidThrough) return { isPro: false, reason: 'none' };
+  if (!paidThrough) return null;
 
   if (status && PAYING_STATUSES.has(status)) {
     // Same entitlement, different sentence. The Terms promise access through
@@ -147,8 +173,35 @@ export function entitlementFor(
   if (status && PAID_THROUGH_STATUSES.has(status)) {
     return { isPro: true, reason: 'cancelled_paid_through' };
   }
+  return null;
+}
 
-  return { isPro: false, reason: 'none' };
+/**
+ * The Apple path, or null when Apple grants nothing.
+ *
+ * Apple's own statuses decide, each bounded by a date in the future, so a
+ * stale row can never mean access for ever:
+ *   - active        → Pro until apple_expires_at. Renewal turned off is still
+ *                     Pro until then (apple_ending), as Apple promises the
+ *                     customer.
+ *   - grace_period  → Pro until apple_grace_period_expires_at. Apple keeps
+ *                     service on while it retries the card; the same choice
+ *                     Stripe's past_due grace makes.
+ *   - billing_retry → NOT Pro. Apple is retrying without a grace period, and
+ *                     Apple itself treats this as no service.
+ *   - expired, revoked (refunded or family-sharing removed), anything else
+ *                   → NOT Pro.
+ * The sandbox is not gated here: TestFlight and App Review buy in it.
+ */
+function appleEntitlement(household: EntitlementInput, now: Date): Entitlement | null {
+  const status = household.apple_status ?? null;
+  if (status === 'active' && isFuture(household.apple_expires_at, now)) {
+    return { isPro: true, reason: household.apple_auto_renew === false ? 'apple_ending' : 'apple_active' };
+  }
+  if (status === 'grace_period' && isFuture(household.apple_grace_period_expires_at, now)) {
+    return { isPro: true, reason: 'apple_grace' };
+  }
+  return null;
 }
 
 /** Convenience for the common call site. */

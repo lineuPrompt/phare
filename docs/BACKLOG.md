@@ -72,6 +72,24 @@ the v1.1 list separately.**
   3.1.1, 3.1.3(b)). Billing + schema + auth: **diagnose and STOP** before
   building. Apple's Small Business Program: 15% instead of 30% under
   US$1M/year — enrol before the first sale.
+  Decisions (Lineu, 2026-10-16, "the simpler and easiest solution that
+  follows the plan"): `expo-iap` + Apple's server library; same price as the
+  web at Apple's nearest price point; the mobile "no prices" rule becomes
+  "prices only from StoreKit, never a web pricing link"; Apple columns on
+  `households`.
+  - **Piece 1, columns + entitlement: BUILT 2026-10-16, uncommitted.**
+    Migration `20261016010000_apple_subscription_columns.sql` WRITTEN, NOT
+    applied. **Apply it BEFORE deploying the code**: loadEntitlement now
+    selects the Apple columns and fails closed (everyone free) without them.
+  - Piece 2: Apple notification webhook + purchase verification route.
+  - Piece 3: the app's subscribe screen (expo-iap, Restore Purchases,
+    manage subscription). Native module, so a new dev build.
+  - Piece 4: web display of an Apple subscription (Subscription section,
+    `/api/me`).
+  - Piece 5: rewrite `sourceCompliance` and `bundle:check` for "StoreKit
+    prices only"; update CLAUDE.md §1 and §4.
+  - Piece 6: App Review notes for in-app purchase; Terms and Privacy (Apple
+    billing) to counsel.
 
 1. **iOS App Store submission readiness — report only.** Everything left
    between today and submission, in order, each marked Claude Code / Lineu /

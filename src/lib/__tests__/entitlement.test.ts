@@ -220,3 +220,91 @@ describe('active_ending — cancelled mid-period, still entitled', () => {
     }, NOW).reason).toBe('comp');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Apple (in-app purchase, 2026-10-16). Each status bounded by a future date.
+// ---------------------------------------------------------------------------
+
+describe('entitlementFor — Apple', () => {
+  it('active with a future expiry is Pro', () => {
+    expect(entitlementFor({ apple_status: 'active', apple_expires_at: future, apple_auto_renew: true }, NOW))
+      .toEqual({ isPro: true, reason: 'apple_active' });
+  });
+
+  it('active with a PAST expiry is NOT Pro — a stale row never means access for ever', () => {
+    expect(entitlementFor({ apple_status: 'active', apple_expires_at: past, apple_auto_renew: true }, NOW))
+      .toEqual({ isPro: false, reason: 'none' });
+  });
+
+  it('active with NO expiry is NOT Pro', () => {
+    expect(isPro({ apple_status: 'active', apple_auto_renew: true }, NOW)).toBe(false);
+  });
+
+  it('renewal turned off: still Pro until the period ends, and says so', () => {
+    expect(entitlementFor({ apple_status: 'active', apple_expires_at: future, apple_auto_renew: false }, NOW))
+      .toEqual({ isPro: true, reason: 'apple_ending' });
+  });
+
+  it('an unknown renewal setting reads as renewing, not ending', () => {
+    expect(entitlementFor({ apple_status: 'active', apple_expires_at: future }, NOW).reason).toBe('apple_active');
+  });
+
+  it('billing grace period keeps access until the grace date', () => {
+    expect(entitlementFor({
+      apple_status: 'grace_period', apple_expires_at: past, apple_grace_period_expires_at: future,
+    }, NOW)).toEqual({ isPro: true, reason: 'apple_grace' });
+  });
+
+  it('grace is BOUNDED by its own date, not by the paid period', () => {
+    expect(isPro({ apple_status: 'grace_period', apple_expires_at: future, apple_grace_period_expires_at: past }, NOW))
+      .toBe(false);
+  });
+
+  it.each(['billing_retry', 'expired', 'revoked', 'something_new'])(
+    '%s is not Pro, even with a future expiry on the row',
+    (status) => {
+      expect(entitlementFor({
+        apple_status: status, apple_expires_at: future, apple_grace_period_expires_at: future,
+      }, NOW)).toEqual({ isPro: false, reason: 'none' });
+    }
+  );
+
+  it('an unparseable expiry never grants access', () => {
+    expect(isPro({ apple_status: 'active', apple_expires_at: 'soon' }, NOW)).toBe(false);
+  });
+
+  it('Apple is enough on its own when Stripe has lapsed', () => {
+    expect(entitlementFor({
+      subscription_status: 'canceled', subscription_current_period_end: past,
+      apple_status: 'active', apple_expires_at: future,
+    }, NOW).reason).toBe('apple_active');
+  });
+
+  it('Stripe is enough on its own when Apple has expired', () => {
+    expect(entitlementFor({
+      subscription_status: 'active', subscription_current_period_end: future,
+      apple_status: 'expired', apple_expires_at: past,
+    }, NOW).reason).toBe('active');
+  });
+
+  it('paying through both reads with the Stripe sentence; comp still comes first', () => {
+    const both = {
+      subscription_status: 'active', subscription_current_period_end: future,
+      apple_status: 'active', apple_expires_at: future,
+    };
+    expect(entitlementFor(both, NOW).reason).toBe('active');
+    expect(entitlementFor({ ...both, comp_until: '2027-11-01' }, NOW).reason).toBe('comp');
+  });
+
+  it('a Stripe status that grants nothing does not hide a live Apple subscription', () => {
+    // The legacy 'trial' default sits on every household; it must not stop the
+    // Apple path from being asked.
+    expect(entitlementFor({
+      subscription_status: 'trial', apple_status: 'grace_period', apple_grace_period_expires_at: future,
+    }, NOW).reason).toBe('apple_grace');
+  });
+
+  it('the Pro horizon follows an Apple subscription', () => {
+    expect(horizonMonthsFor({ apple_status: 'active', apple_expires_at: future }, NOW)).toBe(HORIZON_MONTHS_PRO);
+  });
+});

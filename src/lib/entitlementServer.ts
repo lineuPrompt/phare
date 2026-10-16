@@ -23,7 +23,14 @@ export interface HouseholdReader {
 }
 
 /** The exact column list entitlement depends on. One place, so it cannot drift. */
-export const ENTITLEMENT_COLUMNS = 'subscription_status, subscription_current_period_end, subscription_cancel_at_period_end, comp_until';
+// The Apple columns (2026-10-16) are read here too. Their migration,
+// 20261016010000_apple_subscription_columns.sql, MUST be live before this
+// deploys: against a database without them this select fails, and the
+// fail-closed branch below would read every household, paying ones included,
+// as free.
+export const ENTITLEMENT_COLUMNS =
+  'subscription_status, subscription_current_period_end, subscription_cancel_at_period_end, comp_until, ' +
+  'apple_status, apple_expires_at, apple_grace_period_expires_at, apple_auto_renew';
 
 export async function loadEntitlement(
   supabase: HouseholdReader,
