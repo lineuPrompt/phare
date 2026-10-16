@@ -62,8 +62,8 @@ the v1.1 list separately.**
   public REST API. No abuse found (every comp has a known reason). Fix =
   revoke client writes + SELECT-only policy. **APPLIED and verified
   2026-10-16** (`20261016000000_households_read_only_for_clients.sql`):
-  VERIFY 7/7 PASS (it gave 4 FAIL before applying). PostgREST behaviour check
-  (a refused PATCH as Zezinho Test) pending Lineu's permission. Blocks in-app purchase (its columns would share the
+  VERIFY 7/7 PASS (it gave 4 FAIL before applying). PostgREST behaviour verified
+  live as Zezinho Test: read 200, PATCH refused 403/42501, row unchanged. Blocks in-app purchase (its columns would share the
   hole). — [ticket](tickets/households-billing-columns-client-writable.md)
 - **In-app purchase — chosen by Lineu 2026-10-16, replaces early access.**
   Pro is sold in the iOS app through Apple (StoreKit), alongside Stripe on
@@ -78,9 +78,9 @@ the v1.1 list separately.**
   "prices only from StoreKit, never a web pricing link"; Apple columns on
   `households`.
   - **Piece 1, columns + entitlement: BUILT 2026-10-16, uncommitted.**
-    Migration `20261016010000_apple_subscription_columns.sql` WRITTEN, NOT
-    applied. **Apply it BEFORE deploying the code**: loadEntitlement now
-    selects the Apple columns and fails closed (everyone free) without them.
+    Migration `20261016010000_apple_subscription_columns.sql` APPLIED and
+    VERIFIED LIVE 2026-10-16 (14/14 PASS; the entitlement select runs live).
+    Safe to deploy the code now.
   - Piece 2: Apple notification webhook + purchase verification route.
   - Piece 3: the app's subscribe screen (expo-iap, Restore Purchases,
     manage subscription). Native module, so a new dev build.

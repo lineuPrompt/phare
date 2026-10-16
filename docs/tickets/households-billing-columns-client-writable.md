@@ -3,8 +3,8 @@
 **Found:** 2026-10-16, while designing in-app purchase. **Severity: high**
 (billing). **Status:** FIXED. Applied 2026-10-16:
 `supabase/migrations/20261016000000_households_read_only_for_clients.sql`.
-Verified live: privileges and policy checks, 7/7 PASS. The PostgREST
-behaviour check is still to run.
+Verified live: privileges and policy checks, 7/7 PASS, and over PostgREST
+as Zezinho Test: read 200, PATCH refused 403/42501, row unchanged.
 Not exploited by me.
 
 ## What is wrong

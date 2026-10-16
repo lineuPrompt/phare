@@ -6,8 +6,15 @@
 --
 --   VERIFIED LIVE 2026-10-16 through the read-only MCP server: the VERIFY
 --   query below, 7/7 PASS. Run before applying it gave 4 FAIL (the hole) and
---   3 PASS, so the checks can fail. Behaviour over PostgREST (a refused
---   PATCH as Zezinho Test): NOT YET RUN, awaiting Lineu's permission.
+--   3 PASS, so the checks can fail.
+--
+--   BEHAVIOUR VERIFIED LIVE 2026-10-16 over the real path, with Lineu's
+--   permission: signed in as Zezinho Test (publishable key + its own JWT),
+--   PostgREST READ of its own household -> 200, 1 row; PATCH comp_until to
+--   its existing value -> 403, code 42501 ("Grant the required privileges").
+--   Row unchanged afterwards (updated_at still 2026-08-11 16:32:23).
+--   DELETE deliberately not probed: if it were not refused, it would delete
+--   Zezinho Test. The privilege check above covers it.
 --
 -- Ticket: docs/tickets/households-billing-columns-client-writable.md
 --

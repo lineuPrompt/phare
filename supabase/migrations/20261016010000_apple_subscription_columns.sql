@@ -1,8 +1,13 @@
 -- =============================================================================
 -- Phare — Apple (App Store) subscription state on households. 2026-10-16.
 --
--- STATUS: WRITTEN, NOT APPLIED. Lineu applies it in the SQL Editor, then runs
--- the VERIFY block at the bottom as its own run.
+-- STATUS: APPLIED — 2026-10-16 (Lineu, SQL Editor).
+--
+--   VERIFIED LIVE 2026-10-16 through the read-only MCP server: VERIFY below
+--   14/14 PASS (before applying, the same query gave 11 FAIL / 3 PASS). The
+--   exact ENTITLEMENT_COLUMNS select from entitlementServer.ts runs against
+--   the live table. 2be22642 still reads as Stripe 'active' and Zezinho Test
+--   as 'comp', as before. No household has Apple state.
 --
 -- APPLY THIS BEFORE DEPLOYING THE CODE THAT READS IT. src/lib/entitlementServer.ts
 -- selects these columns on every entitlement read. Against a database without
