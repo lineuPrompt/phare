@@ -8,7 +8,9 @@
     "monthNav": {
       "previous": "Previous month",
       "next": "Next month",
-      "thisMonth": "This month"
+      "thisMonth": "This month",
+      "openTimeline": "Open {month} in the Timeline",
+      "openHome": "Open {month} on Home"
     }
   },
   "timezone": {
@@ -69,7 +71,8 @@
       "untilNextPay": "Next month, up to your pay on {payday}",
       "today": "Today",
       "endOfDay": "End of day",
-      "untitled": "Entry"
+      "untitled": "Entry",
+      "editHint": "Tap an entry to change or delete it."
     },
     "setBalance": "Set your balance",
     "addChequing": "Add a chequing account"
@@ -425,5 +428,24 @@
       "dateInvalid": "Enter the date as YYYY-MM-DD.",
       "dateInFuture": "The date can't be in the future."
     }
+  },
+  "edit": {
+    "title": "Edit entry",
+    "titleTransfer": "Edit transfer",
+    "categoryUnchanged": "Keep current",
+    "transferHint": "Saving changes both sides of this transfer.",
+    "save": "Save changes",
+    "saving": "Saving…",
+    "delete": "Delete",
+    "deleting": "Deleting…",
+    "deleteEntryConfirm": "Delete this entry? This can't be undone.",
+    "deleteTransferConfirm": "Delete this transfer? Both sides of it are removed.",
+    "confirmDelete": "Yes, delete",
+    "cancel": "Cancel",
+    "errors": {
+      "gone": "This entry no longer exists. It may have been changed somewhere else."
+    },
+    "detachHint": "This is part of a recurring rule. Saving edits only this occurrence — the rule itself is unchanged.",
+    "deleteOccurrenceConfirm": "Delete just this occurrence? The recurring rule is unchanged — future occurrences keep their usual amount."
   }
 }

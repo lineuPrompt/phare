@@ -15,7 +15,8 @@ import { onEntrySaved } from '../lib/entryEvents';
 import AddEntryButton from '../components/AddEntryButton';
 import MonthNav from '../components/MonthNav';
 import ActionButton from '../components/ActionButton';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { monthLinkParams, requestedMonth } from '../lib/monthLink';
 import {
   loadHome,
   loadHomeMonth,
@@ -294,7 +295,11 @@ const SAVINGS_COLOR = '#0284C7';
 const DEBT_COLOR = '#7C3AED';
 
 export default function HomeScreen() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const router = useRouter();
+  // A month sent from the Timeline's month name (monthLink.ts).
+  const linkParams = useLocalSearchParams<{ month?: string; at?: string }>();
+  const lastLinkAt = useRef<string | null>(null);
   const [load, setLoad] = useState<HomeLoad | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -379,6 +384,16 @@ export default function HomeScreen() {
     };
   }, [fetchOutcome, apply]);
 
+  // Apply a month sent from the Timeline once the context is loaded, and only
+  // once per tap.
+  useEffect(() => {
+    if (!load) return;
+    const month = requestedMonth(linkParams, load.context.months, lastLinkAt.current);
+    if (month === null) return;
+    lastLinkAt.current = String(linkParams.at);
+    if (month !== load.month) void selectMonth(month);
+  }, [linkParams, load, selectMonth]);
+
   if (loading) {
     return (
       <SafeAreaView style={[styles.safe, styles.centred]} edges={['top']}>
@@ -406,6 +421,8 @@ export default function HomeScreen() {
             month={load.month}
             currentMonth={load.context.currentMonth}
             onSelect={(month) => void selectMonth(month)}
+            onMonthPress={() => router.navigate({ pathname: '/timeline', params: monthLinkParams(load.month) })}
+            monthPressLabel={t('common.monthNav.openTimeline', { month: formatMonthLong(load.month, locale) })}
           />
         )}
         {paging && <ActivityIndicator color={theme.color.heading} />}

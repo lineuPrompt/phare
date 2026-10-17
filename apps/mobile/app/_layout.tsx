@@ -41,6 +41,8 @@ export default function RootLayout() {
           {/* The chequing balance and a new account, the same way. */}
           <Stack.Screen name="balance" options={{ presentation: 'modal' }} />
           <Stack.Screen name="account-new" options={{ presentation: 'modal' }} />
+          {/* Editing or deleting a Timeline entry. */}
+          <Stack.Screen name="entry-edit" options={{ presentation: 'modal' }} />
         </Stack>
       </I18nProvider>
     </SafeAreaProvider>

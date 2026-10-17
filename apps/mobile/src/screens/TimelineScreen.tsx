@@ -15,10 +15,13 @@ import { onEntrySaved } from '../lib/entryEvents';
 import AddEntryButton from '../components/AddEntryButton';
 import MonthNav from '../components/MonthNav';
 import ActionButton from '../components/ActionButton';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { monthLinkParams, requestedMonth } from '../lib/monthLink';
+import { amountField, editableKind } from '../lib/entryEdit';
 import { createTimelineLoader, type LoadTrigger, type TimelineLoad } from '../lib/timelineLoader';
 import {
   buildTimelineView,
+  formatMonthLong,
   timelineMonths,
   entryAmount,
   formatDayLong,
@@ -72,9 +75,27 @@ const DIP_PALETTE: Record<DipStatus, { surface: string; border: string; text: st
 
 function EntryRow({ entry, locale, muted }: { entry: TimelineEntry; locale: Locale; muted?: boolean }) {
   const { t } = useI18n();
+  const router = useRouter();
   const amount = entryAmount(entry, locale);
+  // Tap to edit or delete (entryEdit.ts). A card payment is computed, so it
+  // is not a button at all.
+  const kind = editableKind(entry);
+  const open = () =>
+    kind &&
+    router.push({
+      pathname: '/entry-edit',
+      params: {
+        id: entry.id,
+        kind,
+        type: entry.type,
+        date: entry.date,
+        description: entry.description ?? '',
+        amount: amountField(entry.amount),
+        recurring: entry.recurringItemId !== null ? '1' : '0',
+      },
+    });
 
-  return (
+  const row = (
     <View style={styles.entryRow}>
       <Text style={[styles.entryLabel, muted && styles.entryMuted]} numberOfLines={1}>
         {/* The web page's row markers, kept: a bridge is computed from a card's
@@ -96,6 +117,18 @@ function EntryRow({ entry, locale, muted }: { entry: TimelineEntry; locale: Loca
         {amount.text}
       </Text>
     </View>
+  );
+
+  if (!kind) return row;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityHint={t('timeline.list.editHint')}
+      onPress={open}
+      style={({ pressed }) => pressed && styles.rowPressed}
+    >
+      {row}
+    </Pressable>
   );
 }
 
@@ -125,6 +158,9 @@ function UnbalancedCard({ day, locale }: { day: UnbalancedDay; locale: Locale })
 export default function TimelineScreen() {
   const { t, locale } = useI18n();
   const router = useRouter();
+  // A month sent from Home's month name (monthLink.ts).
+  const linkParams = useLocalSearchParams<{ month?: string; at?: string }>();
+  const lastLinkAt = useRef<string | null>(null);
   const [load, setLoad] = useState<TimelineLoad | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -234,6 +270,15 @@ export default function TimelineScreen() {
     [view]
   );
 
+  // Apply a month sent from Home once the ledger is loaded, and only once per tap.
+  useEffect(() => {
+    if (load?.kind !== 'ready') return;
+    const month = requestedMonth(linkParams, months, lastLinkAt.current);
+    if (month === null) return;
+    lastLinkAt.current = String(linkParams.at);
+    selectMonth(month);
+  }, [linkParams, load, months, selectMonth]);
+
   const header = (
     <View style={styles.header}>
       <Text style={styles.title}>{t('timeline.title')}</Text>
@@ -287,7 +332,14 @@ export default function TimelineScreen() {
 
         {load?.kind === 'ready' && view && currentMonth && (
           <>
-            <MonthNav months={months} month={view.month} currentMonth={currentMonth} onSelect={selectMonth} />
+            <MonthNav
+              months={months}
+              month={view.month}
+              currentMonth={currentMonth}
+              onSelect={selectMonth}
+              onMonthPress={() => router.navigate({ pathname: '/', params: monthLinkParams(view.month) })}
+              monthPressLabel={t('common.monthNav.openHome', { month: formatMonthLong(view.month, locale) })}
+            />
 
             <DipHeader
               todayBalance={load.data.todayBalance}
@@ -530,6 +582,7 @@ const styles = StyleSheet.create({
   entryMuted: { color: theme.color.muted },
   entryAmount: { fontSize: 14, fontWeight: '600' },
   future: { opacity: 0.75 },
+  rowPressed: { opacity: 0.5 },
   installment: {
     fontSize: 11,
     color: theme.color.muted,

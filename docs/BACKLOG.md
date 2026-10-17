@@ -51,7 +51,14 @@ the v1.1 list separately.**
 - **S5. Cards: setup, detail, goal and category budgets** (Lineu: edit goal AND
   budgets, as on web; same closed-cycle and later-plans 409s; live write
   tests on Zezinho Test only).
-- **S6. Entries: edit and delete, income, transfers.**
+- **S6. Entries: edit and delete, income, transfers.** Edit/delete of
+  Timeline entries BUILT 2026-10-17, uncommitted (Lineu asked for it): tap a
+  row → edit date, description, amount, category; delete with confirmation;
+  transfers through `/api/transfers/[id]`; card payments not editable; no
+  money in↔out switch. Adding income and transfers still to do. Route gaps
+  found: [ticket](tickets/expenses-patch-route-gaps.md).
+- **Home ↔ Timeline month link** (Lineu, 2026-10-17): BUILT, uncommitted —
+  tapping the month name opens that month on the other tab.
 - **S7. Household members: list, invite, remove (owner only).**
 - **S8. Savings goals and sinking funds** (read-only first round, then
   creation).

@@ -14,12 +14,17 @@ import { theme } from '../theme';
  * of the range is a missing arrow, with no explanation: on a free household
  * the forward end is the entitled horizon, and saying what lies past it would
  * be steering toward a purchase (Guideline 3.1.1).
+ *
+ * THE MONTH NAME IS A LINK when `onMonthPress` is given (2026-10-17): Home's
+ * opens that month in the Timeline, the Timeline's opens it on Home.
  */
 export default function MonthNav({
   months,
   month,
   currentMonth,
   onSelect,
+  onMonthPress,
+  monthPressLabel,
 }: {
   /** Ascending YYYY-MM months this screen may show. */
   months: readonly string[];
@@ -28,6 +33,10 @@ export default function MonthNav({
   /** The household's current month (businessMonth), for "This month". */
   currentMonth: string;
   onSelect: (month: string) => void;
+  /** Tapping the month name. Omitted: the name is plain text. */
+  onMonthPress?: () => void;
+  /** What the tap does, for VoiceOver ("Open October 2026 in the Timeline"). */
+  monthPressLabel?: string;
 }) {
   const { t, locale } = useI18n();
   const { previous, next } = monthNeighbours(months, month);
@@ -36,7 +45,19 @@ export default function MonthNav({
     <View style={styles.bar}>
       <Arrow label={t('common.monthNav.previous')} glyph="‹" target={previous} onSelect={onSelect} />
       <View style={styles.centre}>
-        <Text style={styles.month}>{formatMonthLong(month, locale)}</Text>
+        {onMonthPress ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={monthPressLabel}
+            onPress={onMonthPress}
+            hitSlop={8}
+            style={({ pressed }) => pressed && styles.pressed}
+          >
+            <Text style={[styles.month, styles.monthLink]}>{formatMonthLong(month, locale)} ›</Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.month}>{formatMonthLong(month, locale)}</Text>
+        )}
         {month !== currentMonth && (
           <Pressable accessibilityRole="button" onPress={() => onSelect(currentMonth)} hitSlop={8}>
             <Text style={styles.thisMonth}>{t('common.monthNav.thisMonth')}</Text>
@@ -89,6 +110,7 @@ const styles = StyleSheet.create({
   },
   centre: { flex: 1, alignItems: 'center', gap: 2 },
   month: { fontSize: 16, fontWeight: '700', color: theme.color.heading },
+  monthLink: { textDecorationLine: 'underline' },
   thisMonth: { fontSize: 13, fontWeight: '600', color: theme.color.accent },
   arrow: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.6 },

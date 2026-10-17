@@ -8,7 +8,9 @@
     "monthNav": {
       "previous": "Mois précédent",
       "next": "Mois suivant",
-      "thisMonth": "Ce mois-ci"
+      "thisMonth": "Ce mois-ci",
+      "openTimeline": "Ouvrir {month} dans la chronologie",
+      "openHome": "Ouvrir {month} dans l'accueil"
     }
   },
   "timezone": {
@@ -69,7 +71,8 @@
       "untilNextPay": "Le mois prochain, jusqu'à votre paie du {payday}",
       "today": "Aujourd'hui",
       "endOfDay": "Fin de journée",
-      "untitled": "Entrée"
+      "untitled": "Entrée",
+      "editHint": "Touchez une entrée pour la modifier ou la supprimer."
     },
     "setBalance": "Indiquer votre solde",
     "addChequing": "Ajouter un compte chèques"
@@ -425,5 +428,24 @@
       "dateInvalid": "Entrez la date au format AAAA-MM-JJ.",
       "dateInFuture": "La date ne peut pas être dans le futur."
     }
+  },
+  "edit": {
+    "title": "Modifier l'entrée",
+    "titleTransfer": "Modifier le transfert",
+    "categoryUnchanged": "Garder l'actuelle",
+    "transferHint": "Enregistrer modifie les deux côtés de ce transfert.",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "delete": "Supprimer",
+    "deleting": "Suppression…",
+    "deleteEntryConfirm": "Supprimer cette entrée? Cette action est irréversible.",
+    "deleteTransferConfirm": "Supprimer ce transfert? Les deux côtés sont retirés.",
+    "confirmDelete": "Oui, supprimer",
+    "cancel": "Annuler",
+    "errors": {
+      "gone": "Cette entrée n'existe plus. Elle a peut-être été modifiée ailleurs."
+    },
+    "detachHint": "Cette entrée fait partie d'une règle récurrente. Enregistrer ne modifie que cette occurrence — la règle elle-même reste inchangée.",
+    "deleteOccurrenceConfirm": "Supprimer seulement cette occurrence? La règle récurrente reste inchangée — les prochaines occurrences garderont leur montant habituel."
   }
 }
