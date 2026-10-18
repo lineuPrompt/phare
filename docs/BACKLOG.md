@@ -97,8 +97,12 @@ the v1.1 list separately.**
     `APPLE_*` env vars in Vercel (list in `src/lib/apple/appleConfig.ts`) and
     the notification URL in App Store Connect. Not exercised against Apple
     yet: needs the In-App Purchase key and a sandbox purchase (piece 3).
-  - Piece 3: the app's subscribe screen (expo-iap, Restore Purchases,
-    manage subscription). Native module, so a new dev build.
+  - App Store Connect done by Lineu 2026-10-17: group Phare Pro,
+    `phare.app.pro.monthly` (CAD 14.99) and `phare.app.pro.yearly`
+    (CAD 149.00), Family Sharing OFF (products replaced), Paid Apps
+    Agreement done, Small Business Program pending, taxes in progress.
+  - Piece 3: the app's subscribe screen. **Designed, NOT built:
+    [iap-design.md](iap-design.md). STOP: 4 decisions in its §6.**
   - Piece 4: web display of an Apple subscription (Subscription section,
     `/api/me`).
   - Piece 5: rewrite `sourceCompliance` and `bundle:check` for "StoreKit
