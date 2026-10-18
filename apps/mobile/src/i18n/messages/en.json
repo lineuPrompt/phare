@@ -331,7 +331,9 @@
       "verdictChanged": "Your household changed since this screen opened. Close it and open it again.",
       "paymentServiceFailed": "A payment service didn't respond, so nothing has been deleted. Please try again, or contact support@phare.money.",
       "failed": "Couldn't complete the deletion. Please try again."
-    }
+    },
+    "appleSubscription": "Your Phare Pro subscription is billed by Apple. Deleting your account doesn't cancel it. Cancel it first, in your iPhone's Settings or with the button below.",
+    "manageSubscription": "Manage subscription"
   },
   "privacy": {
     "back": "Back",
@@ -447,5 +449,42 @@
     },
     "detachHint": "This is part of a recurring rule. Saving edits only this occurrence — the rule itself is unchanged.",
     "deleteOccurrenceConfirm": "Delete just this occurrence? The recurring rule is unchanged — future occurrences keep their usual amount."
+  },
+  "pro": {
+    "title": "Phare Pro",
+    "intro": "Everything Phare already does, with more room to plan ahead.",
+    "features": {
+      "horizon": "See your plan {months} months ahead, instead of {free}.",
+      "review": "Read the full monthly review, not just its opening.",
+      "regenerate": "Regenerate your plan up to {count} times a month.",
+      "categories": "Create your own spending categories."
+    },
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "perMonth": "{price} per month",
+    "perYear": "{price} per year",
+    "subscribe": "Subscribe",
+    "renewal": "Payment is charged to your Apple ID. The subscription renews automatically unless you turn it off at least 24 hours before the end of the current period. You can manage or cancel it at any time in your iPhone's Settings.",
+    "termsOfUse": "Terms of Use",
+    "privacy": "Privacy Policy",
+    "restore": "Restore Purchases",
+    "manage": "Manage subscription",
+    "alreadyPro": "Your household has Phare Pro.",
+    "ownerOnly": "Only the owner of the household can subscribe.",
+    "working": "One moment…",
+    "welcome": "Welcome to Phare Pro.",
+    "restored": "Your purchase is restored.",
+    "nothingToRestore": "There is no Phare Pro purchase on this Apple ID to restore.",
+    "section": "Phare Pro",
+    "statusFree": "Your household uses Phare without Pro.",
+    "see": "See Phare Pro",
+    "errors": {
+      "otherHousehold": "This purchase belongs to another Phare household, so it can't be used here.",
+      "notAvailable": "Purchases aren't available right now. Please try again later.",
+      "notFound": "Apple has no record of this purchase yet. Please try again in a moment.",
+      "notVerified": "This purchase couldn't be confirmed with Apple.",
+      "products": "Phare Pro isn't available from the App Store right now. Please try again later.",
+      "store": "The App Store couldn't complete the purchase. Nothing was charged."
+    }
   }
 }

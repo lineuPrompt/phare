@@ -331,7 +331,9 @@
       "verdictChanged": "Votre ménage a changé depuis l'ouverture de cet écran. Fermez-le, puis rouvrez-le.",
       "paymentServiceFailed": "Un service de paiement n'a pas répondu, donc rien n'a été supprimé. Veuillez réessayer ou écrire à support@phare.money.",
       "failed": "Impossible de terminer la suppression. Veuillez réessayer."
-    }
+    },
+    "appleSubscription": "Votre abonnement Phare Pro est facturé par Apple. Supprimer votre compte ne l'annule pas. Annulez-le d'abord, dans les Réglages de votre iPhone ou avec le bouton ci-dessous.",
+    "manageSubscription": "Gérer l'abonnement"
   },
   "privacy": {
     "back": "Retour",
@@ -447,5 +449,42 @@
     },
     "detachHint": "Cette entrée fait partie d'une règle récurrente. Enregistrer ne modifie que cette occurrence — la règle elle-même reste inchangée.",
     "deleteOccurrenceConfirm": "Supprimer seulement cette occurrence? La règle récurrente reste inchangée — les prochaines occurrences garderont leur montant habituel."
+  },
+  "pro": {
+    "title": "Phare Pro",
+    "intro": "Tout ce que Phare fait déjà, avec plus de recul pour planifier.",
+    "features": {
+      "horizon": "Voyez votre plan {months} mois à l'avance, au lieu de {free}.",
+      "review": "Lisez le bilan mensuel au complet, pas seulement son début.",
+      "regenerate": "Régénérez votre plan jusqu'à {count} fois par mois.",
+      "categories": "Créez vos propres catégories de dépenses."
+    },
+    "monthly": "Mensuel",
+    "yearly": "Annuel",
+    "perMonth": "{price} par mois",
+    "perYear": "{price} par année",
+    "subscribe": "S'abonner",
+    "renewal": "Le paiement est porté à votre identifiant Apple. L'abonnement se renouvelle automatiquement, sauf si vous le désactivez au moins 24 heures avant la fin de la période en cours. Vous pouvez le gérer ou l'annuler en tout temps dans les Réglages de votre iPhone.",
+    "termsOfUse": "Conditions d'utilisation",
+    "privacy": "Politique de confidentialité",
+    "restore": "Restaurer les achats",
+    "manage": "Gérer l'abonnement",
+    "alreadyPro": "Votre ménage a Phare Pro.",
+    "ownerOnly": "Seul le propriétaire du ménage peut s'abonner.",
+    "working": "Un instant…",
+    "welcome": "Bienvenue dans Phare Pro.",
+    "restored": "Votre achat est restauré.",
+    "nothingToRestore": "Il n'y a aucun achat Phare Pro à restaurer pour cet identifiant Apple.",
+    "section": "Phare Pro",
+    "statusFree": "Votre ménage utilise Phare sans Pro.",
+    "see": "Découvrir Phare Pro",
+    "errors": {
+      "otherHousehold": "Cet achat appartient à un autre ménage Phare : il ne peut pas être utilisé ici.",
+      "notAvailable": "Les achats ne sont pas offerts pour le moment. Veuillez réessayer plus tard.",
+      "notFound": "Apple n'a pas encore de trace de cet achat. Veuillez réessayer dans un instant.",
+      "notVerified": "Cet achat n'a pas pu être confirmé auprès d'Apple.",
+      "products": "Phare Pro n'est pas offert dans l'App Store pour le moment. Veuillez réessayer plus tard.",
+      "store": "L'App Store n'a pas pu terminer l'achat. Rien n'a été facturé."
+    }
   }
 }

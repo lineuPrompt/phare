@@ -101,12 +101,19 @@ the v1.1 list separately.**
     `phare.app.pro.monthly` (CAD 14.99) and `phare.app.pro.yearly`
     (CAD 149.00), Family Sharing OFF (products replaced), Paid Apps
     Agreement done, Small Business Program pending, taxes in progress.
-  - Piece 3: the app's subscribe screen. **Designed, NOT built:
-    [iap-design.md](iap-design.md). STOP: 4 decisions in its §6.**
+  - **Piece 3, the app: BUILT 2026-10-17, uncommitted** (decisions: owner
+    only, expo-iap 5.8.2, deletion warns but stays possible). Phare Pro
+    screen (`/pro`), Account section, "See Phare Pro" on the locked letter,
+    one StoreKit listener (`IapListener`), verify-then-finish, Restore,
+    Manage subscription, warning before deletion while an Apple subscription
+    renews. Server accepts only `phare.app.pro.monthly/.yearly`. Native
+    module: **new build needed**. Not yet tested against Apple's sandbox.
+  - **Piece 5, rule and tests: DONE with piece 3.** CLAUDE.md §1/§4,
+    `complianceScan`, `sourceCompliance`, `i18nParity`: "Phare Pro" and
+    subscribe are allowed; typed prices, Stripe, upgrade/pricing wording and
+    web pricing links are refused.
   - Piece 4: web display of an Apple subscription (Subscription section,
     `/api/me`).
-  - Piece 5: rewrite `sourceCompliance` and `bundle:check` for "StoreKit
-    prices only"; update CLAUDE.md §1 and §4.
   - Piece 6: App Review notes for in-app purchase; Terms and Privacy (Apple
     billing) to counsel.
 

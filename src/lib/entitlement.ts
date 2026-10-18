@@ -224,9 +224,10 @@ export function isPro(household: EntitlementInput | null | undefined, now?: Date
 //   - Budget alerts, AI coach, screenshot import. Not built.
 // ---------------------------------------------------------------------------
 
-/** Months of projection visible on the timeline. */
-export const HORIZON_MONTHS_FREE = 3;
-export const HORIZON_MONTHS_PRO = 12;
+// HORIZON_MONTHS_FREE / HORIZON_MONTHS_PRO moved to @phare/core (2026-10-17),
+// shared with the app's Phare Pro screen. Re-exported so no import site changed.
+import { HORIZON_MONTHS_FREE, HORIZON_MONTHS_PRO } from '@phare/core';
+export { HORIZON_MONTHS_FREE, HORIZON_MONTHS_PRO };
 
 /** Review regenerations per calendar month. Enforced in piece 7, not yet. */
 export const REGENERATIONS_PER_MONTH_FREE = 0;

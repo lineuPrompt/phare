@@ -16,6 +16,7 @@ export * from './money';
 export * from './timeline';
 export * from './months';
 export * from './accounts';
+export * from './billing';
 export * from './timezoneSupport';
 export * from './onboarding';
 export * from './accountDeletion';

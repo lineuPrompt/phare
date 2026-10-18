@@ -64,7 +64,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#02245E"
         }
-      ]
+      ],
+      "expo-iap"
     ],
     "experiments": {
       "typedRoutes": true

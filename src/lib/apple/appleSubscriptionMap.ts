@@ -11,6 +11,14 @@
 // read. Nothing here decides Pro.
 // ---------------------------------------------------------------------------
 
+import { PHARE_PRO_PRODUCT_IDS } from '@phare/core';
+
+// The only products this app sells — one list in @phare/core, shared with the
+// app that requests them. A transaction for anything else, including the
+// retired money.phare.app.pro.* products, is refused by name: Apple signing it
+// proves only that it is real, not that it is ours to grant Pro for.
+export { PHARE_PRO_PRODUCT_IDS };
+
 /** Apple's numeric statuses (App Store Server API `status`). */
 const STATUS_WORDS: Record<number, AppleStatusWord> = {
   1: 'active',
@@ -83,6 +91,9 @@ export function appleSubscriptionToColumns(
     throw new AppleMappingError('renewal_mismatch', 'renewal info belongs to another subscription');
   }
   if (!transaction.productId) throw new AppleMappingError('no_product', 'transaction has no productId');
+  if (!(PHARE_PRO_PRODUCT_IDS as readonly string[]).includes(transaction.productId)) {
+    throw new AppleMappingError('unknown_product', `product ${transaction.productId} is not a Phare Pro product`);
+  }
 
   const word = status === undefined ? undefined : STATUS_WORDS[status];
   if (!word) throw new AppleMappingError('unknown_status', `unknown Apple status ${String(status)}`);

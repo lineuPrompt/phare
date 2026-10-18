@@ -1,8 +1,9 @@
 # In-app purchase design
 
-**Status:** design only, 2026-10-17. Nothing in pieces 3–6 is built.
-Pieces 1 (columns + entitlement) and 2 (server routes) are built and live.
-**STOP: awaiting Lineu's decisions in §6.**
+**Status (2026-10-17):** pieces 1–2 built and live; **piece 3 (the app) and
+piece 5 (rule and tests) built, uncommitted**, with Lineu's decisions: owner
+only, `expo-iap` 5.8.2, warn before deletion. Pieces 4 (web display) and 6
+(App Store metadata, review notes, counsel) remain.
 
 ## 1. What is set up in App Store Connect (Lineu, 2026-10-17)
 

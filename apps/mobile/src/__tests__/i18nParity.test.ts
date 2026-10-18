@@ -173,9 +173,12 @@ describe('every key used in source resolves in both locales', () => {
 
 describe('App Store compliance — no pricing or steering copy', () => {
   // Guideline 3.1.1: an iOS app must not point users at an external purchase
-  // mechanism. Phare's subscription is sold via Stripe on the web, so no
-  // price, plan name, or upgrade prompt may appear in this bundle — and the
-  // constraint is "from the first commit", not "before launch".
+  // mechanism. SINCE IN-APP PURCHASE (2026-10-17) the app sells Phare Pro
+  // through Apple, so the catalogue may name "Phare Pro", say subscribe, and
+  // label a period ("{price} per month"). It may still never TYPE a price —
+  // every price is StoreKit's displayPrice, filled into a placeholder — nor
+  // name Stripe, nor use upgrade/pricing wording. Same rule as complianceScan.ts.
+  // Removed 2026-10-17: subscri, per month, par mois, phare pro. Added: stripe.
   //
   // This runs over the CATALOGUES rather than the rendered screens because
   // every string ships in the binary whether or not a screen renders it. The
@@ -189,13 +192,10 @@ describe('App Store compliance — no pricing or steering copy', () => {
     CURRENCY_FIGURE,     // adds the fr-CA form the line above misses: "15 $"
     /\bupgrade\b/i,
     /\bpricing\b/i,
-    /\bsubscri/i,        // subscribe / subscription
-    /\bper month\b/i,
-    /\bpar mois\b/i,
     /\bforfait\s+\w*\s*pro\b/i,
     /\bpasser à\b/i,     // "passer à Pro" — the fr upgrade CTA
     /\baméliorer\b/i,
-    /\bphare pro\b/i,
+    /\bstripe\b/i,      // the web's payment processor
     /\btarif/i,
     /\bprix\b/i,
   ];
@@ -210,6 +210,14 @@ describe('App Store compliance — no pricing or steering copy', () => {
     const refused = (text: string) => FORBIDDEN.some((pattern) => pattern.test(text));
     expect(refused('Only $15 a month')).toBe(true);
     expect(refused(`Seulement 150${nbsp}$`)).toBe(true);
+  });
+
+  it('refuses naming the web payment processor, and allows the in-app purchase words', () => {
+    const refused = (text: string) => FORBIDDEN.some((pattern) => pattern.test(text));
+    expect(refused('Pay with Stripe')).toBe(true);
+    expect(refused('Subscribe to Phare Pro')).toBe(false);
+    expect(refused('{price} per month')).toBe(false);
+    expect(refused("S'abonner à Phare Pro")).toBe(false);
   });
 
   it.each(['en', 'fr'])('%s contains no pricing or upgrade copy', (locale) => {

@@ -45,19 +45,28 @@ export const CURRENCY_FIGURE = new RegExp(
  * Every pattern that must not appear in shipped text. `wordGuard` patterns
  * refuse a preceding `.` or word character, so an identifier such as
  * `sub.subscription.unsubscribe()` does not read as copy.
+ *
+ * THE RULE SINCE IN-APP PURCHASE (Lineu, 2026-10-16/17): the app sells Phare
+ * Pro through Apple, so it may name the plan ("Phare Pro") and say subscribe /
+ * subscription / abonnement. What it may still never do:
+ *   - type a price: every price on screen is StoreKit's own `displayPrice`,
+ *     so a currency figure in source or bundle is a price someone typed;
+ *   - point anywhere else to pay: no Stripe, no pricing or upgrade wording, no
+ *     link to a web pricing, billing or checkout page (sourceCompliance).
+ * Removed 2026-10-17: 'subscribe/subscription', 'abonnement' and 'the Pro plan
+ * name'. Added: 'Stripe'.
  */
 export const FORBIDDEN_TEXT: readonly (readonly [label: string, pattern: RegExp])[] = [
   ['a currency figure', CURRENCY_FIGURE],
   ['the word upgrade', /(?<![.\w])upgrade(s|d)?\b/i],
   ['the word pricing', /(?<![.\w])pricing\b/i],
-  // Every form, plural included: "once paid subscriptions are available"
-  // slipped past the singular-only pattern until 2026-10-02.
-  ['subscribe/subscription', /(?<![.\w])subscri(be|bes|bed|bing|ption|ptions)\b/i],
   ['a paid plan or feature', /(?<![.\w])paid\s+(plans?|tiers?|features?|versions?|subscriptions?|access)\b/i],
   ['a per-month price form', /\d\s*\/\s*(month|mo|mois)\b/i],
-  ['the Pro plan name', /(?<![.\w])phare\s+pro\b/i],
+  // The web's payment processor: naming it in the app points to paying
+  // outside Apple (Guideline 3.1.1). The Privacy Policy's processor sentence
+  // is excused by full sentence below.
+  ['Stripe', /(?<![.\w])stripe\b/i],
   // French. The English patterns are blind to these, and the app ships both.
-  ['abonnement (French: subscription)', /(?<![.\p{L}])abonne(ment|ments|r|z)?(?![\p{L}])/iu],
   ['payant (French: paid plan or feature)', /(?<![.\p{L}])(forfaits?|versions?|fonctions?|fonctionnalités?|options?|accès|abonnements?)\s+payant(e|s|es)?(?![\p{L}])/iu],
   ['tarif (French: pricing)', /(?<![.\p{L}])tarif(s|ication|ications)?(?![\p{L}])/iu],
   ['mise à niveau (French: upgrade)', /(?<![.\p{L}])(mise|mettre|mettez|passer|passez)\s+à\s+(niveau|la\s+version\s+supérieure)(?![\p{L}])/iu],
@@ -85,17 +94,8 @@ export const POLICY_SENTENCE_ALLOWLIST = [
   '**Stripe** — traitement des paiements, une fois les abonnements payants offerts (reçoit vos renseignements de facturation; Phare ne conserve pas votre numéro de carte)',
 ] as const;
 
-/**
- * The seed expense category "Utilities & Subscriptions" (@phare/core
- * SEED_EXPENSE_CATEGORIES) — a household's own bills (streaming, software),
- * not Phare's. Caught once the subscription pattern learned plurals
- * (2026-10-02). Excused as this exact string only; pinned to the seed list by
- * sourceCompliance.test.ts.
- */
-export const CATEGORY_NAME_ALLOWLIST = ['Utilities & Subscriptions'] as const;
-
 /** Everything of our own that is excused, for the source and bundle scans. */
-export const OWN_COPY_ALLOWLIST: readonly string[] = [...POLICY_SENTENCE_ALLOWLIST, ...CATEGORY_NAME_ALLOWLIST];
+export const OWN_COPY_ALLOWLIST: readonly string[] = [...POLICY_SENTENCE_ALLOWLIST];
 
 // ── Compiled-bundle string extraction ───────────────────────────────────────
 

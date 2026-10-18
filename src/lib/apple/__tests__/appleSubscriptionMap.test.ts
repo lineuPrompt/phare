@@ -9,7 +9,7 @@ const SIGNED_RENEWAL = Date.UTC(2026, 9, 16, 12, 5, 0);
 const tx = (over: Partial<VerifiedTransaction> = {}): VerifiedTransaction => ({
   originalTransactionId: '2000000123',
   bundleId: BUNDLE,
-  productId: 'money.phare.pro.monthly',
+  productId: 'phare.app.pro.monthly',
   expiresDate: EXPIRES,
   appAccountToken: 'cceaee4b-8e8d-46e1-b8c8-2d743e2f6563',
   environment: 'Sandbox',
@@ -31,7 +31,7 @@ describe('appleSubscriptionToColumns', () => {
     expect(appleSubscriptionToColumns(1, tx(), { originalTransactionId: '2000000123', autoRenewStatus: 1, signedDate: SIGNED_RENEWAL }, BUNDLE))
       .toEqual({
         apple_original_transaction_id: '2000000123',
-        apple_product_id: 'money.phare.pro.monthly',
+        apple_product_id: 'phare.app.pro.monthly',
         apple_status: 'active',
         apple_expires_at: '2026-11-16T12:00:00.000Z',
         apple_grace_period_expires_at: null,
@@ -64,6 +64,15 @@ describe('appleSubscriptionToColumns', () => {
   it('an unknown renewal setting is null, never "on"', () => {
     expect(appleSubscriptionToColumns(1, tx(), null, BUNDLE).apple_auto_renew).toBeNull();
     expect(appleSubscriptionToColumns(1, tx(), { signedDate: SIGNED_RENEWAL }, BUNDLE).apple_auto_renew).toBeNull();
+  });
+
+  it('accepts both Phare Pro products', () => {
+    expect(appleSubscriptionToColumns(1, tx({ productId: 'phare.app.pro.yearly' }), null, BUNDLE).apple_product_id).toBe('phare.app.pro.yearly');
+  });
+
+  it('refuses any other product, including the retired ones, by name', () => {
+    expect(code(() => appleSubscriptionToColumns(1, tx({ productId: 'money.phare.app.pro.monthly' }), null, BUNDLE))).toBe('unknown_product');
+    expect(code(() => appleSubscriptionToColumns(1, tx({ productId: 'phare.app.pro.lifetime' }), null, BUNDLE))).toBe('unknown_product');
   });
 
   it('refuses a transaction signed for another app', () => {

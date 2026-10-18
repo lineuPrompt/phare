@@ -11,7 +11,8 @@ Standing instructions for every session in this repo. Rules, not suggestions.
 - **The mobile app must work without the web app.** A household that installs
   from the App Store and never opens phare.money must be able to run its plan
   month after month. The web is a plus, not a requirement. Only two things
-  stay web-only: buying or managing a subscription (App Store rules) and
+  stay web-only: buying or managing a **Stripe** subscription (App Store
+  rules; in the app, Phare Pro is sold through Apple's in-app purchase) and
   spreadsheet import. A mobile string that sends people to phare.money for
   anything else is a gap to close, not a design. The gaps and their order:
   `docs/mobile-standalone-audit.md`.
@@ -92,9 +93,14 @@ Run from the repo root unless noted.
     byte level: fr-CA currency uses U+00A0 as both the thousands separator and
     before `$` (pinned in `packages/core/src/__tests__/money.test.ts`).
   - Duplicate top-level JSON keys silently shadow earlier ones.
-- **Mobile shows no prices, upgrade CTAs, pricing links, or steering copy**
-  (App Store 3.1.1). Enforced over source by `sourceCompliance.test.ts` and over
-  the compiled bundle by `bundle:check`. Core's source counts as mobile source.
+- **Mobile sells only through Apple, and never types a price** (App Store
+  3.1.1, changed 2026-10-17 for in-app purchase). The app may name "Phare Pro"
+  and say subscribe, but every price shown is StoreKit's own `displayPrice`.
+  No typed price, no Stripe, no upgrade or pricing wording, and no link to a
+  web pricing, billing or checkout page. Enforced over source by
+  `sourceCompliance.test.ts` and `i18nParity.test.ts`, and over the compiled
+  bundle by `bundle:check`. Core's source counts as mobile source. Design:
+  `docs/iap-design.md`.
 - **Expenses never get member attribution.** Manual-entry routes default expense
   `member_id` to null, never to the creator.
 

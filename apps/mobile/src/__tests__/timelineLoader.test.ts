@@ -264,9 +264,12 @@ describe('the auth gate on a deep link', () => {
     const source = fs.readFileSync(path.join(SRC_DIR, 'components', 'TabsLayout.tsx'), 'utf8');
     expect(source).toMatch(/import AuthGate from '\.\/AuthGate'/);
     expect(source).toMatch(/import HouseholdGate from '\.\/HouseholdGate'/);
+    // The StoreKit listener (2026-10-17) sits between the gates and the tabs:
+    // still inside both, so it never runs for a signed-out visitor.
     expect(source).toMatch(
-      /<AuthGate>\s*<HouseholdGate>\s*<Tabs[\s\S]*<\/Tabs>\s*<\/HouseholdGate>\s*<\/AuthGate>/
+      /<AuthGate>\s*<HouseholdGate>[\s\S]*?<Tabs[\s\S]*<\/Tabs>\s*<\/HouseholdGate>\s*<\/AuthGate>/
     );
+    expect(source).toMatch(/<HouseholdGate>[\s\S]*<IapListener \/>[\s\S]*<\/HouseholdGate>/);
   });
 
   it('every route outside the tab group is gated itself or deliberately public', () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { FORBIDDEN_TEXT, findViolations, OWN_COPY_ALLOWLIST, POLICY_SENTENCE_ALLOWLIST, CATEGORY_NAME_ALLOWLIST } from './complianceScan';
+import { FORBIDDEN_TEXT, findViolations, OWN_COPY_ALLOWLIST, POLICY_SENTENCE_ALLOWLIST } from './complianceScan';
 import { PRIVACY_POLICY, SEED_EXPENSE_CATEGORIES } from '@phare/core';
 
 // ---------------------------------------------------------------------------
@@ -123,19 +123,39 @@ describe('our own excused copy is pinned (2026-10-02)', () => {
     }
   });
 
-  it('the excused category name is exactly a seed category, and still needs its excuse', () => {
-    for (const name of CATEGORY_NAME_ALLOWLIST) {
-      expect(SEED_EXPENSE_CATEGORIES as readonly string[]).toContain(name);
-      expect(findViolations([name]).length, name).toBeGreaterThan(0);
-    }
-  });
-
   it('the excuse covers those exact strings only: the same words anywhere else still fail', () => {
     expect(findViolations(['Unlock paid subscriptions today'], OWN_COPY_ALLOWLIST).map((v) => v.label))
-      .toContain('subscribe/subscription');
+      .toContain('a paid plan or feature');
     expect(findViolations(['Passez à un abonnement payant'], OWN_COPY_ALLOWLIST).map((v) => v.label))
-      .toEqual(expect.arrayContaining(['abonnement (French: subscription)', 'payant (French: paid plan or feature)']));
-    expect(findViolations(['Your Subscriptions'], OWN_COPY_ALLOWLIST).length).toBeGreaterThan(0);
+      .toContain('payant (French: paid plan or feature)');
+    expect(findViolations(['Payments are processed by Stripe'], OWN_COPY_ALLOWLIST).map((v) => v.label))
+      .toContain('Stripe');
+  });
+});
+
+describe('the in-app purchase rule (2026-10-17)', () => {
+  it('the app may name the plan and say subscribe, in both languages', () => {
+    expect(findViolations([
+      'Subscribe to Phare Pro',
+      'Your subscription renews automatically',
+      "S'abonner à Phare Pro",
+      'Votre abonnement se renouvelle automatiquement',
+      // The seed category no longer needs an excuse.
+      'Utilities & Subscriptions',
+    ])).toEqual([]);
+    expect(SEED_EXPENSE_CATEGORIES as readonly string[]).toContain('Utilities & Subscriptions');
+  });
+
+  it('a typed price still fails, in either language, so every price must come from StoreKit', () => {
+    expect(findViolations(['Phare Pro: $14.99 a month']).map((v) => v.label)).toContain('a currency figure');
+    expect(findViolations(['Phare Pro : 14,99 $ par mois']).map((v) => v.label)).toContain('a currency figure');
+    expect(findViolations(['Only 14.99/month']).map((v) => v.label)).toContain('a per-month price form');
+  });
+
+  it('pointing elsewhere to pay still fails', () => {
+    expect(findViolations(['Upgrade on our website']).map((v) => v.label)).toContain('the word upgrade');
+    expect(findViolations(['See our pricing']).map((v) => v.label)).toContain('the word pricing');
+    expect(findViolations(['Pay with Stripe instead']).map((v) => v.label)).toContain('Stripe');
   });
 });
 

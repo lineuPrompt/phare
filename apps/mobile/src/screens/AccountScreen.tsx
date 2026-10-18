@@ -8,6 +8,8 @@ import { useI18n } from '../i18n';
 import { theme } from '../theme';
 import DeleteAccountSection from '../components/DeleteAccountSection';
 import AccountsSection from '../components/AccountsSection';
+import ProSection from '../components/ProSection';
+import AppleBillingWarning from '../components/AppleBillingWarning';
 
 /**
  * The Account tab: who is signed in, the household's accounts, the way out,
@@ -62,6 +64,9 @@ export default function AccountScreen() {
         {/* Accounts and the chequing balance, without the web (standalone S3). */}
         <AccountsSection />
 
+        {/* Phare Pro, sold through Apple (in-app purchase piece 3). */}
+        <ProSection />
+
         {signOutFailed && (
           <View style={styles.errorBox}>
             <Text style={styles.errorText}>{t('account.signOutFailed')}</Text>
@@ -87,6 +92,9 @@ export default function AccountScreen() {
         >
           <Text style={styles.value}>{t('account.privacyLink')}</Text>
         </Pressable>
+
+        {/* A renewing App Store subscription outlives the account: say so first. */}
+        <AppleBillingWarning />
 
         {/* Deletion must be doable in the app (App Store 5.1.1(v)). */}
         <DeleteAccountSection

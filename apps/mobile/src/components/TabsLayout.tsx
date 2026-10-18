@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router/js-tabs';
 import AuthGate from './AuthGate';
 import HouseholdGate from './HouseholdGate';
+import IapListener from './IapListener';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
@@ -30,6 +31,8 @@ export default function TabsLayout() {
   return (
     <AuthGate>
       <HouseholdGate>
+        {/* StoreKit's purchase listener, for the whole signed-in session. */}
+        <IapListener />
         <Tabs
           screenOptions={{
             headerShown: false,

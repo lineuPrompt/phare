@@ -27,7 +27,10 @@
 // counting is then an equality match that cannot drift.
 // ---------------------------------------------------------------------------
 
-export const REGENERATIONS_PER_MONTH = 4;
+// Moved to @phare/core (2026-10-17), shared with the app's Phare Pro screen.
+// Re-exported so no import site changed; imported for quotaFrom's default.
+import { REGENERATIONS_PER_MONTH } from '@phare/core';
+export { REGENERATIONS_PER_MONTH };
 
 /** The event that both records and counts a regeneration. */
 export const REGENERATION_EVENT = 'review_regenerated' as const;

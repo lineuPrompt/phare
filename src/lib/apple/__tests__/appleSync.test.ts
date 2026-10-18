@@ -32,7 +32,7 @@ function unsign<T>(env: AppleEnv, signed: string): T {
 const transaction = (env: AppleEnv, over: Partial<VerifiedTransaction> = {}): VerifiedTransaction => ({
   originalTransactionId: ORIGINAL,
   bundleId: BUNDLE,
-  productId: 'money.phare.pro.monthly',
+  productId: 'phare.app.pro.monthly',
   expiresDate: Date.UTC(2026, 10, 16),
   appAccountToken: HH,
   environment: env,
