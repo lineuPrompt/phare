@@ -2,7 +2,16 @@
 -- Phare — events: members may READ their household's events; only the server
 -- writes them. 2026-10-19.
 --
--- STATUS: WRITTEN, NOT APPLIED.
+-- STATUS: APPLIED — 2026-10-19 (Lineu, SQL Editor, after the eventWriter code
+-- deployed).
+--
+--   VERIFIED LIVE 2026-10-19 through the read-only MCP server: VERIFY below
+--   7/7 PASS (before applying: 4 FAIL / 3 PASS).
+--   BEHAVIOUR VERIFIED LIVE 2026-10-19 as Zezinho Test (publishable key + own
+--   JWT): PostgREST INSERT own-household event 403/42501 (no row written),
+--   UPDATE 403/42501, DELETE 403/42501, SELECT 200; POST /api/events
+--   (allowlisted) 204 and its row written; GET /api/timeline?pageView=1 200
+--   and timeline_opened written. Household rows 115 -> 117; quota rows 3 -> 3.
 --
 -- ORDER MATTERS — APPLY ONLY AFTER THE CODE IS DEPLOYED. The code change in
 -- the same commit moves every event write to the service role
