@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { conversationsClientTables } from '../../../../test/conversationsClientDouble';
 import { businessMonth } from '@phare/core';
 
 // getHouseholdTimezone's fallback (and every test household's scripted
@@ -602,6 +603,8 @@ describe('POST /api/save-plan — calculated-source end-to-end persistence (manu
 
     // The plan artifact (top recommendation + review) is recorded.
     const conversationInserts = calls.filter((c) => c.table === 'conversations' && c.method === 'insert');
+    // Written through the service role (launch plan 1.3), not the session.
+    expect(conversationsClientTables).toEqual(['conversations']);
     expect(conversationInserts).toHaveLength(1);
 
     // No anchor step needed — everything was monthly and anchored immediately.

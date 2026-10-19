@@ -1,5 +1,6 @@
 import { beforeEach, vi } from 'vitest';
 import { fakeEventWriter, resetEventWriterDouble } from './src/test/eventWriterDouble';
+import { forwardingConversationsClient, resetConversationsClientDouble } from './src/test/conversationsClientDouble';
 
 // ---------------------------------------------------------------------------
 // THE REAL ANTHROPIC CLIENT IS OPT-IN, NOT OPT-OUT.
@@ -68,6 +69,15 @@ vi.mock('@/lib/anthropic', async (importOriginal) => {
 
 vi.mock('@/lib/eventWriter', () => ({ eventWriter: () => fakeEventWriter() }));
 
+// ---------------------------------------------------------------------------
+// CONVERSATIONS ARE READ AND WRITTEN BY THE SERVICE ROLE (2026-10-19,
+// src/lib/conversationsClient.ts). The double forwards to the test's own
+// supabase-server mock and records the tables asked for through it.
+// ---------------------------------------------------------------------------
+
+vi.mock('@/lib/conversationsClient', () => ({ conversationsClient: () => forwardingConversationsClient() }));
+
 beforeEach(() => {
   resetEventWriterDouble();
+  resetConversationsClientDouble();
 });

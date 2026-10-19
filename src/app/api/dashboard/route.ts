@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { conversationsClient } from '@/lib/conversationsClient';
 import { computeMonthTotals, computeGoalBalance, GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { evaluateGoals, isDebtGoalName, computeDebtPayoff, addMonthsToMonth } from '@/lib/goalHelpers';
 import { ensureBridgesForWindow } from '@/lib/bridgeHelpers';
@@ -216,14 +217,15 @@ export async function GET(request: Request) {
 
         snapshotOnly
           ? Promise.resolve({ data: null, error: null })
-          : supabase
+          // Through the service role (launch plan 1.3); scoped by the filter below.
+          : conversationsClient().then((letters) => letters
               .from('conversations')
               .select('messages, created_at')
               .eq('household_id', householdId)
               .in('type', ['onboarding', 'monthly_review'])
               .order('created_at', { ascending: false })
               .limit(1)
-              .maybeSingle(),
+              .maybeSingle()),
 
         // Income and expense recurring items with no known pay date yet —
         // real cadence and amount are saved, but nothing is materialized for

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { conversationsClientTables } from '../../../../test/conversationsClientDouble';
 import { recordedEvents } from '../../../../test/eventWriterDouble';
 
 // Regression test for the manual-entry-onboards-but-dashboard-is-empty bug:
@@ -448,6 +449,8 @@ describe('GET /api/dashboard — review-open instrumentation', () => {
     const fired = recordedEvents.find((e) => e.event_type === 'viewed_monthly_review');
     expect(fired).toBeTruthy();
     expect(fired!.household_id).toBe('hh1');
+    // The letter was read through the service role (launch plan 1.3).
+    expect(conversationsClientTables).toEqual(['conversations']);
   });
 
   it('does not fire viewed_monthly_review when there is no review yet to show', async () => {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { conversationsClientTables } from '../../../../test/conversationsClientDouble';
 import { recordedEvents } from '../../../../test/eventWriterDouble';
 
 // Events are written through the service role (eventWriter, launch plan 1.1),
@@ -721,6 +722,9 @@ describe('POST /api/regenerate-plan — persistence', () => {
       { error: null },
     ]);
     expect(res.status).toBe(200);
+    // The in-progress check and the save, both through the service role
+    // (launch plan 1.3).
+    expect(conversationsClientTables).toEqual(['conversations', 'conversations']);
   });
 
   it('surfaces a save failure instead of reporting success', async () => {

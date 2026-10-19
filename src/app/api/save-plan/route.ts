@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { conversationsClient } from '@/lib/conversationsClient';
 import { businessMonth, materializeRule, monthNameToNumber, SEED_EXPENSE_CATEGORIES } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { logEvent } from '@/lib/eventLogger';
@@ -632,7 +633,8 @@ export async function POST(request: Request) {
     // instead of creating a duplicate savings account for it.
 
     // ----- Review -----
-    await supabase.from('conversations').insert({
+    // Through the service role (launch plan 1.3): members cannot write letters.
+    await (await conversationsClient()).from('conversations').insert({
       household_id: householdId,
       user_id: user.id,
       type: 'onboarding',

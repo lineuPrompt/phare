@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { conversationsClient } from '@/lib/conversationsClient';
 import { computeMonthTotals, type TxRow, type AccountRow } from '@/lib/dashboardHelpers';
 import { loadEntitlement } from '@/lib/entitlementServer';
 import {
@@ -68,7 +69,10 @@ export async function GET() {
     }
     const householdId = userRow.household_id;
 
-    const { data: conversations, error: convErr } = await supabase
+    // conversations through the service role (launch plan 1.3): members cannot
+    // read letters directly. Scoped to this household by the filter below.
+    const letters = await conversationsClient();
+    const { data: conversations, error: convErr } = await letters
       .from('conversations')
       .select('id, type, review_month, created_at, messages')
       .eq('household_id', householdId)

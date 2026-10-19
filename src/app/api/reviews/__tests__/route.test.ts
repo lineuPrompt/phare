@@ -1,4 +1,5 @@
 ﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { conversationsClientTables } from '../../../../test/conversationsClientDouble';
 
 // ---------------------------------------------------------------------------
 // The two things this route must never get wrong: sending a free household the
@@ -123,6 +124,9 @@ describe('GET /api/reviews', () => {
     expect(json.isPro).toBe(true);
     expect(json.months[0].letter.reviewLocked).toBe(false);
     expect(json.months[0].letter.review).toBe(LONG);
+    // Letters are read through the service role (launch plan 1.3), never the
+    // member's session.
+    expect(conversationsClientTables).toEqual(['conversations']);
   });
 
   it('computes the month figure from the ledger, not from the prose', async () => {

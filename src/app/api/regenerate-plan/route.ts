@@ -37,6 +37,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { conversationsClient } from '@/lib/conversationsClient';
 import { businessMonth } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { requirePro } from '@/lib/proGate';
@@ -98,7 +99,10 @@ export async function POST(request: Request) {
     // progress, so the two normally address different rows; possible via a
     // manual cron trigger. Checked BEFORE reserveRegeneration so a refused
     // request never costs a refresh.
-    const { data: activeClaim } = await supabase
+    // conversations through the service role (launch plan 1.3): members cannot
+    // read letters directly. Scoped to this household by the filter below.
+    const letters = await conversationsClient();
+    const { data: activeClaim } = await letters
       .from('conversations')
       .select('id, messages')
       .eq('household_id', householdId)
@@ -157,7 +161,7 @@ export async function POST(request: Request) {
     // created_at is set explicitly: the archive shows it as when the letter was
     // written, and on a replacement the row's original insert time would
     // misdate text produced just now.
-    const { error: saveErr } = await supabase
+    const { error: saveErr } = await letters
       .from('conversations')
       .upsert(
         {
