@@ -12,6 +12,11 @@ Last reconciled with `docs/tickets/` and the code: 2026-10-01 (mobile first; web
 first — iOS App Store submission. Every web functionality item is FROZEN
 (listed below with its ticket, so nothing is lost).**
 
+**LAUNCH PLAN ADOPTED (Lineu, 2026-10-17): [launch-plan.md](launch-plan.md).
+Phase 1 (security and correctness) is current. No feature work (S1, S4–S6)
+until Phase 1 exits. Android paused. The launch plan's rows outrank this list
+where they overlap.**
+
 **Direction (Lineu, 2026-10-15): the mobile app must work without the web
 (CLAUDE.md §1). Submit v1.0 as tested (build 9). Standalone ships as
 updates (1.1, 1.2…), in the order below. Pre-approved: existing routes only,
