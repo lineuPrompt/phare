@@ -105,7 +105,7 @@ export async function POST(
     }
 
     // Role changes are exactly the kind of thing you want a trail of.
-    await logEvent(supabase, caller.householdId, caller.userId, 'member_promoted_to_owner', {
+    await logEvent(caller.householdId, caller.userId, 'member_promoted_to_owner', {
       member_id: member.id,
       promoted_user_id: member.user_id,
     });

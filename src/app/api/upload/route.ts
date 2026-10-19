@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
   const rejected = (reason: UploadRejectionReason) => {
     const s = session;
     if (!s) return;
-    after(() => logEvent(s.supabase, s.householdId, s.userId, 'onboarding_upload_rejected', { reason, platform }));
+    after(() => logEvent(s.householdId, s.userId, 'onboarding_upload_rejected', { reason, platform }));
   };
 
   try {

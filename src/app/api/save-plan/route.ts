@@ -642,7 +642,7 @@ export async function POST(request: Request) {
       ],
     });
 
-    await logEvent(supabase, householdId, user.id, 'completed_onboarding', { locale });
+    await logEvent(householdId, user.id, 'completed_onboarding', { locale });
     return NextResponse.json({ saved: true, unmatchedMembers, needsPayDate, householdMembers: allMembers ?? [] });
   } catch (error) {
     console.error('Save plan error:', error);

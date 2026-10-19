@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { recordedEvents } from '../../../../test/eventWriterDouble';
 
 // Regression test for the manual-entry-onboards-but-dashboard-is-empty bug:
 // hasPlan used to be gated on the `budgets` table having a row, which is
@@ -50,8 +51,11 @@ function makeSupabaseMock(script: Record<string, Resolution[]>) {
     auth: { getUser: async () => ({ data: { user: { id: 'user-1' } }, error: null }) },
     from: (table: string) => ({
       select: () => entry(table),
+      // Events are written through the service role (eventWriter, launch plan
+      // 1.1): a session insert into events is refused, as in production.
       insert: (payload: unknown) => {
-        if (table === 'events') inserts.push({ table, payload });
+        if (table === 'events') throw new Error('events must be written through eventWriter, not the session');
+        inserts.push({ table, payload });
         return entry(table);
       },
     }),
@@ -421,7 +425,7 @@ describe('GET /api/dashboard — review-open instrumentation', () => {
   };
 
   it('fires viewed_monthly_review on a full load that actually has a review to show', async () => {
-    const { client, inserts } = makeSupabaseMock({
+    const { client } = makeSupabaseMock({
       ...baseFixture,
       conversations: [{
         data: {
@@ -441,13 +445,13 @@ describe('GET /api/dashboard — review-open instrumentation', () => {
 
     expect(res.status).toBe(200);
     expect(json.review).toBe('A fine month overall.');
-    const fired = inserts.find((i) => (i.payload as { event_type: string }).event_type === 'viewed_monthly_review');
+    const fired = recordedEvents.find((e) => e.event_type === 'viewed_monthly_review');
     expect(fired).toBeTruthy();
-    expect((fired!.payload as { household_id: string }).household_id).toBe('hh1');
+    expect(fired!.household_id).toBe('hh1');
   });
 
   it('does not fire viewed_monthly_review when there is no review yet to show', async () => {
-    const { client, inserts } = makeSupabaseMock({
+    const { client } = makeSupabaseMock({
       ...baseFixture,
       conversations: [{ data: null, error: null }],
     });
@@ -461,11 +465,11 @@ describe('GET /api/dashboard — review-open instrumentation', () => {
 
     expect(res.status).toBe(200);
     expect(json.review).toBeNull();
-    expect(inserts.find((i) => (i.payload as { event_type: string }).event_type === 'viewed_monthly_review')).toBeUndefined();
+    expect(recordedEvents.find((e) => e.event_type === 'viewed_monthly_review')).toBeUndefined();
   });
 
   it('does not fire viewed_monthly_review on a snapshotOnly month-nav reload, even when a review exists', async () => {
-    const { client, inserts } = makeSupabaseMock({
+    const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', full_name: 'Lineu Prompt' }, error: null }],
       households: [{ data: { timezone: 'America/Toronto' }, error: null }],
       file_imports: [{ data: { id: 'imp-1' }, error: null }],
@@ -491,6 +495,6 @@ describe('GET /api/dashboard — review-open instrumentation', () => {
 
     expect(res.status).toBe(200);
     expect(json.review).toBeUndefined();
-    expect(inserts.find((i) => (i.payload as { event_type: string }).event_type === 'viewed_monthly_review')).toBeUndefined();
+    expect(recordedEvents.find((e) => e.event_type === 'viewed_monthly_review')).toBeUndefined();
   });
 });

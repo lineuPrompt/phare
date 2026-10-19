@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+// Guard events are written through the service role (eventWriter, launch plan
+// 1.1), not the fake session: read them from the suite-wide recorder.
+import { recordedEvents } from '../../test/eventWriterDouble';
 import { makeFakeCardSupabase, type Row } from '@/app/api/card-envelope/__tests__/fakeCardSupabase';
 import { splitExtraOccurrences, oneTimeNetEffect, type WindfallFlag } from '@/lib/reviewContextHelpers';
 import { findExpenseMisframing, checkTopRecommendationFigures } from '@/lib/letterGuards';
@@ -151,9 +154,9 @@ describe('the review, end to end', () => {
 
   it('a letter that moves the extra expense is retried, then refused, and nothing is saved', async () => {
     const bad = 'Put that one-time $350 car payment windfall toward your emergency fund.';
-    const { error, fake } = await generate(['Keep going.'], [bad, bad]);
+    const { error } = await generate(['Keep going.'], [bad, bad]);
     expect(error?.name).toBe('LetterGuardError');
-    const failed = fake.writes.find((w) => w.table === 'events' && (w.payload as { event_type: string }).event_type === 'review_guard_failed');
+    const failed = recordedEvents.map((row) => ({ payload: row })).find((w) => (w.payload as { event_type: string }).event_type === 'review_guard_failed');
     expect((failed!.payload as { metadata: { kind: string; framing: string[] } }).metadata).toMatchObject({ kind: 'monthly_review' });
     expect((failed!.payload as { metadata: { framing: string[] } }).metadata.framing.length).toBeGreaterThan(0);
   });
@@ -169,13 +172,13 @@ describe('the review, end to end', () => {
   });
 
   it('a top recommendation with a figure from no money source fails visibly on the second try', async () => {
-    const { error, fake } = await generate(
+    const { error } = await generate(
       ['Put $500 toward savings.', 'Put $600 toward savings.'],
       []
     );
     expect(error?.name).toBe('LetterGuardError');
     expect(error?.message).toContain('$600');
-    const failed = fake.writes.find((w) => w.table === 'events' && (w.payload as { event_type: string }).event_type === 'review_guard_failed');
+    const failed = recordedEvents.map((row) => ({ payload: row })).find((w) => (w.payload as { event_type: string }).event_type === 'review_guard_failed');
     expect((failed!.payload as { metadata: { kind: string; figures: string[] } }).metadata).toMatchObject({ kind: 'top_recommendation', figures: ['$600'] });
   });
 

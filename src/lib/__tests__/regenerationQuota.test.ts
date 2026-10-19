@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { eventWriterBehaviour, recordedEvents } from '../../test/eventWriterDouble';
 import { quotaFrom, resetDateFor, REGENERATIONS_PER_MONTH } from '@/lib/regenerationQuota';
 import { readQuota, reserveRegeneration } from '@/lib/regenerationQuotaServer';
 
@@ -52,8 +53,13 @@ describe('resetDateFor', () => {
 
 // --- server side ----------------------------------------------------------
 
-function client({ count = 0, countError = null as unknown, insertError = null as unknown } = {}) {
-  const inserts: Record<string, unknown>[] = [];
+/**
+ * The member's session client: the count only, no insert — the reservation
+ * writes through the service role (eventWriter, launch plan 1.1). `inserts`
+ * are the rows the event writer received (vitest.setup.ts double).
+ */
+function client({ count = 0, countError = null as unknown, insertError = null as { message: string } | null } = {}) {
+  if (insertError) eventWriterBehaviour.insertError = insertError;
   const c = {
     from: () => ({
       select: () => ({
@@ -63,13 +69,9 @@ function client({ count = 0, countError = null as unknown, insertError = null as
           }),
         }),
       }),
-      insert: async (row: Record<string, unknown>) => {
-        inserts.push(row);
-        return { error: insertError };
-      },
     }),
   };
-  return { c, inserts };
+  return { c, inserts: recordedEvents };
 }
 
 describe('readQuota', () => {

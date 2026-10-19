@@ -87,7 +87,7 @@ export async function DELETE(
       return NextResponse.json({ error: deleteError.message }, { status: 500 });
     }
 
-    await logEvent(supabase, caller.householdId, caller.userId, 'pending_member_removed', {
+    await logEvent(caller.householdId, caller.userId, 'pending_member_removed', {
       member_id: member.id,
       removed_user_id: member.user_id,
     });

@@ -1,3 +1,4 @@
+import { eventWriter } from '@/lib/eventWriter';
 import { businessToday } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import {
@@ -93,7 +94,9 @@ export async function reserveOnboardingGeneration(
 
   if (!quota.allowed) return { ok: false, reason: 'exhausted', quota };
 
-  const { error } = await supabase.from('events').insert({
+  const { error } = await eventWriter().from('events').insert({
+    // Through the service role: members cannot write events (launch plan
+    // 1.1). The count above still reads with the member's session.
     household_id: householdId,
     user_id: userId,
     event_type: event,

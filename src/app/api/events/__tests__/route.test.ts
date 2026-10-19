@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QUOTA_EVENT_TYPES } from '@/lib/clientEvents';
+import { eventWriterBehaviour, recordedEvents } from '../../../../test/eventWriterDouble';
 
 // ---------------------------------------------------------------------------
 // after() is captured rather than executed, for two reasons:
@@ -42,7 +43,11 @@ function makeSupabase(opts: {
     insertError = null,
   } = opts;
 
-  const inserts: Inserted[] = [];
+  // Rows land in the event writer (service role, launch plan 1.1), not on the
+  // member's session client — which below has no `events` branch at all, so a
+  // session insert would throw "Unexpected table".
+  const inserts = recordedEvents as Inserted[];
+  if (insertError) eventWriterBehaviour.insertError = insertError;
   const tablesTouched: string[] = [];
 
   const client = {
@@ -59,14 +64,6 @@ function makeSupabase(opts: {
               }),
             }),
           }),
-        };
-      }
-      if (table === 'events') {
-        return {
-          insert: async (row: Inserted) => {
-            inserts.push(row);
-            return { error: insertError };
-          },
         };
       }
       throw new Error(`Unexpected table "${table}"`);

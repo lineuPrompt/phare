@@ -1,8 +1,15 @@
 -- =============================================================================
 -- Phare — users is READ-ONLY for signed-in users. 2026-10-19.
 --
--- STATUS: WRITTEN, NOT APPLIED. Lineu applies it in the SQL Editor; Claude
--- Code runs the VERIFY block and the live check.
+-- STATUS: APPLIED — 2026-10-19 (Lineu, SQL Editor).
+--
+--   VERIFIED LIVE 2026-10-19 through the read-only MCP server: VERIFY below
+--   8/8 PASS (before applying: 4 FAIL / 4 PASS).
+--   BEHAVIOUR VERIFIED LIVE 2026-10-19 over PostgREST as Zezinho Test
+--   (publishable key + its own JWT): READ own row 200; PATCH household_id,
+--   role and terms_version, each to its CURRENT value, 403 / 42501; DELETE
+--   403 / 42501. Row unchanged (updated_at 2026-10-10 01:45:24 before and
+--   after).
 --
 -- Launch plan item 1.2 (docs/launch-plan.md, Phase 1). Approved by Lineu
 -- 2026-10-19.

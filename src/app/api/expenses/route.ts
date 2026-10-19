@@ -152,7 +152,7 @@ export async function POST(request: Request) {
 
     // Log created_first_expense the first time this household enters a transaction manually.
     if (await isFirstEvent(supabase, householdId, 'created_first_expense')) {
-      await logEvent(supabase, householdId, user.id, 'created_first_expense', { type });
+      await logEvent(householdId, user.id, 'created_first_expense', { type });
     }
 
     return NextResponse.json({ saved: true, count: rows.length });

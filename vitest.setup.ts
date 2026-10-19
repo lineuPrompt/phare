@@ -1,4 +1,5 @@
-import { vi } from 'vitest';
+import { beforeEach, vi } from 'vitest';
+import { fakeEventWriter, resetEventWriterDouble } from './src/test/eventWriterDouble';
 
 // ---------------------------------------------------------------------------
 // THE REAL ANTHROPIC CLIENT IS OPT-IN, NOT OPT-OUT.
@@ -53,4 +54,20 @@ vi.mock('@/lib/anthropic', async (importOriginal) => {
       },
     },
   };
+});
+
+// ---------------------------------------------------------------------------
+// EVENTS ARE WRITTEN BY THE SERVICE ROLE (2026-10-19, src/lib/eventWriter.ts).
+//
+// The real writer builds an admin client from env vars that tests do not
+// have. Replaced suite-wide by a recording double, reset before each test:
+// assert on `recordedEvents` (src/test/eventWriterDouble.ts) to see the rows
+// a route or helper wrote. A file's own vi.mock of '@/lib/eventWriter' still
+// wins, as with the Anthropic mock above.
+// ---------------------------------------------------------------------------
+
+vi.mock('@/lib/eventWriter', () => ({ eventWriter: () => fakeEventWriter() }));
+
+beforeEach(() => {
+  resetEventWriterDouble();
 });

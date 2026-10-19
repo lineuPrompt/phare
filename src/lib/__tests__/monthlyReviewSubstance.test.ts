@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+// Guard events are written through the service role (eventWriter, launch plan
+// 1.1), not the fake session: read them from the suite-wide recorder.
+import { recordedEvents } from '../../test/eventWriterDouble';
 import { makeFakeCardSupabase, type Row } from '@/app/api/card-envelope/__tests__/fakeCardSupabase';
 import { monthReachedByRules } from '@/lib/goalHelpers';
 import { cardLetterFacts } from '@/lib/cardOverTarget';
@@ -303,9 +306,9 @@ describe('monthly review — Part B substance', () => {
     it('naming a category absent from the payload\'s cards is rejected: retried, then nothing saved and the name recorded', async () => {
       // Restaurants has a plan on Visa, but it is not a top overspend, so the
       // payload's cards do not carry it.
-      const { error, fake } = await generate('2026-09', 'Restaurants came in at $793.75.', 'Restaurants again, at $793.75.');
+      const { error } = await generate('2026-09', 'Restaurants came in at $793.75.', 'Restaurants again, at $793.75.');
       expect((error as Error).name).toBe('LetterGuardError');
-      const failed = fake.writes.find((w) => w.table === 'events' && (w.payload as { event_type: string }).event_type === 'review_guard_failed');
+      const failed = recordedEvents.map((row) => ({ payload: row })).find((w) => (w.payload as { event_type: string }).event_type === 'review_guard_failed');
       expect((failed!.payload as { household_id: string; metadata: { names: string[]; month: string } })).toMatchObject({
         household_id: HH, metadata: { names: ['Restaurants'], month: '2026-09' },
       });

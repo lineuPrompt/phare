@@ -1,3 +1,5 @@
+import { eventWriter } from '@/lib/eventWriter';
+
 /**
  * Event logger — lightweight trial diary.
  *
@@ -104,18 +106,19 @@ export type EventType =
   | 'onboarding_upload_rejected';
 
 /**
- * Insert one event row.
+ * Insert one event row, through the service role (eventWriter.ts): members
+ * cannot write `events` (launch plan 1.1). The row's household_id is the
+ * caller's, as every caller already resolves it from the session.
  * Catches all errors internally — tracking failures must not surface to the caller.
  */
 export async function logEvent(
-  supabase: EventClient,
   householdId: string,
   userId: string | null,
   eventType: EventType,
   metadata?: Record<string, unknown>
 ): Promise<void> {
   try {
-    const { error } = await supabase.from('events').insert({
+    const { error } = await eventWriter().from('events').insert({
       household_id: householdId,
       user_id: userId,
       event_type: eventType,

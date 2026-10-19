@@ -2,7 +2,10 @@
 
 **Filed** 2026-10-10, found while making `review_guard_failed` server-only.
 
-**Status:** OPEN. Schema / RLS change: diagnose and stop for approval.
+**Status:** FIX BUILT 2026-10-19 (launch plan 1.1), not live. Code: every
+event write goes through `src/lib/eventWriter.ts` (service role). Migration:
+`supabase/migrations/20261019010000_events_server_only_writes.sql`, to apply
+only after the code is deployed.
 
 ---
 

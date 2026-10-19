@@ -2,6 +2,7 @@ import { NextResponse, after } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { createRateLimiter, clientIp } from '@/lib/rateLimit';
 import { validateClientEvent } from '@/lib/clientEvents';
+import { eventWriter } from '@/lib/eventWriter';
 
 // ---------------------------------------------------------------------------
 // POST /api/events — the only channel by which the browser can write a funnel
@@ -110,7 +111,10 @@ export async function POST(request: Request) {
     const { type, metadata } = validated;
 
     after(async () => {
-      const { error } = await supabase.from('events').insert({
+      // Through the service role, after the allowlist and the caller's own
+      // household were checked above: members cannot write events directly
+      // (launch plan 1.1).
+      const { error } = await eventWriter().from('events').insert({
         household_id: householdId,
         user_id: user.id,
         event_type: type,

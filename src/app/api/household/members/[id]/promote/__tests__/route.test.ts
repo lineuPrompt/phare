@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { recordedEvents } from '../../../../../../../test/eventWriterDouble';
 
 // Promote-to-owner runs with the SERVICE-ROLE client, which bypasses RLS
 // entirely. Every guard the database would normally enforce is therefore the
@@ -59,14 +60,6 @@ function makeSessionClient(
       }
       if (table === 'household_members') {
         return { select: () => ({ eq: () => ({ single: async () => ({ data: memberRow }) }) }) };
-      }
-      if (table === 'events') {
-        return {
-          insert: async (payload: Record<string, unknown>) => {
-            inserts.push({ table, payload });
-            return { error: null };
-          },
-        };
       }
       throw new Error(`unexpected table on session client: ${table}`);
     },
@@ -188,7 +181,7 @@ describe('POST /api/household/members/[id]/promote', () => {
   });
 
   it('promotes an active member, scoping the write by household as well as id', async () => {
-    const { client, inserts } = makeSessionClient({ household_id: 'hh1', role: 'owner' }, ACTIVE_MEMBER);
+    const { client } = makeSessionClient({ household_id: 'hh1', role: 'owner' }, ACTIVE_MEMBER);
     await useSession(client);
     adminUsersSelect.mockReturnValue(
       resultChain({ data: { id: 'u-target', role: 'member', household_id: 'hh1' } })
@@ -214,20 +207,22 @@ describe('POST /api/household/members/[id]/promote', () => {
     expect(eqCalls).toContainEqual({ method: 'eq', args: ['id', 'u-target'] });
     expect(eqCalls).toContainEqual({ method: 'eq', args: ['household_id', 'hh1'] });
 
-    const event = inserts.find((i) => i.table === 'events');
-    expect(event?.payload).toMatchObject({
+    // Written through the service role (eventWriter, launch plan 1.1).
+    const event = recordedEvents[0];
+    expect(recordedEvents).toHaveLength(1);
+    expect(event).toMatchObject({
       household_id: 'hh1',
       user_id: 'owner-1', // the owner who performed it, not the person promoted
       event_type: 'member_promoted_to_owner',
     });
-    expect(event?.payload.metadata).toMatchObject({
+    expect(event?.metadata).toMatchObject({
       member_id: 'mem-1',
       promoted_user_id: 'u-target',
     });
   });
 
   it('surfaces a failed role update rather than reporting success', async () => {
-    const { client, inserts } = makeSessionClient({ household_id: 'hh1', role: 'owner' }, ACTIVE_MEMBER);
+    const { client } = makeSessionClient({ household_id: 'hh1', role: 'owner' }, ACTIVE_MEMBER);
     await useSession(client);
     adminUsersSelect.mockReturnValue(
       resultChain({ data: { id: 'u-target', role: 'member', household_id: 'hh1' } })
@@ -242,7 +237,7 @@ describe('POST /api/household/members/[id]/promote', () => {
     expect(res.status).toBe(500);
     expect((await res.json()).error).toBe('permission denied');
     // No event for something that didn't happen.
-    expect(inserts.find((i) => i.table === 'events')).toBeUndefined();
+    expect(recordedEvents).toEqual([]);
   });
 
   it('500s when the auth lookup fails, without guessing that the member is active', async () => {

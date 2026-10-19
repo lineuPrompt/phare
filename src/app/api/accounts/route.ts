@@ -124,7 +124,7 @@ export async function POST(request: Request) {
     // Log created_first_goal the first time a goal account is created.
     const goalTypes = new Set<string>(GOAL_ACCOUNT_TYPES);
     if (goalTypes.has(type) && await isFirstEvent(supabase, householdId, 'created_first_goal')) {
-      await logEvent(supabase, householdId, user?.id ?? null, 'created_first_goal', { account_type: type });
+      await logEvent(householdId, user?.id ?? null, 'created_first_goal', { account_type: type });
     }
 
     return NextResponse.json({ account });

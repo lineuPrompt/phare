@@ -274,7 +274,7 @@ export async function DELETE(request: Request) {
     // users.household_id, and the events RLS policy resolves the household
     // through exactly that column, so the caller's own client can no longer
     // insert here.
-    await logEvent(admin, userRow.household_id, user.id, 'member_self_deleted', {
+    await logEvent(userRow.household_id, user.id, 'member_self_deleted', {
       member_id: ctx.selfMemberId,
       request_id: reqRow.id,
     });

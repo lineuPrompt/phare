@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { recordedEvents } from '../../../../test/eventWriterDouble';
 
 // These tests cover the additive Phase 3 surface only: the optional
 // `windowStart` query param and the `unbalancedDays` response field.
@@ -210,21 +211,21 @@ describe('GET /api/timeline — timeline_opened funnel event', () => {
     const res = await getTimeline('account=acc-1&pageView=1');
     expect(res.status).toBe(200);
 
-    const eventInserts = calls.filter((c) => c.table === 'events');
-    expect(eventInserts).toHaveLength(1);
-    expect((eventInserts[0].args[1] as { event_type: string }).event_type).toBe('timeline_opened');
+    // Written through the service role (eventWriter), never the session.
+    expect(calls.filter((c) => c.table === 'events')).toHaveLength(0);
+    expect(recordedEvents).toHaveLength(1);
+    expect(recordedEvents[0]).toMatchObject({ event_type: 'timeline_opened', household_id: expect.any(String) });
   });
 
   it('does NOT fire when pageView is absent — the dashboard\'s dip-tile call to this same endpoint must never count as a Timeline open', async () => {
-    const { client, calls } = makeSupabaseMock(baseScript);
+    const { client } = makeSupabaseMock(baseScript);
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
     const res = await getTimeline('account=acc-1');
     expect(res.status).toBe(200);
 
-    const eventInserts = calls.filter((c) => c.table === 'events');
-    expect(eventInserts).toHaveLength(0);
+    expect(recordedEvents).toHaveLength(0);
   });
 
   it('fires on every real load, not gated to the first ever — a repeat visit still logs (frequency signal, not a one-time milestone)', async () => {
@@ -240,8 +241,10 @@ describe('GET /api/timeline — timeline_opened funnel event', () => {
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client2);
     await getTimeline('account=acc-1&pageView=1');
 
-    expect(calls.filter((c) => c.table === 'events')).toHaveLength(1);
-    expect(calls2.filter((c) => c.table === 'events')).toHaveLength(1);
+    // One row per load, both through the event writer.
+    void calls;
+    void calls2;
+    expect(recordedEvents.map((e) => e.event_type)).toEqual(['timeline_opened', 'timeline_opened']);
   });
 });
 

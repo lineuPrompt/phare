@@ -1,4 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { recordedEvents } from '../../../../test/eventWriterDouble';
+
+// Events are written through the service role (eventWriter, launch plan 1.1),
+// not the session client this file records. The rows the writer received, in
+// the same call shape the assertions below read (args[0] is the row).
+const eventCalls = () => recordedEvents.map((row) => ({ table: 'events', method: 'insert', args: [row] }));
 
 // Same hard gate as api/plan/route.ts, now applied to the ongoing monthly
 // review: the AI must never instantiate structured objects (sinking-fund
@@ -704,6 +710,7 @@ describe('POST /api/regenerate-plan — persistence', () => {
     ]);
     // reserveRegeneration reads/writes events; a refused request must not.
     expect(calls.some((c) => c.table === 'events')).toBe(false);
+    expect(recordedEvents).toEqual([]);
   });
 
   it('an EXISTING FILLED review for the month is replaced, not refused', async () => {
@@ -1456,11 +1463,11 @@ describe('POST /api/regenerate-plan — names guard: only cards and categories t
       .mockResolvedValueOnce({ content: [{ type: 'text', text: "There's room to work with this month — Shopping is one place to look." }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
 
-    const { res, json, calls } = await post(noCardFixture);
+    const { res, json } = await post(noCardFixture);
     expect(res.status).toBe(200);
     expect(createMock).toHaveBeenCalledTimes(3);
     expect(json.reviewText).toBe('A fine, clean month overall.');
-    const retried = calls.find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried');
+    const retried = eventCalls().find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried');
     expect((retried!.args[0] as { metadata: { triggeredBy: string[] } }).metadata.triggeredBy).toEqual(['names']);
   });
 
@@ -1478,7 +1485,7 @@ describe('POST /api/regenerate-plan — names guard: only cards and categories t
     expect(createMock).toHaveBeenCalledTimes(3);
     // Never persisted.
     expect(calls.some((c) => c.table === 'conversations' && c.method === 'upsert')).toBe(false);
-    const failed = calls.find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_guard_failed');
+    const failed = eventCalls().find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_guard_failed');
     const meta = (failed!.args[0] as { household_id: string; metadata: { month: string; names: string[]; figures: string[] } });
     expect(meta.household_id).toBe('hh1');
     expect(meta.metadata.names).toEqual(['Shopping']);
@@ -1609,10 +1616,10 @@ describe('POST /api/regenerate-plan — figure guard: every dollar figure is one
       // 975.47 + 1475.38 = 2450.85, written "roughly $2,451".
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Those two lines came to roughly $2,451.' }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Groceries run came to $975.47.' }] });
-    const { res, json, calls } = await post();
+    const { res, json } = await post();
     expect(res.status).toBe(200);
     expect(json.reviewText).toBe('Groceries run came to $975.47.');
-    const retried = calls.find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried');
+    const retried = eventCalls().find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried');
     expect((retried!.args[0] as { metadata: { triggeredBy: string[] } }).metadata.triggeredBy).toEqual(['figures']);
   });
 
@@ -1625,7 +1632,7 @@ describe('POST /api/regenerate-plan — figure guard: every dollar figure is one
     expect(res.status).toBe(502);
     expect(json.code).toBe('review_guard_failed');
     expect(calls.some((c) => c.table === 'conversations' && c.method === 'upsert')).toBe(false);
-    const failed = calls.find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_guard_failed');
+    const failed = eventCalls().find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_guard_failed');
     expect((failed!.args[0] as { metadata: { figures: string[] } }).metadata.figures).toEqual(['29.5 %']);
   });
 
@@ -1638,7 +1645,7 @@ describe('POST /api/regenerate-plan — figure guard: every dollar figure is one
     expect(res.status).toBe(502);
     expect(json.error).toContain('$2,450');
     expect(calls.some((c) => c.table === 'conversations' && c.method === 'upsert')).toBe(false);
-    const failed = calls.find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_guard_failed');
+    const failed = eventCalls().find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_guard_failed');
     expect((failed!.args[0] as { metadata: { figures: string[]; firstAttempt: { figures: string[] } } }).metadata).toMatchObject({
       figures: ['$2,450'],
       firstAttempt: { figures: ['$2,451'] },
@@ -1931,7 +1938,7 @@ describe('POST /api/regenerate-plan — reviewText borrowed-cash guard (unified 
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Your $1,000 line-of-credit draw gives you $1,000 of surplus to invest.' }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
 
-    const { client, calls } = makeSupabaseMock(drawFixture);
+    const { client } = makeSupabaseMock(drawFixture);
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
@@ -1946,7 +1953,7 @@ describe('POST /api/regenerate-plan — reviewText borrowed-cash guard (unified 
     expect(createMock).toHaveBeenCalledTimes(3);
     expect(json.reviewText).toBe('A fine, clean month overall.');
 
-    const eventCall = calls.find(
+    const eventCall = eventCalls().find(
       (c) => c.table === 'events' && c.method === 'insert' &&
              (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
     );
@@ -1963,7 +1970,7 @@ describe('POST /api/regenerate-plan — reviewText borrowed-cash guard (unified 
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Your $1,000 draw gives you $1,000 of surplus to invest.' }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'You have an extra $1,000 available this month to put toward your goals.' }] });
 
-    const { client, calls } = makeSupabaseMock(drawFixture);
+    const { client } = makeSupabaseMock(drawFixture);
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
@@ -1981,7 +1988,7 @@ describe('POST /api/regenerate-plan — reviewText borrowed-cash guard (unified 
     expect(json.reviewText).toContain('$1000.00');
     expect(json.reviewText).toContain('borrowed');
 
-    const eventCall = calls.find(
+    const eventCall = eventCalls().find(
       (c) => c.table === 'events' && c.method === 'insert' &&
              (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
     );
@@ -2114,7 +2121,7 @@ describe('POST /api/regenerate-plan — reviewText token-leak guard (third condi
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Consider putting {{EXTRA_ROOM}} toward your goals this month.' }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
 
-    const { client, calls } = makeSupabaseMock(noCardFixture);
+    const { client } = makeSupabaseMock(noCardFixture);
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
@@ -2129,7 +2136,7 @@ describe('POST /api/regenerate-plan — reviewText token-leak guard (third condi
     expect(createMock).toHaveBeenCalledTimes(3);
     expect(json.reviewText).toBe('A fine, clean month overall.');
 
-    const eventCall = calls.find(
+    const eventCall = eventCalls().find(
       (c) => c.table === 'events' && c.method === 'insert' &&
              (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
     );
@@ -2144,7 +2151,7 @@ describe('POST /api/regenerate-plan — reviewText token-leak guard (third condi
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Put {{EXTRA_ROOM}} here and {{EXTRA_ROOM}} there too.' }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Still {{ANOTHER_TOKEN}} leaking on the retry.' }] });
 
-    const { client, calls } = makeSupabaseMock(noCardFixture);
+    const { client } = makeSupabaseMock(noCardFixture);
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
@@ -2160,7 +2167,7 @@ describe('POST /api/regenerate-plan — reviewText token-leak guard (third condi
     expect(json.reviewText).not.toContain('{{');
     expect(json.reviewText).toContain("couldn't be generated safely");
 
-    const eventCall = calls.find(
+    const eventCall = eventCalls().find(
       (c) => c.table === 'events' && c.method === 'insert' &&
              (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
     );
@@ -2208,7 +2215,7 @@ describe('POST /api/regenerate-plan — reviewText token-leak guard (third condi
 
     expect(res.status).toBe(502);
     expect(calls.some((c) => c.table === 'conversations' && c.method === 'upsert')).toBe(false);
-    const failed = calls.find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_guard_failed');
+    const failed = eventCalls().find((c) => c.table === 'events' && (c.args[0] as { event_type?: string })?.event_type === 'review_guard_failed');
     expect((failed!.args[0] as { metadata: { names: string[] } }).metadata.names).toEqual(['Shopping']);
   });
 });
@@ -2248,7 +2255,7 @@ describe('POST /api/regenerate-plan — reviewText illustrative single-brace tok
       .mockResolvedValueOnce({ content: [{ type: 'text', text: `Your plan sets money aside each month for {${token}}, so plan around it.` }] })
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'A fine, clean month overall.' }] });
 
-    const { client, calls } = makeSupabaseMock(noCardFixture);
+    const { client } = makeSupabaseMock(noCardFixture);
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
@@ -2263,7 +2270,7 @@ describe('POST /api/regenerate-plan — reviewText illustrative single-brace tok
     expect(createMock).toHaveBeenCalledTimes(3);
     expect(json.reviewText).toBe('A fine, clean month overall.');
 
-    const eventCall = calls.find(
+    const eventCall = eventCalls().find(
       (c) => c.table === 'events' && c.method === 'insert' &&
              (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
     );
@@ -2313,7 +2320,7 @@ describe('POST /api/regenerate-plan — reviewText illustrative single-brace tok
       ],
     };
 
-    const { client, calls } = makeSupabaseMock(drawFixture);
+    const { client } = makeSupabaseMock(drawFixture);
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
 
@@ -2329,7 +2336,7 @@ describe('POST /api/regenerate-plan — reviewText illustrative single-brace tok
     expect(json.reviewText).toContain('borrowed');
     expect(json.reviewText).not.toContain('{name}');
 
-    const eventCall = calls.find(
+    const eventCall = eventCalls().find(
       (c) => c.table === 'events' && c.method === 'insert' &&
              (c.args[0] as { event_type?: string })?.event_type === 'review_text_guard_retried'
     );

@@ -17,8 +17,14 @@
 // says "yes" must never be the thing proving the gate works.
 // ---------------------------------------------------------------------------
 
-/** Reservation rows written during a test, in order. Cleared per file, not per test. */
-export const reservedEvents: Record<string, unknown>[] = [];
+import { recordedEvents } from '../../../test/eventWriterDouble';
+
+/**
+ * Event rows written during a test, in order. Since launch plan 1.1 every
+ * event is written through the service role (eventWriter), so this is the
+ * suite-wide recorder (vitest.setup.ts), reset before each test.
+ */
+export const reservedEvents = recordedEvents as Record<string, unknown>[];
 
 /**
  * Stands in for `createClient()` from supabase-server: an authenticated user
@@ -50,15 +56,12 @@ export function authedClient() {
           }),
         };
       }
-      // events — zero used, and inserts always succeed.
+      // events — zero used. The session only counts: writes go through the
+      // service role (eventWriter), so a session insert here would throw.
       return {
         select: () => ({
           eq: () => ({ eq: () => ({ eq: () => Promise.resolve({ count: 0, error: null }) }) }),
         }),
-        insert: (row: Record<string, unknown>) => {
-          reservedEvents.push(row);
-          return Promise.resolve({ error: null });
-        },
       };
     },
   };

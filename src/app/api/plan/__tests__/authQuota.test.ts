@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { recordedEvents } from '../../../../test/eventWriterDouble';
 import type { NextRequest } from 'next/server';
 
 // ---------------------------------------------------------------------------
@@ -24,10 +25,11 @@ let scenario: {
   user: { id: string } | null;
   householdId: string | null;
   count: { count: number | null; error: unknown };
-  insertError?: unknown;
 };
 
-const inserts: Record<string, unknown>[] = [];
+// The quota reservation writes through the service role (eventWriter, launch
+// plan 1.1): its rows land in the suite-wide recorder, read here.
+const inserts = recordedEvents as Record<string, unknown>[];
 
 vi.mock('@/lib/supabase-server', () => ({
   createClient: async () => ({
@@ -49,15 +51,11 @@ vi.mock('@/lib/supabase-server', () => ({
           }),
         };
       }
-      // events
+      // events: the member's session only COUNTS (no insert — that would throw).
       return {
         select: () => ({
           eq: () => ({ eq: () => ({ eq: () => Promise.resolve(scenario.count) }) }),
         }),
-        insert: (row: Record<string, unknown>) => {
-          inserts.push(row);
-          return Promise.resolve({ error: scenario.insertError ?? null });
-        },
       };
     },
   }),

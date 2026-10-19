@@ -73,7 +73,7 @@ export async function GET(request: Request) {
     const householdId = userRow.household_id as string;
 
     if (isPageView) {
-      void logEvent(supabase, householdId, user.id, 'timeline_opened');
+      void logEvent(householdId, user.id, 'timeline_opened');
     }
 
     const { data: account } = await supabase

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { logEvent, isFirstEvent, isFirstReturnToday, EventClient } from '../eventLogger';
+import { eventWriterBehaviour, recordedEvents } from '../../test/eventWriterDouble';
 
 // ---------------------------------------------------------------------------
 // Mock factory
@@ -65,55 +66,35 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('logEvent', () => {
-  it('resolves without throwing on success', async () => {
-    const supabase = makeSupabase();
-    await expect(
-      logEvent(supabase, 'hh-1', 'u-1', 'returned')
-    ).resolves.toBeUndefined();
+  // logEvent writes through the service role (eventWriter.ts) since launch
+  // plan 1.1; vitest.setup.ts installs a recording double, read here.
+
+  it('writes the row through the event writer', async () => {
+    await expect(logEvent('hh-1', 'u-1', 'returned')).resolves.toBeUndefined();
+    expect(recordedEvents).toEqual([{ household_id: 'hh-1', user_id: 'u-1', event_type: 'returned', metadata: null }]);
   });
 
   it('swallows a rejected insert (network error) — never throws', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const supabase = makeSupabase({ insertThrows: true });
+    eventWriterBehaviour.insertThrows = true;
 
-    await expect(
-      logEvent(supabase, 'hh-1', 'u-1', 'completed_onboarding')
-    ).resolves.toBeUndefined();
+    await expect(logEvent('hh-1', 'u-1', 'completed_onboarding')).resolves.toBeUndefined();
 
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('completed_onboarding'),
-      expect.anything()
-    );
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('completed_onboarding'), expect.anything());
   });
 
   it('logs console.error when Supabase returns an error object — never throws', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const supabase = makeSupabase({ insertError: { message: 'RLS violation' } });
+    eventWriterBehaviour.insertError = { message: 'RLS violation' };
 
-    await expect(
-      logEvent(supabase, 'hh-1', 'u-1', 'created_first_expense')
-    ).resolves.toBeUndefined();
+    await expect(logEvent('hh-1', 'u-1', 'created_first_expense')).resolves.toBeUndefined();
 
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('created_first_expense'),
-      'RLS violation'
-    );
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('created_first_expense'), 'RLS violation');
   });
 
   it('passes metadata to the insert', async () => {
-    let captured: unknown = null;
-    const supabase: EventClient = {
-      from: () => ({
-        insert: (data: unknown) => {
-          captured = data;
-          return Promise.resolve({ error: null });
-        },
-      }),
-    };
-
-    await logEvent(supabase, 'hh-1', 'u-1', 'viewed_planner', { locale: 'en' });
-
-    expect(captured).toMatchObject({
+    await logEvent('hh-1', 'u-1', 'viewed_planner', { locale: 'en' });
+    expect(recordedEvents[0]).toMatchObject({
       household_id: 'hh-1',
       user_id: 'u-1',
       event_type: 'viewed_planner',
@@ -122,20 +103,9 @@ describe('logEvent', () => {
   });
 
   it('sets metadata to null when not provided', async () => {
-    let captured: unknown = null;
-    const supabase: EventClient = {
-      from: () => ({
-        insert: (data: unknown) => {
-          captured = data;
-          return Promise.resolve({ error: null });
-        },
-      }),
-    };
-
-    await logEvent(supabase, 'hh-1', null, 'signup');
-
-    expect((captured as Record<string, unknown>).metadata).toBeNull();
-    expect((captured as Record<string, unknown>).user_id).toBeNull();
+    await logEvent('hh-1', null, 'signup');
+    expect(recordedEvents[0].metadata).toBeNull();
+    expect(recordedEvents[0].user_id).toBeNull();
   });
 });
 

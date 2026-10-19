@@ -4,6 +4,7 @@ import {
   reserveOnboardingGeneration,
 } from '../onboardingQuotaServer';
 import { PLAN_GENERATION_EVENT } from '../onboardingQuota';
+import { eventWriterBehaviour, recordedEvents } from '../../test/eventWriterDouble';
 
 // ---------------------------------------------------------------------------
 // The DB-backed allowance. What matters here is not the happy path — it is the
@@ -19,15 +20,17 @@ vi.mock('@/lib/householdTimezone', () => ({
 type CountResult = { count: number | null; error: unknown };
 
 /**
- * A Supabase stand-in with exactly the two shapes this module uses: a counting
- * select on `events`, and an insert on `events`.
+ * The member's session client: a counting select on `events` ONLY. It has no
+ * insert, on purpose — the reservation must write through the service role
+ * (eventWriter, launch plan 1.1), so an insert on the session would throw here.
+ * `inserts` are the rows the event writer received (vitest.setup.ts double).
  */
 function makeClient(opts: {
   count?: CountResult;
-  insertError?: unknown;
+  insertError?: { message: string };
 }) {
-  const inserts: Record<string, unknown>[] = [];
   const count = opts.count ?? { count: 0, error: null };
+  if (opts.insertError) eventWriterBehaviour.insertError = opts.insertError;
 
   const client = {
     from(_table: string) {
@@ -39,15 +42,11 @@ function makeClient(opts: {
             }),
           }),
         }),
-        insert: (row: Record<string, unknown>) => {
-          inserts.push(row);
-          return Promise.resolve({ error: opts.insertError ?? null });
-        },
       };
     },
   };
 
-  return { client, inserts };
+  return { client, inserts: recordedEvents };
 }
 
 beforeEach(() => {

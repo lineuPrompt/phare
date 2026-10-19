@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { recordedEvents } from '../../../../../../test/eventWriterDouble';
 
 // DELETE /api/household/members/[id] — revoke a PENDING invite.
 //
@@ -42,14 +43,6 @@ function makeSessionClient(
       }
       if (table === 'household_members') {
         return { select: () => ({ eq: () => ({ single: async () => ({ data: memberRow }) }) }) };
-      }
-      if (table === 'events') {
-        return {
-          insert: async (payload: Record<string, unknown>) => {
-            inserts.push({ table, payload });
-            return { error: null };
-          },
-        };
       }
       throw new Error(`unexpected table: ${table}`);
     },
@@ -133,7 +126,7 @@ describe('DELETE /api/household/members/[id]', () => {
   });
 
   it('deletes only the auth user for a pending member, and logs it', async () => {
-    const { client, inserts } = makeSessionClient({ household_id: 'hh1', role: 'owner' }, PENDING_MEMBER);
+    const { client } = makeSessionClient({ household_id: 'hh1', role: 'owner' }, PENDING_MEMBER);
     await useSession(client);
     getUserByIdMock.mockResolvedValue({ data: { user: { last_sign_in_at: null } }, error: null });
 
@@ -146,8 +139,10 @@ describe('DELETE /api/household/members/[id]', () => {
     // household's attribution with it.
     expect(deleteUserMock).toHaveBeenCalledWith('u-pending');
 
-    const event = inserts.find((i) => i.table === 'events');
-    expect(event?.payload).toMatchObject({
+    // Written through the service role (eventWriter, launch plan 1.1).
+    const event = recordedEvents[0];
+    expect(recordedEvents).toHaveLength(1);
+    expect(event).toMatchObject({
       household_id: 'hh1',
       user_id: 'owner-1',
       event_type: 'pending_member_removed',
@@ -155,7 +150,7 @@ describe('DELETE /api/household/members/[id]', () => {
   });
 
   it('surfaces a failed auth deletion instead of reporting success', async () => {
-    const { client, inserts } = makeSessionClient({ household_id: 'hh1', role: 'owner' }, PENDING_MEMBER);
+    const { client } = makeSessionClient({ household_id: 'hh1', role: 'owner' }, PENDING_MEMBER);
     await useSession(client);
     getUserByIdMock.mockResolvedValue({ data: { user: { last_sign_in_at: null } }, error: null });
     deleteUserMock.mockResolvedValue({ error: { message: 'auth down' } });
@@ -163,6 +158,6 @@ describe('DELETE /api/household/members/[id]', () => {
     const res = await del();
     expect(res.status).toBe(500);
     expect((await res.json()).error).toBe('auth down');
-    expect(inserts.find((i) => i.table === 'events')).toBeUndefined();
+    expect(recordedEvents).toEqual([]);
   });
 });

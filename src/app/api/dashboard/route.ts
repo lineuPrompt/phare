@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     // Diary: once-per-UTC-day "user was active" heartbeat.
     isFirstReturnToday(supabase, householdId, user.id).then((first) => {
       if (first) {
-        void logEvent(supabase, householdId, user.id, 'returned', {
+        void logEvent(householdId, user.id, 'returned', {
           date: new Date().toISOString().slice(0, 10),
         });
       }
@@ -389,7 +389,7 @@ export async function GET(request: Request) {
     // month-nav reloads never reach this branch (early return above) and
     // never fire this, so clicking through months doesn't inflate the count.
     if (review) {
-      void logEvent(supabase, householdId, user.id, 'viewed_monthly_review', { month: actualsMonth.slice(0, 7) });
+      void logEvent(householdId, user.id, 'viewed_monthly_review', { month: actualsMonth.slice(0, 7) });
     }
 
     // Sinking funds now share ONE cash buffer (Build 4 Part A, 2026-07-21
