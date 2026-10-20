@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
-import { localeFromNext } from '@/lib/authCallbackHelpers';
+import { establishLinkSession, localeFromNext } from '@/lib/authCallbackHelpers';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -30,30 +30,13 @@ export default function AuthCallbackPage() {
 
     const supabase = createClient();
 
-    // The @supabase/ssr browser client may have already processed the hash tokens
-    // during its async initialize(). Check for an existing session first so we
-    // don't call setSession concurrently with the client's own initialization.
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session) {
-        // Client already established a session from the hash — just redirect.
-        if (tokenType === 'recovery') {
-          router.replace(`/${setPasswordLocale}/set-password?next=${encodeURIComponent(next)}`);
-        } else {
-          router.replace(next);
-        }
-        return;
-      }
-
-      // No session yet — set it manually with the tokens from the hash.
-      const { error } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
-
+    // The session must be the link's own user, never whoever was already
+    // signed in on this browser (launch plan 1.5) — see establishLinkSession.
+    establishLinkSession(supabase.auth, accessToken, refreshToken).then(({ error }) => {
       if (error) {
         // Surface the real error in the URL so it's visible during debugging.
-        console.error('[auth/callback] setSession error:', error.message);
-        router.replace(`/en/signin?error=${encodeURIComponent(error.message)}`);
+        console.error('[auth/callback] setSession error:', error);
+        router.replace(`/en/signin?error=${encodeURIComponent(error)}`);
         return;
       }
 
