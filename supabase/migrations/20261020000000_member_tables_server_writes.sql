@@ -2,7 +2,17 @@
 -- Phare — household_members: members read, only the server writes.
 -- member_deletion_requests: server only. 2026-10-20.
 --
--- STATUS: WRITTEN — not applied.
+-- STATUS: APPLIED — 2026-10-20 (Lineu, SQL Editor), after commit 0b58488 was
+--   confirmed Ready on Vercel.
+--
+--   VERIFIED LIVE 2026-10-20 through the read-only MCP server: VERIFY below
+--   11/11 PASS (before applying: 8 FAIL / 3 PASS).
+--   BEHAVIOUR VERIFIED LIVE as Zezinho Test (publishable key + own JWT):
+--   household_members SELECT own 200 (1 row), other households 0 rows;
+--   UPDATE / DELETE (nonexistent id) and INSERT (nonexistent household) all
+--   403/42501; member_deletion_requests SELECT and DELETE 403/42501;
+--   GET /api/household/members 200 with its member. Member row unchanged
+--   (1 row, updated_at 2026-08-11 16:32:23).
 --
 -- ORDER MATTERS — APPLY ONLY AFTER THE CODE IS LIVE ON phare.money (not just
 -- pushed). The code change in the same commit moves the last member-session
