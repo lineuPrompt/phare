@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Owner gate, rate limit, and honest-error surfacing for the resend-invite
-// route. Mocks both the caller's session client (household_members read/
-// write) and the admin client (getUserById / resetPasswordForEmail).
+// route. Mocks both the caller's session client (household_members read)
+// and the admin client (getUserById / resetPasswordForEmail, and the
+// last_resend_at stamp since launch plan 1.4).
 
 type Resolution = { data?: unknown; error?: unknown };
 
@@ -63,12 +64,32 @@ vi.mock('@/lib/supabase-server', () => ({
 
 const getUserByIdMock = vi.fn();
 const resetPasswordMock = vi.fn();
+/**
+ * Writes made through the admin client: the last_resend_at stamp goes through
+ * the service role since launch plan 1.4. Each records the table, the update
+ * payload, and every .eq() filter applied to it.
+ */
+const adminWrites: { table: string; payload: unknown; filters: [string, unknown][] }[] = [];
 vi.mock('@/lib/supabase-admin', () => ({
   createAdminClient: () => ({
     auth: {
       admin: { getUserById: (...args: unknown[]) => getUserByIdMock(...args) },
       resetPasswordForEmail: (...args: unknown[]) => resetPasswordMock(...args),
     },
+    from: (table: string) => ({
+      update: (payload: unknown) => {
+        const write = { table, payload, filters: [] as [string, unknown][] };
+        adminWrites.push(write);
+        const chain = {
+          eq: (column: string, value: unknown) => {
+            write.filters.push([column, value]);
+            return chain;
+          },
+          then: (resolve: (v: { error: null }) => unknown) => Promise.resolve({ error: null }).then(resolve),
+        };
+        return chain;
+      },
+    }),
   }),
 }));
 
@@ -85,6 +106,7 @@ describe('POST /api/household/members/[id]/resend', () => {
     vi.resetModules();
     getUserByIdMock.mockReset();
     resetPasswordMock.mockReset();
+    adminWrites.length = 0;
   });
 
   it('rejects a non-owner caller before touching the Admin API', async () => {
@@ -173,13 +195,13 @@ describe('POST /api/household/members/[id]/resend', () => {
     const json = await res.json();
     expect(json.error).toBe('SMTP quota exceeded');
     expect(calls.some((c) => c.table === 'household_members' && c.method === 'update')).toBe(false);
+    expect(adminWrites).toEqual([]);
   });
 
   it('on success, resends and stamps last_resend_at', async () => {
     const { client, calls } = makeSupabaseMock({ household_id: 'hh1', role: 'owner' }, {
       household_members: [
         { data: { id: 'mem-1', household_id: 'hh1', user_id: 'u1', last_resend_at: null }, error: null },
-        { error: null }, // update last_resend_at
       ],
     });
     const { createClient } = await import('@/lib/supabase-server');
@@ -199,8 +221,13 @@ describe('POST /api/household/members/[id]/resend', () => {
       redirectTo: expect.stringContaining('/auth/callback'),
     }));
 
-    const updateCall = calls.find((c) => c.table === 'household_members' && c.method === 'update');
-    expect(updateCall?.args[0]).toHaveProperty('last_resend_at');
+    // Stamped through the service role (launch plan 1.4), scoped to the
+    // caller's household explicitly — never on the member's session.
+    expect(calls.some((c) => c.table === 'household_members' && c.method === 'update')).toBe(false);
+    expect(adminWrites).toHaveLength(1);
+    expect(adminWrites[0].table).toBe('household_members');
+    expect(adminWrites[0].payload).toHaveProperty('last_resend_at');
+    expect(adminWrites[0].filters).toEqual([['id', 'mem-1'], ['household_id', 'hh1']]);
   });
 
   // Resend used to hardcode next=/en/dashboard, so re-inviting a French
@@ -214,7 +241,6 @@ describe('POST /api/household/members/[id]/resend', () => {
     const { client } = makeSupabaseMock({ household_id: 'hh1', role: 'owner', households }, {
       household_members: [
         { data: { id: 'mem-1', household_id: 'hh1', user_id: 'u1', last_resend_at: null }, error: null },
-        { error: null },
       ],
     });
     const { createClient } = await import('@/lib/supabase-server');
@@ -236,7 +262,6 @@ describe('POST /api/household/members/[id]/resend', () => {
     const { client } = makeSupabaseMock({ household_id: 'hh1', role: 'owner' }, {
       household_members: [
         { data: { id: 'mem-1', household_id: 'hh1', user_id: 'u1', last_resend_at: oldIso }, error: null },
-        { error: null },
       ],
     });
     const { createClient } = await import('@/lib/supabase-server');

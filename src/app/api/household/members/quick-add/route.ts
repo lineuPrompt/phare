@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { createAdminClient } from '@/lib/supabase-admin';
 import { getCallerInfo } from '../route';
 
 /**
@@ -27,7 +28,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
-    const { data: member, error } = await supabase
+    // Through the service role (launch plan 1.4): members cannot write
+    // household_members directly. The household is the caller's own.
+    const { data: member, error } = await createAdminClient()
       .from('household_members')
       .insert({ household_id: caller.householdId, name: name.trim() })
       .select('id, name')

@@ -407,10 +407,14 @@ export async function POST(request: Request) {
     let attachedTo: string | null = null;
 
     if (attachTargetId && newUser.user) {
-      const { data: existingRow } = await supabase
+      // Through the service role (launch plan 1.4): members cannot write
+      // household_members directly. The service role bypasses RLS, so both the
+      // read and the write are scoped to the caller's household explicitly.
+      const { data: existingRow } = await admin
         .from('household_members')
         .select('name')
         .eq('id', attachTargetId)
+        .eq('household_id', caller.householdId)
         .single();
 
       if (existingRow) {
@@ -418,10 +422,11 @@ export async function POST(request: Request) {
           ? fullName.trim()
           : existingRow.name;
 
-        const { error: attachError } = await supabase
+        const { error: attachError } = await admin
           .from('household_members')
           .update({ user_id: newUser.user.id, name: mergedName })
-          .eq('id', attachTargetId);
+          .eq('id', attachTargetId)
+          .eq('household_id', caller.householdId);
 
         if (attachError) {
           console.error('Member attach-on-invite update error (userId for ops):', newUser.user.id, attachError);
@@ -429,18 +434,20 @@ export async function POST(request: Request) {
           attached = true;
           attachedTo = mergedName;
 
-          const { data: duplicateRow } = await supabase
+          const { data: duplicateRow } = await admin
             .from('household_members')
             .select('id')
             .eq('user_id', newUser.user.id)
+            .eq('household_id', caller.householdId)
             .neq('id', attachTargetId)
             .maybeSingle();
 
           if (duplicateRow) {
-            const { error: cleanupError } = await supabase
+            const { error: cleanupError } = await admin
               .from('household_members')
               .delete()
-              .eq('id', duplicateRow.id);
+              .eq('id', duplicateRow.id)
+              .eq('household_id', caller.householdId);
             if (cleanupError) {
               console.error('Member attach-on-invite duplicate cleanup error (row left behind, needs manual removal via the merge script):', duplicateRow.id, cleanupError);
             }

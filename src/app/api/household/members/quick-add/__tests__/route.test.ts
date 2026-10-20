@@ -56,6 +56,19 @@ vi.mock('@/lib/supabase-server', () => ({
   createClient: vi.fn(),
 }));
 
+// The insert goes through the service role (launch plan 1.4); the member's
+// session only identifies the caller.
+vi.mock('@/lib/supabase-admin', () => ({
+  createAdminClient: vi.fn(),
+}));
+
+async function useAdmin(script: Record<string, Resolution[]>) {
+  const admin = makeSupabaseMock(script);
+  const { createAdminClient } = await import('@/lib/supabase-admin');
+  (createAdminClient as ReturnType<typeof vi.fn>).mockReturnValue(admin.client);
+  return admin;
+}
+
 describe('POST /api/household/members/quick-add', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -64,10 +77,12 @@ describe('POST /api/household/members/quick-add', () => {
   it('creates a name-only member row — no user_id, no email, no invite fields', async () => {
     const { client, calls } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', role: 'member' }, error: null }],
-      household_members: [{ data: { id: 'mem-julia', name: 'Julia' }, error: null }],
     });
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const admin = await useAdmin({
+      household_members: [{ data: { id: 'mem-julia', name: 'Julia' }, error: null }],
+    });
 
     const { POST } = await import('../route');
     const res = await POST(new Request('http://localhost/api/household/members/quick-add', {
@@ -79,7 +94,9 @@ describe('POST /api/household/members/quick-add', () => {
     expect(res.status).toBe(200);
     expect(json.member).toEqual({ id: 'mem-julia', name: 'Julia' });
 
-    const inserts = calls.filter((c) => c.table === 'household_members' && c.method === 'insert');
+    // Written by the service role, never the member's session.
+    expect(calls.some((c) => c.table === 'household_members')).toBe(false);
+    const inserts = admin.calls.filter((c) => c.table === 'household_members' && c.method === 'insert');
     expect(inserts).toHaveLength(1);
     // Exactly household_id + name — no email, no user_id, nothing invite-shaped.
     expect(inserts[0].args[0]).toEqual({ household_id: 'hh1', name: 'Julia' });
@@ -103,10 +120,10 @@ describe('POST /api/household/members/quick-add', () => {
   it('a non-owner member role can still quick-add — no owner gate, unlike provisioning', async () => {
     const { client } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1', role: 'member' }, error: null }],
-      household_members: [{ data: { id: 'mem-sam', name: 'Sam' }, error: null }],
     });
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    await useAdmin({ household_members: [{ data: { id: 'mem-sam', name: 'Sam' }, error: null }] });
 
     const { POST } = await import('../route');
     const res = await POST(new Request('http://localhost/api/household/members/quick-add', {

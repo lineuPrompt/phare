@@ -82,10 +82,13 @@ export async function POST(
       return NextResponse.json({ error: emailError.message }, { status: 500 });
     }
 
-    const { error: stampError } = await supabase
+    // Through the service role (launch plan 1.4), so scoped to the caller's
+    // household explicitly.
+    const { error: stampError } = await admin
       .from('household_members')
       .update({ last_resend_at: new Date().toISOString() })
-      .eq('id', member.id);
+      .eq('id', member.id)
+      .eq('household_id', caller.householdId);
     if (stampError) {
       console.error('Resend invite — last_resend_at stamp error (memberId for ops, email already sent):', member.id, stampError);
     }

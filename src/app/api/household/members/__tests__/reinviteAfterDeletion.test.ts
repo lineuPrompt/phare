@@ -84,6 +84,9 @@ vi.mock('@/lib/supabase-server', () => ({ createClient: vi.fn() }));
 
 const createUserMock = vi.fn();
 const resetPasswordMock = vi.fn();
+// household_members calls made through the service role — the attach path,
+// since launch plan 1.4. Null until a test scripts them.
+let adminDb: ReturnType<typeof makeSupabaseMock> | null = null;
 
 vi.mock('@/lib/supabase-admin', () => ({
   createAdminClient: () => ({
@@ -93,7 +96,8 @@ vi.mock('@/lib/supabase-admin', () => ({
     },
     // The "is this email already ours?" lookup — always "no", so the cap check
     // and the attach logic below both run.
-    from: () => {
+    from: (table: string) => {
+      if (table === 'household_members' && adminDb) return adminDb.client.from(table);
       const nullChain = (): unknown =>
         new Proxy({}, {
           get(_, prop) {
@@ -124,6 +128,7 @@ describe('re-invite after a member self-deletion must not reattach', () => {
     vi.resetModules();
     createUserMock.mockReset();
     resetPasswordMock.mockReset();
+    adminDb = null;
     createUserMock.mockResolvedValue({ data: { user: { id: 'new-auth-user' } }, error: null });
     resetPasswordMock.mockResolvedValue({ error: null });
   });
@@ -209,11 +214,17 @@ describe('re-invite after a member self-deletion must not reattach', () => {
         { count: 0, error: null },
         // Same shape as above but NOT tombstoned — a real quick-add row.
         { data: { id: 'mem-julia', user_id: null, household_id: 'hh1', deleted_at: null }, error: null },
+      ],
+    });
+    // The attach goes through the service role (launch plan 1.4).
+    adminDb = makeSupabaseMock({
+      household_members: [
         { data: { name: 'Julia' }, error: null }, // existing row's current name
         { error: null },                          // the attach update
         { data: null, error: null },              // trigger duplicate lookup
       ],
     });
+    const adminChains = adminDb.chains;
 
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
@@ -229,9 +240,14 @@ describe('re-invite after a member self-deletion must not reattach', () => {
     expect(res.status).toBe(200);
     expect(json.attached).toBe(true);
 
-    const update = chains.find(
+    // The member's session never writes household_members.
+    expect(chains.some((c) => c.table === 'household_members' && c.calls[0]?.method !== 'select')).toBe(false);
+
+    const update = adminChains.find(
       (c) => c.table === 'household_members' && c.calls[0]?.method === 'update'
     );
     expect(update?.calls[0].args[0]).toEqual({ user_id: 'new-auth-user', name: 'Julia Alff' });
+    const updateFilters = update?.calls.filter((c) => c.method === 'eq').map((c) => c.args);
+    expect(updateFilters).toEqual([['id', 'mem-julia'], ['household_id', 'hh1']]);
   });
 });

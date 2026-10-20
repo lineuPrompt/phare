@@ -65,6 +65,50 @@ const getUserByIdMock = vi.fn();
 const adminUsersSelectMock = vi.fn();
 const adminFromCalls: { table: string; args: unknown[] }[] = [];
 
+// household_members calls the route makes through the service role: the
+// attach path, since launch plan 1.4 (members cannot write the table). Each
+// call records its method, arguments and every .eq() filter, so a test can
+// prove the write is scoped to the caller's household. Unscripted = throws.
+type AdminChain = { method: string; args: unknown[]; filters: [string, unknown][] };
+let adminMembers: { script: Resolution[]; chains: AdminChain[] } | null = null;
+
+function scriptAdminMembers(script: Resolution[]) {
+  const scripted = { script, chains: [] as AdminChain[] };
+  adminMembers = scripted;
+  return scripted;
+}
+
+function adminMembersFrom() {
+  const start = (method: string) => (...args: unknown[]) => {
+    if (!adminMembers) throw new Error(`Unscripted admin household_members ${method}`);
+    const chain: AdminChain = { method, args, filters: [] };
+    adminMembers.chains.push(chain);
+    const resolution = adminMembers.script[adminMembers.chains.length - 1];
+    if (!resolution) {
+      throw new Error(`No scripted admin household_members response #${adminMembers.chains.length} (${method})`);
+    }
+    const link = (): unknown =>
+      new Proxy({}, {
+        get(_, prop) {
+          if (prop === 'then') {
+            return (resolve: (v: Resolution) => unknown, reject?: (v: unknown) => unknown) =>
+              Promise.resolve(resolution).then(resolve, reject);
+          }
+          return (...a: unknown[]) => {
+            if (prop === 'eq') chain.filters.push([a[0] as string, a[1]]);
+            return link();
+          };
+        },
+      });
+    return link();
+  };
+  return { select: start('select'), update: start('update'), delete: start('delete'), insert: start('insert') };
+}
+
+beforeEach(() => {
+  adminMembers = null;
+});
+
 vi.mock('@/lib/supabase-admin', () => ({
   createAdminClient: () => ({
     auth: {
@@ -74,7 +118,7 @@ vi.mock('@/lib/supabase-admin', () => ({
       },
       resetPasswordForEmail: (...args: unknown[]) => resetPasswordMock(...args),
     },
-    from: (table: string) => ({
+    from: (table: string) => table === 'household_members' ? adminMembersFrom() : ({
       select: (...args: unknown[]) => {
         adminFromCalls.push({ table, args });
         // Fall back to an empty result so a test that doesn't care about the
@@ -120,12 +164,15 @@ describe('POST /api/household/members — match-before-create', () => {
       household_members: [
         { count: 0, error: null },     // member-cap count (route reads this first)
         { data: [{ id: 'mem-julia', name: 'Julia' }], error: null }, // name-only candidates
-        { data: { name: 'Julia' }, error: null },                    // existing row's current name
-        { error: null },                                             // update (attach)
-        { data: { id: 'mem-trigger-dup' }, error: null },            // the trigger's brand-new duplicate
-        { error: null },                                             // delete the duplicate
       ],
     });
+    // The attach itself goes through the service role (launch plan 1.4).
+    const admin = scriptAdminMembers([
+      { data: { name: 'Julia' }, error: null },          // existing row's current name
+      { error: null },                                   // update (attach)
+      { data: { id: 'mem-trigger-dup' }, error: null },  // the trigger's brand-new duplicate
+      { error: null },                                   // delete the duplicate
+    ]);
 
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
@@ -136,14 +183,24 @@ describe('POST /api/household/members — match-before-create', () => {
     expect(res.status).toBe(200);
     expect(json).toEqual({ success: true, attached: true, attachedTo: 'Julia Alff' });
 
+    // The member's session only read (cap count, candidates) — it never
+    // writes household_members.
+    expect(calls.filter((c) => c.table === 'household_members').map((c) => c.method)).toEqual(['select', 'select']);
+    expect(admin.chains.map((c) => c.method)).toEqual(['select', 'update', 'select', 'delete']);
+    const [nameRead, updateCall, duplicateLookup, deleteCall] = admin.chains;
+
+    // The service role bypasses RLS, so every call names the household itself.
+    expect(nameRead.filters).toEqual([['id', 'mem-julia'], ['household_id', 'hh1']]);
+
     // The EXISTING member id was updated (attribution — recurring_items,
     // transactions, budgets pointing at mem-julia — never touched or re-pointed).
-    const updateCall = calls.find((c) => c.table === 'household_members' && c.method === 'update');
-    expect(updateCall?.args[0]).toEqual({ user_id: 'new-auth-user', name: 'Julia Alff' });
+    expect(updateCall.args[0]).toEqual({ user_id: 'new-auth-user', name: 'Julia Alff' });
+    expect(updateCall.filters).toEqual([['id', 'mem-julia'], ['household_id', 'hh1']]);
 
-    // The trigger's freshly-created duplicate (a different id) was removed.
-    const deleteCall = calls.find((c) => c.table === 'household_members' && c.method === 'delete');
-    expect(deleteCall).toBeTruthy();
+    // The trigger's freshly-created duplicate (a different id) was removed —
+    // looked up and deleted within the caller's household only.
+    expect(duplicateLookup.filters).toEqual([['user_id', 'new-auth-user'], ['household_id', 'hh1']]);
+    expect(deleteCall.filters).toEqual([['id', 'mem-trigger-dup'], ['household_id', 'hh1']]);
 
     // No second, competing member row is left orphaned — createUser really
     // was called (an email was actually sent to the real Julia).
@@ -213,11 +270,13 @@ describe('POST /api/household/members — match-before-create', () => {
       household_members: [
         { count: 0, error: null },     // member-cap count (route reads this first)
         { data: { id: 'm5', user_id: null, household_id: 'hh1' }, error: null }, // attachToMemberId validation
-        { data: { name: 'Julia' }, error: null },                                // existing row's name
-        { error: null },                                                        // update
-        { data: null, error: null },                                            // no duplicate found
       ],
     });
+    const admin = scriptAdminMembers([
+      { data: { name: 'Julia' }, error: null }, // existing row's name
+      { error: null },                          // update
+      { data: null, error: null },              // no duplicate found
+    ]);
 
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
@@ -227,7 +286,10 @@ describe('POST /api/household/members — match-before-create', () => {
 
     expect(res.status).toBe(200);
     expect(json).toEqual({ success: true, attached: true, attachedTo: 'Julia Alff' });
-    void calls;
+    expect(calls.some((c) => c.table === 'household_members' && c.method !== 'select')).toBe(false);
+    // No duplicate found, so no delete.
+    expect(admin.chains.map((c) => c.method)).toEqual(['select', 'update', 'select']);
+    expect(admin.chains[1].filters).toEqual([['id', 'm5'], ['household_id', 'hh1']]);
   });
 
   it('forceNew (the owner\'s explicit "create as a new person" choice) skips matching and never attaches', async () => {
