@@ -3,8 +3,9 @@
 **Filed** 2026-10-20, found while checking launch plan 1.4 (who writes
 `household_members`).
 
-**Status:** FIX WRITTEN 2026-10-20 (launch plan 1.6, approved):
-`supabase/migrations/20261020010000_rpc_execute_grants.sql`, not applied.
+**Status:** FIXED and verified live 2026-10-20 (launch plan 1.6):
+`supabase/migrations/20261020010000_rpc_execute_grants.sql` applied, VERIFY
+6/6 PASS, deletion functions refused to members and to signed-out callers.
 Diagnosis update: no partial run was possible — each call is one transaction,
 and a refused statement undoes the whole call. All six functions also carried
 Postgres' default PUBLIC EXECUTE, so the fix revokes PUBLIC too.

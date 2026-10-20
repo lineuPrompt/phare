@@ -1,7 +1,16 @@
 -- =============================================================================
 -- Phare — who may call the public functions. 2026-10-20.
 --
--- STATUS: WRITTEN — not applied.
+-- STATUS: APPLIED — 2026-10-20 (Lineu, SQL Editor).
+--
+--   VERIFIED LIVE 2026-10-20 through the read-only MCP server: VERIFY below
+--   6/6 PASS (before applying: 6/6 FAIL).
+--   BEHAVIOUR VERIFIED LIVE as Zezinho Test (publishable key, nonexistent ids):
+--   delete_household, delete_household_member, household_deletion_preview as a
+--   member → 403/42501 "permission denied for function"; delete_household with
+--   no session → 401/42501. create_transfer as a member → runs (400 P0001, its
+--   own argument check); delete_goal_account as a member → runs (200). Both
+--   with no session → 401/42501.
 --
 -- NO CODE CHANGE, NO ORDERING. Every caller already uses the right client:
 --   admin (service role) only:  delete_household, delete_household_member,
