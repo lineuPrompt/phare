@@ -2,7 +2,22 @@
 -- Phare — conversations: server only. Members can neither read nor write
 -- letters directly. 2026-10-19.
 --
--- STATUS: WRITTEN, NOT APPLIED.
+-- STATUS: APPLIED — 2026-10-19 18:44 UTC (Lineu, SQL Editor).
+--
+--   APPLIED ~1 HOUR BEFORE THE CODE WENT LIVE. The commit was pushed, but the
+--   Vercel deploy serving phare.money still ran the old member-session reads
+--   until about 19:48 UTC (Supabase edge logs: authenticated 403 at 18:44, then
+--   service_role 200 from 19:48). In that window /api/reviews answered 503 and
+--   the dashboard showed no letter. No data was lost. Next time: confirm the
+--   deploy is Ready on phare.money, not just pushed, before applying.
+--
+--   VERIFIED LIVE 2026-10-19 through the read-only MCP server: VERIFY below
+--   6/6 PASS (before applying: 4 FAIL / 2 PASS).
+--   BEHAVIOUR VERIFIED LIVE as Zezinho Test (publishable key + own JWT):
+--   2026-10-19: PostgREST SELECT / INSERT / UPDATE / DELETE all 403/42501.
+--   2026-10-20: direct SELECT still 403; GET /api/reviews 200 with all 3
+--   monthly letters in full (comped, Pro); GET /api/dashboard 200 with its
+--   letter. Letter rows unchanged: 13, newest updated_at 2026-10-11 18:00:34.
 --
 -- ORDER MATTERS — APPLY ONLY AFTER THE CODE IS DEPLOYED. The code change in
 -- the same commit moves every remaining member-session read and write of
