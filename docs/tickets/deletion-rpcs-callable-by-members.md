@@ -3,7 +3,11 @@
 **Filed** 2026-10-20, found while checking launch plan 1.4 (who writes
 `household_members`).
 
-**Status:** OPEN. P1, belongs with launch plan 1.6 (policy review).
+**Status:** FIX WRITTEN 2026-10-20 (launch plan 1.6, approved):
+`supabase/migrations/20261020010000_rpc_execute_grants.sql`, not applied.
+Diagnosis update: no partial run was possible — each call is one transaction,
+and a refused statement undoes the whole call. All six functions also carried
+Postgres' default PUBLIC EXECUTE, so the fix revokes PUBLIC too.
 
 ---
 
