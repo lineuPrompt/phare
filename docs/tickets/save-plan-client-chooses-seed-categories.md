@@ -2,7 +2,11 @@
 
 **Filed** 2026-10-01, found while moving the seed list into `@phare/core`.
 
-**Status:** OPEN. Ticket only.
+**Status:** FIXED in code 2026-10-21 (launch plan 1.6, categories): the seed
+is always `SEED_EXPENSE_CATEGORIES`; `plan.seedCategories` in the body is
+ignored (still accepted and length-capped by `promptInputLimits`, and still
+returned by `/api/plan`, both harmless now). Test: a body with
+`seedCategories: ['Yachts', 'Housing']` seeds the fixed ten, no "Yachts".
 
 ## The problem
 

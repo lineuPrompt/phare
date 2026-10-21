@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { conversationsClientTables } from '../../../../test/conversationsClientDouble';
+import { categoriesWriterTables } from '../../../../test/categoriesWriterDouble';
 import { businessMonth } from '@phare/core';
 
 // getHouseholdTimezone's fallback (and every test household's scripted
@@ -778,7 +779,7 @@ describe('POST /api/save-plan — category seeding never fails silently', () => 
   // A household with no categories yet (a first onboarding). The category
   // script is the variable; every other table is the zero-accounts scenario
   // above, truncated to what runs before the category block.
-  async function runWithCategories(categories: Resolution[]) {
+  async function runWithCategories(categories: Resolution[], extraPlan: Record<string, unknown> = {}) {
     const { client, calls } = makeSupabaseMock({
       users: [{ data: { household_id: 'hh1' }, error: null }],
       household_members: [
@@ -823,6 +824,7 @@ describe('POST /api/save-plan — category seeding never fails silently', () => 
           sinkingFunds: [],
           goals: [],
           topRecommendation: 'Keep it up.',
+          ...extraPlan,
         },
         reviewText: 'Looking good.',
         locale: 'en',
@@ -855,7 +857,27 @@ describe('POST /api/save-plan — category seeding never fails silently', () => 
     const seedInserts = calls.filter((c) => c.table === 'categories' && c.method === 'insert');
     expect(seedInserts).toHaveLength(1);
     expect((seedInserts[0].args[0] as { name: string }[]).map((r) => r.name)).toEqual(SEED_CATEGORY_NAMES);
+    // The seed is written by the service role (launch plan 1.6); the read of
+    // existing categories stays on the member's session.
+    expect(categoriesWriterTables).toEqual(['categories']);
     expectStoppedAtCategories(calls);
+  });
+
+  it('a category list in the request body is ignored: the fixed set is seeded, nothing else', async () => {
+    // seedCategories in the body used to be inserted as-is — a way to add
+    // custom categories past the Pro gate. The insert result is a failure so
+    // the route stops right after the seed and nothing more needs scripting.
+    const { calls } = await runWithCategories([
+      { data: [], error: null },
+      { error: { message: 'stop here' } },
+    ], { seedCategories: ['Yachts', 'Housing'] });
+
+    const seedInserts = calls.filter((c) => c.table === 'categories' && c.method === 'insert');
+    expect(seedInserts).toHaveLength(1);
+    const names = (seedInserts[0].args[0] as { name: string; household_id: string }[]).map((r) => r.name);
+    expect(names).toEqual(SEED_CATEGORY_NAMES);
+    expect(names).not.toContain('Yachts');
+    expect((seedInserts[0].args[0] as { household_id: string }[]).every((r) => r.household_id === 'hh1')).toBe(true);
   });
 
   it('a failed read of existing categories returns 500 instead of seeding blind', async () => {

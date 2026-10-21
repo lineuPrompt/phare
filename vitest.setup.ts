@@ -1,6 +1,7 @@
 import { beforeEach, vi } from 'vitest';
 import { fakeEventWriter, resetEventWriterDouble } from './src/test/eventWriterDouble';
 import { forwardingConversationsClient, resetConversationsClientDouble } from './src/test/conversationsClientDouble';
+import { forwardingCategoriesWriter, resetCategoriesWriterDouble } from './src/test/categoriesWriterDouble';
 
 // ---------------------------------------------------------------------------
 // THE REAL ANTHROPIC CLIENT IS OPT-IN, NOT OPT-OUT.
@@ -77,7 +78,15 @@ vi.mock('@/lib/eventWriter', () => ({ eventWriter: () => fakeEventWriter() }));
 
 vi.mock('@/lib/conversationsClient', () => ({ conversationsClient: () => forwardingConversationsClient() }));
 
+// ---------------------------------------------------------------------------
+// CATEGORIES ARE WRITTEN BY THE SERVICE ROLE (2026-10-21,
+// src/lib/categoriesWriter.ts). Same forwarding double as conversations.
+// ---------------------------------------------------------------------------
+
+vi.mock('@/lib/categoriesWriter', () => ({ categoriesWriter: () => forwardingCategoriesWriter() }));
+
 beforeEach(() => {
   resetEventWriterDouble();
   resetConversationsClientDouble();
+  resetCategoriesWriterDouble();
 });

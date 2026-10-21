@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { conversationsClient } from '@/lib/conversationsClient';
+import { categoriesWriter } from '@/lib/categoriesWriter';
 import { businessMonth, materializeRule, monthNameToNumber, SEED_EXPENSE_CATEGORIES } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { logEvent } from '@/lib/eventLogger';
@@ -385,13 +386,19 @@ export async function POST(request: Request) {
     }
 
     // ----- Seed the fixed category set (idempotent) -----
-    const seedNames: string[] = plan.seedCategories ?? [...SEED_EXPENSE_CATEGORIES];
+    // Always the fixed set from @phare/core. A list in the request body is
+    // ignored: it let a client choose its own categories past the Pro gate on
+    // custom ones (docs/tickets/save-plan-client-chooses-seed-categories.md).
+    const seedNames: string[] = [...SEED_EXPENSE_CATEGORIES];
 
     const toSeed = missingSeedCategories((existingCats ?? []).map((c) => c.name), seedNames);
     if (toSeed.length > 0) {
       // Without categories a household cannot record money out, so a failed
       // seed must fail the save — never a 200 over an empty category list.
-      const { error: seedError } = await supabase.from('categories').insert(toSeed.map((name) => ({
+      // Written by the service role (launch plan 1.6): members can only read
+      // categories. household_id is the caller's own, set on every row.
+      const writer = await categoriesWriter();
+      const { error: seedError } = await writer.from('categories').insert(toSeed.map((name) => ({
         household_id: householdId,
         name,
         type: 'expense',

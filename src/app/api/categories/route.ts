@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { requirePro } from '@/lib/proGate';
+import { categoriesWriter } from '@/lib/categoriesWriter';
 
 // GET: household's expense categories (id, name) — the shared read path for
 // any form that needs a category selector (Timeline's chequing entry form,
@@ -60,7 +61,10 @@ export async function POST(request: Request) {
     const gate = await requirePro(supabase, userRow.household_id, 'custom_categories');
     if (!gate.allowed) return gate.response;
 
-    const { data: cat, error } = await supabase
+    // Written by the service role (launch plan 1.6): members can only read
+    // categories, so the Pro gate above cannot be stepped around.
+    const writer = await categoriesWriter();
+    const { data: cat, error } = await writer
       .from('categories')
       .insert({ household_id: userRow.household_id, name: name.trim(), type: 'expense' })
       .select('id, name, type')
