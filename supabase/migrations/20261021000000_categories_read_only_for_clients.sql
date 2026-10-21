@@ -1,7 +1,16 @@
 -- =============================================================================
 -- Phare — categories: members read, only the server writes. 2026-10-21.
 --
--- STATUS: WRITTEN — not applied.
+-- STATUS: APPLIED — 2026-10-21 (Lineu, SQL Editor), after the code shipped in
+--   commit 1d39cd2.
+--
+--   VERIFIED LIVE 2026-10-21 through the read-only MCP server: VERIFY below
+--   7/7 PASS (before applying: 4 FAIL / 3 PASS).
+--   BEHAVIOUR VERIFIED LIVE as Zezinho Test (publishable key + own JWT):
+--   SELECT own categories 200 (10 rows); INSERT (nonexistent household),
+--   UPDATE and DELETE (nonexistent id) 403/42501; SELECT with no session
+--   401/42501; GET /api/categories 200 with 10 categories. Rows unchanged
+--   (10, same names).
 --
 -- ORDER MATTERS — APPLY ONLY AFTER THE CODE IS LIVE ON phare.money (Vercel
 -- shows the deployment Ready, not just pushed). The code change in the same
