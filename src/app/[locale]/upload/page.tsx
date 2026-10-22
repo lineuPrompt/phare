@@ -99,6 +99,7 @@ export default function UploadPage() {
   const [saveNotices, setSaveNotices] = useState<{
     unmatchedMembers: { label: string; attemptedMember: string }[];
     needsPayDate: NeedsPayDateItem[];
+    letterError: string | null;
   } | null>(null);
   // Household members for the anchor step's attribution dropdown.
   const [householdMembers, setHouseholdMembers] = useState<{ id: string; name: string }[]>([]);
@@ -222,6 +223,7 @@ export default function UploadPage() {
       setSaveNotices({
         unmatchedMembers: outcome.unmatchedMembers,
         needsPayDate: outcome.needsPayDate,
+        letterError: outcome.letterError,
       });
       setHouseholdMembers(outcome.householdMembers);
       setPlanSaveStatus('saved');

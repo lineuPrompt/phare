@@ -136,6 +136,9 @@ export type AfterSaveOutcome<Item, Counts> =
       needsPayDate: Item[];
       unmatchedMembers: { label: string; attemptedMember: string }[];
       householdMembers: { id: string; name: string }[];
+      /** Set when the plan saved but its first letter did not — the server's
+       *  reason. null when the letter saved. */
+      letterError: string | null;
     };
 
 export function afterSaveOutcome<Item, Counts>(
@@ -145,6 +148,7 @@ export function afterSaveOutcome<Item, Counts>(
     needsPayDate?: Item[];
     unmatchedMembers?: { label: string; attemptedMember: string }[];
     householdMembers?: { id: string; name: string }[];
+    letterError?: string | null;
   } | null | undefined
 ): AfterSaveOutcome<Item, Counts> {
   if (data?.needsConfirmation) {
@@ -156,6 +160,7 @@ export function afterSaveOutcome<Item, Counts>(
     needsPayDate,
     unmatchedMembers: data?.unmatchedMembers ?? [],
     householdMembers: data?.householdMembers ?? [],
+    letterError: typeof data?.letterError === 'string' && data.letterError ? data.letterError : null,
   };
 }
 

@@ -60,7 +60,19 @@ describe('afterSaveOutcome — what a 2xx save-plan body means', () => {
       needsPayDate: [],
       unmatchedMembers,
       householdMembers,
+      letterError: null,
     });
+  });
+
+  it('a letter that did not save comes through as letterError, with the server reason', () => {
+    const out = afterSaveOutcome({ needsPayDate: [], letterError: 'permission denied for table conversations' });
+    expect(out).toMatchObject({ kind: 'done', letterError: 'permission denied for table conversations' });
+  });
+
+  it('a letter that saved (null), or an older server that sends nothing, is letterError null', () => {
+    expect(afterSaveOutcome({ letterError: null })).toMatchObject({ letterError: null });
+    expect(afterSaveOutcome({})).toMatchObject({ letterError: null });
+    expect(afterSaveOutcome({ letterError: '' })).toMatchObject({ letterError: null });
   });
 
   it('an unparseable body (null) is a save with no notices, as the web page always read it', () => {
@@ -69,6 +81,7 @@ describe('afterSaveOutcome — what a 2xx save-plan body means', () => {
       needsPayDate: [],
       unmatchedMembers: [],
       householdMembers: [],
+      letterError: null,
     });
   });
 

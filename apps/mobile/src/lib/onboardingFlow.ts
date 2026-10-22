@@ -272,14 +272,16 @@ export function createOnboardingRunner(deps: { get: Getter; post: Poster; patch:
       at: () => Date = () => new Date()
     ): Promise<
       | { kind: 'needsConfirmation' }
-      | { kind: 'payDates'; items: PayDateItem[]; anchor: 'skipped' | 'anchored' | 'failed' }
-      | { kind: 'done'; anchor: 'skipped' | 'anchored' | 'failed' }
+      | { kind: 'payDates'; items: PayDateItem[]; anchor: 'skipped' | 'anchored' | 'failed'; letterFailed: boolean }
+      | { kind: 'done'; anchor: 'skipped' | 'anchored' | 'failed'; letterFailed: boolean }
     > {
       if (outcome.kind === 'needsConfirmation') return { kind: 'needsConfirmation' };
       const anchor = await this.anchor(openingBalance, at);
+      // The plan saved but its first letter did not: said on the done screen.
+      const letterFailed = outcome.letterError !== null;
       return outcome.kind === 'needsPayDate'
-        ? { kind: 'payDates', items: outcome.needsPayDate, anchor }
-        : { kind: 'done', anchor };
+        ? { kind: 'payDates', items: outcome.needsPayDate, anchor, letterFailed }
+        : { kind: 'done', anchor, letterFailed };
     },
 
     /** One pay date. Validated by core's rules before it is sent. */

@@ -45,6 +45,7 @@ export default function PlanDisplay({
   saveNotices: {
     unmatchedMembers: { label: string; attemptedMember: string }[];
     needsPayDate: { id: string; description: string; type: 'income' | 'expense' }[];
+    letterError: string | null;
   } | null;
   saveErrorMessage: string | null;
   locale: string;
@@ -303,8 +304,11 @@ export default function PlanDisplay({
         </div>
       )}
 
-      {planSaveStatus === 'saved' && saveNotices && (saveNotices.unmatchedMembers.length > 0 || saveNotices.needsPayDate.length > 0) && (
+      {planSaveStatus === 'saved' && saveNotices && (saveNotices.unmatchedMembers.length > 0 || saveNotices.needsPayDate.length > 0 || saveNotices.letterError) && (
         <div className="rounded-2xl p-6 space-y-3" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+          {saveNotices.letterError && (
+            <p style={{ color: '#374151' }}>{t('plan.letterFailed')}</p>
+          )}
           {saveNotices.unmatchedMembers.length > 0 && (
             <div>
               <p style={{ color: '#374151' }}>

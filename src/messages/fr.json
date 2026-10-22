@@ -288,6 +288,7 @@
         "confirm": "Remplacer"
       },
       "unmatchedMembers": "{count, plural, one {Le nom de membre d'une source de revenu ne correspondait à personne dans votre foyer — elle vous a été attribuée. Vérifiez-la dans la page Récurrences.} other {Le nom de membre de # sources de revenu ne correspondait à personne dans votre foyer — elles vous ont été attribuées. Vérifiez-les dans la page Récurrences.}}",
+      "letterFailed": "Votre plan est enregistré, mais pas sa première lettre. Votre prochain bilan mensuel arrivera comme prévu.",
       "unmatchedMemberItem": "« {name} » ne correspondait à personne — attribué à vous.",
       "needsDateFlag": "définissez une date de paiement pour voir ce mois-ci",
       "anchorStep": {

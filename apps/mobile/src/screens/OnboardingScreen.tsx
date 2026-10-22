@@ -62,6 +62,8 @@ type DoneInfo = {
   reviewNoteKey: string | null;
   reviewResetsOn: string | null;
   anchor: 'skipped' | 'anchored' | 'failed';
+  /** The plan saved but its first letter did not. */
+  letterFailed: boolean;
 };
 
 export default function OnboardingScreen({ onFinished }: { onFinished: () => void }) {
@@ -128,6 +130,7 @@ export default function OnboardingScreen({ onFinished }: { onFinished: () => voi
       reviewNoteKey: review.noteKey,
       reviewResetsOn: review.resetsOn,
       anchor: next.anchor,
+      letterFailed: next.letterFailed,
     };
     setStep(next.kind === 'payDates' ? { name: 'payDates', items: next.items, after: info } : { name: 'done', info });
   };
@@ -356,6 +359,7 @@ export default function OnboardingScreen({ onFinished }: { onFinished: () => voi
       <>
         <Text style={styles.title}>{t('onboarding.done.title')}</Text>
         {info.anchor === 'failed' && <ErrorBox text={t('onboarding.done.anchorFailed')} />}
+        {info.letterFailed && <ErrorBox text={t('onboarding.done.letterFailed')} />}
         {info.reviewText ? (
           <View style={styles.card}>
             <Text style={styles.letter}>{info.reviewText}</Text>

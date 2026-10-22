@@ -275,16 +275,12 @@ for when it thaws:
   1226134) and verified on Zezinho Test; no run through the actual screens.
 - ~~**save-plan: five more writes never read their error.**~~ FIXED in code
   2026-10-22 (launch plan 1.7), eight writes checked, uncommitted. A failed
-  onboarding letter comes back as `letterError`, which no screen shows yet
-  (Lineu to decide). — [ticket](tickets/save-plan-unchecked-writes.md)
+  onboarding letter is said on screen, web and mobile. — [ticket](tickets/save-plan-unchecked-writes.md)
 - **The AI chooses each expense's category and fixed/variable** (CLAUDE.md
   §4). **STOP.** — [ticket](tickets/plan-ai-classifies-expense-lines.md)
 - ~~**save-plan seeds whatever category names the request body sends.**~~
   FIXED 2026-10-21 (launch plan 1.6, commit 1d39cd2). —
   [ticket](tickets/save-plan-client-chooses-seed-categories.md)
-- **Web entry forms read amounts with `parseFloat`** — "12,50" (a French
-  decimal comma) is saved as 12. **Money input.** —
-  [ticket](tickets/web-amount-parsefloat-decimal-comma.md)
 - **POST /api/recurring attributes an expense rule's transactions to its
   creator** (CLAUDE.md §4); 0 live rows. —
   [ticket](tickets/recurring-post-expense-rows-attributed-to-creator.md)

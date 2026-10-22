@@ -270,6 +270,7 @@
     "done": {
       "title": "Votre plan est prêt",
       "anchorFailed": "Votre plan est enregistré, mais pas le solde de votre compte chèques. Vous pouvez l'indiquer dans Compte → Mettre à jour le solde.",
+      "letterFailed": "Votre plan est enregistré, mais pas sa première lettre. Votre prochain bilan mensuel arrivera comme prévu.",
       "continue": "Continuer"
     },
     "errors": {

@@ -288,6 +288,7 @@
         "confirm": "Replace"
       },
       "unmatchedMembers": "{count, plural, one {1 income source's Member name didn't match anyone in your household — it was assigned to you. Check it on the Recurring page.} other {# income sources' Member names didn't match anyone in your household — they were assigned to you. Check them on the Recurring page.}}",
+      "letterFailed": "Your plan is saved, but its first letter wasn't. Your next monthly review will arrive as usual.",
       "unmatchedMemberItem": "“{name}” didn't match anyone — assigned to you.",
       "needsDateFlag": "set a payment date to see this month",
       "anchorStep": {

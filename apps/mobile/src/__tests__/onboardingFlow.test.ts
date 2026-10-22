@@ -200,11 +200,11 @@ describe('runner.afterSave — anchor only after a real save', () => {
       '/api/anchors': { ok: true },
     });
     const next = await s.runner.afterSave(
-      { kind: 'needsPayDate', needsPayDate: [ITEM], unmatchedMembers: [], householdMembers: [] },
+      { kind: 'needsPayDate', needsPayDate: [ITEM], unmatchedMembers: [], householdMembers: [], letterError: null },
       '1250.5',
       NOON_TORONTO
     );
-    expect(next).toEqual({ kind: 'payDates', items: [ITEM], anchor: 'anchored' });
+    expect(next).toEqual({ kind: 'payDates', items: [ITEM], anchor: 'anchored', letterFailed: false });
     expect(s.sent.find((x) => x.path === '/api/anchors')?.body).toEqual({
       accountId: 'chq', anchorDate: '2026-09-30', balance: 1250.5,
     });
@@ -213,10 +213,10 @@ describe('runner.afterSave — anchor only after a real save', () => {
   it('a blank balance anchors nothing and asks nothing', async () => {
     const s = fakeServer({});
     const next = await s.runner.afterSave(
-      { kind: 'done', needsPayDate: [], unmatchedMembers: [], householdMembers: [] },
+      { kind: 'done', needsPayDate: [], unmatchedMembers: [], householdMembers: [], letterError: null },
       ''
     );
-    expect(next).toEqual({ kind: 'done', anchor: 'skipped' });
+    expect(next).toEqual({ kind: 'done', anchor: 'skipped', letterFailed: false });
     expect(s.sent).toEqual([]);
   });
 
@@ -227,10 +227,24 @@ describe('runner.afterSave — anchor only after a real save', () => {
       '/api/anchors': new ApiError('server', 400, null),
     });
     const next = await s.runner.afterSave(
-      { kind: 'done', needsPayDate: [], unmatchedMembers: [], householdMembers: [] },
+      { kind: 'done', needsPayDate: [], unmatchedMembers: [], householdMembers: [], letterError: null },
       '100'
     );
-    expect(next).toEqual({ kind: 'done', anchor: 'failed' });
+    expect(next).toEqual({ kind: 'done', anchor: 'failed', letterFailed: false });
+  });
+
+  it('a plan saved without its letter says so on the done screen (letterFailed), whatever the anchor did', async () => {
+    const s = fakeServer({});
+    const done = await s.runner.afterSave(
+      { kind: 'done', needsPayDate: [], unmatchedMembers: [], householdMembers: [], letterError: 'permission denied for table conversations' },
+      ''
+    );
+    expect(done).toEqual({ kind: 'done', anchor: 'skipped', letterFailed: true });
+    const dates = await s.runner.afterSave(
+      { kind: 'needsPayDate', needsPayDate: [ITEM], unmatchedMembers: [], householdMembers: [], letterError: 'timeout' },
+      ''
+    );
+    expect(dates).toEqual({ kind: 'payDates', items: [ITEM], anchor: 'skipped', letterFailed: true });
   });
 
   it('no chequing account is a failed anchor', async () => {
