@@ -1,7 +1,21 @@
 -- =============================================================================
 -- Phare — a household's rows may only point at its own rows. 2026-10-22.
 --
--- STATUS: WRITTEN — not applied.
+-- STATUS: APPLIED — 2026-10-22 (Lineu, SQL Editor).
+--
+--   VERIFIED LIVE 2026-10-22 through the read-only MCP server: VERIFY below
+--   13/13 PASS (before applying: 13 FAIL).
+--   BEHAVIOUR VERIFIED LIVE as Zezinho Test (publishable key + own JWT):
+--   refused 403/42501 with the guard's message — recurring_items.account_id,
+--   transactions.member_id (a link the old guard did not cover),
+--   account_balance_anchors.account_id on INSERT, and
+--   transactions.recurring_item_id on UPDATE of an existing row.
+--   Normal use through the app, all 200: manual expense add + delete,
+--   recurring rule create (12 rows) + delete, transfer to a goal account +
+--   delete, and (earlier today) a card-plan save. Probe rows removed after;
+--   none left. Side finding: docs/tickets/recurring-future-anchor-materializes-current-month.md.
+--   NOT YET exercised: deleting a whole household with the guard in place
+--   (needs a throwaway account, T1).
 --
 -- NO CODE CHANGE, NO ORDERING. Safe to apply at any time: every live link
 -- already points within its own household (scan below), and the app never
