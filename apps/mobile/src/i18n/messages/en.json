@@ -184,7 +184,21 @@
     }
   },
   "entry": {
-    "title": "Add an expense",
+    "title": "Add an entry",
+    "kind": {
+      "expense": "Money out",
+      "income": "Money in",
+      "transfer": "Contribution"
+    },
+    "goal": "Savings goal or debt",
+    "noGoals": "No savings goal or debt account yet.",
+    "addSavings": "Add a savings account",
+    "descriptionOptional": "Description (optional)",
+    "kindPayment": "Payment",
+    "kindDraw": "Draw",
+    "saveIncome": "Add income",
+    "saveTransfer": "Add contribution",
+    "saveDraw": "Record draw",
     "open": "Add an expense",
     "account": "Account",
     "date": "Date",
@@ -200,6 +214,7 @@
     "noAccounts": "There's no chequing account or credit card to add this to yet.",
     "noCategories": "No categories to choose from.",
     "problems": {
+      "goalRequired": "Choose a goal or debt account.",
       "accountRequired": "Choose an account.",
       "dateInvalid": "Enter a real date, written as YYYY-MM-DD.",
       "descriptionRequired": "Add a description.",

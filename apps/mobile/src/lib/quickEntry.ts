@@ -10,11 +10,17 @@ import type { Getter } from './timelineLoader';
 import type { AccountsResponse, TimezoneResponse } from './timeline';
 
 // ---------------------------------------------------------------------------
-// Quick expense entry: money out, one-off, on chequing or a credit card.
+// Quick entry: one-off money out, money in, or a contribution to a savings
+// goal or debt (money in and contributions: standalone S6, 2026-10-22).
 //
-// V1 SCOPE, ENFORCED BY THE BODY THIS BUILDS: no income, no repeat, no
-// installments, no transfer, no member. The body has exactly the fields
-// listed in ExpenseBody and nothing else — see buildExpenseBody.
+// SCOPE, ENFORCED BY THE BODIES THIS BUILDS: no repeat, no installments, no
+// member. Each body has exactly the fields its type lists and nothing else,
+// the same fields the web Timeline's entry form sends:
+//   money out    POST /api/expenses  (ExpenseBody)
+//   money in     POST /api/expenses  (IncomeBody — no category; the route
+//                records the creator as the income's member, as on the web)
+//   contribution POST /api/transfers (TransferBody — the atomic pair; a
+//                draw only to a debt account, as on the web)
 //
 // THE SERVER DECIDES. This module stops a person sending something that is
 // certainly wrong (an amount it could not read, a date that does not exist),
@@ -86,6 +92,7 @@ export type ExpenseBody = {
 
 /** Why the form cannot be sent yet. Each maps to one message key. */
 export type DraftProblem =
+  | 'goalRequired'
   | 'accountRequired'
   | 'dateInvalid'
   | 'descriptionRequired'
@@ -125,9 +132,92 @@ export function buildExpenseBody(
   };
 }
 
+// ── Money in ────────────────────────────────────────────────────────────────
+
+export type EntryKind = 'expense' | 'income' | 'transfer';
+
+/** The POST /api/expenses body for money in. No category: categories are money out. */
+export type IncomeBody = {
+  type: 'income';
+  date: string;
+  description: string;
+  amount: number;
+  accountId: string;
+};
+
+export function buildIncomeBody(
+  draft: EntryDraft
+): { ok: true; body: IncomeBody } | { ok: false; problem: DraftProblem } {
+  if (!draft.accountId) return { ok: false, problem: 'accountRequired' };
+  if (!isCalendarDate(draft.date)) return { ok: false, problem: 'dateInvalid' };
+  const description = draft.description.trim();
+  if (!description) return { ok: false, problem: 'descriptionRequired' };
+  if (description.length > MANUAL_ENTRY_DESCRIPTION_MAX_CHARS) return { ok: false, problem: 'descriptionTooLong' };
+  const amount = parseAmountInput(draft.amount);
+  if (amount === null || amount <= 0) return { ok: false, problem: 'amountInvalid' };
+  return { ok: true, body: { type: 'income', date: draft.date, description, amount, accountId: draft.accountId } };
+}
+
+// ── A contribution to a savings goal or a debt ─────────────────────────────
+
+/** A place a contribution can go: GET /api/goals (savings, TFSA, RRSP, debt). */
+export type EntryGoal = { id: string; name: string; isDebt: boolean };
+
+/**
+ * The goals a contribution can go to. Loaded only when the person picks
+ * "Contribution", so a failure here never blocks money out or money in.
+ */
+export async function loadTransferGoals(get: Getter): Promise<EntryGoal[]> {
+  const data = await get<{ goals?: unknown }>('/api/goals');
+  if (!Array.isArray(data?.goals)) throw new Error('goals: no goal list in the answer');
+  return data.goals.map((g) => {
+    const goal = g as { id?: unknown; name?: unknown; isDebt?: unknown };
+    return { id: String(goal.id), name: String(goal.name), isDebt: goal.isDebt === true };
+  });
+}
+
+export type TransferDraft = {
+  goalId: string;
+  /** Only read for a debt account; anything else is always a contribution. */
+  transferKind: 'contribution' | 'draw';
+  date: string;
+  description: string;
+  amount: string;
+};
+
+/** The POST /api/transfers body. */
+export type TransferBody = {
+  date: string;
+  amount: number;
+  goalAccountId: string;
+  /** Left out when blank: the route names the transfer after the goal. */
+  description?: string;
+  kind: 'contribution' | 'draw';
+};
+
+export function buildTransferBody(
+  draft: TransferDraft,
+  goals: EntryGoal[]
+): { ok: true; body: TransferBody } | { ok: false; problem: DraftProblem } {
+  const goal = goals.find((g) => g.id === draft.goalId);
+  if (!goal) return { ok: false, problem: 'goalRequired' };
+  if (!isCalendarDate(draft.date)) return { ok: false, problem: 'dateInvalid' };
+  const description = draft.description.trim();
+  if (description.length > MANUAL_ENTRY_DESCRIPTION_MAX_CHARS) return { ok: false, problem: 'descriptionTooLong' };
+  const amount = parseAmountInput(draft.amount);
+  if (amount === null || amount <= 0) return { ok: false, problem: 'amountInvalid' };
+  // A draw is borrowing against a credit line: only a debt account has one.
+  const kind = goal.isDebt ? draft.transferKind : 'contribution';
+  return {
+    ok: true,
+    body: { date: draft.date, amount, goalAccountId: goal.id, ...(description ? { description } : {}), kind },
+  };
+}
+
 /** The message key for a local problem. Literal keys: see the parity test. */
 export function problemKey(problem: DraftProblem): string {
   switch (problem) {
+    case 'goalRequired': return 'entry.problems.goalRequired';
     case 'accountRequired': return 'entry.problems.accountRequired';
     case 'dateInvalid': return 'entry.problems.dateInvalid';
     case 'descriptionRequired': return 'entry.problems.descriptionRequired';

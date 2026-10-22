@@ -16,11 +16,16 @@ import { addCalendarDays, MANUAL_ENTRY_DESCRIPTION_MAX_CHARS } from '@phare/core
 import { apiGet, apiPost, messageKeyFor } from '../lib/api';
 import {
   buildExpenseBody,
+  buildIncomeBody,
+  buildTransferBody,
   entryErrorKey,
   loadEntryForm,
+  loadTransferGoals,
   problemKey,
   type EntryDraft,
   type EntryForm,
+  type EntryGoal,
+  type EntryKind,
 } from '../lib/quickEntry';
 import { emitEntrySaved } from '../lib/entryEvents';
 import Chip from '../components/Chip';
@@ -29,11 +34,13 @@ import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
 /**
- * Add an expense: money out, one-off, on chequing or a credit card.
+ * Add an entry, one-off: money out (chequing or a credit card), money in, or
+ * a contribution to a savings goal or debt (standalone S6). Each sends what
+ * the web Timeline's entry form sends (quickEntry.ts builds every body).
  *
  * What it never does, each on purpose:
  *   - show the entry anywhere before the server says 200;
- *   - send a member, a repeat or installments (quickEntry.ts builds the body);
+ *   - send a member, a repeat or installments;
  *   - offer "new category" — creating one is a paid feature on the web, and a
  *     locked control here would be a paywall in the app;
  *   - treat its own checks as final — the server's refusal is what is shown.
@@ -51,9 +58,34 @@ export default function QuickEntryScreen() {
   const [draft, setDraft] = useState<EntryDraft>({
     accountId: '', date: '', description: '', categoryId: '', amount: '',
   });
+  const [kind, setKind] = useState<EntryKind>('expense');
+  // Goals load only when "Contribution" is picked; their failure is theirs alone.
+  const [goals, setGoals] = useState<EntryGoal[] | null>(null);
+  const [goalsErrorKey, setGoalsErrorKey] = useState<string | null>(null);
+  const [goalId, setGoalId] = useState('');
+  const [transferKind, setTransferKind] = useState<'contribution' | 'draw'>('contribution');
   const [saving, setSaving] = useState(false);
   const [messageKey, setMessageKey] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  const loadGoals = useCallback(async () => {
+    setGoalsErrorKey(null);
+    try {
+      const loaded = await loadTransferGoals(apiGet);
+      setGoals(loaded);
+      setGoalId((id) => id || loaded[0]?.id || '');
+    } catch (err) {
+      console.error('Quick entry goals load error:', err);
+      setGoalsErrorKey(messageKeyFor(err));
+    }
+  }, []);
+
+  const chooseKind = (next: EntryKind) => {
+    setKind(next);
+    setMessageKey(null);
+    setSaved(false);
+    if (next === 'transfer' && goals === null) void loadGoals();
+  };
 
   // Fetching and applying are separate, as on the other screens, so a result
   // that lands after the modal closed is dropped rather than set.
@@ -102,7 +134,12 @@ export default function QuickEntryScreen() {
   };
 
   const save = async () => {
-    const built = buildExpenseBody(draft);
+    const built =
+      kind === 'transfer'
+        ? buildTransferBody({ goalId, transferKind, date: draft.date, description: draft.description, amount: draft.amount }, goals ?? [])
+        : kind === 'income'
+          ? buildIncomeBody(draft)
+          : buildExpenseBody(draft);
     if (!built.ok) {
       setMessageKey(problemKey(built.problem));
       return;
@@ -111,7 +148,7 @@ export default function QuickEntryScreen() {
     setMessageKey(null);
     setSaved(false);
     try {
-      await apiPost('/api/expenses', built.body);
+      await apiPost(kind === 'transfer' ? '/api/transfers' : '/api/expenses', built.body);
       // Only now: the server has the row.
       emitEntrySaved();
       setSaved(true);
@@ -155,6 +192,11 @@ export default function QuickEntryScreen() {
 
   const today = form.today;
   const yesterday = addCalendarDays(today, -1);
+  const selectedGoal = goals?.find((g) => g.id === goalId) ?? null;
+  const saveLabel =
+    kind === 'transfer'
+      ? selectedGoal?.isDebt && transferKind === 'draw' ? t('entry.saveDraw') : t('entry.saveTransfer')
+      : kind === 'income' ? t('entry.saveIncome') : t('entry.save');
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -162,24 +204,68 @@ export default function QuickEntryScreen() {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {header}
 
-          {form.accounts.length === 0 ? (
+          <View style={styles.chips}>
+            <Chip label={t('entry.kind.expense')} selected={kind === 'expense'} onPress={() => chooseKind('expense')} />
+            <Chip label={t('entry.kind.income')} selected={kind === 'income'} onPress={() => chooseKind('income')} />
+            <Chip label={t('entry.kind.transfer')} selected={kind === 'transfer'} onPress={() => chooseKind('transfer')} />
+          </View>
+
+          {kind !== 'transfer' && form.accounts.length === 0 ? (
             <View>
               <Text style={styles.empty}>{t('entry.noAccounts')}</Text>
               <ActionButton label={t('entry.addAccount')} onPress={() => router.replace('/account-new')} />
             </View>
+          ) : kind === 'transfer' && goals === null ? (
+            goalsErrorKey ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{t(goalsErrorKey)}</Text>
+                <Pressable accessibilityRole="button" onPress={() => void loadGoals()} hitSlop={8}>
+                  <Text style={styles.retry}>{t('common.retry')}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <ActivityIndicator color={theme.color.heading} />
+            )
+          ) : kind === 'transfer' && goals !== null && goals.length === 0 ? (
+            <View>
+              <Text style={styles.empty}>{t('entry.noGoals')}</Text>
+              <ActionButton
+                label={t('entry.addSavings')}
+                onPress={() => router.replace({ pathname: '/account-new', params: { type: 'savings' } })}
+              />
+            </View>
           ) : (
             <>
-              <Text style={styles.label}>{t('entry.account')}</Text>
-              <View style={styles.chips}>
-                {form.accounts.map((a) => (
-                  <Chip
-                    key={a.id}
-                    label={a.name}
-                    selected={draft.accountId === a.id}
-                    onPress={() => update({ accountId: a.id })}
-                  />
-                ))}
-              </View>
+              {kind === 'transfer' && goals ? (
+                <>
+                  <Text style={styles.label}>{t('entry.goal')}</Text>
+                  <View style={styles.chips}>
+                    {goals.map((g) => (
+                      <Chip key={g.id} label={g.name} selected={goalId === g.id} onPress={() => { setGoalId(g.id); setMessageKey(null); setSaved(false); }} />
+                    ))}
+                  </View>
+                  {selectedGoal?.isDebt && (
+                    <View style={styles.chips}>
+                      <Chip label={t('entry.kindPayment')} selected={transferKind === 'contribution'} onPress={() => setTransferKind('contribution')} />
+                      <Chip label={t('entry.kindDraw')} selected={transferKind === 'draw'} onPress={() => setTransferKind('draw')} />
+                    </View>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Text style={styles.label}>{t('entry.account')}</Text>
+                  <View style={styles.chips}>
+                    {form.accounts.map((a) => (
+                      <Chip
+                        key={a.id}
+                        label={a.name}
+                        selected={draft.accountId === a.id}
+                        onPress={() => update({ accountId: a.id })}
+                      />
+                    ))}
+                  </View>
+                </>
+              )}
 
               <Text style={styles.label}>{t('entry.date')}</Text>
               <View style={styles.chips}>
@@ -200,7 +286,7 @@ export default function QuickEntryScreen() {
                 accessibilityLabel={t('entry.date')}
               />
 
-              <Text style={styles.label}>{t('entry.description')}</Text>
+              <Text style={styles.label}>{kind === 'transfer' ? t('entry.descriptionOptional') : t('entry.description')}</Text>
               {/* No maxLength: a length cap on the field would cut a pasted
                   description silently. Too long is refused, visibly, on save. */}
               <TextInput
@@ -210,20 +296,24 @@ export default function QuickEntryScreen() {
                 accessibilityLabel={t('entry.description')}
               />
 
-              <Text style={styles.label}>{t('entry.category')}</Text>
-              {form.categories.length === 0 ? (
-                <Text style={styles.hint}>{t('entry.noCategories')}</Text>
-              ) : (
-                <View style={styles.chips}>
-                  {form.categories.map((c) => (
-                    <Chip
-                      key={c.id}
-                      label={c.name}
-                      selected={draft.categoryId === c.id}
-                      onPress={() => update({ categoryId: c.id })}
-                    />
-                  ))}
-                </View>
+              {kind === 'expense' && (
+                <>
+                  <Text style={styles.label}>{t('entry.category')}</Text>
+                  {form.categories.length === 0 ? (
+                    <Text style={styles.hint}>{t('entry.noCategories')}</Text>
+                  ) : (
+                    <View style={styles.chips}>
+                      {form.categories.map((c) => (
+                        <Chip
+                          key={c.id}
+                          label={c.name}
+                          selected={draft.categoryId === c.id}
+                          onPress={() => update({ categoryId: c.id })}
+                        />
+                      ))}
+                    </View>
+                  )}
+                </>
               )}
 
               <Text style={styles.label}>{t('entry.amount')}</Text>
@@ -250,7 +340,7 @@ export default function QuickEntryScreen() {
                 disabled={saving}
                 style={({ pressed }) => [styles.button, (pressed || saving) && styles.buttonPressed]}
               >
-                <Text style={styles.buttonText}>{saving ? t('entry.saving') : t('entry.save')}</Text>
+                <Text style={styles.buttonText}>{saving ? t('entry.saving') : saveLabel}</Text>
               </Pressable>
             </>
           )}

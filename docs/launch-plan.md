@@ -48,7 +48,7 @@
 | 2.2 | **S1:** sign-up, password reset, updated-terms acceptance in the app | P0 | C | 2.1 | A new account created and confirmed in the app, with no web page; `signup` event carries `platform: 'mobile'`; reset finishes in the app |
 | 2.3 | **S4:** income and bill dates, editing them (effective-dated) | P0 | C (diagnose → STOP) | Phase 1 | Dateless lines dated in the app; a raise saved from a date leaves past months unchanged |
 | 2.4 | **S5:** cards: close and payment days, detail, goal and budgets. **BUILT 2026-10-22, uncommitted; device test pending.** | P0 | C | Phase 1 | A card's days, goal and two budgets set in the app match the web for the same month; closed cycle refused |
-| 2.5 | **S6 remainder:** add income and transfers in the app | P0 | C | Phase 1 | An income and a transfer added in the app appear on the Timeline and web identically |
+| 2.5 | **S6 remainder:** add income and transfers in the app. **BUILT 2026-10-22, uncommitted; verified live on Zezinho Test (income, contribution, debt payment and draw).** | P0 | C | Phase 1 | An income and a transfer added in the app appear on the Timeline and web identically |
 | 2.6 | Product metadata EN/FR, and review screenshot per product | P0 | L (C writes text) | 1.9 | Both products "Ready to Submit" |
 | 2.7 | App Store screenshots (new screens, EN/FR) | P0 | L | 2.2–2.5 | Uploaded for both locales |
 | 2.8 | App Privacy: add "Purchase history" | P0 | L (C gives answers) | None | Saved in App Store Connect |

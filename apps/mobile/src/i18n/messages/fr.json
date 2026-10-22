@@ -184,7 +184,21 @@
     }
   },
   "entry": {
-    "title": "Ajouter une dépense",
+    "title": "Ajouter une entrée",
+    "kind": {
+      "expense": "Sortie d'argent",
+      "income": "Entrée d'argent",
+      "transfer": "Contribution"
+    },
+    "goal": "Objectif d'épargne ou dette",
+    "noGoals": "Aucun objectif d'épargne ni compte de dette pour l'instant.",
+    "addSavings": "Ajouter un compte d'épargne",
+    "descriptionOptional": "Description (optionnel)",
+    "kindPayment": "Paiement",
+    "kindDraw": "Prélèvement",
+    "saveIncome": "Ajouter le revenu",
+    "saveTransfer": "Ajouter la contribution",
+    "saveDraw": "Enregistrer le prélèvement",
     "open": "Ajouter une dépense",
     "account": "Compte",
     "date": "Date",
@@ -200,6 +214,7 @@
     "noAccounts": "Il n'y a encore ni compte chèques ni carte de crédit où l'ajouter.",
     "noCategories": "Aucune catégorie à choisir.",
     "problems": {
+      "goalRequired": "Choisissez un objectif ou un compte de dette.",
       "accountRequired": "Choisissez un compte.",
       "dateInvalid": "Entrez une date valide, au format AAAA-MM-JJ.",
       "descriptionRequired": "Ajoutez une description.",

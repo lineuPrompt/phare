@@ -62,7 +62,7 @@ the v1.1 list separately.**
   Timeline entries BUILT 2026-10-17, uncommitted (Lineu asked for it): tap a
   row → edit date, description, amount, category; delete with confirmation;
   transfers through `/api/transfers/[id]`; card payments not editable; no
-  money in↔out switch. Adding income and transfers still to do. Route gaps
+  money in↔out switch. Adding income and contributions (savings goal or debt, payment or draw) BUILT 2026-10-22, uncommitted, verified live on Zezinho Test. Route gaps
   FIXED in code 2026-10-22 (launch plan 1.7), uncommitted:
   [ticket](tickets/expenses-patch-route-gaps.md).
 - **Home ↔ Timeline month link** (Lineu, 2026-10-17): BUILT, uncommitted —
