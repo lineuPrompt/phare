@@ -16,6 +16,7 @@ import { categoryDisplayName } from '@/lib/categoryTranslations';
 import { businessToday, statementCycleWindow } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { fetchCardPlanForMonth, fetchLaterOwnPlanMonths } from '@/lib/cardPlanServer';
+import { cardPlanWriter } from '@/lib/cardPlanWriter';
 
 async function resolveHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -195,6 +196,9 @@ export async function POST(request: Request) {
     if (!Array.isArray(items)) {
       return NextResponse.json({ error: 'items must be an array' }, { status: 400 });
     }
+    if (!items.every((i: unknown) => typeof (i as { categoryId?: unknown } | null)?.categoryId === 'string')) {
+      return NextResponse.json({ error: 'Each item needs a categoryId' }, { status: 400 });
+    }
     if (laterPlans !== undefined && laterPlans !== 'apply' && laterPlans !== 'keep') {
       return NextResponse.json({ error: "laterPlans must be 'apply' or 'keep'" }, { status: 400 });
     }
@@ -237,6 +241,28 @@ export async function POST(request: Request) {
       );
     }
 
+    // OWN CATEGORIES ONLY (launch plan 1.6). The plan is written through the
+    // service role below, which no RLS checks, so every category named must be
+    // proven to be this household's own first. Checked before any write.
+    const categoryIds = [...new Set((items as { categoryId: string }[]).map((i) => i.categoryId))];
+    if (categoryIds.length > 0) {
+      const { data: ownCategories, error: categoryErr } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('household_id', householdId)
+        .in('id', categoryIds);
+      if (categoryErr) {
+        console.error('Envelope categories check error:', categoryErr);
+        return NextResponse.json({ error: `Failed to check categories: ${categoryErr.message}` }, { status: 500 });
+      }
+      if ((ownCategories ?? []).length !== categoryIds.length) {
+        return NextResponse.json(
+          { error: 'One or more categories do not belong to this household', code: 'unknown_category' },
+          { status: 400 }
+        );
+      }
+    }
+
     // LATER PLANS (2026-09-29). A later open/future month with a plan of its
     // own outranks this one (order is by month, never by save time), so
     // saving this month does not reach it. The household decides, explicitly,
@@ -262,8 +288,14 @@ export async function POST(request: Request) {
 
     const monthStart = `${month}-01`;
 
+    // Every plan write goes through the service role (launch plan 1.6):
+    // members can only read monthly_goals and card_envelope_items, so the
+    // closed-cycle lock above cannot be stepped around. Each write names the
+    // household itself.
+    const writer = await cardPlanWriter();
+
     // 1. Upsert monthly goal for this card + month
-    const { error: goalErr } = await supabase
+    const { error: goalErr } = await writer
       .from('monthly_goals')
       .upsert(
         { household_id: householdId, account_id: cardId, month: monthStart, card_goal: totalGoal },
@@ -276,7 +308,7 @@ export async function POST(request: Request) {
 
     // 2. Replace this month's envelope items only (month-scoped: never
     // touches another month's saved rows).
-    const { error: delErr } = await supabase
+    const { error: delErr } = await writer
       .from('card_envelope_items')
       .delete()
       .eq('household_id', householdId)
@@ -295,7 +327,7 @@ export async function POST(request: Request) {
         monthly_amount: item.monthlyAmount,
         month: monthStart,
       }));
-      const { error: insErr } = await supabase.from('card_envelope_items').insert(rows);
+      const { error: insErr } = await writer.from('card_envelope_items').insert(rows);
       if (insErr) {
         console.error('Envelope items insert error:', insErr);
         return NextResponse.json({ error: 'Failed to save categories' }, { status: 500 });
@@ -309,7 +341,7 @@ export async function POST(request: Request) {
     if (laterPlans === 'apply' && laterOwnPlanMonths.length > 0) {
       const laterStarts = laterOwnPlanMonths.map((m) => `${m}-01`);
       for (const table of ['monthly_goals', 'card_envelope_items'] as const) {
-        const { error: removeErr } = await supabase
+        const { error: removeErr } = await writer
           .from(table)
           .delete()
           .eq('household_id', householdId)

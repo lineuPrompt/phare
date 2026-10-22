@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeFakeCardSupabase, FREE_HOUSEHOLD, type Row } from './fakeCardSupabase';
 import { editorItemsFrom } from '@/lib/envelopeHelpers';
 import { fetchLaterOwnPlanMonths } from '@/lib/cardPlanServer';
+import { cardPlanWriterTables } from '../../../../test/cardPlanWriterDouble';
 
 /**
  * THE SAVE RULE (2026-09-29).
@@ -122,6 +123,11 @@ describe('POST /api/card-envelope — later months with their own plans', () => 
     expect(monthsOf(store.monthly_goals)).toEqual(['2026-08', '2026-10']);
     expect(monthsOf(store.card_envelope_items)).toEqual(['2026-08', '2026-10']);
     expect(closedAugust(store)).toEqual(AUGUST_AS_SEEDED);
+    // The later plans were removed through the service role too (launch plan
+    // 1.6): October's goal, its items delete and insert, then both removals.
+    expect(cardPlanWriterTables).toEqual([
+      'monthly_goals', 'card_envelope_items', 'card_envelope_items', 'monthly_goals', 'card_envelope_items',
+    ]);
 
     const december = await get(client, '2026-12');
     expect(december.totalGoal).toBe(950);

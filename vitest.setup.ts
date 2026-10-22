@@ -2,6 +2,7 @@ import { beforeEach, vi } from 'vitest';
 import { fakeEventWriter, resetEventWriterDouble } from './src/test/eventWriterDouble';
 import { forwardingConversationsClient, resetConversationsClientDouble } from './src/test/conversationsClientDouble';
 import { forwardingCategoriesWriter, resetCategoriesWriterDouble } from './src/test/categoriesWriterDouble';
+import { forwardingCardPlanWriter, resetCardPlanWriterDouble } from './src/test/cardPlanWriterDouble';
 
 // ---------------------------------------------------------------------------
 // THE REAL ANTHROPIC CLIENT IS OPT-IN, NOT OPT-OUT.
@@ -85,8 +86,16 @@ vi.mock('@/lib/conversationsClient', () => ({ conversationsClient: () => forward
 
 vi.mock('@/lib/categoriesWriter', () => ({ categoriesWriter: () => forwardingCategoriesWriter() }));
 
+// ---------------------------------------------------------------------------
+// A CARD'S PLAN IS WRITTEN BY THE SERVICE ROLE (2026-10-22,
+// src/lib/cardPlanWriter.ts). Same forwarding double.
+// ---------------------------------------------------------------------------
+
+vi.mock('@/lib/cardPlanWriter', () => ({ cardPlanWriter: () => forwardingCardPlanWriter() }));
+
 beforeEach(() => {
   resetEventWriterDouble();
   resetConversationsClientDouble();
   resetCategoriesWriterDouble();
+  resetCardPlanWriterDouble();
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeFakeCardSupabase, FREE_HOUSEHOLD, type Row } from './fakeCardSupabase';
+import { cardPlanWriterTables } from '../../../../test/cardPlanWriterDouble';
 
 /**
  * CLOSED-CYCLE LOCK (2026-09-11) — POST /api/card-envelope refuses to write a
@@ -20,6 +21,11 @@ function seed(closeDay: number | null): Record<string, Row[]> {
     users: [{ id: 'user-1', household_id: 'hh-1' }],
     households: [FREE_HOUSEHOLD],
     accounts: [{ id: VISA, household_id: 'hh-1', name: 'Visa', type: 'credit_card', statement_close_day: closeDay, payment_day: 17 }],
+    categories: [
+      { id: 'cat-groceries', household_id: 'hh-1', type: 'expense', name: 'Groceries & Pharmacy' },
+      // Another household's category: a request may name it, but never save it.
+      { id: 'cat-other-household', household_id: 'hh-2', type: 'expense', name: 'Groceries & Pharmacy' },
+    ],
     monthly_goals: [{ household_id: 'hh-1', account_id: VISA, month: '2026-08-01', card_goal: 3315 }],
     card_envelope_items: [{ household_id: 'hh-1', account_id: VISA, category_id: 'cat-groceries', month: '2026-08-01', monthly_amount: 700 }],
   };
@@ -53,6 +59,7 @@ describe('POST /api/card-envelope — closed-cycle lock', () => {
     expect(res.status).toBe(409);
     expect((await res.json()).code).toBe('cycle_closed');
     expect(writes).toEqual([]);
+    expect(cardPlanWriterTables).toEqual([]);
     expect(store.monthly_goals[0].card_goal).toBe(3315);
     expect(store.card_envelope_items).toHaveLength(1);
     expect(store.card_envelope_items[0].monthly_amount).toBe(700);
@@ -76,6 +83,11 @@ describe('POST /api/card-envelope — closed-cycle lock', () => {
 
     expect(res.status).toBe(200);
     expect(store.monthly_goals.find((g) => g.month === '2026-09-01')?.card_goal).toBe(9999);
+    // Every plan write went through the service role (launch plan 1.6): the
+    // goal upsert, then the month's items delete and insert.
+    expect(cardPlanWriterTables).toEqual(['monthly_goals', 'card_envelope_items', 'card_envelope_items']);
+    expect(store.monthly_goals.find((g) => g.month === '2026-09-01')?.household_id).toBe('hh-1');
+    expect(store.card_envelope_items.filter((r) => r.month === '2026-09-01').map((r) => r.household_id)).toEqual(['hh-1']);
   });
 
   it('a FUTURE cycle still saves normally', async () => {
@@ -125,5 +137,70 @@ describe('POST /api/card-envelope — closed-cycle lock', () => {
     vi.setSystemTime(new Date('2026-08-28T01:00:00Z'));
     const { client } = makeFakeCardSupabase(seed(27));
     expect((await post(client, rewriteAugust)).status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OWN CATEGORIES ONLY (launch plan 1.6). The plan is written through the
+// service role, which no RLS checks, so the route proves each category is the
+// household's own before writing anything.
+// ---------------------------------------------------------------------------
+
+describe('POST /api/card-envelope — categories must be the household\'s own', () => {
+  beforeEach(() => { vi.resetModules(); vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('another household\'s category: 400 unknown_category, and NOTHING is written', async () => {
+    vi.setSystemTime(new Date('2026-09-11T12:00:00-04:00'));
+    const { client, store, writes } = makeFakeCardSupabase(seed(27));
+
+    const res = await post(client, {
+      ...rewriteAugust,
+      month: '2026-09',
+      items: [{ categoryId: 'cat-groceries', monthlyAmount: 5 }, { categoryId: 'cat-other-household', monthlyAmount: 5 }],
+    });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('unknown_category');
+    expect(writes).toEqual([]);
+    expect(cardPlanWriterTables).toEqual([]);
+    expect(store.monthly_goals).toHaveLength(1);
+    expect(store.card_envelope_items).toHaveLength(1);
+  });
+
+  it('a category id that does not exist anywhere is refused the same way', async () => {
+    vi.setSystemTime(new Date('2026-09-11T12:00:00-04:00'));
+    const { client, writes } = makeFakeCardSupabase(seed(27));
+
+    const res = await post(client, { ...rewriteAugust, month: '2026-09', items: [{ categoryId: 'cat-nowhere', monthlyAmount: 5 }] });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('unknown_category');
+    expect(writes).toEqual([]);
+  });
+
+  it('the same own category twice is not mistaken for a foreign one', async () => {
+    vi.setSystemTime(new Date('2026-09-11T12:00:00-04:00'));
+    const { client } = makeFakeCardSupabase(seed(27));
+
+    const res = await post(client, {
+      ...rewriteAugust,
+      month: '2026-09',
+      items: [{ categoryId: 'cat-groceries', monthlyAmount: 5 }, { categoryId: 'cat-groceries', monthlyAmount: 6 }],
+    });
+
+    expect(res.status).not.toBe(400);
+  });
+
+  it('an item without a string categoryId is a 400 before anything is read or written', async () => {
+    vi.setSystemTime(new Date('2026-09-11T12:00:00-04:00'));
+    const { client, writes } = makeFakeCardSupabase(seed(27));
+
+    const res = await post(client, { ...rewriteAugust, month: '2026-09', items: [{ categoryId: 42, monthlyAmount: 5 }] });
+
+    expect(res.status).toBe(400);
+    // The shape check answers, not the ownership lookup further down.
+    expect(await res.json()).toEqual({ error: 'Each item needs a categoryId' });
+    expect(writes).toEqual([]);
   });
 });
