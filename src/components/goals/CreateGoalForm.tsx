@@ -8,7 +8,9 @@ type GoalType = 'savings' | 'tfsa' | 'rrsp' | 'debt';
 const GOAL_TYPES: GoalType[] = ['savings', 'tfsa', 'rrsp', 'debt'];
 
 interface Props {
-  onCreated: () => void;
+  /** `openingBalanceFailed` carries the server's reason when the account was
+   *  created but its starting balance was not saved. */
+  onCreated: (outcome?: { openingBalanceFailed: string }) => void;
 }
 
 export default function CreateGoalForm({ onCreated }: Props) {
@@ -56,9 +58,13 @@ export default function CreateGoalForm({ onCreated }: Props) {
 
     setSaving(false);
 
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? 'Error');
+    const body = res.ok ? null : await res.json().catch(() => ({}));
+    // The account exists but its starting balance did not save: close as
+    // created (a second Save would create a second account) and let the page
+    // say what is missing, with the server's reason.
+    const balanceMissing = body?.code === 'opening_balance_failed';
+    if (!res.ok && !balanceMissing) {
+      setError(body?.error ?? 'Error');
       return;
     }
 
@@ -68,7 +74,7 @@ export default function CreateGoalForm({ onCreated }: Props) {
     setGoalTargetDate('');
     setAmountOwed('');
     setOpeningBalance('');
-    onCreated();
+    onCreated(balanceMissing ? { openingBalanceFailed: body?.error ?? '' } : undefined);
   }
 
   return (

@@ -1,7 +1,12 @@
 # GET /api/anchors swallows a failed read and answers "no anchors"
 
 **Found:** 2026-10-15, building mobile month navigation (standalone S2).
-**Status:** filed, not fixed (out of scope).
+**Status:** FIXED in code 2026-10-22 (launch plan 1.7). GET answers 500 with the
+reason on a failed anchors read, and on a failed account read (was a 404;
+now `.maybeSingle()`, so "no row" stays a 404). The web Timeline no longer
+sends any non-401 failure to the sign-in page: it shows "Could not load your
+timeline" with the reason and a retry (EN/FR). Mobile already threw on it.
+Tests: `src/app/api/anchors/__tests__/route.test.ts`, 4/4 mutants caught.
 
 ## What happens
 

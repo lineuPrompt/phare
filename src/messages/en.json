@@ -664,6 +664,8 @@
   "timeline": {
     "title": "Cash Timeline",
     "loading": "Loading your timeline...",
+    "loadError": "Could not load your timeline. Please try again.",
+    "retry": "Try again",
     "header": {
       "balanceToday": "Balance today",
       "on": "on",
@@ -799,7 +801,9 @@
       "amountOwed": "Amount currently owed",
       "amountOwedPlaceholder": "e.g. 5000",
       "saving": "Creating...",
-      "save": "Create goal"
+      "save": "Create goal",
+      "openingBalanceFailed": "The account was added, but its starting balance wasn't saved. Add it from the account's settings.",
+      "dismiss": "Dismiss"
     },
     "transfer": {
       "title": "Add money",

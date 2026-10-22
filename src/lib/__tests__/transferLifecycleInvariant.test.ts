@@ -59,16 +59,19 @@ function makeFakeSupabase(seed: { users: Row[]; household_members: Row[]; accoun
         update(patch: Record<string, unknown>) {
           const filters: { field: string; value: unknown }[] = [];
           const inFilters: { field: string; values: unknown[] }[] = [];
+          const matched: Row[] = [];
           const api = {
             eq(field: string, value: unknown) { filters.push({ field, value }); return api; },
             in(field: string, values: unknown[]) { inFilters.push({ field, values }); return api; },
-            then(resolve: (v: { data: null; error: null }) => unknown) {
+            select() { return api; },
+            then(resolve: (v: { data: Row[]; error: null }) => unknown) {
               store[table] = rows.map((r) => {
                 const matchesEq = filters.every((f) => r[f.field] === f.value);
                 const matchesIn = inFilters.every((f) => f.values.includes(r[f.field]));
-                return matchesEq && matchesIn ? { ...r, ...patch } : r;
+                if (matchesEq && matchesIn) { matched.push(r); return { ...r, ...patch }; }
+                return r;
               });
-              return Promise.resolve({ data: null, error: null }).then(resolve);
+              return Promise.resolve({ data: matched, error: null }).then(resolve);
             },
           };
           return api;
@@ -76,16 +79,19 @@ function makeFakeSupabase(seed: { users: Row[]; household_members: Row[]; accoun
         delete() {
           const filters: { field: string; value: unknown }[] = [];
           const inFilters: { field: string; values: unknown[] }[] = [];
+          const matched: Row[] = [];
           const api = {
             eq(field: string, value: unknown) { filters.push({ field, value }); return api; },
             in(field: string, values: unknown[]) { inFilters.push({ field, values }); return api; },
-            then(resolve: (v: { data: null; error: null }) => unknown) {
+            select() { return api; },
+            then(resolve: (v: { data: Row[]; error: null }) => unknown) {
               store[table] = rows.filter((r) => {
                 const matchesEq = filters.every((f) => r[f.field] === f.value);
                 const matchesIn = inFilters.every((f) => f.values.includes(r[f.field]));
-                return !(matchesEq && matchesIn);
+                if (matchesEq && matchesIn) { matched.push(r); return false; }
+                return true;
               });
-              return Promise.resolve({ data: null, error: null }).then(resolve);
+              return Promise.resolve({ data: matched, error: null }).then(resolve);
             },
           };
           return api;

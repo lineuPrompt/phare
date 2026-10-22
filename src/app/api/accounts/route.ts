@@ -24,13 +24,21 @@ export async function GET() {
     // sort_order first (explicit, template/entry order — see
     // 20260716000000 migration), then created_at and id as tiebreakers for
     // legacy rows that predate sort_order (all default to 0 and tie there).
-    const { data: accounts } = await supabase
+    const { data: accounts, error } = await supabase
       .from('accounts')
       .select('id, name, type, statement_close_day, payment_day, goal_target, goal_target_date')
       .eq('household_id', householdId)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true })
       .order('id', { ascending: true });
+
+    // A failed read is never "no accounts": that answer offers Chequing as a
+    // type to add (a second chequing account) and shows "no chequing" on the
+    // Timeline (docs/tickets/accounts-route-silent-failures.md).
+    if (error) {
+      console.error('Accounts GET read error:', error);
+      return NextResponse.json({ error: `Failed to load accounts: ${error.message}` }, { status: 500 });
+    }
 
     return NextResponse.json({ accounts: accounts ?? [] });
   } catch {
@@ -77,10 +85,16 @@ export async function POST(request: Request) {
     // New accounts append after everything the household already has —
     // never sort_order 0, which would jump a manually-added card ahead of
     // every template-imported one.
-    const { data: existingAccounts } = await supabase
+    const { data: existingAccounts, error: existingErr } = await supabase
       .from('accounts')
       .select('sort_order')
       .eq('household_id', householdId);
+    if (existingErr) {
+      // Without the existing order the new account would silently jump to
+      // position 1. Refused before anything is written.
+      console.error('Account create order read error:', existingErr);
+      return NextResponse.json({ error: `Failed to read accounts: ${existingErr.message}` }, { status: 500 });
+    }
     const nextSortOrder = (existingAccounts ?? []).reduce((m, a) => Math.max(m, a.sort_order ?? 0), 0) + 1;
 
     const { data: account, error } = await supabase
@@ -110,21 +124,36 @@ export async function POST(request: Request) {
     // balance ("Credit line: −$5,000"); no chequing-side peer, since this is
     // money the household already owed/had before Phare, not a transfer
     // happening today.
+    let openingErr: string | null = null;
     if (wantsOpeningBalance) {
       const timezone = await getHouseholdTimezone(supabase, householdId);
-      const openingErr = await setOpeningBalance(
+      openingErr = await setOpeningBalance(
         supabase, householdId, account.id, Number(openingBalance), businessToday(timezone)
       );
-      if (openingErr) {
-        console.error('Account opening balance insert error:', openingErr);
-        // Non-fatal: account created, just the opening balance didn't seed.
-      }
+      if (openingErr) console.error('Account opening balance insert error:', openingErr);
     }
 
-    // Log created_first_goal the first time a goal account is created.
+    // Log created_first_goal the first time a goal account is created — the
+    // account exists whether or not its opening balance saved.
     const goalTypes = new Set<string>(GOAL_ACCOUNT_TYPES);
     if (goalTypes.has(type) && await isFirstEvent(supabase, householdId, 'created_first_goal')) {
       await logEvent(householdId, user?.id ?? null, 'created_first_goal', { account_type: type });
+    }
+
+    // A missing opening balance leaves every goal figure low by that amount,
+    // so it is never answered as success (it used to be "non-fatal", 200).
+    // The account DOES exist: the answer carries it and a distinct code, so a
+    // caller refreshes instead of creating it twice, and says the balance
+    // still needs adding (docs/tickets/accounts-route-silent-failures.md).
+    if (openingErr) {
+      return NextResponse.json(
+        {
+          error: `The account was created, but its starting balance was not saved: ${openingErr}`,
+          code: 'opening_balance_failed',
+          account,
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ account });

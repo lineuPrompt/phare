@@ -76,6 +76,7 @@ export default function TimelinePage() {
   const [chequingId, setChequingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<TimelineResponse | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
   const [showReAnchor, setShowReAnchor] = useState(false);
   const [showAddEntry, setShowAddEntry] = useState(false);
@@ -116,10 +117,23 @@ export default function TimelinePage() {
   const load = useCallback(() => {
     if (!chequingId) return;
     setLoading(true);
+    setLoadError(null);
+
+    // 401 → sign in. Any other failure is shown with the server's reason —
+    // never read as "no anchors" (which hides every past month) and never
+    // sent to the sign-in page (docs/tickets/anchors-get-swallows-read-error.md).
+    const readJson = async <T,>(r: Response): Promise<T | null> => {
+      if (r.status === 401) return null;
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? `HTTP ${r.status}`);
+      }
+      return r.json() as Promise<T>;
+    };
 
     fetch(`/api/anchors?account=${chequingId}`)
-      .then((r) => (r.status === 401 ? null : r.ok ? r.json() : null))
-      .then((d: { anchors: AnchorRow[] } | null) => {
+      .then((r) => readJson<{ anchors: AnchorRow[] }>(r))
+      .then((d) => {
         if (d === null) { router.push(`/${locale}/signin`); return null; }
 
         const anchors = d.anchors ?? [];
@@ -136,9 +150,10 @@ export default function TimelinePage() {
         // from the dashboard's own call to this endpoint for the dip tile)
         // — see eventLogger.ts's FUNNEL INSTRUMENTATION note.
         return fetch(`/api/timeline?account=${chequingId}${windowStartParam}&pageView=1`)
-          .then((r) => (r.status === 401 ? null : r.ok ? r.json() : null));
+          .then((r) => readJson<TimelineResponse>(r));
       })
-      .then((d: TimelineResponse | null) => { if (d) setData(d); })
+      .then((d) => { if (d) setData(d); })
+      .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
   }, [chequingId, locale, router, currentMonth]);
 
@@ -175,6 +190,23 @@ export default function TimelinePage() {
       </div>
     </main>
   );
+
+  if (loadError && !loading) {
+    return shell(
+      <div className="rounded-2xl bg-white p-8 text-center" style={{ border: '1px solid #E5E7EB' }}>
+        <p className="text-sm font-semibold mb-1" style={{ color: '#DC2626' }}>{t('loadError')}</p>
+        <p className="text-xs mb-4" style={{ color: '#6B7280' }}>{loadError}</p>
+        <button
+          type="button"
+          onClick={load}
+          className="text-sm font-semibold px-4 py-2 rounded-xl"
+          style={{ background: '#0F2044', color: '#FFFFFF' }}
+        >
+          {t('retry')}
+        </button>
+      </div>
+    );
+  }
 
   if (loading && !data) {
     return shell(<p className="text-center py-12 text-sm" style={{ color: '#6B7280' }}>{t('loading')}</p>);

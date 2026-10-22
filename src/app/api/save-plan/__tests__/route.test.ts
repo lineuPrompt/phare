@@ -903,3 +903,181 @@ describe('POST /api/save-plan — category seeding never fails silently', () => 
     expectStoppedAtCategories(calls);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Every replace/insert write is checked (docs/tickets/save-plan-unchecked-
+// writes.md). Each failure answers 500 with the database's reason and runs
+// nothing after it — never `200 { saved: true }` over a write that did not
+// happen. The onboarding letter is the one exception: by then the plan IS
+// saved, so its failure is reported as `letterError`, not a 500.
+// ---------------------------------------------------------------------------
+
+describe('POST /api/save-plan — no write fails silently', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  const FAIL = (message: string) => ({ error: { message } });
+
+  // A household re-onboarding: one provenanced recurring item from the last
+  // plan, a fixed Rent line, a variable Groceries line (a category budget)
+  // and one sinking fund. Mirrors the route's call order.
+  function fullScript(): Record<string, Resolution[]> {
+    const currentMonth = businessMonth(TEST_TIMEZONE);
+    return {
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      household_members: [{ data: { id: 'mem-1' }, error: null }, { data: [], error: null }],
+      accounts: [
+        { data: [{ id: 'chq-1', type: 'chequing', name: 'Chequing', file_import_id: null }], error: null },
+        { data: { id: 'chq-1' }, error: null },
+      ],
+      recurring_items: [
+        { count: 0, error: null },                       // prior-data guard
+        { data: [{ id: 'old-ri' }], error: null },       // the previous plan's recurring items
+        { error: null },                                  // delete them
+        {
+          data: [{
+            id: 'ri-1', description: 'Rent', amount: 1200, type: 'expense', cadence: 'monthly',
+            anchor_date: `${currentMonth}-01`, second_day: null, category_id: 'cat-housing',
+            account_id: 'chq-1', member_id: 'mem-1',
+          }],
+          error: null,
+        },
+      ],
+      budgets: [{ count: 0, error: null }, { error: null }, { error: null }],
+      sinking_funds: [{ count: 0, error: null }, { error: null }, { error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      file_imports: [{ data: { id: 'imp-1' }, error: null }],
+      categories: [
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ name })), error: null },
+        { data: SEED_CATEGORY_NAMES.map((name) => ({ id: `cat-${name.toLowerCase()}`, name })), error: null },
+      ],
+      transactions: [
+        { error: null }, // delete the previous plan's recurring transactions
+        { error: null }, // materialize cleanup for ri-1
+        { error: null }, // materialize insert
+      ],
+      conversations: [{ error: null }],
+    };
+  }
+
+  async function run(script: Record<string, Resolution[]>) {
+    const { client, calls } = makeSupabaseMock(script);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const { POST } = await import('../route');
+    const res = await POST(new Request('http://localhost/api/save-plan', {
+      method: 'POST',
+      body: JSON.stringify({
+        plan: {
+          monthlyBudget: {
+            categories: [
+              { name: 'Rent', budgeted: 1200, type: 'expense', isFixed: true, seedCategory: 'Housing' },
+              { name: 'Groceries', budgeted: 600, type: 'expense', isFixed: false, seedCategory: 'Groceries & Pharmacy' },
+            ],
+          },
+          sinkingFunds: [{ name: 'Car insurance', annualAmount: 1200, monthlyProvision: 100, dueMonth: 'March' }],
+          goals: [],
+          topRecommendation: 'Keep it up.',
+        },
+        reviewText: 'Looking good.',
+        locale: 'en',
+        cardNames: [],
+        fileMeta: null,
+        confirmReplace: true,
+      }),
+    }));
+    return { res, json: await res.json(), calls };
+  }
+
+  const wrote = (calls: Call[], table: string, method: string) =>
+    calls.some((c) => c.table === table && c.method === method);
+
+  it('the full run succeeds and writes every piece (the baseline the failures below break)', async () => {
+    const { res, json, calls } = await run(fullScript());
+    expect(res.status).toBe(200);
+    expect(json.saved).toBe(true);
+    expect(json.letterError).toBeNull();
+    expect(wrote(calls, 'budgets', 'insert')).toBe(true);
+    expect(wrote(calls, 'sinking_funds', 'insert')).toBe(true);
+    expect(wrote(calls, 'conversations', 'insert')).toBe(true);
+  });
+
+  it("a failed read of the previous plan's recurring items: 500, nothing replaced", async () => {
+    const s = fullScript();
+    s.recurring_items[1] = { data: null, ...FAIL('canceling statement due to statement timeout') };
+    const { res, json, calls } = await run(s);
+    expect(res.status).toBe(500);
+    expect(json.error).toBe("Failed to read the previous plan's recurring items: canceling statement due to statement timeout");
+    expect(wrote(calls, 'recurring_items', 'delete')).toBe(false);
+    expect(wrote(calls, 'budgets', 'delete')).toBe(false);
+  });
+
+  it("a failed delete of the previous plan's transactions: 500, its rules kept, nothing after", async () => {
+    const s = fullScript();
+    s.transactions[0] = FAIL('permission denied for table transactions');
+    const { res, json, calls } = await run(s);
+    expect(res.status).toBe(500);
+    expect(json.error).toBe("Failed to remove the previous plan's recurring transactions: permission denied for table transactions");
+    expect(wrote(calls, 'recurring_items', 'delete')).toBe(false);
+    expect(wrote(calls, 'budgets', 'delete')).toBe(false);
+  });
+
+  it("a failed delete of the previous plan's recurring items: 500, nothing after", async () => {
+    const s = fullScript();
+    s.recurring_items[2] = FAIL('update or delete on table "recurring_items" violates foreign key constraint');
+    const { res, json, calls } = await run(s);
+    expect(res.status).toBe(500);
+    expect(json.error).toBe(
+      "Failed to remove the previous plan's recurring items: update or delete on table \"recurring_items\" violates foreign key constraint"
+    );
+    expect(wrote(calls, 'budgets', 'delete')).toBe(false);
+  });
+
+  it('a failed delete of the old budgets: 500, nothing after', async () => {
+    const s = fullScript();
+    s.budgets[1] = FAIL('connection reset');
+    const { res, json, calls } = await run(s);
+    expect(res.status).toBe(500);
+    expect(json.error).toBe('Failed to replace the previous budgets: connection reset');
+    expect(wrote(calls, 'sinking_funds', 'delete')).toBe(false);
+  });
+
+  it('a failed delete of the old sinking funds: 500, nothing after', async () => {
+    const s = fullScript();
+    s.sinking_funds[1] = FAIL('connection reset');
+    const { res, json, calls } = await run(s);
+    expect(res.status).toBe(500);
+    expect(json.error).toBe('Failed to replace the previous sinking funds: connection reset');
+    expect(wrote(calls, 'categories', 'insert')).toBe(false);
+    expect(wrote(calls, 'budgets', 'insert')).toBe(false);
+  });
+
+  it('a failed budgets insert: 500, no sinking funds, no letter', async () => {
+    const s = fullScript();
+    s.budgets[2] = FAIL('value too long for type numeric(10,2)');
+    const { res, json, calls } = await run(s);
+    expect(res.status).toBe(500);
+    expect(json.error).toBe('Failed to save category budgets: value too long for type numeric(10,2)');
+    expect(wrote(calls, 'sinking_funds', 'insert')).toBe(false);
+    expect(wrote(calls, 'conversations', 'insert')).toBe(false);
+  });
+
+  it('a failed sinking funds insert: 500, no letter', async () => {
+    const s = fullScript();
+    s.sinking_funds[2] = FAIL('null value in column "due_month" violates not-null constraint');
+    const { res, json, calls } = await run(s);
+    expect(res.status).toBe(500);
+    expect(json.error).toBe('Failed to save sinking funds: null value in column "due_month" violates not-null constraint');
+    expect(wrote(calls, 'conversations', 'insert')).toBe(false);
+  });
+
+  it('a failed letter: the plan IS saved (200), and the reason comes back as letterError', async () => {
+    const s = fullScript();
+    s.conversations[0] = FAIL('permission denied for table conversations');
+    const { res, json } = await run(s);
+    expect(res.status).toBe(200);
+    expect(json.saved).toBe(true);
+    expect(json.letterError).toBe('permission denied for table conversations');
+  });
+});

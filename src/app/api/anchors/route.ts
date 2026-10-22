@@ -26,24 +26,36 @@ export async function GET(request: Request) {
     const ctx = await resolveContext(supabase);
     if (!ctx) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    // Verify account belongs to household and is chequing
-    const { data: account } = await supabase
+    // Verify account belongs to household and is chequing. maybeSingle: no
+    // row is a 404, a failed read is a 500 with its reason — never confused.
+    const { data: account, error: accountErr } = await supabase
       .from('accounts')
       .select('id, type')
       .eq('id', accountId)
       .eq('household_id', ctx.householdId)
-      .single();
+      .maybeSingle();
+    if (accountErr) {
+      console.error('Anchors GET account read error:', accountErr);
+      return NextResponse.json({ error: `Failed to load account: ${accountErr.message}` }, { status: 500 });
+    }
     if (!account) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     if (account.type !== 'chequing') {
       return NextResponse.json({ error: 'Only chequing accounts support anchors' }, { status: 400 });
     }
 
-    const { data: anchors } = await supabase
+    // A failed read must not answer "no anchors": both Timelines pull their
+    // window back to the earliest anchor, so an empty list silently hides
+    // every past month (docs/tickets/anchors-get-swallows-read-error.md).
+    const { data: anchors, error: anchorsErr } = await supabase
       .from('account_balance_anchors')
       .select('id, anchor_date, balance, created_at')
       .eq('account_id', accountId)
       .eq('household_id', ctx.householdId)
       .order('anchor_date', { ascending: true });
+    if (anchorsErr) {
+      console.error('Anchors GET read error:', anchorsErr);
+      return NextResponse.json({ error: `Failed to load anchors: ${anchorsErr.message}` }, { status: 500 });
+    }
 
     return NextResponse.json({ anchors: anchors ?? [] });
   } catch {

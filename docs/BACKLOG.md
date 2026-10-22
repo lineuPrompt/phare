@@ -46,12 +46,11 @@ the v1.1 list separately.**
 - ~~**S3. Accounts and opening balance.**~~ Built 2026-10-16, uncommitted
   (handoff "S3"). Device test pending. Card statement/payment days stay with
   S5; debt and line-of-credit accounts are not offered yet.
-- **`/api/accounts` silent failures** (found during S3): POST answers 200
-  when the opening balance fails; GET answers `[]` on a failed read. —
-  [ticket](tickets/accounts-route-silent-failures.md)
-- **`GET /api/anchors` swallows a failed read** (found during S2): a failed
-  read answers `{ anchors: [] }` and hides every past month on both
-  Timelines. — [ticket](tickets/anchors-get-swallows-read-error.md)
+- ~~**`/api/accounts` silent failures**~~ FIXED in code 2026-10-22 (launch
+  plan 1.7), uncommitted. — [ticket](tickets/accounts-route-silent-failures.md)
+- ~~**`GET /api/anchors` swallows a failed read**~~ FIXED in code 2026-10-22
+  (launch plan 1.7), uncommitted; the web Timeline now shows load errors. —
+  [ticket](tickets/anchors-get-swallows-read-error.md)
 - **S4. Income and bill dates, and editing them (effective-dated, as on web).**
 - **S5. Cards: setup, detail, goal and category budgets** (Lineu: edit goal AND
   budgets, as on web; same closed-cycle and later-plans 409s; live write
@@ -61,7 +60,8 @@ the v1.1 list separately.**
   row → edit date, description, amount, category; delete with confirmation;
   transfers through `/api/transfers/[id]`; card payments not editable; no
   money in↔out switch. Adding income and transfers still to do. Route gaps
-  found: [ticket](tickets/expenses-patch-route-gaps.md).
+  FIXED in code 2026-10-22 (launch plan 1.7), uncommitted:
+  [ticket](tickets/expenses-patch-route-gaps.md).
 - **Home ↔ Timeline month link** (Lineu, 2026-10-17): BUILT, uncommitted —
   tapping the month name opens that month on the other tab.
 - **S7. Household members: list, invite, remove (owner only).**
@@ -273,12 +273,18 @@ for when it thaws:
   [ticket](tickets/onboarding-review-unguarded.md)
 - **Onboarding funnel: the real-screen run** — events built (80e6981,
   1226134) and verified on Zezinho Test; no run through the actual screens.
-- **save-plan: five more writes never read their error.** —
-  [ticket](tickets/save-plan-unchecked-writes.md)
+- ~~**save-plan: five more writes never read their error.**~~ FIXED in code
+  2026-10-22 (launch plan 1.7), eight writes checked, uncommitted. A failed
+  onboarding letter comes back as `letterError`, which no screen shows yet
+  (Lineu to decide). — [ticket](tickets/save-plan-unchecked-writes.md)
 - **The AI chooses each expense's category and fixed/variable** (CLAUDE.md
   §4). **STOP.** — [ticket](tickets/plan-ai-classifies-expense-lines.md)
-- **save-plan seeds whatever category names the request body sends.** —
+- ~~**save-plan seeds whatever category names the request body sends.**~~
+  FIXED 2026-10-21 (launch plan 1.6, commit 1d39cd2). —
   [ticket](tickets/save-plan-client-chooses-seed-categories.md)
+- **Web entry forms read amounts with `parseFloat`** — "12,50" (a French
+  decimal comma) is saved as 12. **Money input.** —
+  [ticket](tickets/web-amount-parsefloat-decimal-comma.md)
 - **POST /api/recurring attributes an expense rule's transactions to its
   creator** (CLAUDE.md §4); 0 live rows. —
   [ticket](tickets/recurring-post-expense-rows-attributed-to-creator.md)

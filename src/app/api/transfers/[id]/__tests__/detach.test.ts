@@ -27,6 +27,11 @@ function makeFakeSupabase(seed: { users: Row[]; household_members: Row[]; accoun
     recurring_skipped_dates: [],
   };
   let idCounter = 1;
+  // Switchable failures, set by a test before it calls the route:
+  //   readError     — every .maybeSingle() read answers this error
+  //   tombstoneError — the recurring_skipped_dates insert answers this error
+  //   vanishOnWrite — the transfer is gone by the time the update/delete runs
+  const faults: { readError?: string; tombstoneError?: { message: string; code?: string }; vanishOnWrite?: boolean } = {};
 
   function selectChain(rows: Row[]) {
     let result = rows;
@@ -38,6 +43,7 @@ function makeFakeSupabase(seed: { users: Row[]; household_members: Row[]; accoun
         return Promise.resolve(result[0] ? { data: { ...result[0] }, error: null } : { data: null, error: { message: 'not found' } });
       },
       maybeSingle() {
+        if (faults.readError) return Promise.resolve({ data: null, error: { message: faults.readError } });
         return Promise.resolve({ data: result[0] ? { ...result[0] } : null, error: null });
       },
       then(resolve: (v: { data: Row[]; error: null }) => unknown) {
@@ -55,22 +61,32 @@ function makeFakeSupabase(seed: { users: Row[]; household_members: Row[]; accoun
       return {
         select() { return selectChain(rows); },
         insert(row: Record<string, unknown>) {
+          if (table === 'recurring_skipped_dates') {
+            if (faults.tombstoneError) return Promise.resolve({ data: null, error: faults.tombstoneError });
+            if (store[table].some((s) => s.recurring_item_id === row.recurring_item_id && s.date === row.date)) {
+              return Promise.resolve({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } });
+            }
+          }
           store[table] = [...store[table], { id: `${table}-${idCounter++}`, ...row } as Row];
           return Promise.resolve({ data: null, error: null });
         },
         update(patch: Record<string, unknown>) {
           const filters: { field: string; value: unknown }[] = [];
           const inFilters: { field: string; values: unknown[] }[] = [];
+          const matched: Row[] = [];
           const api = {
             eq(field: string, value: unknown) { filters.push({ field, value }); return api; },
             in(field: string, values: unknown[]) { inFilters.push({ field, values }); return api; },
-            then(resolve: (v: { data: null; error: null }) => unknown) {
-              store[table] = rows.map((r) => {
+            select() { return api; },
+            then(resolve: (v: { data: Row[]; error: null }) => unknown) {
+              const source = faults.vanishOnWrite && table === 'transactions' ? [] : rows;
+              store[table] = source.map((r) => {
                 const matchesEq = filters.every((f) => r[f.field] === f.value);
                 const matchesIn = inFilters.every((f) => f.values.includes(r[f.field]));
-                return matchesEq && matchesIn ? { ...r, ...patch } : r;
+                if (matchesEq && matchesIn) { matched.push(r); return { ...r, ...patch }; }
+                return r;
               });
-              return Promise.resolve({ data: null, error: null }).then(resolve);
+              return Promise.resolve({ data: matched, error: null }).then(resolve);
             },
           };
           return api;
@@ -78,16 +94,20 @@ function makeFakeSupabase(seed: { users: Row[]; household_members: Row[]; accoun
         delete() {
           const filters: { field: string; value: unknown }[] = [];
           const inFilters: { field: string; values: unknown[] }[] = [];
+          const matched: Row[] = [];
           const api = {
             eq(field: string, value: unknown) { filters.push({ field, value }); return api; },
             in(field: string, values: unknown[]) { inFilters.push({ field, values }); return api; },
-            then(resolve: (v: { data: null; error: null }) => unknown) {
-              store[table] = rows.filter((r) => {
+            select() { return api; },
+            then(resolve: (v: { data: Row[]; error: null }) => unknown) {
+              const source = faults.vanishOnWrite && table === 'transactions' ? [] : rows;
+              store[table] = source.filter((r) => {
                 const matchesEq = filters.every((f) => r[f.field] === f.value);
                 const matchesIn = inFilters.every((f) => f.values.includes(r[f.field]));
-                return !(matchesEq && matchesIn);
+                if (matchesEq && matchesIn) { matched.push(r); return false; }
+                return true;
               });
-              return Promise.resolve({ data: null, error: null }).then(resolve);
+              return Promise.resolve({ data: matched, error: null }).then(resolve);
             },
           };
           return api;
@@ -130,6 +150,7 @@ function makeFakeSupabase(seed: { users: Row[]; household_members: Row[]; accoun
     },
     currentTransactions(): Row[] { return store.transactions; },
     currentTombstones(): Row[] { return store.recurring_skipped_dates; },
+    faults,
   };
 
   return supabase;
@@ -247,5 +268,128 @@ describe('PATCH/DELETE /api/transfers/[id] — Part A3 detach-on-edit/delete (pa
 
     expect(supabase.currentTombstones()).toHaveLength(0);
     expect(supabase.currentTransactions().every((r) => r.amount === 150)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The transfer edit gaps (docs/tickets/expenses-patch-route-gaps.md): the
+// create limits apply to an edit, a lost tombstone is never silent, a failed
+// read is not "not found", and a write that touched nothing is not success.
+// ---------------------------------------------------------------------------
+
+describe('PATCH/DELETE /api/transfers/[id] — no silent edits', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  async function routeFor(supabase: ReturnType<typeof makeFakeSupabase>) {
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
+    return import('../route');
+  }
+  const patchReq = (id: string, body: Record<string, unknown>) =>
+    [new Request(`http://localhost/api/transfers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }), { params: Promise.resolve({ id }) }] as const;
+  const deleteReq = (id: string) =>
+    [new Request(`http://localhost/api/transfers/${id}`, { method: 'DELETE' }), { params: Promise.resolve({ id }) }] as const;
+
+  it.each([
+    ['an amount past the ceiling', { amount: 1_000_000_000 }, 'INVALID_AMOUNT'],
+    ['a date that is not a calendar date', { amount: 300, date: '2026-02-30' }, 'INVALID_DATE'],
+    ['a description past 200 characters', { amount: 300, description: 'x'.repeat(201) }, 'DESCRIPTION_TOO_LONG'],
+  ])('%s is refused (400 %s) and nothing changes', async (_label, body, code) => {
+    const supabase = seedSupabase();
+    const { chequing_row_id } = await createRecurringOccurrence(supabase);
+    const before = supabase.currentTransactions().map((r) => ({ ...r }));
+    const { PATCH } = await routeFor(supabase);
+
+    const res = await PATCH(...patchReq(chequing_row_id, body));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe(code);
+    expect(supabase.currentTransactions()).toEqual(before);
+    expect(supabase.currentTombstones()).toEqual([]);
+  });
+
+  it('the largest allowed amount and a cleared description still save', async () => {
+    const supabase = seedSupabase();
+    const { chequing_row_id } = await createRecurringOccurrence(supabase);
+    const { PATCH } = await routeFor(supabase);
+
+    const res = await PATCH(...patchReq(chequing_row_id, { amount: 999_999_999.99, description: null }));
+    expect(res.status).toBe(200);
+    expect(supabase.currentTransactions().every((r) => r.amount === 999_999_999.99)).toBe(true);
+  });
+
+  it('PATCH: a failed tombstone answers 500 DETACH_FAILED and both rows are unchanged', async () => {
+    const supabase = seedSupabase();
+    const { chequing_row_id } = await createRecurringOccurrence(supabase);
+    supabase.faults.tombstoneError = { message: 'permission denied for table recurring_skipped_dates' };
+    const { PATCH } = await routeFor(supabase);
+
+    const res = await PATCH(...patchReq(chequing_row_id, { amount: 350 }));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.code).toBe('DETACH_FAILED');
+    expect(json.error).toContain('permission denied for table recurring_skipped_dates');
+    expect(supabase.currentTransactions().every((r) => r.amount === 300 && r.recurring_item_id === 'ri-contrib')).toBe(true);
+  });
+
+  it('DELETE: a failed tombstone answers 500 DETACH_FAILED and both rows remain', async () => {
+    const supabase = seedSupabase();
+    const { chequing_row_id } = await createRecurringOccurrence(supabase);
+    supabase.faults.tombstoneError = { message: 'connection reset' };
+    const { DELETE } = await routeFor(supabase);
+
+    const res = await DELETE(...deleteReq(chequing_row_id));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('DETACH_FAILED');
+    expect(supabase.currentTransactions()).toHaveLength(2);
+  });
+
+  it('a tombstone that already exists (a retry) is success', async () => {
+    const supabase = seedSupabase();
+    const { chequing_row_id } = await createRecurringOccurrence(supabase);
+    const { PATCH } = await routeFor(supabase);
+    await supabase.from('recurring_skipped_dates').insert({ household_id: HOUSEHOLD, recurring_item_id: 'ri-contrib', date: '2026-10-05' });
+
+    const res = await PATCH(...patchReq(chequing_row_id, { amount: 350 }));
+    expect(res.status).toBe(200);
+    expect(supabase.currentTransactions().every((r) => r.amount === 350)).toBe(true);
+  });
+
+  it('a failed read is a 500 with its reason, not "Transfer not found"', async () => {
+    const supabase = seedSupabase();
+    const { chequing_row_id } = await createRecurringOccurrence(supabase);
+    supabase.faults.readError = 'canceling statement due to statement timeout';
+    const { PATCH, DELETE } = await routeFor(supabase);
+
+    const patched = await PATCH(...patchReq(chequing_row_id, { amount: 350 }));
+    expect(patched.status).toBe(500);
+    expect((await patched.json()).error).toContain('canceling statement due to statement timeout');
+
+    const deleted = await DELETE(...deleteReq(chequing_row_id));
+    expect(deleted.status).toBe(500);
+    expect(supabase.currentTransactions()).toHaveLength(2);
+  });
+
+  it('PATCH: a pair gone before the write is a 409, not updated: true', async () => {
+    const supabase = seedSupabase();
+    const { chequing_row_id } = await createRecurringOccurrence(supabase);
+    supabase.faults.vanishOnWrite = true;
+    const { PATCH } = await routeFor(supabase);
+
+    const res = await PATCH(...patchReq(chequing_row_id, { amount: 350 }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).updated).toBeUndefined();
+  });
+
+  it('DELETE: a pair gone before the write is a 409, not deleted: true', async () => {
+    const supabase = seedSupabase();
+    const { chequing_row_id } = await createRecurringOccurrence(supabase);
+    supabase.faults.vanishOnWrite = true;
+    const { DELETE } = await routeFor(supabase);
+
+    const res = await DELETE(...deleteReq(chequing_row_id));
+    expect(res.status).toBe(409);
+    expect((await res.json()).deleted).toBeUndefined();
   });
 });

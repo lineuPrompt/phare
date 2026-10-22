@@ -46,6 +46,9 @@ export default function GoalsSection({ locale }: { locale: string }) {
   const [goals, setGoals] = useState<GoalAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  // Set when a goal account was created but its starting balance did not
+  // save — the server's reason, shown until dismissed.
+  const [openingBalanceFailed, setOpeningBalanceFailed] = useState<string | null>(null);
   const [transferFor, setTransferFor] = useState<string | null>(null);
   // "Record a draw" — the mirror of transferFor's "Make a payment", debt
   // accounts only. Same TransferForm, just a different kind and inline slot,
@@ -84,8 +87,9 @@ export default function GoalsSection({ locale }: { locale: string }) {
 
   useEffect(() => { load(); }, [load]);
 
-  function handleCreated() {
+  function handleCreated(outcome?: { openingBalanceFailed: string }) {
     setShowCreate(false);
+    setOpeningBalanceFailed(outcome?.openingBalanceFailed ?? null);
     load();
   }
 
@@ -201,6 +205,20 @@ export default function GoalsSection({ locale }: { locale: string }) {
             <button onClick={() => setShowCreate(false)} className="text-sm" style={{ color: '#6B7280' }}>✕</button>
           </div>
           <CreateGoalForm onCreated={handleCreated} />
+        </div>
+      )}
+
+      {openingBalanceFailed !== null && (
+        <div role="alert" className="rounded-2xl p-4 flex items-start justify-between gap-3"
+             style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: '#DC2626' }}>{t('create.openingBalanceFailed')}</p>
+            {openingBalanceFailed && (
+              <p className="text-xs mt-1" style={{ color: '#6B7280' }}>{openingBalanceFailed}</p>
+            )}
+          </div>
+          <button type="button" onClick={() => setOpeningBalanceFailed(null)} aria-label={t('create.dismiss')}
+                  className="text-sm" style={{ color: '#6B7280' }}>✕</button>
         </div>
       )}
 

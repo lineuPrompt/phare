@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { isCalendarDate, MANUAL_ENTRY_DESCRIPTION_MAX_CHARS, MANUAL_ENTRY_MAX_AMOUNT } from '@phare/core';
 
 async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -40,6 +41,11 @@ async function resolvePair(
       .eq('transfer_peer_id', id)
       .eq('household_id', householdId),
   ]);
+
+  // A failed read is not "no such transfer" (a 404): the caller's catch
+  // answers 500 with this reason.
+  if (direct.error) throw new Error(`Failed to read the transfer: ${direct.error.message}`);
+  if (reverse.error) throw new Error(`Failed to read the transfer's other side: ${reverse.error.message}`);
 
   const target = direct.data;
   const type = target?.type ?? null;
@@ -87,12 +93,25 @@ async function tombstoneOccurrence(
   recurringItemId: string,
   date: string
 ) {
+  // NOT best-effort (docs/tickets/expenses-patch-route-gaps.md): a lost
+  // tombstone let a later rule edit bring the occurrence back. Written before
+  // the edit or delete, so a failure refuses with nothing changed. One that
+  // already exists (unique on rule + date, e.g. a retry) is success.
   const { error } = await supabase
     .from('recurring_skipped_dates')
     .insert({ household_id: householdId, recurring_item_id: recurringItemId, date });
-  if (error) {
-    console.error('tombstoneOccurrence insert error (non-fatal):', error);
+  if (error && error.code !== '23505') {
+    console.error('tombstoneOccurrence insert error:', error);
+    return error.message as string;
   }
+  return null;
+}
+
+function tombstoneFailed(reason: string) {
+  return NextResponse.json(
+    { error: `This transfer repeats; it could not be detached from its rule, so nothing was changed: ${reason}`, code: 'DETACH_FAILED' },
+    { status: 500 }
+  );
 }
 
 // PATCH: update a transfer's amount, date, and/or description on BOTH sides of the pair.
@@ -117,8 +136,23 @@ export async function PATCH(
       description?: string | null;
     };
 
+    // The create limits (docs/tickets/expenses-patch-route-gaps.md): a
+    // positive amount no larger than the manual-entry ceiling, a real
+    // calendar date, a description of at most 200 characters (null clears it).
     if (!amount || Number(amount) <= 0) {
       return NextResponse.json({ error: 'Amount must be positive' }, { status: 400 });
+    }
+    if (Number(amount) > MANUAL_ENTRY_MAX_AMOUNT) {
+      return NextResponse.json({ error: `Amount must be at most ${MANUAL_ENTRY_MAX_AMOUNT}`, code: 'INVALID_AMOUNT' }, { status: 400 });
+    }
+    if (date !== undefined && date !== null && date !== '' && !isCalendarDate(date)) {
+      return NextResponse.json({ error: 'date must be a real calendar date written as YYYY-MM-DD.', code: 'INVALID_DATE' }, { status: 400 });
+    }
+    if (typeof description === 'string' && description.trim().length > MANUAL_ENTRY_DESCRIPTION_MAX_CHARS) {
+      return NextResponse.json(
+        { error: `description is ${description.trim().length} characters; the limit is ${MANUAL_ENTRY_DESCRIPTION_MAX_CHARS}.`, code: 'DESCRIPTION_TOO_LONG' },
+        { status: 400 }
+      );
     }
 
     const supabase = await createClient();
@@ -144,19 +178,26 @@ export async function PATCH(
     // its original date so a later rule edit can't regenerate it, then
     // clears recurring_item_id on BOTH pair rows in the same update.
     if (recurringItemId && originalDate) {
-      await tombstoneOccurrence(supabase, householdId, recurringItemId, originalDate);
+      const tombstoneErr = await tombstoneOccurrence(supabase, householdId, recurringItemId, originalDate);
+      if (tombstoneErr) return tombstoneFailed(tombstoneErr);
       patch.recurring_item_id = null;
     }
 
-    const { error } = await supabase
+    // .select() reports what the update actually touched: a pair deleted
+    // between resolvePair and here is not `updated: true`.
+    const { data: updatedRows, error } = await supabase
       .from('transactions')
       .update(patch)
       .in('id', ids)
-      .eq('household_id', householdId);
+      .eq('household_id', householdId)
+      .select('id');
 
     if (error) {
       console.error('Transfer PATCH error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    if (!updatedRows || updatedRows.length === 0) {
+      return NextResponse.json({ error: 'Transfer no longer exists' }, { status: 409 });
     }
 
     return NextResponse.json({ updated: true, ids });
@@ -191,18 +232,23 @@ export async function DELETE(
     // Detach-on-delete (Part A3, transfer flavor): tombstone before the pair
     // disappears, same rationale as the PATCH branch above.
     if (recurringItemId && originalDate) {
-      await tombstoneOccurrence(supabase, householdId, recurringItemId, originalDate);
+      const tombstoneErr = await tombstoneOccurrence(supabase, householdId, recurringItemId, originalDate);
+      if (tombstoneErr) return tombstoneFailed(tombstoneErr);
     }
 
-    const { error } = await supabase
+    const { data: deletedRows, error } = await supabase
       .from('transactions')
       .delete()
       .in('id', ids)
-      .eq('household_id', householdId);
+      .eq('household_id', householdId)
+      .select('id');
 
     if (error) {
       console.error('Transfer DELETE error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    if (!deletedRows || deletedRows.length === 0) {
+      return NextResponse.json({ error: 'Transfer no longer exists' }, { status: 409 });
     }
 
     return NextResponse.json({ deleted: true, ids });

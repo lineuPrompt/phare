@@ -8,11 +8,22 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // businessToday(householdTimezone) fixes this; these tests drive the actual
 // POST handler against a household whose timezone is America/Toronto.
 
-type Resolution = { data?: unknown; error?: unknown };
+type Resolution = { data?: unknown; error?: unknown; noRow?: boolean };
+
+// `noRow` behaves the way PostgREST does when a lookup matches nothing:
+// .single() answers an ERROR (PGRST116), .maybeSingle() answers data null
+// with no error. A route that confuses the two turns "not found" into a 500.
+const PGRST116 = { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' };
 
 function makeResultChain(resolution: Resolution) {
   const handler: ProxyHandler<object> = {
     get(_, prop) {
+      if (resolution.noRow && prop === 'single') {
+        return () => makeResultChain({ data: null, error: PGRST116 });
+      }
+      if (resolution.noRow && prop === 'maybeSingle') {
+        return () => makeResultChain({ data: null, error: null });
+      }
       if (prop === 'then') {
         return (resolve: (v: Resolution) => unknown, reject?: (v: unknown) => unknown) =>
           Promise.resolve(resolution).then(resolve, reject);
@@ -104,5 +115,69 @@ describe('POST /api/anchors — future-date guard uses the household timezone, n
 
     expect(res.status).toBe(400);
     expect(json.error).toMatch(/future/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET never answers "no anchors" over a failed read
+// (docs/tickets/anchors-get-swallows-read-error.md). Both Timelines pull
+// their window back to the earliest anchor, so an empty list hides every past
+// month with no error at all.
+// ---------------------------------------------------------------------------
+
+async function getAnchors(client: unknown) {
+  const { createClient } = await import('@/lib/supabase-server');
+  (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+  const { GET } = await import('../route');
+  return GET(new Request('http://localhost/api/anchors?account=chq-1'));
+}
+
+describe('GET /api/anchors — failed reads are errors, not empty answers', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('a failed anchors read is a 500 carrying the database reason, not { anchors: [] }', async () => {
+    const res = await getAnchors(makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      accounts: [{ data: { id: 'chq-1', type: 'chequing' }, error: null }],
+      account_balance_anchors: [{ data: null, error: { message: 'canceling statement due to statement timeout' } }],
+    }));
+
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('Failed to load anchors: canceling statement due to statement timeout');
+    expect(json.anchors).toBeUndefined();
+  });
+
+  it('a failed account read is a 500 with its reason, not "Account not found"', async () => {
+    const res = await getAnchors(makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      accounts: [{ data: null, error: { message: 'connection reset' } }],
+    }));
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe('Failed to load account: connection reset');
+  });
+
+  it('an account that is not the household\'s is still a 404', async () => {
+    const res = await getAnchors(makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      accounts: [{ noRow: true }],
+    }));
+
+    expect(res.status).toBe(404);
+  });
+
+  it('a successful read returns the anchors as stored', async () => {
+    const anchors = [{ id: 'a1', anchor_date: '2026-08-01', balance: 1200, created_at: '2026-08-01T12:00:00Z' }];
+    const res = await getAnchors(makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      accounts: [{ data: { id: 'chq-1', type: 'chequing' }, error: null }],
+      account_balance_anchors: [{ data: anchors, error: null }],
+    }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ anchors });
   });
 });

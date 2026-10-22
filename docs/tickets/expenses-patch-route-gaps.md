@@ -1,7 +1,17 @@
 # PATCH /api/expenses/[id] and /api/transfers/[id]: validation gaps
 
 **Found:** 2026-10-17, building Timeline edit/delete on mobile.
-**Status:** filed, not fixed (out of scope). Mobile avoids each one, as noted.
+**Status:** FIXED in code 2026-10-22 (launch plan 1.7). All six:
+1. income → expense clears `member_id`; 2–4. the edit runs the create rules
+(`parseExpensePatch` in `src/lib/expenseRequest.ts`: calendar date, 200-char
+description, 999,999,999.99 ceiling, two decimals, a number not text) and
+looks up the category's household, as create does; transfers get the same
+date/amount/description limits; 5. a failed tombstone refuses the edit or
+delete with `DETACH_FAILED` and the reason, nothing changed (an existing
+tombstone, 23505, is success); 6. transfer PATCH and DELETE check what they
+touched (409 when nothing). Also: transfer reads no longer answer "not found"
+on a failed read. Tests in both routes' `detach.test.ts`; mutants 15/15
+(expenses) and 10/10 (transfers).
 
 1. **Income → expense keeps the member.** PATCH `/api/expenses/[id]`
    accepts `type: 'expense'` and never clears `member_id`. An income entry

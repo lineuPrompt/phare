@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { parseExpensePatch } from '@/lib/expenseRequest';
 
 async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -37,21 +38,32 @@ async function loadEditableTransaction(
 // try to fill on a future rule edit. The row's recurring_item_id is cleared
 // by the caller as part of the same update; for a delete there's no row left
 // afterward, so the tombstone is the only trace that date was ever handled.
-// Best-effort: a failed tombstone write must not block the user's edit/delete
-// from succeeding — the visible cost of a lost tombstone is a possible future
-// re-materialization collision, not data loss right now.
+// NOT best-effort (it used to be, docs/tickets/expenses-patch-route-gaps.md):
+// a lost tombstone let a later rule edit bring the occurrence back, silently.
+// It is written BEFORE the edit or delete, so a failure refuses the request
+// with nothing changed. A tombstone that already exists (unique on rule +
+// date, e.g. a retry) is success, not a failure.
 async function tombstoneOccurrence(
   supabase: Awaited<ReturnType<typeof createClient>>,
   householdId: string,
   recurringItemId: string,
   date: string
-) {
+): Promise<string | null> {
   const { error } = await supabase
     .from('recurring_skipped_dates')
     .insert({ household_id: householdId, recurring_item_id: recurringItemId, date });
-  if (error) {
-    console.error('tombstoneOccurrence insert error (non-fatal):', error);
+  if (error && error.code !== '23505') {
+    console.error('tombstoneOccurrence insert error:', error);
+    return error.message;
   }
+  return null;
+}
+
+function tombstoneFailed(reason: string) {
+  return NextResponse.json(
+    { error: `This entry repeats; it could not be detached from its rule, so nothing was changed: ${reason}`, code: 'DETACH_FAILED' },
+    { status: 500 }
+  );
 }
 
 // PATCH: edit a manual entry's date/description/amount/category.
@@ -68,30 +80,53 @@ export async function PATCH(
     const householdId = await getHousehold(supabase);
     if (!householdId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
+    // The same rules as a create, for whichever fields are sent: a real
+    // calendar date, a description of at most 200 characters, an amount above
+    // 0 and at most 999,999,999.99 (docs/tickets/expenses-patch-route-gaps.md).
+    const parsed = parseExpensePatch(body);
+    if (!parsed.ok) {
+      const { code, error, status } = parsed.refusal;
+      return NextResponse.json({ error, code }, { status });
+    }
+    const patch = parsed.value;
+
     const found = await loadEditableTransaction(supabase, id, householdId);
     if ('error' in found) return NextResponse.json({ error: found.error }, { status: found.status });
 
-    const updates: Record<string, string | number | null> = {};
-    if (body.date !== undefined) updates.date = body.date;
-    if (body.description !== undefined) updates.description = body.description;
-    if (body.amount !== undefined) {
-      const amt = Number(body.amount);
-      if (!Number.isFinite(amt) || amt <= 0) {
-        return NextResponse.json({ error: 'Amount must be a positive number' }, { status: 400 });
+    // A category must be the household's own — looked up, as on create.
+    if (patch.categoryId) {
+      const { data: category, error: categoryErr } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('id', patch.categoryId)
+        .eq('household_id', householdId)
+        .maybeSingle();
+      if (categoryErr) {
+        console.error('Transaction PATCH category lookup error:', categoryErr);
+        return NextResponse.json({ error: `Failed to check the category: ${categoryErr.message}`, code: 'LOOKUP_FAILED' }, { status: 500 });
       }
-      updates.amount = amt;
+      if (!category) {
+        return NextResponse.json({ error: 'That category does not belong to this household.', code: 'CATEGORY_NOT_FOUND' }, { status: 400 });
+      }
     }
-    if (body.categoryId !== undefined) updates.category_id = body.categoryId || null;
+
+    const updates: Record<string, string | number | null> = {};
+    if (patch.date !== undefined) updates.date = patch.date;
+    if (patch.description !== undefined) updates.description = patch.description;
+    if (patch.amount !== undefined) updates.amount = patch.amount;
+    if (patch.categoryId !== undefined) updates.category_id = patch.categoryId;
     // Money in/out toggle. Categories in this app are expense-only, so
     // flipping to income clears any category unless the caller sent one
     // explicitly in the same request.
-    if (body.type !== undefined) {
-      if (!['income', 'expense'].includes(body.type)) {
-        return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
-      }
-      updates.type = body.type;
-      if (body.type === 'income' && body.categoryId === undefined) {
+    if (patch.type !== undefined) {
+      updates.type = patch.type;
+      if (patch.type === 'income' && patch.categoryId === undefined) {
         updates.category_id = null;
+      }
+      // Expenses never carry a member (CLAUDE.md §4). An income edited into
+      // an expense used to keep the member income records.
+      if (patch.type === 'expense') {
+        updates.member_id = null;
       }
     }
 
@@ -104,7 +139,8 @@ export async function PATCH(
     // never regenerates it, then clear recurring_item_id in the same update
     // — it becomes a standalone one-off from here on, exactly like A1.
     if (found.tx.recurring_item_id) {
-      await tombstoneOccurrence(supabase, householdId, found.tx.recurring_item_id, found.tx.date);
+      const tombstoneErr = await tombstoneOccurrence(supabase, householdId, found.tx.recurring_item_id, found.tx.date);
+      if (tombstoneErr) return tombstoneFailed(tombstoneErr);
       updates.recurring_item_id = null;
     }
 
@@ -157,7 +193,8 @@ export async function DELETE(
     // BEFORE the row disappears — it's the only trace this date was ever
     // handled once the row itself is gone.
     if (found.tx.recurring_item_id) {
-      await tombstoneOccurrence(supabase, householdId, found.tx.recurring_item_id, found.tx.date);
+      const tombstoneErr = await tombstoneOccurrence(supabase, householdId, found.tx.recurring_item_id, found.tx.date);
+      if (tombstoneErr) return tombstoneFailed(tombstoneErr);
     }
 
     // See PATCH above: .select() makes this conditional so a lost race

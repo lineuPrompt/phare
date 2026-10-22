@@ -664,6 +664,8 @@
   "timeline": {
     "title": "Chronologie de trésorerie",
     "loading": "Chargement de votre chronologie...",
+    "loadError": "Impossible de charger votre chronologie. Veuillez réessayer.",
+    "retry": "Réessayer",
     "header": {
       "balanceToday": "Solde aujourd'hui",
       "on": "le",
@@ -799,7 +801,9 @@
       "amountOwed": "Montant actuellement dû",
       "amountOwedPlaceholder": "ex. 5000",
       "saving": "Création...",
-      "save": "Créer l'objectif"
+      "save": "Créer l'objectif",
+      "openingBalanceFailed": "Le compte a été ajouté, mais son solde de départ n'a pas été enregistré. Ajoutez-le depuis les paramètres du compte.",
+      "dismiss": "Fermer"
     },
     "transfer": {
       "title": "Ajouter de l'argent",

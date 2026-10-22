@@ -343,11 +343,17 @@ export async function POST(request: Request) {
     // either added ad-hoc (Recurring page) or predates provenance tracking,
     // and must never be touched here (surfaced to the user as `legacyRecurring`
     // in the confirmation step above instead of being silently kept or dropped).
-    const { data: priorRecurring } = await supabase
+    const { data: priorRecurring, error: priorRecurringErr } = await supabase
       .from('recurring_items')
       .select('id')
       .eq('household_id', householdId)
       .not('file_import_id', 'is', null);
+    // A failed read is not "nothing to replace": the old items would survive
+    // next to the new ones and double the ledger.
+    if (priorRecurringErr) {
+      console.error('Save plan prior recurring read error:', priorRecurringErr);
+      return NextResponse.json({ error: `Failed to read the previous plan's recurring items: ${priorRecurringErr.message}` }, { status: 500 });
+    }
     const priorRecurringIds = (priorRecurring ?? []).map((r) => r.id);
 
     if (priorRecurringIds.length > 0) {
@@ -355,13 +361,21 @@ export async function POST(request: Request) {
       // not just date >= today. Deleting only future rows left past-dated
       // rows orphaned (recurring_item_id set NULL by the FK) on every
       // re-onboarding; that orphan leak is what caused ledger duplication.
-      await supabase
+      const { error: priorTxErr } = await supabase
         .from('transactions')
         .delete()
         .eq('household_id', householdId)
         .in('recurring_item_id', priorRecurringIds);
+      if (priorTxErr) {
+        console.error('Save plan prior recurring transactions delete error:', priorTxErr);
+        return NextResponse.json({ error: `Failed to remove the previous plan's recurring transactions: ${priorTxErr.message}` }, { status: 500 });
+      }
 
-      await supabase.from('recurring_items').delete().in('id', priorRecurringIds);
+      const { error: priorRuleErr } = await supabase.from('recurring_items').delete().in('id', priorRecurringIds);
+      if (priorRuleErr) {
+        console.error('Save plan prior recurring items delete error:', priorRuleErr);
+        return NextResponse.json({ error: `Failed to remove the previous plan's recurring items: ${priorRuleErr.message}` }, { status: 500 });
+      }
     }
 
     // ----- Replace plan-output artifacts -----
@@ -369,8 +383,18 @@ export async function POST(request: Request) {
     // other endpoint inserts/updates/deletes them) — full replacement here is
     // correct, not a scope violation, since nothing else can be silently
     // destroying user-owned data. Already gated by the confirmation step above.
-    await supabase.from('budgets').delete().eq('household_id', householdId);
-    await supabase.from('sinking_funds').delete().eq('household_id', householdId);
+    // Each checked (docs/tickets/save-plan-unchecked-writes.md): a failed
+    // delete would leave the old rows next to the new ones.
+    const { error: budgetsDeleteErr } = await supabase.from('budgets').delete().eq('household_id', householdId);
+    if (budgetsDeleteErr) {
+      console.error('Save plan budgets delete error:', budgetsDeleteErr);
+      return NextResponse.json({ error: `Failed to replace the previous budgets: ${budgetsDeleteErr.message}` }, { status: 500 });
+    }
+    const { error: fundsDeleteErr } = await supabase.from('sinking_funds').delete().eq('household_id', householdId);
+    if (fundsDeleteErr) {
+      console.error('Save plan sinking funds delete error:', fundsDeleteErr);
+      return NextResponse.json({ error: `Failed to replace the previous sinking funds: ${fundsDeleteErr.message}` }, { status: 500 });
+    }
 
     // ----- Seed any missing categories (idempotent — never delete) -----
     // Categories are user-editable and referenced by manually-created
@@ -618,12 +642,16 @@ export async function POST(request: Request) {
       file_import_id: fileImportId,
     }));
     if (budgetRows.length) {
-      await supabase.from('budgets').insert(budgetRows);
+      const { error: budgetsErr } = await supabase.from('budgets').insert(budgetRows);
+      if (budgetsErr) {
+        console.error('Save plan budgets insert error:', budgetsErr);
+        return NextResponse.json({ error: `Failed to save category budgets: ${budgetsErr.message}` }, { status: 500 });
+      }
     }
 
     // ----- Sinking funds -----
     if (plan.sinkingFunds?.length) {
-      await supabase.from('sinking_funds').insert(
+      const { error: fundsErr } = await supabase.from('sinking_funds').insert(
         plan.sinkingFunds.map((f: { name: string; annualAmount: number; monthlyProvision: number; dueMonth: string }) => ({
           household_id: householdId,
           name: f.name,
@@ -633,6 +661,10 @@ export async function POST(request: Request) {
           file_import_id: fileImportId,
         }))
       );
+      if (fundsErr) {
+        console.error('Save plan sinking funds insert error:', fundsErr);
+        return NextResponse.json({ error: `Failed to save sinking funds: ${fundsErr.message}` }, { status: 500 });
+      }
     }
 
     // Goal accounts are handled above with cards, in the reuse/create pass —
@@ -641,7 +673,11 @@ export async function POST(request: Request) {
 
     // ----- Review -----
     // Through the service role (launch plan 1.3): members cannot write letters.
-    await (await conversationsClient()).from('conversations').insert({
+    // Checked, but NOT a 500: every write above succeeded, so the plan IS
+    // saved. A 500 would invite a re-save, which over existing data needs the
+    // replace confirmation — a dead end on mobile. The reason is logged and
+    // returned as `letterError` (null when the letter saved).
+    const { error: letterErr } = await (await conversationsClient()).from('conversations').insert({
       household_id: householdId,
       user_id: user.id,
       type: 'onboarding',
@@ -650,9 +686,16 @@ export async function POST(request: Request) {
         { role: 'assistant', type: 'monthly_review', content: reviewText, locale },
       ],
     });
+    if (letterErr) console.error('Save plan onboarding letter insert error:', letterErr);
 
     await logEvent(householdId, user.id, 'completed_onboarding', { locale });
-    return NextResponse.json({ saved: true, unmatchedMembers, needsPayDate, householdMembers: allMembers ?? [] });
+    return NextResponse.json({
+      saved: true,
+      unmatchedMembers,
+      needsPayDate,
+      householdMembers: allMembers ?? [],
+      letterError: letterErr ? letterErr.message : null,
+    });
   } catch (error) {
     console.error('Save plan error:', error);
     // Surface the real reason to the client — the UI shows it verbatim

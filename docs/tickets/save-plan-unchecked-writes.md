@@ -3,7 +3,13 @@
 **Filed** 2026-09-28, found while fixing
 [category-seed-insert-unchecked](category-seed-insert-unchecked.md).
 
-**Status:** OPEN.
+**Status:** FIXED in code 2026-10-22 (launch plan 1.7). All five, plus three
+more found next to them (the previous plan's recurring items: the read, the
+transactions delete and the rules delete — a failure there doubled the
+ledger). Each answers 500 with the reason and writes nothing after. The
+letter is the exception: the plan is saved by then, so a failed letter is
+logged and returned as `letterError` (200). No screen shows `letterError`
+yet — see the 1.7 handoff. 10/10 mutants caught.
 
 **Severity:** medium. Same class as the category seed: the route returns
 `200 { saved: true }` over a write that did not happen (CLAUDE.md §4).

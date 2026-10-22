@@ -191,3 +191,84 @@ export function parseExpenseRequest(
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// PATCH /api/expenses/[id] — the same rules for whichever fields an edit
+// sends (docs/tickets/expenses-patch-route-gaps.md). The edit route used to
+// write `date` and `description` as sent and cap no amount, so an edit could
+// store what a create refuses.
+// ---------------------------------------------------------------------------
+
+export type ExpensePatch = {
+  date?: string;
+  description?: string;
+  amount?: number;
+  /** null: cleared. */
+  categoryId?: string | null;
+  type?: 'income' | 'expense';
+};
+
+/** A parsed edit body → the validated fields it sends, or the first refusal. */
+export function parseExpensePatch(
+  body: unknown
+): { ok: true; value: ExpensePatch } | { ok: false; refusal: ExpenseRefusal } {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    return refuse('INVALID_JSON', 'Request body must be a JSON object.');
+  }
+  const b = body as Record<string, unknown>;
+  const value: ExpensePatch = {};
+
+  if (b.date !== undefined) {
+    if (!isCalendarDate(b.date)) {
+      return refuse('INVALID_DATE', 'date must be a real calendar date written as YYYY-MM-DD.');
+    }
+    value.date = b.date;
+  }
+
+  if (b.description !== undefined) {
+    if (typeof b.description !== 'string' || b.description.trim() === '') {
+      return refuse('DESCRIPTION_REQUIRED', 'description is required.');
+    }
+    if (b.description.length > MANUAL_ENTRY_DESCRIPTION_MAX_CHARS) {
+      return refuse(
+        'DESCRIPTION_TOO_LONG',
+        `description is ${b.description.length} characters; the limit is ${MANUAL_ENTRY_DESCRIPTION_MAX_CHARS}.`
+      );
+    }
+    value.description = b.description;
+  }
+
+  if (b.amount !== undefined) {
+    const amount = b.amount;
+    if (
+      typeof amount !== 'number' ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      amount > MANUAL_ENTRY_MAX_AMOUNT ||
+      !hasAtMostTwoDecimals(amount)
+    ) {
+      return refuse(
+        'INVALID_AMOUNT',
+        `amount must be a number above 0, at most ${MANUAL_ENTRY_MAX_AMOUNT}, with at most two decimals.`
+      );
+    }
+    value.amount = amount;
+  }
+
+  if (b.categoryId !== undefined) {
+    const categoryId = b.categoryId === null || b.categoryId === '' ? null : b.categoryId;
+    if (categoryId !== null && (typeof categoryId !== 'string' || !UUID.test(categoryId))) {
+      return refuse('CATEGORY_NOT_FOUND', 'That category does not belong to this household.');
+    }
+    value.categoryId = categoryId as string | null;
+  }
+
+  if (b.type !== undefined) {
+    if (b.type !== 'income' && b.type !== 'expense') {
+      return refuse('INVALID_TYPE', 'type must be "income" or "expense".');
+    }
+    value.type = b.type;
+  }
+
+  return { ok: true, value };
+}
