@@ -54,7 +54,10 @@ the v1.1 list separately.**
 - **S4. Income and bill dates, and editing them (effective-dated, as on web).**
 - **S5. Cards: setup, detail, goal and category budgets** (Lineu: edit goal AND
   budgets, as on web; same closed-cycle and later-plans 409s; live write
-  tests on Zezinho Test only).
+  tests on Zezinho Test only). BUILT 2026-10-22, uncommitted: tap a card →
+  its month (goal, spent, each category's budget vs spend); "Edit plan" for
+  an open/future statement → goal, budgets, statement and payment days, the
+  later-months choice. Device test pending. No 12-month grid yet.
 - **S6. Entries: edit and delete, income, transfers.** Edit/delete of
   Timeline entries BUILT 2026-10-17, uncommitted (Lineu asked for it): tap a
   row → edit date, description, amount, category; delete with confirmation;

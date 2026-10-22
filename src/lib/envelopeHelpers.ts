@@ -203,14 +203,10 @@ export function envelopeStatus(subBudget: number, actual: number): EnvelopeStatu
   return 'ok';
 }
 
-// True when the sum of item amounts STRICTLY exceeds totalGoal (equal is fine).
-export function sumWarning(
-  items: { monthlyAmount: number }[],
-  totalGoal: number
-): boolean {
-  const sum = r2(items.reduce((s, i) => s + i.monthlyAmount, 0));
-  return sum > totalGoal;
-}
+// sumWarning and editorItemsFrom live in @phare/core (cardPlan.ts) since
+// mobile S5, so the web and mobile editors share one rule. Re-exported here so
+// existing imports keep working.
+export { sumWarning, editorItemsFrom } from '@phare/core';
 
 // ---------------------------------------------------------------------------
 // Carry-forward: a month-scoped snapshot (a goal, or an envelope item set)
@@ -286,19 +282,6 @@ export function planForMonth<I>(
     goal: carryForwardMap(goalsByMonth, month),
     items: carryForwardMap(itemsByMonth, month) ?? [],
   };
-}
-
-// What the plan editor starts from: the plan the decision view is showing —
-// its own or carried forward — and nothing else. A category that only has
-// spend (planned: false) is not part of the plan, so opening the editor and
-// pressing Save writes the shown plan back unchanged instead of adding $0
-// budgets for it.
-export function editorItemsFrom<T extends { categoryId: string; categoryName: string; monthlyAmount: number; planned?: boolean }>(
-  envelopeItems: T[]
-): { categoryId: string; categoryName: string; monthlyAmount: number }[] {
-  return envelopeItems
-    .filter((i) => i.planned !== false)
-    .map((i) => ({ categoryId: i.categoryId, categoryName: i.categoryName, monthlyAmount: i.monthlyAmount }));
 }
 
 // What was saved for a CLOSED cycle, read from that month's own snapshot only:

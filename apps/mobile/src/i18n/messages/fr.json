@@ -135,6 +135,54 @@
     "noCards": "Aucune carte de crédit pour l'instant.",
     "addCard": "Ajouter une carte"
   },
+  "cardPlan": {
+    "budgets": "Budgets par catégorie",
+    "budget": "Budget",
+    "noBudget": "Aucun budget",
+    "noBudgets": "Aucun budget par catégorie pour ce mois.",
+    "uncategorized": "Sans catégorie",
+    "cycle": {
+      "open": "Ce relevé est en cours.",
+      "future": "Ce relevé n'a pas encore commencé.",
+      "closed": "Ce relevé est clos. Son plan reste tel quel."
+    },
+    "pastPlan": {
+      "goalOnly": "Seul un objectif a été enregistré pour ce mois.",
+      "none": "Rien n'a été prévu pour ce mois."
+    },
+    "edit": "Modifier le plan",
+    "editor": {
+      "title": "Plan de {month}",
+      "goal": "Objectif du mois",
+      "budgets": "Budgets par catégorie",
+      "addCategory": "Ajouter une catégorie",
+      "remove": "Retirer",
+      "closeDay": "Jour de fin du relevé",
+      "payDay": "Jour du paiement",
+      "daysHint": "Un jour du mois, de 1 à 31. Laissez vide si vous ne le savez pas.",
+      "overGoal": "Vos budgets par catégorie dépassent l'objectif.",
+      "later": "Ces mois suivants ont leur propre plan : {months}.",
+      "laterApply": "Leur appliquer aussi ce plan",
+      "laterKeep": "Garder leur propre plan",
+      "laterChooseFirst": "Choisissez ce qui arrive aux mois suivants avant d'enregistrer.",
+      "laterChanged": "Les mois suivants ont changé depuis l'ouverture. Choisissez de nouveau.",
+      "save": "Enregistrer le plan",
+      "saving": "Enregistrement…"
+    },
+    "problems": {
+      "goalInvalid": "Indiquez l'objectif du mois sous forme de montant, comme 1500 ou 1500,50.",
+      "amountInvalid": "Indiquez chaque budget sous forme de montant, comme 200 ou 200,50.",
+      "closeDayInvalid": "Le jour de fin du relevé est un jour du mois, de 1 à 31.",
+      "payDayInvalid": "Le jour du paiement est un jour du mois, de 1 à 31."
+    },
+    "errors": {
+      "cycleClosed": "Ce relevé est clos. Son plan ne peut plus être modifié.",
+      "laterPlansRemoveFailed": "Le plan de ce mois est enregistré, mais les mois suivants gardent leur propre plan.",
+      "unknownCategory": "Une de ces catégories n'appartient plus à votre ménage. Fermez et rouvrez la carte.",
+      "daysFailed": "Le plan est enregistré, mais pas les jours de relevé et de paiement. Enregistrez de nouveau pour les réessayer.",
+      "notFound": "Cette carte est introuvable. Fermez cet écran et rouvrez-la depuis Cartes."
+    }
+  },
   "entry": {
     "title": "Ajouter une dépense",
     "open": "Ajouter une dépense",

@@ -4,6 +4,10 @@
 
 **Rules:**
 - Phases run in order. **No feature work (S1, S4–S6) until Phase 1 exits.**
+  **Changed by Lineu 2026-10-22:** Phase 1's code work is done; its three
+  hands-on items (1.5 invite test with T1/T2, 1.8 device checklist, 1.9
+  sandbox purchase) are deferred by Lineu, and feature work starts now with
+  S5. Those three still have to happen before submission (2.12).
 - **Android is paused** until Phase 4.
 - Schema, auth, billing, money and deletion items: diagnose, report, and
   STOP for approval (CLAUDE.md §6).
@@ -43,7 +47,7 @@
 | 2.1 | **Sign-up decisions:** platform on the signup event (trigger change), email links opening the app, Terms without the web price | P0 | L decides, K (Terms) | Phase 1 | Three decisions written in BACKLOG |
 | 2.2 | **S1:** sign-up, password reset, updated-terms acceptance in the app | P0 | C | 2.1 | A new account created and confirmed in the app, with no web page; `signup` event carries `platform: 'mobile'`; reset finishes in the app |
 | 2.3 | **S4:** income and bill dates, editing them (effective-dated) | P0 | C (diagnose → STOP) | Phase 1 | Dateless lines dated in the app; a raise saved from a date leaves past months unchanged |
-| 2.4 | **S5:** cards: close and payment days, detail, goal and budgets | P0 | C | Phase 1 | A card's days, goal and two budgets set in the app match the web for the same month; closed cycle refused |
+| 2.4 | **S5:** cards: close and payment days, detail, goal and budgets. **BUILT 2026-10-22, uncommitted; device test pending.** | P0 | C | Phase 1 | A card's days, goal and two budgets set in the app match the web for the same month; closed cycle refused |
 | 2.5 | **S6 remainder:** add income and transfers in the app | P0 | C | Phase 1 | An income and a transfer added in the app appear on the Timeline and web identically |
 | 2.6 | Product metadata EN/FR, and review screenshot per product | P0 | L (C writes text) | 1.9 | Both products "Ready to Submit" |
 | 2.7 | App Store screenshots (new screens, EN/FR) | P0 | L | 2.2–2.5 | Uploaded for both locales |

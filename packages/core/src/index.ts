@@ -24,3 +24,4 @@ export * from './entry';
 export * from './onboardingFunnel';
 export * from './categories';
 export * from './privacyPolicy';
+export * from './cardPlan';

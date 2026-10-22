@@ -135,6 +135,54 @@
     "noCards": "No credit cards set up yet.",
     "addCard": "Add a card"
   },
+  "cardPlan": {
+    "budgets": "Category budgets",
+    "budget": "Budget",
+    "noBudget": "No budget",
+    "noBudgets": "No category budgets for this month.",
+    "uncategorized": "Not in a category",
+    "cycle": {
+      "open": "This statement is open.",
+      "future": "This statement hasn't started yet.",
+      "closed": "This statement has closed. Its plan stays as it was."
+    },
+    "pastPlan": {
+      "goalOnly": "Only a goal was saved for this month.",
+      "none": "Nothing was planned for this month."
+    },
+    "edit": "Edit plan",
+    "editor": {
+      "title": "Plan for {month}",
+      "goal": "Monthly goal",
+      "budgets": "Category budgets",
+      "addCategory": "Add a category",
+      "remove": "Remove",
+      "closeDay": "Statement closing day",
+      "payDay": "Payment day",
+      "daysHint": "A day of the month, 1 to 31. Leave it blank if you don't know it.",
+      "overGoal": "Your category budgets add up to more than the goal.",
+      "later": "These later months have their own plans: {months}.",
+      "laterApply": "Use this plan for them too",
+      "laterKeep": "Keep their own plans",
+      "laterChooseFirst": "Choose what happens to the later months before saving.",
+      "laterChanged": "The later months changed since you opened this. Choose again.",
+      "save": "Save plan",
+      "saving": "Saving…"
+    },
+    "problems": {
+      "goalInvalid": "Enter the monthly goal as an amount, like 1500 or 1500.50.",
+      "amountInvalid": "Enter each budget as an amount, like 200 or 200.50.",
+      "closeDayInvalid": "The statement closing day is a day of the month, 1 to 31.",
+      "payDayInvalid": "The payment day is a day of the month, 1 to 31."
+    },
+    "errors": {
+      "cycleClosed": "This statement has closed. Its plan can no longer be changed.",
+      "laterPlansRemoveFailed": "This month's plan was saved, but the later months still have their own plans.",
+      "unknownCategory": "One of these categories isn't in your household any more. Close this and open the card again.",
+      "daysFailed": "The plan was saved, but the statement and payment days weren't. Save again to retry them.",
+      "notFound": "This card couldn't be found. Close this and open it again from Cards."
+    }
+  },
   "entry": {
     "title": "Add an expense",
     "open": "Add an expense",

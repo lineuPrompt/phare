@@ -43,6 +43,9 @@ export default function RootLayout() {
           <Stack.Screen name="account-new" options={{ presentation: 'modal' }} />
           {/* Editing or deleting a Timeline entry. */}
           <Stack.Screen name="entry-edit" options={{ presentation: 'modal' }} />
+          {/* One card's month, and editing its plan (standalone S5). */}
+          <Stack.Screen name="card" />
+          <Stack.Screen name="card-edit" options={{ presentation: 'modal' }} />
           {/* Phare Pro through Apple's in-app purchase. */}
           <Stack.Screen name="pro" options={{ presentation: 'modal' }} />
         </Stack>

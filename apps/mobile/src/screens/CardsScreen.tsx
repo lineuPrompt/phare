@@ -28,14 +28,15 @@ import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
 /**
- * The card room: which credit card has room left this month. Read-only.
+ * The card room: which credit card has room left this month.
  *
  * Differences from the web panel (CrossCardView), on purpose:
  *   - shown for ONE card or more; the web shows it only beside 2+ card tabs,
  *     because there it sits above a per-card detail view. Here it is the whole
  *     screen, and one card's room is still the question.
- *   - month by month through the web picker's own range (/api/cards/months),
- *     but no envelope editor or 12-month grid yet.
+ *   - month by month through the web picker's own range (/api/cards/months);
+ *     tapping a card opens its month (CardDetailScreen) and, for an open or
+ *     future statement, the plan editor. No 12-month grid yet.
  *
  * Every figure is the server's (see cardsLoader.ts). A null goal or room
  * renders as "—", never $0.
@@ -50,7 +51,7 @@ const STATUS_COLOR: Record<CardStatus, string> = {
   unset: theme.color.muted,
 };
 
-function CardRowView({ card }: { card: CardRow }) {
+function CardRowView({ card, onPress }: { card: CardRow; onPress: () => void }) {
   const { t, locale } = useI18n();
 
   // Literal keys, one per status, so the i18n parity test can see each one.
@@ -62,8 +63,14 @@ function CardRowView({ card }: { card: CardRow }) {
 
   const roomNegative = card.remaining !== null && card.remaining < 0;
 
+  // Tapping a card opens its month: budgets by category, and the plan editor.
   return (
-    <View style={styles.card}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={card.name}
+      onPress={onPress}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+    >
       <View style={styles.cardHeader}>
         <Text style={styles.cardName} numberOfLines={1}>{card.name}</Text>
         <Text style={[styles.status, { color: STATUS_COLOR[card.status] }]}>{statusLabel}</Text>
@@ -82,7 +89,7 @@ function CardRowView({ card }: { card: CardRow }) {
           {cardFigure(card.remaining, locale)}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -224,7 +231,13 @@ export default function CardsScreen() {
           </View>
         )}
 
-        {load?.kind === 'ready' && load.cards.map((card) => <CardRowView key={card.id} card={card} />)}
+        {load?.kind === 'ready' && load.cards.map((card) => (
+          <CardRowView
+            key={card.id}
+            card={card}
+            onPress={() => router.push({ pathname: '/card', params: { cardId: card.id, month: load.month } })}
+          />
+        ))}
       </ScrollView>
     </SafeAreaView>
   );
@@ -245,6 +258,7 @@ const styles = StyleSheet.create({
     padding: theme.space.md,
     gap: theme.space.sm,
   },
+  cardPressed: { opacity: 0.7 },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
