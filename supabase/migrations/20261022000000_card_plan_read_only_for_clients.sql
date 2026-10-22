@@ -2,7 +2,19 @@
 -- Phare — a card's plan (monthly_goals, card_envelope_items): members read,
 -- only the server writes. 2026-10-22.
 --
--- STATUS: WRITTEN — not applied.
+-- STATUS: APPLIED — 2026-10-22 (Lineu, SQL Editor), after the code shipped in
+--   commit 12b300f.
+--
+--   VERIFIED LIVE 2026-10-22 through the read-only MCP server: VERIFY below
+--   12/12 PASS (before applying: 8 FAIL / 4 PASS). Data unchanged across the
+--   apply: monthly_goals 14 rows, card_envelope_items 62 rows, value
+--   checksums identical before and after.
+--   BEHAVIOUR VERIFIED LIVE as Zezinho Test (publishable key + own JWT): own
+--   rows readable on both tables (2 goals, 5 items); INSERT (nonexistent
+--   household), UPDATE and DELETE (nonexistent id) 403/42501 on both; no
+--   session 401/42501; GET /api/card-envelope and /api/card-envelope/grid 200.
+--   NOT exercised live: a SAVE through POST /api/card-envelope (it would
+--   change Zezinho Test's plan) — covered by the device checklist.
 --
 -- ORDER MATTERS — APPLY ONLY AFTER THE CODE IS LIVE ON phare.money (Vercel
 -- shows the deployment Ready, not just pushed). The code change in the same
