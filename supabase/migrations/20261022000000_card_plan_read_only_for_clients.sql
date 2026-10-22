@@ -13,8 +13,13 @@
 --   rows readable on both tables (2 goals, 5 items); INSERT (nonexistent
 --   household), UPDATE and DELETE (nonexistent id) 403/42501 on both; no
 --   session 401/42501; GET /api/card-envelope and /api/card-envelope/grid 200.
---   NOT exercised live: a SAVE through POST /api/card-envelope (it would
---   change Zezinho Test's plan) — covered by the device checklist.
+--   LIVE SAVE as Zezinho Test, 2026-10-22 20:08 UTC (card MASTER, close day
+--   15; Lineu allowed changes on Zezinho Test): November (open) saved with
+--   its carried plan, 2800 / one category 550 → 200, read back identical;
+--   now November's own rows. Edge logs: the goal upsert, items delete and
+--   insert all as service_role (201/204/201). A nonexistent category → 400
+--   unknown_category; October (closed) → 409 cycle_closed. August and
+--   October rows untouched.
 --
 -- ORDER MATTERS — APPLY ONLY AFTER THE CODE IS LIVE ON phare.money (Vercel
 -- shows the deployment Ready, not just pushed). The code change in the same
