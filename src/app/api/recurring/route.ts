@@ -32,7 +32,7 @@ export async function GET() {
     // what keeps a split invisible in the UI: the old row disappears and the
     // new one appears in its place at the same list position, reading as a
     // normal in-place edit even though two rule rows now exist underneath.
-    const { data: items } = await supabase
+    const { data: items, error: itemsErr } = await supabase
       .from('recurring_items')
       .select(
         'id, description, amount, type, cadence, anchor_date, second_day, active, category_id, account_id, destination_account_id, member_id, ' +
@@ -44,7 +44,7 @@ export async function GET() {
       .order('type', { ascending: true })
       .order('description', { ascending: true });
 
-    const { data: accounts } = await supabase
+    const { data: accounts, error: accountsErr } = await supabase
       .from('accounts')
       .select('id, name, type')
       .eq('household_id', ctx.householdId)
@@ -61,12 +61,20 @@ export async function GET() {
       (a) => (GOAL_ACCOUNT_TYPES as readonly string[]).includes(a.type)
     );
 
-    const { data: categories } = await supabase
+    const { data: categories, error: categoriesErr } = await supabase
       .from('categories')
       .select('id, name')
       .eq('household_id', ctx.householdId)
       .eq('type', 'expense')
       .order('name');
+
+    // A failed read is never "no recurring lines" (or no accounts, no
+    // categories): each is reported with its reason.
+    const readErr = itemsErr ?? accountsErr ?? categoriesErr;
+    if (readErr) {
+      console.error('Recurring GET read error:', readErr);
+      return NextResponse.json({ error: `Failed to load recurring items: ${readErr.message}` }, { status: 500 });
+    }
 
     return NextResponse.json({
       items: items ?? [],
@@ -168,12 +176,15 @@ export async function POST(request: Request) {
     // onboarding path already follows for fixed expenses (member_id null,
     // see importProvenance-adjacent logic in save-plan/route.ts). Income
     // (and a transfer's initiating member) keep the creator's own member_id,
-    // unchanged from before.
+    // unchanged from before. The rule's rows carry the SAME member as the
+    // rule (docs/tickets/recurring-post-expense-rows-attributed-to-creator.md):
+    // they used to get the creator's member even for an expense.
+    const ruleMemberId = type === 'expense' ? null : ctx.memberId;
     const { data: item, error: itemError } = await supabase
       .from('recurring_items')
       .insert({
         household_id: ctx.householdId,
-        member_id: type === 'expense' ? null : ctx.memberId,
+        member_id: ruleMemberId,
         category_id: resolvedCategoryId,
         account_id: resolvedAccountId,
         destination_account_id: resolvedDestinationId,
@@ -246,7 +257,7 @@ export async function POST(request: Request) {
     if (dates.length) {
       const rows = dates.map((d) => ({
         household_id: ctx.householdId,
-        member_id: ctx.memberId,
+        member_id: ruleMemberId,
         category_id: resolvedCategoryId,
         account_id: resolvedAccountId,
         amount,

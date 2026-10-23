@@ -155,6 +155,12 @@ describe('POST /api/recurring — member attribution', () => {
 
     const insert = calls.find((c) => c.table === 'recurring_items' && c.method === 'insert');
     expect((insert!.args[0] as { member_id: unknown }).member_id).toBeNull();
+
+    // ...and so does every row it materializes — they used to carry the
+    // creator (docs/tickets/recurring-post-expense-rows-attributed-to-creator.md).
+    const rows = calls.find((c) => c.table === 'transactions' && c.method === 'insert')!.args[0] as { member_id: unknown }[];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.member_id === null)).toBe(true);
   });
 
   it('a manually-added recurring INCOME still carries the creating user\'s member_id, unchanged', async () => {
@@ -184,5 +190,60 @@ describe('POST /api/recurring — member attribution', () => {
 
     const insert = calls.find((c) => c.table === 'recurring_items' && c.method === 'insert');
     expect((insert!.args[0] as { member_id: unknown }).member_id).toBe('mem-creator');
+
+    const rows = calls.find((c) => c.table === 'transactions' && c.method === 'insert')!.args[0] as { member_id: unknown }[];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.member_id === 'mem-creator')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET never answers "no recurring lines" over a failed read.
+// ---------------------------------------------------------------------------
+
+describe('GET /api/recurring — failed reads are errors, not empty lists', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  async function getWith(script: Record<string, Resolution[]>) {
+    const { client } = makeSupabaseMock(script);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const { GET } = await import('../route');
+    return GET();
+  }
+
+  const CTX = {
+    users: [{ data: { household_id: 'hh1' }, error: null }],
+    household_members: [{ data: { id: 'mem-1' }, error: null }],
+  };
+
+  it.each([
+    ['recurring_items', { recurring_items: [{ data: null, error: { message: 'canceling statement due to statement timeout' } }], accounts: [{ data: [], error: null }], categories: [{ data: [], error: null }] }],
+    ['accounts', { recurring_items: [{ data: [], error: null }], accounts: [{ data: null, error: { message: 'canceling statement due to statement timeout' } }], categories: [{ data: [], error: null }] }],
+    ['categories', { recurring_items: [{ data: [], error: null }], accounts: [{ data: [], error: null }], categories: [{ data: null, error: { message: 'canceling statement due to statement timeout' } }] }],
+  ])('a failed %s read is a 500 with the reason', async (_table, script) => {
+    const res = await getWith({ ...CTX, ...script });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('Failed to load recurring items: canceling statement due to statement timeout');
+    expect(json.items).toBeUndefined();
+  });
+
+  it('a successful read lists the rules, spending accounts, goal accounts and categories', async () => {
+    const res = await getWith({
+      ...CTX,
+      recurring_items: [{ data: [{ id: 'ri-1', description: 'Rent' }], error: null }],
+      accounts: [{ data: [{ id: 'chq', name: 'Chequing', type: 'chequing' }, { id: 'sav', name: 'Trip', type: 'savings' }], error: null }],
+      categories: [{ data: [{ id: 'cat-1', name: 'Housing' }], error: null }],
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      items: [{ id: 'ri-1', description: 'Rent' }],
+      accounts: [{ id: 'chq', name: 'Chequing', type: 'chequing' }],
+      goalAccounts: [{ id: 'sav', name: 'Trip', type: 'savings' }],
+      categories: [{ id: 'cat-1', name: 'Housing' }],
+    });
   });
 });

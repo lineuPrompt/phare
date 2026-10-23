@@ -111,6 +111,7 @@
     "review": "Review",
     "timeline": "Timeline",
     "account": "Account",
+    "more": "More",
     "cards": "Cards"
   },
   "account": {
@@ -181,6 +182,67 @@
       "unknownCategory": "One of these categories isn't in your household any more. Close this and open the card again.",
       "daysFailed": "The plan was saved, but the statement and payment days weren't. Save again to retry them.",
       "notFound": "This card couldn't be found. Close this and open it again from Cards."
+    }
+  },
+  "more": {
+    "recurring": "Recurring"
+  },
+  "recurring": {
+    "title": "Recurring",
+    "sections": {
+      "needsDate": "Needs a date",
+      "income": "Income",
+      "bills": "Bills",
+      "contributions": "Contributions"
+    },
+    "needsDateHint": "These aren't in your plan until they have a date.",
+    "addDate": "Add a date",
+    "noDate": "No date yet",
+    "empty": "No recurring income or bills yet.",
+    "new": {
+      "income": "New income",
+      "expense": "New bill",
+      "transfer": "New contribution"
+    },
+    "cadence": {
+      "monthly": "Monthly",
+      "biweekly": "Every 2 weeks",
+      "semimonthly": "Twice a month",
+      "weekly": "Weekly"
+    },
+    "editor": {
+      "titleEdit": "Edit",
+      "description": "Description",
+      "amount": "Amount",
+      "cadence": "How often",
+      "date": "Date",
+      "dateHint": "A day it happens on, written as YYYY-MM-DD.",
+      "secondDay": "Second day of the month",
+      "category": "Category",
+      "account": "Account",
+      "goal": "Savings goal or debt",
+      "appliesFrom": "Applies from",
+      "appliesFromHint": "Earlier months keep the old figures. It can't start before today.",
+      "save": "Save",
+      "saving": "Saving…",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this? Its future occurrences are removed; past ones stay.",
+      "confirmDelete": "Yes, delete",
+      "deleting": "Deleting…",
+      "notFound": "This line couldn't be found. It may have been changed elsewhere."
+    },
+    "problems": {
+      "descriptionRequired": "Add a description.",
+      "descriptionTooLong": "That description is too long. Keep it to {max} characters.",
+      "amountInvalid": "Enter an amount above zero, like 1500 or 1500.50.",
+      "dateRequired": "Enter a day it happens on.",
+      "dateInvalid": "Enter a real date, written as YYYY-MM-DD.",
+      "secondDayInvalid": "The second day is a day of the month, 1 to 31.",
+      "categoryRequired": "Choose a category.",
+      "accountRequired": "Choose an account.",
+      "goalRequired": "Choose a goal or debt account.",
+      "effectiveFromInvalid": "Enter the date it applies from as YYYY-MM-DD.",
+      "effectiveFromPast": "It can't apply from a past date: past months keep their real figures."
     }
   },
   "entry": {

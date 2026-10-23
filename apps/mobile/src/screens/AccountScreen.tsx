@@ -10,6 +10,7 @@ import DeleteAccountSection from '../components/DeleteAccountSection';
 import AccountsSection from '../components/AccountsSection';
 import ProSection from '../components/ProSection';
 import AppleBillingWarning from '../components/AppleBillingWarning';
+import BackToMore from '../components/BackToMore';
 
 /**
  * The Account tab: who is signed in, the household's accounts, the way out,
@@ -52,6 +53,7 @@ export default function AccountScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <BackToMore />
         <Text style={styles.title}>{t('account.title')}</Text>
 
         <View style={styles.card}>

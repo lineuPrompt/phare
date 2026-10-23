@@ -52,6 +52,13 @@ the v1.1 list separately.**
   (launch plan 1.7), uncommitted; the web Timeline now shows load errors. —
   [ticket](tickets/anchors-get-swallows-read-error.md)
 - **S4. Income and bill dates, and editing them (effective-dated, as on web).**
+  BUILT 2026-10-23, uncommitted: tabs are now Home · Timeline · Cards · More
+  (Review and Account moved into More, Lineu's call); Recurring in More —
+  list (undated first), add a date, edit with "Applies from", new income /
+  bill / contribution, delete. Server: recurring rows take the rule's member,
+  GET /api/recurring reports read failures, effectiveFrom must be a calendar
+  date, DELETE refuses if future rows fail to go. Live on Zezinho Test against
+  today's server: pass; the server fixes are re-verified after the push.
 - **S5. Cards: setup, detail, goal and category budgets** (Lineu: edit goal AND
   budgets, as on web; same closed-cycle and later-plans 409s; live write
   tests on Zezinho Test only). BUILT 2026-10-22, uncommitted: tap a card →

@@ -3,7 +3,13 @@
 **Filed** 2026-10-01, found while reading the route for the first-session
 extraction.
 
-**Status:** OPEN. CLAUDE.md §4: "Expenses never get member attribution."
+**Status:** FIXED in code 2026-10-23 (S4, approved): rows use the rule's own
+member (null for an expense). Tests now check the rows, not just the rule.
+Live before the fix (2026-10-23, Zezinho Test): a new bill's 12 rows all
+carried the creator. Live data: household 2be22642 has 10 expense rows with a
+member from one rule whose RULE also carries a member — a one-off SQL repair,
+not done, needs its own approval.
+CLAUDE.md §4: "Expenses never get member attribution."
 
 ## The problem
 

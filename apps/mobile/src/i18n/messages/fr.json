@@ -111,6 +111,7 @@
     "review": "Bilan",
     "timeline": "Chronologie",
     "account": "Compte",
+    "more": "Plus",
     "cards": "Cartes"
   },
   "account": {
@@ -181,6 +182,67 @@
       "unknownCategory": "Une de ces catégories n'appartient plus à votre ménage. Fermez et rouvrez la carte.",
       "daysFailed": "Le plan est enregistré, mais pas les jours de relevé et de paiement. Enregistrez de nouveau pour les réessayer.",
       "notFound": "Cette carte est introuvable. Fermez cet écran et rouvrez-la depuis Cartes."
+    }
+  },
+  "more": {
+    "recurring": "Récurrents"
+  },
+  "recurring": {
+    "title": "Récurrents",
+    "sections": {
+      "needsDate": "Date à préciser",
+      "income": "Revenus",
+      "bills": "Factures",
+      "contributions": "Contributions"
+    },
+    "needsDateHint": "Ces éléments ne font pas partie de votre plan tant qu'ils n'ont pas de date.",
+    "addDate": "Ajouter une date",
+    "noDate": "Pas encore de date",
+    "empty": "Aucun revenu ni facture récurrents pour l'instant.",
+    "new": {
+      "income": "Nouveau revenu",
+      "expense": "Nouvelle facture",
+      "transfer": "Nouvelle contribution"
+    },
+    "cadence": {
+      "monthly": "Mensuel",
+      "biweekly": "Aux 2 semaines",
+      "semimonthly": "Deux fois par mois",
+      "weekly": "Hebdomadaire"
+    },
+    "editor": {
+      "titleEdit": "Modifier",
+      "description": "Description",
+      "amount": "Montant",
+      "cadence": "Fréquence",
+      "date": "Date",
+      "dateHint": "Un jour où il a lieu, sous la forme AAAA-MM-JJ.",
+      "secondDay": "Deuxième jour du mois",
+      "category": "Catégorie",
+      "account": "Compte",
+      "goal": "Objectif d'épargne ou dette",
+      "appliesFrom": "S'applique à partir du",
+      "appliesFromHint": "Les mois précédents gardent les anciens montants. Pas avant aujourd'hui.",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "delete": "Supprimer",
+      "deleteConfirm": "Supprimer cet élément? Ses prochaines occurrences sont retirées; les passées restent.",
+      "confirmDelete": "Oui, supprimer",
+      "deleting": "Suppression…",
+      "notFound": "Cet élément est introuvable. Il a peut-être été modifié ailleurs."
+    },
+    "problems": {
+      "descriptionRequired": "Ajoutez une description.",
+      "descriptionTooLong": "Cette description est trop longue. Limitez-la à {max} caractères.",
+      "amountInvalid": "Indiquez un montant supérieur à zéro, comme 1500 ou 1500,50.",
+      "dateRequired": "Indiquez un jour où il a lieu.",
+      "dateInvalid": "Indiquez une vraie date, sous la forme AAAA-MM-JJ.",
+      "secondDayInvalid": "Le deuxième jour est un jour du mois, de 1 à 31.",
+      "categoryRequired": "Choisissez une catégorie.",
+      "accountRequired": "Choisissez un compte.",
+      "goalRequired": "Choisissez un objectif ou un compte de dette.",
+      "effectiveFromInvalid": "Indiquez la date d'application sous la forme AAAA-MM-JJ.",
+      "effectiveFromPast": "Elle ne peut pas commencer à une date passée : les mois passés gardent leurs vrais montants."
     }
   },
   "entry": {

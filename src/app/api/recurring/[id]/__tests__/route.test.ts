@@ -233,3 +233,45 @@ describe('PATCH /api/recurring/[id] — Part A3 re-materialization respects deta
     expect(insertedDates).toEqual(rawDates);
   });
 });
+
+// ---------------------------------------------------------------------------
+// DELETE: a rule never goes while its future occurrences failed to go —
+// they would stay in the ledger, detached, with no rule to find them by.
+// ---------------------------------------------------------------------------
+
+describe('DELETE /api/recurring/[id]', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  async function del(script: Record<string, Resolution[]>) {
+    const { client, calls } = makeSupabaseMock(script);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const { DELETE } = await import('../route');
+    const res = await DELETE(new Request('http://localhost/api/recurring/ri-1', { method: 'DELETE' }), { params: Promise.resolve({ id: 'ri-1' }) });
+    return { res, calls };
+  }
+
+  it('a failed removal of the future occurrences: 500 with the reason, and the rule is kept', async () => {
+    const { res, calls } = await del({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [{ error: { message: 'canceling statement due to statement timeout' } }],
+    });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe('Failed to remove the future occurrences: canceling statement due to statement timeout');
+    expect(calls.some((c) => c.table === 'recurring_items' && c.method === 'delete')).toBe(false);
+  });
+
+  it('the future occurrences go first, then the rule', async () => {
+    const { res, calls } = await del({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      transactions: [{ error: null }],
+      recurring_items: [{ error: null }],
+    });
+    expect(res.status).toBe(200);
+    expect(calls.filter((c) => c.method === 'delete').map((c) => c.table)).toEqual(['transactions', 'recurring_items']);
+  });
+});

@@ -39,6 +39,12 @@ const LIBRARY_ALLOWLIST = [
   'acquisition timed out after `subscribe()`',
   // An event-emitter warning inside the React Native runtime.
   'Trying to subscribe to unknown event',
+  // NOT A PRICE (2026-10-23): ten bytes inside a dependency's CJK character
+  // table, a UTF-16LE string in the Hermes string storage (decoded, it is
+  // U+243D U+3436 U+3535 U+355D …). Read one byte per character by
+  // extractStrings' ASCII pass, its bytes spell "=$64555]5N". Verified by
+  // locating it inside the string-storage section and decoding it as UTF-16.
+  '=$64555]5N',
 ];
 
 function listFiles(dir: string): string[] {

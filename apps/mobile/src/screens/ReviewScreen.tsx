@@ -16,6 +16,7 @@ import { messageKeyFor } from '../lib/api';
 import { formatMonthLong } from '../lib/timelineView';
 import { useI18n } from '../i18n';
 import LockedNotice from '../components/LockedNotice';
+import BackToMore from '../components/BackToMore';
 import { theme } from '../theme';
 
 /**
@@ -161,8 +162,8 @@ export default function ReviewScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Sign-out and the link to the Timeline moved to the tab bar: the
-            Account tab and the Timeline tab. */}
+        {/* Opened from the More tab (2026-10-23). */}
+        <BackToMore />
         <View style={styles.header}>
           <Text style={styles.title}>{t('review.title')}</Text>
         </View>

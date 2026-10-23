@@ -387,6 +387,39 @@ describe('PATCH /api/recurring/[id] — Part B split-into-two-rules', () => {
     void todayStr;
   });
 
+  it('rejects an effective date that is not a real calendar day, even in the future', async () => {
+    const supabase = makeFakeSupabase({
+      ...baseSeed(),
+      recurring_items: [
+        {
+          id: 'ri-x', household_id: HOUSEHOLD, member_id: null, description: 'X', amount: 100,
+          type: 'expense', cadence: 'monthly', anchor_date: '2020-01-01', second_day: null,
+          category_id: 'cat-x', account_id: CHEQUING, destination_account_id: null, active: true,
+        } as unknown as Row,
+      ],
+      transactions: [],
+      recurring_skipped_dates: [],
+    });
+
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
+
+    const { PATCH } = await import('../route');
+    // Shaped like a date and after today, so neither the old format check nor
+    // the "not in the past" check would stop it — only a calendar check does.
+    const res = await PATCH(
+      new Request('http://localhost/api/recurring/ri-x', {
+        method: 'PATCH',
+        body: JSON.stringify({ amount: 150, effectiveFrom: '2099-02-30' }),
+      }),
+      { params: Promise.resolve({ id: 'ri-x' }) }
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('Invalid effective date');
+    expect(supabase.rows('recurring_items').find((r) => r.id === 'ri-x')!.active).toBe(true);
+    expect(supabase.rows('recurring_items')).toHaveLength(1);
+  });
+
   it('a category-only edit (no value change) never splits — takes the metadata path', async () => {
     const supabase = makeFakeSupabase({
       ...baseSeed(),

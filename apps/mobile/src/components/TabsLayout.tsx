@@ -6,7 +6,8 @@ import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
 /**
- * The signed-in shell: Home | Review | Timeline | Cards | Account.
+ * The signed-in shell: Home | Timeline | Cards | More (Lineu, 2026-10-23 —
+ * the web sidebar's main items; Review, Recurring and Account open from More).
  *
  * LIVES IN src/, NOT app/(tabs)/_layout.tsx, because the i18n parity test
  * extracts t() keys from src/ only. A tab label written in app/ would ship
@@ -39,17 +40,16 @@ export default function TabsLayout() {
             tabBarActiveTintColor: theme.color.heading,
             tabBarInactiveTintColor: theme.color.muted,
             tabBarIconStyle: { display: 'none' },
-            // 12, down from 14, when the fifth tab arrived: at 14 the longest
-            // French label, « Chronologie », no longer fits a fifth of a phone.
-            tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+            // 13 with four tabs: « Chronologie », the longest French label,
+            // fits a quarter of a phone at 13 (it needed 12 at five tabs).
+            tabBarLabelStyle: { fontSize: 13, fontWeight: '600' },
             sceneStyle: { backgroundColor: theme.color.background },
           }}
         >
           <Tabs.Screen name="index" options={{ title: t('tabs.home') }} />
-          <Tabs.Screen name="review" options={{ title: t('tabs.review') }} />
           <Tabs.Screen name="timeline" options={{ title: t('tabs.timeline') }} />
           <Tabs.Screen name="cards" options={{ title: t('tabs.cards') }} />
-          <Tabs.Screen name="account" options={{ title: t('tabs.account') }} />
+          <Tabs.Screen name="more" options={{ title: t('tabs.more') }} />
         </Tabs>
       </HouseholdGate>
     </AuthGate>

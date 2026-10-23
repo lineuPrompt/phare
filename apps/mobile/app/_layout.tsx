@@ -43,6 +43,11 @@ export default function RootLayout() {
           <Stack.Screen name="account-new" options={{ presentation: 'modal' }} />
           {/* Editing or deleting a Timeline entry. */}
           <Stack.Screen name="entry-edit" options={{ presentation: 'modal' }} />
+          {/* Opened from the More tab (2026-10-23). */}
+          <Stack.Screen name="reviews" />
+          <Stack.Screen name="account" />
+          <Stack.Screen name="recurring" />
+          <Stack.Screen name="recurring-edit" options={{ presentation: 'modal' }} />
           {/* One card's month, and editing its plan (standalone S5). */}
           <Stack.Screen name="card" />
           <Stack.Screen name="card-edit" options={{ presentation: 'modal' }} />

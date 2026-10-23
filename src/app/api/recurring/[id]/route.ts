@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { businessToday, materializeFromMonthStart, excludeSkippedDates, firstOfNextMonth, sameAnchorSchedule } from '@phare/core';
+import { businessToday, materializeFromMonthStart, excludeSkippedDates, firstOfNextMonth, isCalendarDate, sameAnchorSchedule } from '@phare/core';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 
@@ -331,7 +331,9 @@ async function splitRule(args: {
 
   const requestedEffectiveFrom = typeof body.effectiveFrom === 'string' ? body.effectiveFrom : null;
   const effectiveFrom = requestedEffectiveFrom || firstOfNextMonth(todayStr);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
+  // A real calendar date, not just its shape: '2026-02-30' compares as a
+  // string but names no day, and would split the rule on it.
+  if (!isCalendarDate(effectiveFrom)) {
     return NextResponse.json({ error: 'Invalid effective date' }, { status: 400 });
   }
   if (effectiveFrom < todayStr) {
@@ -498,12 +500,19 @@ export async function DELETE(
     const timezone = await getHouseholdTimezone(supabase, householdId);
     const todayStr = businessToday(timezone);
 
-    await supabase
+    // Checked: if the future rows stay, deleting the rule would leave them
+    // behind, detached (recurring_item_id set null) — bills that keep
+    // appearing with no rule to find them by. Refused before the rule goes.
+    const { error: futureErr } = await supabase
       .from('transactions')
       .delete()
       .eq('household_id', householdId)
       .eq('recurring_item_id', id)
       .gte('date', todayStr);
+    if (futureErr) {
+      console.error('Recurring delete future rows error:', futureErr);
+      return NextResponse.json({ error: `Failed to remove the future occurrences: ${futureErr.message}` }, { status: 500 });
+    }
 
     const { error } = await supabase
       .from('recurring_items')
