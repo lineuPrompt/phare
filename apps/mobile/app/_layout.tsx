@@ -44,6 +44,7 @@ export default function RootLayout() {
           {/* Editing or deleting a Timeline entry. */}
           <Stack.Screen name="entry-edit" options={{ presentation: 'modal' }} />
           {/* Opened from the More tab (2026-10-23). */}
+          <Stack.Screen name="goals" />
           <Stack.Screen name="reviews" />
           <Stack.Screen name="account" />
           <Stack.Screen name="recurring" />

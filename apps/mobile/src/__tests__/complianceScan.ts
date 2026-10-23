@@ -116,6 +116,94 @@ export const OWN_COPY_ALLOWLIST: readonly string[] = [...POLICY_SENTENCE_ALLOWLI
  * one (little-endian small integers do). Runs shorter than `minLength` are
  * dropped for the same reason.
  */
+// ── Hermes string table: every string, exactly ──────────────────────────────
+
+const HBC_MAGIC = 0x1f1903c103bc1fc6n;
+/**
+ * Bytecode versions this reader's layout was verified on (2026-10-23, Expo SDK
+ * 57 / Hermes 98: all 19,848 string-table entries in range, "Try again" and
+ * "Réessayer" decoded exactly). Another version fails loudly rather than
+ * reading a layout it was never checked against.
+ */
+const HBC_VERIFIED_VERSIONS: ReadonlySet<number> = new Set([98]);
+
+/**
+ * Every string in a Hermes bytecode file's string table, decoded exactly as
+ * stored — ASCII or UTF-16LE, per entry — with nothing in between.
+ *
+ * WHY (2026-10-23). extractStrings reads printable byte runs, so the bytes of
+ * a UTF-16 string can read as ASCII: a dependency's CJK character table
+ * (U+243D U+3436 U+3535 …) spelled "=$64555]5N" and failed the price check,
+ * and the run moved with every build ("$08}(yDzD6" the next), so no
+ * allowlist could hold it. The string table says where each string starts,
+ * how long it is and which encoding it uses; read that way, nothing is
+ * misread and nothing is missed.
+ *
+ * Layout (Hermes BytecodeFileFormat, version 98): a 128-byte header (magic,
+ * version, 20-byte source hash, then u32 fields from offset 32), then, each
+ * 4-byte aligned: 12-byte small function headers, string kinds (u32 each),
+ * identifier hashes (u32), the small string table (u32: isUTF16:1,
+ * offset:23, length:8 — length 255 means "see the overflow table"), the
+ * overflow table (u32 offset, u32 length), the string storage.
+ *
+ * Every check throws: a scan that read the wrong bytes must fail, never pass
+ * by finding nothing.
+ */
+export function hermesStrings(bytes: Uint8Array): string[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (bytes.byteLength < 128 || view.getBigUint64(0, true) !== HBC_MAGIC) {
+    throw new Error('hermesStrings: not a Hermes bytecode file');
+  }
+  const version = view.getUint32(8, true);
+  if (!HBC_VERIFIED_VERSIONS.has(version)) {
+    throw new Error(
+      `hermesStrings: bytecode version ${version}; the string-table layout was verified on ${[...HBC_VERIFIED_VERSIONS].join(', ')} only — check it before trusting this scan`
+    );
+  }
+  const u32 = (at: number) => view.getUint32(at, true);
+  if (u32(32) !== bytes.byteLength) throw new Error('hermesStrings: the header file length does not match the file');
+  const functionCount = u32(40);
+  const stringKindCount = u32(44);
+  const identifierCount = u32(48);
+  const stringCount = u32(52);
+  const overflowCount = u32(56);
+  const storageSize = u32(60);
+
+  const align = (n: number) => (n + 3) & ~3;
+  let at = align(128 + 12 * functionCount);
+  at = align(at + 4 * stringKindCount);
+  at = align(at + 4 * identifierCount);
+  const smallTable = at;
+  const overflowTable = align(smallTable + 4 * stringCount);
+  const storage = align(overflowTable + 8 * overflowCount);
+  if (storage + storageSize > bytes.byteLength) throw new Error('hermesStrings: the string storage runs past the end of the file');
+
+  const out: string[] = [];
+  for (let k = 0; k < stringCount; k++) {
+    const entry = u32(smallTable + 4 * k);
+    const isUtf16 = (entry & 1) === 1;
+    let offset = (entry >>> 1) & 0x7fffff;
+    let length = entry >>> 24;
+    if (length === 255) {
+      if (offset >= overflowCount) throw new Error(`hermesStrings: string ${k} points past the overflow table`);
+      const o = overflowTable + 8 * offset;
+      offset = u32(o);
+      length = u32(o + 4);
+    }
+    const size = isUtf16 ? 2 * length : length;
+    if (offset + size > storageSize) throw new Error(`hermesStrings: string ${k} runs past the string storage`);
+    const start = storage + offset;
+    let s = '';
+    if (isUtf16) {
+      for (let i = 0; i < length; i++) s += String.fromCharCode(bytes[start + 2 * i] | (bytes[start + 2 * i + 1] << 8));
+    } else {
+      for (let i = 0; i < length; i++) s += String.fromCharCode(bytes[start + i]);
+    }
+    out.push(s);
+  }
+  return out;
+}
+
 export function extractStrings(bytes: Uint8Array, minLength = 6): string[] {
   const out: string[] = [];
 

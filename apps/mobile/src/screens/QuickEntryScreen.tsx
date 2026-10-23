@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { addCalendarDays, MANUAL_ENTRY_DESCRIPTION_MAX_CHARS } from '@phare/core';
 import { apiGet, apiPost, messageKeyFor } from '../lib/api';
 import {
@@ -58,7 +58,12 @@ export default function QuickEntryScreen() {
   const [draft, setDraft] = useState<EntryDraft>({
     accountId: '', date: '', description: '', categoryId: '', amount: '',
   });
-  const [kind, setKind] = useState<EntryKind>('expense');
+  // /add?kind=transfer&goalId=… opens on Contribution with that goal chosen
+  // (the Goals screen's "Add money").
+  const params = useLocalSearchParams<{ kind?: string; goalId?: string }>();
+  const [kind, setKind] = useState<EntryKind>(
+    params.kind === 'income' || params.kind === 'transfer' ? params.kind : 'expense'
+  );
   // Goals load only when "Contribution" is picked; their failure is theirs alone.
   const [goals, setGoals] = useState<EntryGoal[] | null>(null);
   const [goalsErrorKey, setGoalsErrorKey] = useState<string | null>(null);
@@ -68,17 +73,44 @@ export default function QuickEntryScreen() {
   const [messageKey, setMessageKey] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const loadGoals = useCallback(async () => {
-    setGoalsErrorKey(null);
+  // Fetching and applying are separate, as for the form above, so the effect
+  // below only applies an answer that arrived — never sets state itself.
+  const fetchGoals = useCallback(async (): Promise<{ goals: EntryGoal[] } | { errorKey: string }> => {
     try {
-      const loaded = await loadTransferGoals(apiGet);
-      setGoals(loaded);
-      setGoalId((id) => id || loaded[0]?.id || '');
+      return { goals: await loadTransferGoals(apiGet) };
     } catch (err) {
       console.error('Quick entry goals load error:', err);
-      setGoalsErrorKey(messageKeyFor(err));
+      return { errorKey: messageKeyFor(err) };
     }
   }, []);
+
+  const applyGoals = useCallback((outcome: { goals: EntryGoal[] } | { errorKey: string }) => {
+    if ('goals' in outcome) {
+      const loaded = outcome.goals;
+      setGoalsErrorKey(null);
+      setGoals(loaded);
+      const wanted = typeof params.goalId === 'string' && loaded.some((g) => g.id === params.goalId) ? params.goalId : '';
+      setGoalId((id) => id || wanted || loaded[0]?.id || '');
+    } else {
+      setGoalsErrorKey(outcome.errorKey);
+    }
+  }, [params.goalId]);
+
+  const loadGoals = useCallback(async () => applyGoals(await fetchGoals()), [fetchGoals, applyGoals]);
+
+  // Opened straight on Contribution (/add?kind=transfer): its goals load now.
+  const openedOnContribution = params.kind === 'transfer';
+  useEffect(() => {
+    if (!openedOnContribution) return;
+    let cancelled = false;
+    void (async () => {
+      const outcome = await fetchGoals();
+      if (!cancelled) applyGoals(outcome);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [openedOnContribution, fetchGoals, applyGoals]);
 
   const chooseKind = (next: EntryKind) => {
     setKind(next);

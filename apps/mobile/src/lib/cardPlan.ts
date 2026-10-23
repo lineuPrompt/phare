@@ -38,6 +38,17 @@ export type CardBudget = {
   planned: boolean;
 };
 
+/** One entry of the cycle, as the route groups them. Read-only here. */
+export type CardEntry = {
+  id: string;
+  date: string;
+  description: string | null;
+  /** As stored: an expense adds to spend, an income (a refund) nets against it. */
+  amount: number;
+  type: 'expense' | 'income';
+  installmentLabel: string | null;
+};
+
 export type CardDetail = {
   card: { id: string; name: string; statementCloseDay: number | null; paymentDay: number | null };
   month: string;
@@ -50,7 +61,27 @@ export type CardDetail = {
   laterPlanMonths: string[];
   /** Closed months only: what was saved for that month itself. */
   pastPlan: PastPlan | null;
+  /** The cycle's entries by category id, oldest first, and those with none. */
+  entriesByCategory: Record<string, CardEntry[]>;
+  uncategorizedEntries: CardEntry[];
 };
+
+function parseEntries(raw: unknown, what: string): CardEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x, i) => {
+      const e = x as Record<string, unknown>;
+      return {
+        id: String(e.id),
+        date: String(e.date),
+        description: typeof e.description === 'string' ? e.description : null,
+        amount: num(e.amount, `${what} entry ${i}`),
+        type: e.type === 'income' ? 'income' as const : 'expense' as const,
+        installmentLabel: typeof e.installmentLabel === 'string' ? e.installmentLabel : null,
+      };
+    })
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
 
 type Getter = <T>(path: string) => Promise<T>;
 type Poster = <T>(path: string, body: unknown) => Promise<T>;
@@ -111,6 +142,10 @@ export function parseCardDetail(raw: unknown, month: string): CardDetail {
     cycleState: state,
     laterPlanMonths: Array.isArray(d.laterPlanMonths) ? d.laterPlanMonths.filter((m): m is string => typeof m === 'string') : [],
     pastPlan,
+    entriesByCategory: Object.fromEntries(
+      Object.entries((d.entriesByCategory ?? {}) as Record<string, unknown>).map(([categoryId, list]) => [categoryId, parseEntries(list, categoryId)])
+    ),
+    uncategorizedEntries: parseEntries(d.uncategorizedEntries, 'uncategorized'),
   };
 }
 

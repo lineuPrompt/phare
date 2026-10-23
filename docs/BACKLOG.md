@@ -57,8 +57,12 @@ the v1.1 list separately.**
   list (undated first), add a date, edit with "Applies from", new income /
   bill / contribution, delete. Server: recurring rows take the rule's member,
   GET /api/recurring reports read failures, effectiveFrom must be a calendar
-  date, DELETE refuses if future rows fail to go. Live on Zezinho Test against
-  today's server: pass; the server fixes are re-verified after the push.
+  date, DELETE refuses if future rows fail to go. Committed f01d795; verified live on
+  Zezinho Test after the deploy (bill rows carry no member; 2099-02-30 refused).
+  2026-10-23 also: tabs relabelled as the web sidebar (Overview · Timeline ·
+  Credit Cards · More); More in the sidebar's order (Goals, Reviews,
+  Recurring, then Account); Goals screen (read-only, "Add money" opens a
+  contribution); card categories expand to their entries (read-only).
 - **S5. Cards: setup, detail, goal and category budgets** (Lineu: edit goal AND
   budgets, as on web; same closed-cycle and later-plans 409s; live write
   tests on Zezinho Test only). BUILT 2026-10-22, uncommitted: tap a card →

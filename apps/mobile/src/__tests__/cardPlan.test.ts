@@ -185,3 +185,44 @@ describe('saving the plan', () => {
     expect(out.kind === 'error' && out.messageKey).not.toMatch(/^cardPlan/);
   });
 });
+
+describe('a category expanded: its entries', () => {
+  const withEntries = {
+    ...ANSWER,
+    entriesByCategory: {
+      'cat-gro': [
+        { id: 'e2', date: '2026-10-20', description: 'IGA', amount: '80.25', type: 'expense', installmentLabel: null },
+        { id: 'e1', date: '2026-10-17', description: 'Costco', amount: 400.25, type: 'expense', installmentLabel: null },
+        { id: 'e3', date: '2026-10-21', description: 'Refund', amount: 12, type: 'income', installmentLabel: null },
+      ],
+    },
+    uncategorizedEntries: [{ id: 'u1', date: '2026-10-18', description: null, amount: 12.25, type: 'expense', installmentLabel: '2/6' }],
+  };
+
+  it('each category keeps its own entries, oldest first, numerics read exactly', () => {
+    const d = parseCardDetail(withEntries, '2026-11');
+    expect(d.entriesByCategory['cat-gro'].map((e) => e.id)).toEqual(['e1', 'e2', 'e3']);
+    expect(d.entriesByCategory['cat-gro'][1]).toEqual({ id: 'e2', date: '2026-10-20', description: 'IGA', amount: 80.25, type: 'expense', installmentLabel: null });
+  });
+
+  it('a refund stays a refund (income), not spend', () => {
+    expect(parseCardDetail(withEntries, '2026-11').entriesByCategory['cat-gro'][2].type).toBe('income');
+  });
+
+  it('entries with no category, with no description and an installment label, are kept', () => {
+    expect(parseCardDetail(withEntries, '2026-11').uncategorizedEntries).toEqual([
+      { id: 'u1', date: '2026-10-18', description: null, amount: 12.25, type: 'expense', installmentLabel: '2/6' },
+    ]);
+  });
+
+  it('an unreadable entry amount is an error, not a zero', () => {
+    const bad = { ...withEntries, uncategorizedEntries: [{ ...withEntries.uncategorizedEntries[0], amount: 'abc' }] };
+    expect(() => parseCardDetail(bad, '2026-11')).toThrow(/not a number/);
+  });
+
+  it('an answer with no entries reads as none, not an error', () => {
+    const d = parseCardDetail(ANSWER, '2026-11');
+    expect(d.entriesByCategory).toEqual({});
+    expect(d.uncategorizedEntries).toEqual([]);
+  });
+});

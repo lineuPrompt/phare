@@ -6,37 +6,44 @@ import { theme } from '../theme';
 
 /**
  * The More tab (Lineu, 2026-10-23): the web sidebar's secondary items, as a
- * short menu. Home, Timeline and Cards are the tabs; everything else opens
- * from here. Goals and Household get their rows when their screens exist —
- * no placeholders.
+ * short menu, in its order. Overview, Timeline and Credit Cards are the tabs
+ * (the sidebar's first three, same labels); everything else opens from here.
+ * Household gets its row when its screen exists — no placeholders.
  */
 export default function MoreScreen() {
   const { t } = useI18n();
   const router = useRouter();
 
-  const rows: { label: string; href: Href }[] = [
-    { label: t('tabs.review'), href: '/reviews' },
-    { label: t('more.recurring'), href: '/recurring' },
-    { label: t('tabs.account'), href: '/account' },
+  // The web sidebar's order: Goals, Reviews, Recurring (Household joins when
+  // it is built). Account sits apart, as the web keeps it out of the sidebar.
+  const groups: { label: string; href: Href }[][] = [
+    [
+      { label: t('more.goals'), href: '/goals' },
+      { label: t('tabs.review'), href: '/reviews' },
+      { label: t('more.recurring'), href: '/recurring' },
+    ],
+    [{ label: t('tabs.account'), href: '/account' }],
   ];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>{t('tabs.more')}</Text>
-        <View style={styles.card}>
-          {rows.map((row, i) => (
-            <Pressable
-              key={row.label}
-              accessibilityRole="button"
-              onPress={() => router.push(row.href)}
-              style={({ pressed }) => [styles.row, i > 0 && styles.divider, pressed && styles.pressed]}
-            >
-              <Text style={styles.label}>{row.label}</Text>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          ))}
-        </View>
+        {groups.map((rows, g) => (
+          <View key={g} style={styles.card}>
+            {rows.map((row, i) => (
+              <Pressable
+                key={row.label}
+                accessibilityRole="button"
+                onPress={() => router.push(row.href)}
+                style={({ pressed }) => [styles.row, i > 0 && styles.divider, pressed && styles.pressed]}
+              >
+                <Text style={styles.label}>{row.label}</Text>
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+            ))}
+          </View>
+        ))}
       </ScrollView>
     </SafeAreaView>
   );

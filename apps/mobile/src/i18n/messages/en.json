@@ -107,12 +107,12 @@
     "streamProbeFailed": "Probe failed: {reason}"
   },
   "tabs": {
-    "home": "Home",
-    "review": "Review",
+    "home": "Overview",
+    "review": "Reviews",
     "timeline": "Timeline",
     "account": "Account",
     "more": "More",
-    "cards": "Cards"
+    "cards": "Credit Cards"
   },
   "account": {
     "title": "Account",
@@ -141,6 +141,7 @@
     "budget": "Budget",
     "noBudget": "No budget",
     "noBudgets": "No category budgets for this month.",
+    "noEntries": "No entries in this category.",
     "uncategorized": "Not in a category",
     "cycle": {
       "open": "This statement is open.",
@@ -185,6 +186,7 @@
     }
   },
   "more": {
+    "goals": "Goals",
     "recurring": "Recurring"
   },
   "recurring": {
@@ -244,6 +246,19 @@
       "effectiveFromInvalid": "Enter the date it applies from as YYYY-MM-DD.",
       "effectiveFromPast": "It can't apply from a past date: past months keep their real figures."
     }
+  },
+  "goals": {
+    "title": "Goals",
+    "empty": "No savings goal or debt yet.",
+    "savedToday": "Saved so far",
+    "owedToday": "Owed today",
+    "target": "Target",
+    "by": "by",
+    "payoffBy": "Paid off by",
+    "contribution": "Contribution",
+    "addMoney": "Add money",
+    "makePayment": "Make a payment",
+    "newGoal": "New savings goal"
   },
   "entry": {
     "title": "Add an entry",

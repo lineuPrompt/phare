@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { extractStrings, findViolations, OWN_COPY_ALLOWLIST } from './complianceScan';
+import { extractStrings, findViolations, hermesStrings, OWN_COPY_ALLOWLIST } from './complianceScan';
 
 // ---------------------------------------------------------------------------
 // APP STORE COMPLIANCE, CHECKED OVER THE COMPILED BUNDLE.
@@ -35,16 +35,24 @@ const BUNDLE_DIR = path.join(APP_ROOT, 'dist', '_expo', 'static', 'js');
 const LIBRARY_ALLOWLIST = [
   // @supabase/realtime-js — an error for self-hosters on an old Realtime server.
   'or upgrade the Realtime server in your self-hosted setup',
-  // @supabase/auth-js — a navigator lock timeout message.
-  'acquisition timed out after `subscribe()`',
-  // An event-emitter warning inside the React Native runtime.
-  'Trying to subscribe to unknown event',
-  // NOT A PRICE (2026-10-23): ten bytes inside a dependency's CJK character
-  // table, a UTF-16LE string in the Hermes string storage (decoded, it is
-  // U+243D U+3436 U+3535 U+355D …). Read one byte per character by
-  // extractStrings' ASCII pass, its bytes spell "=$64555]5N". Verified by
-  // locating it inside the string-storage section and decoding it as UTF-16.
-  '=$64555]5N',
+  // @supabase/supabase-js — the Node.js version deprecation warning.
+  'Please upgrade to Node.js 22 or later',
+  // Removed 2026-10-23: the two `subscribe` sentences (an auth-js lock
+  // timeout, a React Native event-emitter warning). "subscribe" stopped being
+  // forbidden on 2026-10-17, and read string by string the first no longer
+  // exists as one sentence.
+];
+
+/**
+ * Library strings excused only when a WHOLE string equals the entry — never a
+ * string that merely contains it. Possible since the scan reads each string
+ * exactly (hermesStrings); a bare word as a sentence entry would excuse that
+ * word everywhere, our own copy included.
+ */
+const LIBRARY_EXACT_STRINGS = [
+  // A Material Icons glyph name in a bundled icon font's name table (its
+  // neighbours there: 'grade', 'eraser_size_4', 'how_to_reg'). Not copy.
+  'upgrade',
 ];
 
 function listFiles(dir: string): string[] {
@@ -90,22 +98,33 @@ describe('the compiled bundle carries no purchase-steering text', () => {
     }
   });
 
-  const strings = bundles.flatMap((file) => extractStrings(fs.readFileSync(file)));
+  // A Hermes file is read through its own string table (hermesStrings): each
+  // string exactly, in its own encoding. Reading byte runs instead let a
+  // UTF-16 library string read as a "$64555" price (2026-10-23).
+  const strings = bundles.flatMap((file) =>
+    file.endsWith('.hbc') ? hermesStrings(fs.readFileSync(file)) : extractStrings(fs.readFileSync(file))
+  );
 
-  it('extracts both ASCII and UTF-16LE strings from this bundle', () => {
-    // Guards the scan itself. If either decoder broke, every assertion below
-    // would pass by finding nothing. One known string from each encoding.
-    expect(strings.some((s) => s.includes('Try again'))).toBe(true);
-    expect(strings.some((s) => s.includes('Réessayer'))).toBe(true);
+  it('extracts both ASCII and UTF-16LE strings from this bundle, exactly', () => {
+    // Guards the scan itself. If the reader broke, every assertion below
+    // would pass by finding nothing. One known string from each encoding,
+    // each a whole string of its own — not a fragment of a byte run.
+    expect(strings).toContain('Try again');
+    expect(strings).toContain('Réessayer');
+    expect(strings.length).toBeGreaterThan(10_000);
   });
 
   it('contains no forbidden text outside the library and own-copy allowlists', () => {
-    expect(findViolations(strings, [...LIBRARY_ALLOWLIST, ...OWN_COPY_ALLOWLIST])).toEqual([]);
+    const scanned = strings.filter((s) => !LIBRARY_EXACT_STRINGS.includes(s));
+    expect(findViolations(scanned, [...LIBRARY_ALLOWLIST, ...OWN_COPY_ALLOWLIST])).toEqual([]);
   });
 
   it('every allowlist entry still matches something', () => {
     for (const sentence of [...LIBRARY_ALLOWLIST, ...OWN_COPY_ALLOWLIST]) {
       expect(strings.some((s) => s.includes(sentence)), sentence).toBe(true);
+    }
+    for (const exact of LIBRARY_EXACT_STRINGS) {
+      expect(strings.includes(exact), `exact string: ${exact}`).toBe(true);
     }
   });
 });

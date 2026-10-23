@@ -107,12 +107,12 @@
     "streamProbeFailed": "Échec de la sonde : {reason}"
   },
   "tabs": {
-    "home": "Accueil",
-    "review": "Bilan",
+    "home": "Aperçu",
+    "review": "Revues",
     "timeline": "Chronologie",
     "account": "Compte",
     "more": "Plus",
-    "cards": "Cartes"
+    "cards": "Cartes de crédit"
   },
   "account": {
     "title": "Compte",
@@ -141,6 +141,7 @@
     "budget": "Budget",
     "noBudget": "Aucun budget",
     "noBudgets": "Aucun budget par catégorie pour ce mois.",
+    "noEntries": "Aucune entrée dans cette catégorie.",
     "uncategorized": "Sans catégorie",
     "cycle": {
       "open": "Ce relevé est en cours.",
@@ -185,6 +186,7 @@
     }
   },
   "more": {
+    "goals": "Objectifs",
     "recurring": "Récurrents"
   },
   "recurring": {
@@ -244,6 +246,19 @@
       "effectiveFromInvalid": "Indiquez la date d'application sous la forme AAAA-MM-JJ.",
       "effectiveFromPast": "Elle ne peut pas commencer à une date passée : les mois passés gardent leurs vrais montants."
     }
+  },
+  "goals": {
+    "title": "Objectifs",
+    "empty": "Aucun objectif d'épargne ni dette pour l'instant.",
+    "savedToday": "Épargné à ce jour",
+    "owedToday": "Dû aujourd'hui",
+    "target": "Cible",
+    "by": "d'ici le",
+    "payoffBy": "Remboursé d'ici le",
+    "contribution": "Contribution",
+    "addMoney": "Ajouter de l'argent",
+    "makePayment": "Faire un paiement",
+    "newGoal": "Nouvel objectif d'épargne"
   },
   "entry": {
     "title": "Ajouter une entrée",

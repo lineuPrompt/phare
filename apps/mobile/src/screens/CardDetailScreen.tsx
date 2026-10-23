@@ -3,10 +3,10 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, T
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { apiGet, messageKeyFor } from '../lib/api';
-import { canEditPlan, loadCardDetail, type BudgetStatus, type CardDetail } from '../lib/cardPlan';
+import { canEditPlan, loadCardDetail, type BudgetStatus, type CardDetail, type CardEntry } from '../lib/cardPlan';
 import { cardFigure } from '../lib/cardsLoader';
 import { onEntrySaved } from '../lib/entryEvents';
-import { formatMonthLong } from '../lib/timelineView';
+import { formatDayShort, formatMonthLong } from '../lib/timelineView';
 import ActionButton from '../components/ActionButton';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
@@ -17,6 +17,10 @@ import { theme } from '../theme';
  * view. Every figure is the server's (GET /api/card-envelope); nothing here
  * adds or subtracts. "Edit plan" is offered for an open or future statement
  * only: a closed one keeps the plan it had.
+ *
+ * Tapping a category opens its entries for the cycle (Lineu, 2026-10-23), as
+ * the route groups them. Read-only here: editing an entry stays on the
+ * Timeline, which knows whether it repeats.
  */
 
 const STATUS_COLOR: Record<BudgetStatus, string> = {
@@ -36,6 +40,15 @@ export default function CardDetailScreen() {
   const [detail, setDetail] = useState<CardDetail | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Category ids whose entries are open; '' is "not in a category".
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const toggle = (key: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const fetchDetail = useCallback(async (): Promise<{ detail: CardDetail } | { errorKey: string }> => {
     if (!cardId || !month) return { errorKey: 'cardPlan.errors.notFound' };
@@ -107,6 +120,23 @@ export default function CardDetailScreen() {
       : t('cardPlan.cycle.open')
     : null;
 
+  const entryList = (entries: CardEntry[]) => (
+    <View style={styles.entries}>
+      {entries.length === 0 && <Text style={styles.budgetDetail}>{t('cardPlan.noEntries')}</Text>}
+      {entries.map((e) => (
+        <View key={e.id} style={styles.entry}>
+          <Text style={styles.entryDate}>{formatDayShort(e.date, locale)}</Text>
+          <Text style={styles.entryText} numberOfLines={1}>
+            {e.description ?? '—'}{e.installmentLabel ? ` (${e.installmentLabel})` : ''}
+          </Text>
+          <Text style={[styles.entryAmount, e.type === 'income' && { color: theme.color.positive }]}>
+            {e.type === 'income' ? '+' : ''}{cardFigure(e.amount, locale)}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+
   const planned = detail?.budgets.filter((b) => b.planned) ?? [];
   const unplanned = detail?.budgets.filter((b) => !b.planned) ?? [];
 
@@ -152,31 +182,59 @@ export default function CardDetailScreen() {
             <View style={styles.card}>
               {planned.length === 0 && <Text style={styles.empty}>{t('cardPlan.noBudgets')}</Text>}
               {planned.map((b) => (
-                <View key={b.categoryId} style={styles.budget}>
-                  <View style={styles.figureRow}>
-                    <Text style={styles.budgetName} numberOfLines={1}>{b.categoryName}</Text>
-                    <Text style={[styles.figureStrong, { color: STATUS_COLOR[b.status] }]}>
-                      {cardFigure(b.remaining, locale)}
+                <View key={b.categoryId}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: open.has(b.categoryId) }}
+                    onPress={() => toggle(b.categoryId)}
+                    style={({ pressed }) => [styles.budget, pressed && styles.pressed]}
+                  >
+                    <View style={styles.figureRow}>
+                      <Text style={styles.budgetName} numberOfLines={1}>
+                        {open.has(b.categoryId) ? '▾' : '▸'} {b.categoryName}
+                      </Text>
+                      <Text style={[styles.figureStrong, { color: STATUS_COLOR[b.status] }]}>
+                        {cardFigure(b.remaining, locale)}
+                      </Text>
+                    </View>
+                    <Text style={styles.budgetDetail}>
+                      {t('cards.spent')} {cardFigure(b.actual, locale)} · {t('cardPlan.budget')} {cardFigure(b.monthlyAmount, locale)}
                     </Text>
-                  </View>
-                  <Text style={styles.budgetDetail}>
-                    {t('cards.spent')} {cardFigure(b.actual, locale)} · {t('cardPlan.budget')} {cardFigure(b.monthlyAmount, locale)}
-                  </Text>
+                  </Pressable>
+                  {open.has(b.categoryId) && entryList(detail.entriesByCategory[b.categoryId] ?? [])}
                 </View>
               ))}
               {unplanned.map((b) => (
-                <View key={b.categoryId} style={styles.budget}>
-                  <View style={styles.figureRow}>
-                    <Text style={styles.budgetName} numberOfLines={1}>{b.categoryName}</Text>
-                    <Text style={styles.figureValue}>{cardFigure(b.actual, locale)}</Text>
-                  </View>
-                  <Text style={styles.budgetDetail}>{t('cardPlan.noBudget')}</Text>
+                <View key={b.categoryId}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: open.has(b.categoryId) }}
+                    onPress={() => toggle(b.categoryId)}
+                    style={({ pressed }) => [styles.budget, pressed && styles.pressed]}
+                  >
+                    <View style={styles.figureRow}>
+                      <Text style={styles.budgetName} numberOfLines={1}>
+                        {open.has(b.categoryId) ? '▾' : '▸'} {b.categoryName}
+                      </Text>
+                      <Text style={styles.figureValue}>{cardFigure(b.actual, locale)}</Text>
+                    </View>
+                    <Text style={styles.budgetDetail}>{t('cardPlan.noBudget')}</Text>
+                  </Pressable>
+                  {open.has(b.categoryId) && entryList(detail.entriesByCategory[b.categoryId] ?? [])}
                 </View>
               ))}
-              {detail.uncategorized !== 0 && (
-                <View style={styles.figureRow}>
-                  <Text style={styles.budgetName}>{t('cardPlan.uncategorized')}</Text>
-                  <Text style={styles.figureValue}>{cardFigure(detail.uncategorized, locale)}</Text>
+              {(detail.uncategorized !== 0 || detail.uncategorizedEntries.length > 0) && (
+                <View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: open.has('') }}
+                    onPress={() => toggle('')}
+                    style={({ pressed }) => [styles.figureRow, pressed && styles.pressed]}
+                  >
+                    <Text style={styles.budgetName}>{open.has('') ? '▾' : '▸'} {t('cardPlan.uncategorized')}</Text>
+                    <Text style={styles.figureValue}>{cardFigure(detail.uncategorized, locale)}</Text>
+                  </Pressable>
+                  {open.has('') && entryList(detail.uncategorizedEntries)}
                 </View>
               )}
             </View>
@@ -218,6 +276,19 @@ const styles = StyleSheet.create({
   figureValue: { fontSize: 15, color: theme.color.body },
   figureStrong: { fontSize: 16, fontWeight: '700', color: theme.color.heading },
   budget: { gap: 2 },
+  pressed: { opacity: 0.6 },
+  entries: {
+    marginTop: theme.space.sm,
+    marginLeft: theme.space.md,
+    paddingLeft: theme.space.sm,
+    borderLeftWidth: 2,
+    borderLeftColor: theme.color.border,
+    gap: 6,
+  },
+  entry: { flexDirection: 'row', alignItems: 'baseline', gap: theme.space.sm },
+  entryDate: { width: 84, fontSize: 13, color: theme.color.muted },
+  entryText: { flex: 1, fontSize: 14, color: theme.color.body },
+  entryAmount: { fontSize: 14, color: theme.color.body },
   budgetName: { flex: 1, fontSize: 15, fontWeight: '600', color: theme.color.body },
   budgetDetail: { fontSize: 13, color: theme.color.muted },
   empty: { fontSize: 14, color: theme.color.muted },
