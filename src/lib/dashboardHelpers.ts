@@ -79,7 +79,22 @@
  *   debtPayments = Σ amount WHERE type = 'transfer' AND account_id ∈ chequing
  *                    AND amount >= 0 AND destination IS a debt account
  *   borrowed     = Σ -amount WHERE type = 'transfer' AND account_id ∈ chequing AND amount < 0
- *   net          = income − expenses − savings − debtPayments   (borrowed excluded, always)
+ *                    AND source NOT a savings-type account
+ *   withdrawn    = Σ -amount WHERE type = 'transfer' AND account_id ∈ chequing AND amount < 0
+ *                    AND source IS a savings/TFSA/RRSP account (the Reserve Fund included)
+ *   net          = income − expenses − savings − debtPayments   (borrowed and withdrawn excluded, always)
+ *
+ * WITHDRAWALS (2026-10-27) — a draw from savings is not income either
+ * --------------------------------------------------------------------
+ * create_transfer's 'draw' now works against any goal account, exactly as
+ * it does against a credit line (Lineu: "it should work exactly as the
+ * credit line"). Money taken back out of the Reserve Fund or a savings goal
+ * is real cash in chequing but was not earned this month, so it stays out
+ * of netCashFlow exactly like borrowed cash. It gets its own bucket because
+ * it is not debt: calling it "borrowed from a credit line" would be false.
+ * The source is the peer row's account type, the same peer resolution the
+ * debt-payment split uses. A negative row whose peer cannot be resolved
+ * stays `borrowed`, as before this change — never silently dropped.
  *
  * The goal-side transfer rows (account_id ∈ goal accounts) fall through all
  * predicates and are intentionally counted in zero buckets. Same now for a
@@ -142,6 +157,10 @@ export type MonthTotals = {
   // projection tile, future coaching sourcing contract) must treat this as
   // NOT available capacity.
   totalBorrowed: number;
+  // Cash taken back into chequing from a savings/TFSA/RRSP account (the
+  // Reserve Fund included) this month. Excluded from netCashFlow for the
+  // same reason as totalBorrowed — see WITHDRAWALS above.
+  totalWithdrawn: number;
   netCashFlow: number;
   /**
    * totalSavings partitioned by the account the money went TO — the same
@@ -184,6 +203,10 @@ export function computeMonthTotals(
   const debtAccountIds = new Set(
     accounts.filter((a) => a.type === 'debt').map((a) => a.id)
   );
+  // Where a draw (amount < 0) came from — see WITHDRAWALS above.
+  const savingsTypeAccountIds = new Set(
+    accounts.filter((a) => a.type === 'savings' || a.type === 'tfsa' || a.type === 'rrsp').map((a) => a.id)
+  );
   // id → row, for the transfer_peer_id lookup above. Rows without an `id`
   // (a caller that didn't select it) simply never match as anyone's peer —
   // same safe "falls back to savings" outcome as a missing transfer_peer_id.
@@ -195,6 +218,7 @@ export function computeMonthTotals(
   let expenses = 0;
   let debtPayments = 0;
   let borrowed = 0;
+  let withdrawn = 0;
 
   // SAVINGS IS ACCUMULATED IN INTEGER CENTS, unlike the other buckets, and
   // so is its per-destination breakdown below. That is what makes
@@ -227,10 +251,15 @@ export function computeMonthTotals(
       // savings (its original, pre-split bucket). The goal-side peer row
       // (type='transfer', goal account_id) is not on chequing, so it falls
       // through and is counted in no bucket either way.
+      const peer = tx.transfer_peer_id != null ? byId.get(tx.transfer_peer_id) : undefined;
       if (amt < 0) {
-        borrowed += -amt;
+        // Withdrawn from savings, or borrowed — see WITHDRAWALS above.
+        if (peer?.account_id != null && savingsTypeAccountIds.has(peer.account_id)) {
+          withdrawn += -amt;
+        } else {
+          borrowed += -amt;
+        }
       } else {
-        const peer = tx.transfer_peer_id != null ? byId.get(tx.transfer_peer_id) : undefined;
         const peerIsDebt = peer?.account_id != null && debtAccountIds.has(peer.account_id);
         if (peerIsDebt) {
           debtPayments += amt;
@@ -271,6 +300,7 @@ export function computeMonthTotals(
     totalSavings:      savings,
     totalDebtPayments: Math.round(debtPayments * 100) / 100,
     totalBorrowed:     Math.round(borrowed     * 100) / 100,
+    totalWithdrawn:    Math.round(withdrawn    * 100) / 100,
     // Same integer partition as totalSavings, so the lines sum to it exactly.
     // Largest first; the "Other" bucket (accountId null) always sorts last
     // regardless of size — it is a caveat, not a destination.

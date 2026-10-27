@@ -75,7 +75,7 @@ describe('GET /api/sinking-funds', () => {
     expect(json.buffer).toEqual({
       linkedAccountId: null, balance: 0, fundedAlready: false, totalMonthlyProvision: 558,
       contributionAmount: null, cadence: null, secondDay: null, anchorDate: null, recurringItemId: null,
-      nextContributionDate: null, tombstonesAfterBoundary: 0, contributions: [], upcomingContributions: [], billsPaid: [],
+      nextContributionDate: null, tombstonesAfterBoundary: 0, contributions: [], upcomingContributions: [], withdrawals: [], billsPaid: [],
     });
   });
 
@@ -128,6 +128,48 @@ describe('GET /api/sinking-funds', () => {
       expect(json.buffer.contributions).toEqual([{ id: 't1', date: '2026-06-01', description: 'Sinking funds', amount: 708 }]);
       expect(json.buffer.upcomingContributions).toEqual([{ id: 't3', date: '2026-08-01', description: 'Sinking funds', amount: 708 }]);
       expect(json.buffer.billsPaid).toEqual([{ id: 't2', date: '2026-06-15', description: 'Property tax', amount: 300 }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a withdrawal back to chequing is listed on its own — never as a contribution, never in the drift check', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-10T12:00:00'));
+
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+      sinking_funds: [{
+        data: [{ id: 'sf-1', name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, linked_account_id: 'buffer-1' }],
+        error: null,
+      }],
+      transactions: [{
+        data: [
+          // Newest first, as the route orders them.
+          { id: 't3', amount: 708, type: 'transfer', account_id: 'buffer-1', date: '2026-08-01', description: 'Sinking funds' }, // future
+          { id: 'w1', amount: -200, type: 'transfer', account_id: 'buffer-1', date: '2026-07-20', description: 'Reserve Fund (withdrawal)' }, // planned
+          { id: 't1', amount: 708, type: 'transfer', account_id: 'buffer-1', date: '2026-06-01', description: 'Sinking funds' },
+        ],
+        error: null,
+      }],
+      recurring_items: [{ data: { id: 'ri-1', amount: 708, cadence: 'monthly', anchor_date: '2026-07-01', second_day: null, effective_from: '2026-06-01' }, error: null }],
+      recurring_skipped_dates: [{ count: 0, error: null }],
+    });
+
+    try {
+      const { createClient } = await import('@/lib/supabase-server');
+      (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+      const { GET } = await import('../route');
+      const json = await (await GET()).json();
+
+      expect(json.buffer.balance).toBe(708); // the planned withdrawal is not balance yet
+      expect(json.buffer.contributions).toEqual([{ id: 't1', date: '2026-06-01', description: 'Sinking funds', amount: 708 }]);
+      expect(json.buffer.upcomingContributions).toEqual([{ id: 't3', date: '2026-08-01', description: 'Sinking funds', amount: 708 }]);
+      expect(json.buffer.withdrawals).toEqual([{ id: 'w1', date: '2026-07-20', description: 'Reserve Fund (withdrawal)', amount: 200 }]);
+      // The upcoming rows all match the rule: a withdrawal is not a drifted contribution.
+      expect(json.buffer.contributionDrift).toBeNull();
     } finally {
       vi.useRealTimers();
     }

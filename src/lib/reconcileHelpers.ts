@@ -63,6 +63,10 @@ export type ReconciliationResult = {
   // note). Surfaced here too so the audit view can show it was accounted
   // for, not silently dropped.
   totalBorrowed: number;
+  // Cash taken back into chequing from a savings-type account this month —
+  // excluded from both nets like totalBorrowed (computeMonthTotals's
+  // WITHDRAWALS note), surfaced for the same reason.
+  totalWithdrawn: number;
   /** Card→chequing bridge lines, a subset of totalExpenses — shown separately. */
   totalBridgePayments: number;
   netFromBuckets: number;
@@ -231,6 +235,7 @@ export function reconcileMonth(
     totalSavings: buckets.totalSavings,
     totalDebtPayments: buckets.totalDebtPayments,
     totalBorrowed: buckets.totalBorrowed,
+    totalWithdrawn: buckets.totalWithdrawn,
     totalBridgePayments,
     netFromBuckets,
     netFromChequing,

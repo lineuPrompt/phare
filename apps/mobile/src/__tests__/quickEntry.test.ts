@@ -245,6 +245,22 @@ describe('contributions — to a savings goal or a debt', () => {
     expect(asked).toEqual(['/api/goals']);
   });
 
+  it('puts the Reserve Fund first when the route names one — the app has no other way into it', async () => {
+    const get = (async () => ({
+      goals: [{ id: 'goal-trip', name: 'Trip', isDebt: false }],
+      reserve: { id: 'acc-reserve', name: 'Reserve Fund' },
+    })) as Getter;
+    expect(await loadTransferGoals(get)).toEqual([
+      { id: 'acc-reserve', name: 'Reserve Fund', isDebt: false },
+      { id: 'goal-trip', name: 'Trip', isDebt: false },
+    ]);
+  });
+
+  it('no Reserve Fund (not started) adds nothing', async () => {
+    const get = (async () => ({ goals: [{ id: 'goal-trip', name: 'Trip', isDebt: false }], reserve: null })) as Getter;
+    expect(await loadTransferGoals(get)).toEqual([{ id: 'goal-trip', name: 'Trip', isDebt: false }]);
+  });
+
   it('an answer with no goal list is an error, not "no goals"', async () => {
     const get = (async () => ({ error: 'x' })) as Getter;
     await expect(loadTransferGoals(get)).rejects.toThrow(/no goal list/);
@@ -262,11 +278,21 @@ describe('contributions — to a savings goal or a debt', () => {
     expect(built.ok && built.body.description).toBe('Bonus');
   });
 
-  it('a draw is sent only to a debt account', () => {
-    const toDebt = buildTransferBody({ ...TDRAFT, goalId: 'goal-loc', transferKind: 'draw' }, GOALS);
-    expect(toDebt.ok && toDebt.body.kind).toBe('draw');
-    const toSavings = buildTransferBody({ ...TDRAFT, transferKind: 'draw' }, GOALS);
-    expect(toSavings.ok && toSavings.body.kind).toBe('contribution');
+  it('a draw goes to any goal, as on the credit line: borrowing from a debt, a withdrawal from savings', () => {
+    const fromDebt = buildTransferBody({ ...TDRAFT, goalId: 'goal-loc', transferKind: 'draw' }, GOALS);
+    expect(fromDebt.ok && fromDebt.body.kind).toBe('draw');
+    const fromSavings = buildTransferBody({ ...TDRAFT, transferKind: 'draw' }, GOALS);
+    expect(fromSavings).toEqual({
+      ok: true,
+      body: { date: '2026-09-27', amount: 100.5, goalAccountId: 'goal-trip', kind: 'draw' },
+    });
+  });
+
+  it('a withdrawal refused for the balance has its own message in both languages', () => {
+    expect(entryErrorKey(new ApiError('server', 400, 'INSUFFICIENT_BALANCE'))).toBe('entry.errors.insufficientBalance');
+    for (const catalog of [en, fr] as Catalog[]) {
+      expect(lookup(catalog, 'entry.errors.insufficientBalance')).toBeTruthy();
+    }
   });
 
   it.each([

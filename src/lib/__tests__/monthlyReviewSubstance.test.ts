@@ -206,7 +206,7 @@ describe('monthly review — Part B substance', () => {
   describe('the month, its savings, and the month before', () => {
     it('surplus, savings by destination and debt payments, from computeMonthTotals', async () => {
       const { payload } = await generate();
-      expect(payload.month).toEqual({ income: 5000, expenses: 4500, savings: 125, debtPayments: 0, borrowed: 0, netCashFlow: 375, result: 'surplus' });
+      expect(payload.month).toEqual({ income: 5000, expenses: 4500, savings: 125, debtPayments: 0, borrowed: 0, withdrawn: 0, netCashFlow: 375, result: 'surplus' });
       expect(payload.savingsByDestination).toEqual([{ name: 'Travel', amount: 125 }]);
     });
 

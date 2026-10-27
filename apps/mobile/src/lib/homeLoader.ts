@@ -74,6 +74,7 @@ type SnapshotResponse = {
     totalSavings?: unknown;
     totalDebtPayments?: unknown;
     totalBorrowed?: unknown;
+    totalWithdrawn?: unknown;
     netCashFlow?: unknown;
     savingsByDestination?: { accountId: string | null; name: string | null; amount: unknown }[];
   };
@@ -93,6 +94,8 @@ export type HomeSnapshot = {
   netCashFlow: number;
   /** Cash drawn from a debt account this month. Never part of netCashFlow. */
   borrowed: number;
+  /** Cash taken back from savings or the Reserve Fund this month. Never part of netCashFlow. */
+  withdrawn: number;
   /** Recurring lines with no date yet: this month's totals may be missing them. */
   awaitingDates: boolean;
 };
@@ -175,6 +178,7 @@ function snapshotFrom(data: SnapshotResponse, month: string): HomeSnapshot {
     debtPayments: amount(s.totalDebtPayments, 'totalDebtPayments'),
     netCashFlow: amount(s.netCashFlow, 'netCashFlow'),
     borrowed: amount(s.totalBorrowed, 'totalBorrowed'),
+    withdrawn: amount(s.totalWithdrawn, 'totalWithdrawn'),
     awaitingDates:
       amount(data.unanchoredIncomeCount, 'unanchoredIncomeCount') +
         amount(data.unanchoredExpenseCount, 'unanchoredExpenseCount') >

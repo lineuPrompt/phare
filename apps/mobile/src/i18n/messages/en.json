@@ -258,6 +258,7 @@
     "contribution": "Contribution",
     "addMoney": "Add money",
     "makePayment": "Make a payment",
+    "withdraw": "Withdraw",
     "newGoal": "New savings goal"
   },
   "entry": {
@@ -265,7 +266,7 @@
     "kind": {
       "expense": "Money out",
       "income": "Money in",
-      "transfer": "Contribution"
+      "transfer": "Savings or debt"
     },
     "goal": "Savings goal or debt",
     "noGoals": "No savings goal or debt account yet.",
@@ -273,9 +274,12 @@
     "descriptionOptional": "Description (optional)",
     "kindPayment": "Payment",
     "kindDraw": "Draw",
+    "kindAddMoney": "Add money",
+    "kindWithdraw": "Withdraw",
     "saveIncome": "Add income",
     "saveTransfer": "Add contribution",
     "saveDraw": "Record draw",
+    "saveWithdrawal": "Withdraw to chequing",
     "open": "Add an expense",
     "account": "Account",
     "date": "Date",
@@ -309,7 +313,8 @@
       "accountNotFound": "That account isn't available any more. Close this screen and open it again.",
       "payloadTooLarge": "That entry is too large to save.",
       "noChequing": "Phare needs a chequing account first. Add one in Account → Accounts.",
-      "saveFailed": "Phare couldn't save this expense, and nothing was recorded. Please try again."
+      "saveFailed": "Phare couldn't save this expense, and nothing was recorded. Please try again.",
+      "insufficientBalance": "That's more than this account holds on that date, so nothing was withdrawn."
     },
     "addAccount": "Add an account"
   },
@@ -496,6 +501,7 @@
       "surplus": "Monthly surplus",
       "deficit": "Monthly deficit",
       "borrowedNote": "⚠ {amount} of this month's cash was borrowed. It's in your account, but you didn't earn it — so it's not in the figure above.",
+      "withdrawnNote": "{amount} of this month's cash came out of your savings. It's in your account, but it isn't this month's income — so it's not in the figure above.",
       "monthOnlyNote": "This reflects this month's cash flow only, not your running balance. Your real balance is on the Timeline tab.",
       "actualsForMonth": "Actuals for {month} — not projections"
     },

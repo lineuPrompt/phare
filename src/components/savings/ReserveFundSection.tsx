@@ -15,6 +15,7 @@ import { firstOfNextMonth } from '@phare/core';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 import ContributionEditor, { type Cadence } from '@/components/savings/ContributionEditor';
 import ContributionDriftNotice from '@/components/savings/ContributionDriftNotice';
+import TransferForm from '@/components/goals/TransferForm';
 import type { ContributionDrift } from '@/lib/contributionDrift';
 
 type BufferData = SinkingFundBuffer & {
@@ -28,6 +29,8 @@ type BufferData = SinkingFundBuffer & {
   contributionDrift: ContributionDrift | null;
   contributions: { id: string; date: string; description: string | null; amount: number }[];
   upcomingContributions: { id: string; date: string; description: string | null; amount: number }[];
+  // Money taken back to chequing (2026-10-27). Amount is a positive magnitude.
+  withdrawals: { id: string; date: string; description: string | null; amount: number }[];
   billsPaid: { id: string; date: string; description: string | null; amount: number }[];
 };
 
@@ -54,6 +57,9 @@ export default function ReserveFundSection({ locale }: { locale: string }) {
   // shared with the goal cards below — this section only decides whether it
   // is open.
   const [editingContribution, setEditingContribution] = useState(false);
+  // Withdraw to chequing — the same draw the credit line uses (TransferForm,
+  // kind='draw'); the route refuses more than the balance.
+  const [withdrawing, setWithdrawing] = useState(false);
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -320,6 +326,11 @@ export default function ReserveFundSection({ locale }: { locale: string }) {
                       {buffer.nextContributionDate && ` · ${t('nextContribution', { date: fmtDate(buffer.nextContributionDate) })}`}
                     </p>
                     <div className="flex gap-3">
+                      {buffer.balance > 0 && !withdrawing && (
+                        <button onClick={() => setWithdrawing(true)} className="text-xs font-semibold cursor-pointer" style={{ color: '#B45309' }}>
+                          {tGoals('recordWithdrawal')}
+                        </button>
+                      )}
                       {buffer.recurringItemId && (
                         <button onClick={() => setEditingContribution(true)} className="text-xs font-semibold cursor-pointer" style={{ color: '#2ABFBF' }}>
                           {tEditor('editCta')}
@@ -338,6 +349,22 @@ export default function ReserveFundSection({ locale }: { locale: string }) {
                     quietly contradicts the list further down. */}
                 {buffer.contributionDrift && (
                   <ContributionDriftNotice drift={buffer.contributionDrift} locale={locale} />
+                )}
+
+                {withdrawing && (
+                  <div className="pt-3 border-t" style={{ borderColor: '#F3F4F6' }}>
+                    <h4 className="text-sm font-semibold mb-1" style={{ color: '#0F2044' }}>
+                      {tGoals('withdrawal.title')}
+                    </h4>
+                    <p className="text-xs mb-3" style={{ color: '#6B7280' }}>{tGoals('withdrawal.hint')}</p>
+                    <TransferForm
+                      goals={[{ id: buffer.linkedAccountId, name: t('title') }]}
+                      defaultGoalId={buffer.linkedAccountId}
+                      kind="draw"
+                      onSaved={() => { setWithdrawing(false); load(); }}
+                      onCancel={() => setWithdrawing(false)}
+                    />
+                  </div>
                 )}
               </>
             )}
@@ -502,6 +529,26 @@ export default function ReserveFundSection({ locale }: { locale: string }) {
                       ))}
                     </div>
                   </>
+                )}
+              </div>
+
+              {/* Withdrawals back to chequing */}
+              <div className="rounded-2xl bg-white p-6" style={{ border: '1px solid #E5E7EB' }}>
+                <h3 className="text-sm font-semibold mb-3 uppercase tracking-wide" style={{ color: '#9CA3AF' }}>
+                  {t('withdrawals')}
+                </h3>
+                {buffer.withdrawals.length === 0 ? (
+                  <p className="text-sm" style={{ color: '#9CA3AF' }}>{t('noWithdrawals')}</p>
+                ) : (
+                  <div className="space-y-1">
+                    {buffer.withdrawals.map((w) => (
+                      <div key={w.id} className="flex items-center gap-3 py-1.5" style={{ borderBottom: '1px solid #F9FAFB' }}>
+                        <span className="text-sm w-24 shrink-0" style={{ color: w.date > today ? '#9CA3AF' : '#6B7280' }}>{fmtDate(w.date)}</span>
+                        <span className="flex-1 min-w-0 truncate text-sm" style={{ color: w.date > today ? '#9CA3AF' : '#0F2044' }}>{w.description ?? '—'}</span>
+                        <span className="text-sm font-medium shrink-0" style={{ color: '#B45309' }}>−{formatCurrency(w.amount, locale)}</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 

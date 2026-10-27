@@ -207,7 +207,7 @@ export async function generateMonthlyReview({
     const historyRows = historyResult.data ?? [];
 
     // ── One call for all buckets (same function as Expenses page) ───────────
-    const { totalIncome: incomeTotal, totalExpenses: expenseTotal, totalSavings, totalDebtPayments, totalBorrowed, netCashFlow, savingsByDestination } =
+    const { totalIncome: incomeTotal, totalExpenses: expenseTotal, totalSavings, totalDebtPayments, totalBorrowed, totalWithdrawn, netCashFlow, savingsByDestination } =
       computeMonthTotals(
         allTxns.map((tx) => ({
           id: tx.id,
@@ -681,6 +681,11 @@ export async function generateMonthlyReview({
           `income, savings, or surplus because of it; if you mention the household's cash position, disclose that ` +
           `part of it was borrowed.\n`
         : '') +
+      (totalWithdrawn > 0
+        ? `Withdrawn from savings this month: $${totalWithdrawn}, moved back to chequing from the household's own ` +
+          `savings or reserve fund. It is NOT income, NOT borrowing, and NOT new savings — it is already excluded ` +
+          `from every figure above. Never describe this month as having more income or surplus because of it.\n`
+        : '') +
       `All figures are ACTUAL ${reviewMonthLabel} ledger — computed from materialized transactions, ` +
       `NOT from planned budgets or per-period recurring amounts.\n` +
       `Income lines: ${JSON.stringify(incomeLines)}\n` +
@@ -887,6 +892,9 @@ export async function generateMonthlyReview({
       savings: totalSavings,
       debtPayments: totalDebtPayments,
       borrowed: totalBorrowed,
+      // Money the household took back out of its own savings (2026-10-27) —
+      // excluded from netCashFlow like borrowed, but never debt.
+      withdrawn: totalWithdrawn,
       netCashFlow,
       result: netCashFlow >= 0 ? ('surplus' as const) : ('deficit' as const),
     };

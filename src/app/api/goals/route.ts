@@ -29,6 +29,10 @@ export async function GET() {
     // section instead, so it must never also appear here (Build 4 Part 2,
     // 2026-07-21).
     const goalAccounts = (accounts ?? []).filter((a) => !a.is_sinking_fund);
+    // The Reserve Fund's account, named on its own (never among the goals) so
+    // a client without a Reserve screen — the mobile app's quick entry — can
+    // still add money to it or withdraw from it. Null when not started.
+    const reserveAccount = (accounts ?? []).find((a) => a.is_sinking_fund) ?? null;
     const goalIds = goalAccounts.map((a) => a.id);
 
     // Fetch FULL (all-time) transaction history for goal accounts.
@@ -167,7 +171,10 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ goals });
+    return NextResponse.json({
+      goals,
+      reserve: reserveAccount ? { id: reserveAccount.id, name: reserveAccount.name } : null,
+    });
   } catch (error) {
     console.error('Goals GET error:', error);
     return NextResponse.json({ error: 'Failed to load goals' }, { status: 500 });

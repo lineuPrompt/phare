@@ -325,19 +325,19 @@ export default function GoalsSection({ locale }: { locale: string }) {
                       >
                         {goal.isDebt ? t('makePayment') : t('addMoney')}
                       </button>
-                      {/* Draw — the mirror of a payment, debt accounts
-                          only: borrows against the credit line, real
-                          cash into chequing, excluded from surplus
-                          everywhere the month is summarized. */}
-                      {goal.isDebt && (
-                        <button
-                          onClick={() => setDrawFor(goal.id)}
-                          className="px-4 py-2 rounded-xl text-sm font-semibold"
-                          style={{ border: '1.5px solid #B45309', color: '#B45309', background: 'white' }}
-                        >
-                          {t('recordDraw')}
-                        </button>
-                      )}
+                      {/* Draw — the mirror of a payment or a contribution:
+                          real cash back into chequing, excluded from surplus
+                          everywhere the month is summarized. From a debt it
+                          is borrowing; from a savings goal it is a
+                          withdrawal (2026-10-27), and only up to the
+                          balance — the route refuses more. */}
+                      <button
+                        onClick={() => setDrawFor(goal.id)}
+                        className="px-4 py-2 rounded-xl text-sm font-semibold"
+                        style={{ border: '1.5px solid #B45309', color: '#B45309', background: 'white' }}
+                      >
+                        {goal.isDebt ? t('recordDraw') : t('recordWithdrawal')}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -504,16 +504,14 @@ export default function GoalsSection({ locale }: { locale: string }) {
                   </div>
                 )}
 
-                {/* Inline draw form — same TransferForm, kind='draw'.
-                    create_transfer restricts draws to debt accounts
-                    server-side too; this button only ever renders for
-                    goal.isDebt above. */}
+                {/* Inline draw form — same TransferForm, kind='draw', for a
+                    debt (borrowing) or a savings goal (a withdrawal). */}
                 {isDrawOpen && (
                   <div className="pt-2 border-t" style={{ borderColor: '#F3F4F6' }}>
                     <h4 className="text-sm font-semibold mb-3" style={{ color: '#0F2044' }}>
-                      {t('draw.title')}
+                      {goal.isDebt ? t('draw.title') : t('withdrawal.title')}
                     </h4>
-                    <p className="text-xs mb-3" style={{ color: '#6B7280' }}>{t('draw.hint')}</p>
+                    <p className="text-xs mb-3" style={{ color: '#6B7280' }}>{goal.isDebt ? t('draw.hint') : t('withdrawal.hint')}</p>
                     <TransferForm
                       goals={[goal]}
                       defaultGoalId={goal.id}
@@ -599,7 +597,7 @@ export default function GoalsSection({ locale }: { locale: string }) {
                                 also negative for a debt, but it is labelled below
                                 rather than flagged: it is a stated starting
                                 position, not something that moved. */}
-                            {tr.amount < 0 && !tr.isOpeningBalance && <span className="mr-1">🚨</span>}
+                            {goal.isDebt && tr.amount < 0 && !tr.isOpeningBalance && <span className="mr-1">🚨</span>}
                             {/* Rendered from i18n, not from the stored bilingual
                                 'Starting balance / Solde initial' literal — the
                                 flag is what identifies it now. */}

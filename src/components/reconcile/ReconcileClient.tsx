@@ -389,6 +389,13 @@ export default function ReconcileClient() {
                         </p>
                       </div>
                     )}
+                    {/* Withdrawn from savings — excluded from both nets like
+                        borrowed cash (computeMonthTotals's WITHDRAWALS note). */}
+                    {data.totalWithdrawn > 0 && (
+                      <p className="text-sm font-medium mt-3" style={{ color: '#B45309' }}>
+                        {t('bucketBreakdown.withdrawn', { amount: fmt(data.totalWithdrawn, locale) })}
+                      </p>
+                    )}
                   </div>
 
                   {/* Right: dual-net comparison */}

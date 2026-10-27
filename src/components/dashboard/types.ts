@@ -12,6 +12,10 @@ export type DashboardSummary = {
   // from netCashFlow (see computeMonthTotals's DEBT DRAWS note,
   // dashboardHelpers.ts). Shown beside surplus/deficit, never folded into it.
   totalBorrowed: number;
+  // Cash taken back into chequing from a savings/TFSA/RRSP account or the
+  // Reserve Fund this month — excluded from netCashFlow like totalBorrowed
+  // (computeMonthTotals's WITHDRAWALS note). Shown beside it, never folded in.
+  totalWithdrawn: number;
   netCashFlow: number;
   // totalSavings partitioned by destination account, emitted by
   // computeMonthTotals from the same branch that produces the total, with

@@ -85,10 +85,11 @@ function makeFakeSupabase(seed: { users: Row[]; household_members: Row[]; accoun
       };
     },
     // Reimplements create_transfer's real behavior INCLUDING p_kind
-    // (20260801000000_create_transfer_draw_kind.sql): tenant checks, the
-    // debt-only restriction on draws, and the signed-amount insert — same
-    // value on both sides of the pair, negative for a draw, positive for a
-    // contribution/payment.
+    // (20260801000000_create_transfer_draw_kind.sql, as changed by
+    // 20261027000000_create_transfer_draw_from_savings.sql): tenant checks,
+    // a draw against ANY goal type (the debt-only restriction is gone), and
+    // the signed-amount insert — same value on both sides of the pair,
+    // negative for a draw, positive for a contribution/payment.
     rpc(name: string, params: Record<string, unknown>) {
       if (name !== 'create_transfer') throw new Error(`fake supabase: unexpected rpc "${name}"`);
 
@@ -129,10 +130,6 @@ function makeFakeSupabase(seed: { users: Row[]; household_members: Row[]; accoun
       if (!['savings', 'tfsa', 'rrsp', 'debt'].includes(goal.type as string)) {
         return fail(`create_transfer: account ${params.p_goal_id} is not a goal account (type=${goal.type})`);
       }
-      if (kind === 'draw' && goal.type !== 'debt') {
-        return fail(`create_transfer: draws are only valid against a debt account (account ${params.p_goal_id} is type=${goal.type})`);
-      }
-
       const signedAmount = kind === 'draw' ? -Number(params.p_amount) : Number(params.p_amount);
 
       const goalRow: Row = {
@@ -317,38 +314,134 @@ describe('POST /api/transfers with kind=draw — creates a real linked pair', ()
     const txns = supabase.currentTransactions();
     expect(txns.every((t) => Number(t.amount) === 300)).toBe(true); // positive, unchanged behaviour
   });
+});
 
-  it('a draw against a non-debt goal is rejected with 400, before the RPC runs', async () => {
-    const supabase = seedSupabase([]);
+/**
+ * Withdrawals (2026-10-27) — a draw from a savings goal or the Reserve Fund,
+ * the same mechanism as the credit line (Lineu: "it should work exactly as
+ * the credit line"). Classified as withdrawn, never borrowed, and never more
+ * than the account holds on the withdrawal's date.
+ */
+describe('POST /api/transfers with kind=draw from savings — a withdrawal', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  const funded = () => seedSupabase([
+    { id: 'e1', household_id: HOUSEHOLD, account_id: CHEQUING, amount: 3000, type: 'income', date: '2026-07-01', description: 'Salary', is_bridge: false },
+    // $500 already saved: a real pair, as create_transfer writes it.
+    { id: 's-g', household_id: HOUSEHOLD, account_id: SAVINGS, amount: 500, type: 'transfer', date: '2026-06-10', description: 'Emergency Fund', transfer_peer_id: 's-c', is_bridge: false },
+    { id: 's-c', household_id: HOUSEHOLD, account_id: CHEQUING, amount: 500, type: 'transfer', date: '2026-06-10', description: 'Emergency Fund', transfer_peer_id: 's-g', is_bridge: false },
+  ]);
+
+  it('creates a negative pair: savings balance down, chequing up, counted as withdrawn — not borrowed, not income', async () => {
+    const supabase = funded();
     const { createClient } = await import('@/lib/supabase-server');
     (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
 
     const { POST } = await import('../../app/api/transfers/route');
     const res = await POST(new Request('http://localhost/api/transfers', {
       method: 'POST',
-      body: JSON.stringify({ date: '2026-07-05', amount: 300, goalAccountId: SAVINGS, kind: 'draw' }),
+      body: JSON.stringify({ date: '2026-07-21', amount: 200, goalAccountId: SAVINGS, kind: 'draw' }),
     }));
-    expect(res.status).toBe(400);
-    expect(supabase.currentTransactions()).toHaveLength(0);
+    expect(res.status).toBe(200);
+    const { chequingRowId, goalRowId } = await res.json();
+
+    const txns = supabase.currentTransactions();
+    const chqRow = txns.find((t) => t.id === chequingRowId)!;
+    const savRow = txns.find((t) => t.id === goalRowId)!;
+    expect(Number(chqRow.amount)).toBe(-200);
+    expect(Number(savRow.amount)).toBe(-200);
+    expect(savRow.account_id).toBe(SAVINGS);
+    expect(chqRow.description).toBe('Emergency Fund (withdrawal)');
+
+    const rows = txns.map((t) => ({ amount: Number(t.amount), type: t.type as string, account_id: t.account_id as string, date: t.date as string }));
+    expect(computeGoalBalance(rows, SAVINGS, '2026-07-31')).toBe(300);
+
+    // July only: the salary and the withdrawal pair.
+    const julyOnly = txns.filter((t) => (t.date as string).startsWith('2026-07'));
+    const result = reconcileAll({ ...supabase, currentTransactions: () => julyOnly });
+    expect(result.totalWithdrawn).toBe(200);
+    expect(result.totalBorrowed).toBe(0);
+    expect(result.totalIncome).toBe(3000);
+    expect(result.totalSavings).toBe(0);
+    expect(result.netFromBuckets).toBe(3000);
+    expect(result.reconciled).toBe(true);
+    expect(result.accounts.find((a) => a.accountId === CHEQUING)!.monthBalance).toBe(3200);
   });
 
-  it('the RPC itself also rejects a draw against a non-debt goal (defense in depth)', async () => {
+  it('the whole balance can come out', async () => {
+    const supabase = funded();
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
+    const { POST } = await import('../../app/api/transfers/route');
+    const res = await POST(new Request('http://localhost/api/transfers', {
+      method: 'POST',
+      body: JSON.stringify({ date: '2026-07-21', amount: 500, goalAccountId: SAVINGS, kind: 'draw' }),
+    }));
+    expect(res.status).toBe(200);
+  });
+
+  it('more than the balance on that date is refused with 400 INSUFFICIENT_BALANCE, before the RPC runs', async () => {
+    const supabase = funded();
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
+    const { POST } = await import('../../app/api/transfers/route');
+    const before = supabase.currentTransactions().length;
+    const res = await POST(new Request('http://localhost/api/transfers', {
+      method: 'POST',
+      body: JSON.stringify({ date: '2026-07-21', amount: 500.01, goalAccountId: SAVINGS, kind: 'draw' }),
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe('INSUFFICIENT_BALANCE');
+    expect(body.available).toBe(500);
+    expect(supabase.currentTransactions()).toHaveLength(before);
+  });
+
+  it('the balance is read as of the withdrawal date: money that arrives later does not count', async () => {
+    const supabase = funded();
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
+    const { POST } = await import('../../app/api/transfers/route');
+    // Dated before the June 10 deposit: nothing there yet.
+    const res = await POST(new Request('http://localhost/api/transfers', {
+      method: 'POST',
+      body: JSON.stringify({ date: '2026-06-01', amount: 100, goalAccountId: SAVINGS, kind: 'draw' }),
+    }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).available).toBe(0);
+  });
+
+  it('a debt draw has no balance floor — borrowing is what makes it negative', async () => {
     const supabase = seedSupabase([]);
-    const { error } = await supabase.rpc('create_transfer', {
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
+    const { POST } = await import('../../app/api/transfers/route');
+    const res = await POST(new Request('http://localhost/api/transfers', {
+      method: 'POST',
+      body: JSON.stringify({ date: '2026-07-05', amount: 300, goalAccountId: DEBT, kind: 'draw' }),
+    }));
+    expect(res.status).toBe(200);
+  });
+
+  it('the database function itself now accepts a draw from savings (mirrors the 20261027 migration)', async () => {
+    const supabase = funded();
+    const { data, error } = await supabase.rpc('create_transfer', {
       p_household_id: HOUSEHOLD,
       p_member_id: 'member-1',
       p_chequing_id: CHEQUING,
       p_goal_id: SAVINGS,
-      p_amount: 300,
+      p_amount: 100,
       p_date: '2026-07-05',
-      p_description: 'Attempted draw on savings',
+      p_description: 'Emergency Fund (withdrawal)',
       p_kind: 'draw',
     });
-    expect(error).toBeTruthy();
-    expect(error!.message).toMatch(/draws are only valid against a debt account/);
-    expect(supabase.currentTransactions()).toHaveLength(0);
+    expect(error).toBeNull();
+    expect(data).toBeTruthy();
   });
 });
+
 
 describe('Full-cycle invariant: draw → payment → draw stays reconciled through POST /api/transfers at every step', () => {
   beforeEach(() => {

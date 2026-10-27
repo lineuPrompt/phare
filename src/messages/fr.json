@@ -421,6 +421,7 @@
     "surplus": "Surplus mensuel",
     "deficit": "Déficit mensuel",
     "borrowedNote": "⚠ {amount} de l'encaisse de ce mois-ci a été emprunté. Cet argent est dans votre compte, mais vous ne l'avez pas gagné — il n'est donc pas inclus dans le montant ci-dessus.",
+    "withdrawnNote": "{amount} de l'encaisse de ce mois-ci provient de votre épargne. Cet argent est dans votre compte, mais ce n'est pas un revenu du mois — il n'est donc pas inclus dans le montant ci-dessus.",
     "monthOnlyNote": "Ceci reflète uniquement le flux de trésorerie de ce mois, pas votre solde réel.",
     "viewRealBalance": "Voir votre solde réel dans la Chronologie",
     "plan": {
@@ -783,6 +784,13 @@
     "currentlyOwed": "actuellement dû",
     "makePayment": "Faire un paiement",
     "recordDraw": "Enregistrer un prélèvement",
+    "recordWithdrawal": "Retirer",
+    "withdrawal": {
+      "title": "Retirer vers le compte chèques",
+      "hint": "Transfère de l'argent d'ici vers votre compte chèques. Le solde diminue, et cet argent n'est jamais compté comme un revenu ni comme un surplus.",
+      "save": "Retirer",
+      "insufficient": "Il y a {amount} ici à cette date. Un retrait ne peut pas dépasser ce montant."
+    },
     "payoffPlan": "Paiement de {amount}/mois · remboursé d'ici {date}",
     "debtPaidOff": "Remboursé",
     "draw": {
@@ -931,6 +939,8 @@
     "upcoming": "À venir",
     "billsPaid": "Factures payées à partir de ce fonds",
     "noBillsPaid": "Aucune facture payée à partir de ce fonds pour l'instant.",
+    "withdrawals": "Retiré vers le compte chèques",
+    "noWithdrawals": "Aucun retrait pour l'instant.",
     "confirmDeleteTitle": "Arrêter et supprimer votre fonds de réserve ?",
     "confirmDeleteStops": "Ceci arrête la contribution de {amount}/mois et supprime le compte du fonds.",
     "confirmDeleteUpcoming": "Ceci annule {count} contributions à venir.",
@@ -1053,7 +1063,8 @@
       "savingsTransfers": "Virements d'épargne",
       "debtPayments": "Paiements de dette",
       "netFromBuckets": "Net (par catégorie)",
-      "borrowed": "⚠ {amount} emprunté ce mois-ci — non compté comme revenu, épargne ou paiement de dette."
+      "borrowed": "⚠ {amount} emprunté ce mois-ci — non compté comme revenu, épargne ou paiement de dette.",
+      "withdrawn": "{amount} retiré de l'épargne ce mois-ci — non compté comme revenu, épargne ou paiement de dette."
     },
     "dualNet": {
       "title": "Comparaison des deux nets",

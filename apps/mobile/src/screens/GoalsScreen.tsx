@@ -120,6 +120,15 @@ export default function GoalsScreen() {
             >
               <Text style={styles.action}>{g.isDebt ? t('goals.makePayment') : t('goals.addMoney')} ›</Text>
             </Pressable>
+            {!g.isDebt && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push({ pathname: '/add', params: { kind: 'transfer', goalId: g.id, transferKind: 'draw' } })}
+                hitSlop={8}
+              >
+                <Text style={styles.action}>{t('goals.withdraw')} ›</Text>
+              </Pressable>
+            )}
           </View>
         ))}
 

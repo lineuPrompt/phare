@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
+import { GOAL_ACCOUNT_TYPES, computeGoalBalance } from '@/lib/dashboardHelpers';
 
 const GOAL_TYPE_SET = new Set<string>(GOAL_ACCOUNT_TYPES);
 
@@ -21,10 +21,13 @@ async function getContext(supabase: Awaited<ReturnType<typeof createClient>>) {
 // transaction. Any failure rolls back completely — no partial pair can persist.
 // Body: { date, amount, description?, goalAccountId, kind? }
 // kind: 'contribution' (default) — chequing → goal, the existing behaviour.
-//       'draw' — goal → chequing, restricted to a debt account. See
-//       create_transfer's sign-convention comment (20260801000000 migration)
-//       for why this needs no separate balance/reconciliation "kind" field —
-//       the stored amount's sign alone carries the direction.
+//       'draw' — goal → chequing, from any goal account (2026-10-27): borrowing
+//       against a debt account, or withdrawing from a savings-type one (the
+//       Reserve Fund included) — the same mechanism for both, as Lineu asked.
+//       See create_transfer's sign-convention comment (20260801000000
+//       migration) for why this needs no separate balance/reconciliation
+//       "kind" field — the stored amount's sign alone carries the direction,
+//       and the goal account's type says borrowed or withdrawn.
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -58,22 +61,46 @@ export async function POST(request: Request) {
     if (!goalAccount || !GOAL_TYPE_SET.has(goalAccount.type)) {
       return NextResponse.json({ error: 'Invalid goal account' }, { status: 400 });
     }
-    // A draw is borrowing against a credit line/loan — only meaningful for a
-    // debt account. Checked here too (not just inside the RPC) so the error
-    // surfaces as a clean 400, not a raw RPC exception message.
+    // A draw from a savings-type account is a withdrawal: it cannot take out
+    // more than the account holds on that date. The balance is the same
+    // ledger sum the Goals and Reserve pages show (computeGoalBalance), as of
+    // the withdrawal's own date — rows dated after it do not count. A debt
+    // draw has no such floor: borrowing is what makes its balance negative.
     if (kind === 'draw' && goalAccount.type !== 'debt') {
-      return NextResponse.json({ error: 'Draws are only valid against a debt account' }, { status: 400 });
+      const { data: goalRows, error: goalRowsErr } = await supabase
+        .from('transactions')
+        .select('amount, type, account_id, date')
+        .eq('household_id', householdId)
+        .eq('account_id', goalAccountId);
+      if (goalRowsErr) {
+        console.error('Transfer POST balance read error:', goalRowsErr);
+        return NextResponse.json({ error: `Could not read the account balance: ${goalRowsErr.message}`, code: 'LOOKUP_FAILED' }, { status: 500 });
+      }
+      const available = computeGoalBalance(goalRows ?? [], goalAccountId, date);
+      if (Number(amount) > available) {
+        return NextResponse.json(
+          {
+            error: `This account holds ${available.toFixed(2)} on ${date}; a withdrawal cannot be larger.`,
+            code: 'INSUFFICIENT_BALANCE',
+            available,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // A blank description used to leave both peer rows unlabeled (the
     // Timeline showed a bare "🪙 Entry", Goals' Upcoming showed "—") — default
     // to the destination's own name so a transfer is never nameless.
     // "(payment)" for a contribution to a debt destination, "(draw)" for a
-    // draw, matching the labels the Timeline/Goals UI expects.
+    // debt draw, "(withdrawal)" for a draw from a savings-type account,
+    // matching the labels the Timeline/Goals UI expects.
     const resolvedDescription =
       description?.trim() ||
       (kind === 'draw'
-        ? `${goalAccount.name} (draw)`
+        ? goalAccount.type === 'debt'
+          ? `${goalAccount.name} (draw)`
+          : `${goalAccount.name} (withdrawal)`
         : goalAccount.type === 'debt'
           ? `${goalAccount.name} (payment)`
           : goalAccount.name);

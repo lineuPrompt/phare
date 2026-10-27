@@ -78,6 +78,31 @@ the v1.1 list separately.**
   [ticket](tickets/expenses-patch-route-gaps.md).
 - **Home ↔ Timeline month link** (Lineu, 2026-10-17): BUILT, uncommitted —
   tapping the month name opens that month on the other tab.
+- **LAUNCH BLOCKER (Lineu, 2026-10-27): withdraw from savings and the
+  Reserve Fund back to chequing.** "It should work exactly as the credit
+  line." BUILT 2026-10-27, uncommitted. The credit line's draw now works
+  from every goal account (savings, TFSA, RRSP, the Reserve Fund); a draw
+  from savings is "withdrawn", from a debt "borrowed"; both stay out of
+  the surplus. The route refuses a withdrawal above the balance on its date
+  (`INSUFFICIENT_BALANCE`). Web: Withdraw on each savings goal and on the
+  Reserve Fund (with its own withdrawals list); mobile: Add money /
+  Withdraw chips in quick entry, the Reserve Fund listed there first,
+  Withdraw on Goals. Overview, Home, the audit page and the monthly review
+  say "withdrawn from savings", never "borrowed".
+  **Migration `20261027000000_create_transfer_draw_from_savings.sql`
+  WRITTEN, NOT APPLIED.** Order: apply it, deploy the web, then the app
+  (the new app needs `totalWithdrawn` from the server). Pre-apply VERIFY:
+  7 PASS, row 3 FAIL as expected. After applying: VERIFY must be 8/8, then
+  the live check on Zezinho Test (Claude Code).
+  Follow-ups, not built: editing a withdrawal larger, or deleting an
+  earlier contribution, can still take a savings balance below zero (only
+  the create path checks); two withdrawals sent at the same instant could
+  both pass the check.
+- **`POST /api/transfers` input checks** — the date, amount ceiling and
+  description limit its PATCH already has. —
+  [ticket](tickets/transfers-post-input-gaps.md)
+- **`GET /api/goals` ignores read errors** — a failed read answers "no
+  goals". — [ticket](tickets/goals-get-ignores-read-errors.md)
 - **S7. Household members: list, invite, remove (owner only).**
 - **S8. Savings goals and sinking funds** (read-only first round, then
   creation).
@@ -324,6 +349,7 @@ for when it thaws:
 
 | Item | Commit |
 |---|---|
+| Withdraw from savings and the Reserve Fund (draw from any goal account; withdrawn vs borrowed) — migration written, not applied | _(Lineu)_ |
 | Standalone S3 — accounts list, add account, chequing balance in the app; opening-balance rule moved to `@phare/core` | _(Lineu)_ |
 | Standalone S2 — month navigation (Home, Timeline, Cards); month helpers moved to `@phare/core` | _(Lineu)_ |
 | Mobile standalone audit (`docs/mobile-standalone-audit.md`), CLAUDE.md product rule, 1.1 review notes | _(Lineu)_ |

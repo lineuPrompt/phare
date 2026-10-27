@@ -303,10 +303,11 @@ function EntryRow({
 }) {
   const t = useTranslations('timeline.list');
   // Every row here is on the chequing account (Timeline is chequing-scoped),
-  // so a negative 'transfer' amount can only mean one thing: a debt draw's
-  // chequing-side row (see timelineHelpers.ts's TRANSFER DIRECTION NOTE) —
-  // real cash coming IN. It reads with a "+" like income, but in a distinct
-  // amber, never green: this money was borrowed, not earned, and must not
+  // so a negative 'transfer' amount means a draw's chequing-side row — from a
+  // debt, or (entry.isWithdrawal) from savings — (see timelineHelpers.ts's
+  // TRANSFER DIRECTION NOTE): real cash coming IN. It reads with a "+" like
+  // income, but in a distinct amber, never green: this money was not earned
+  // this month (borrowed, or the household's own savings), and must not
   // look identical to a paycheque at a glance. formatSignedAmount stays
   // type-only (it's shared with the reconcile page and cards, where the same
   // negative sign on a goal/debt account means the OPPOSITE — money owed
@@ -335,8 +336,12 @@ function EntryRow({
       >
         {entry.isBridge && <span className="mr-1">💳</span>}
         {/* A draw gets a distinct warning icon — this is borrowed money, it
-            must never blend in with an ordinary contribution/payment. */}
-        {isEditableTransfer && (isDraw ? <span className="mr-1">🚨</span> : <span className="mr-1">🪙 →</span>)}
+            must never blend in with an ordinary contribution/payment. A
+            withdrawal from savings is a draw too, but the household's own
+            money (2026-10-27): it comes back with the coin, not the alarm. */}
+        {isEditableTransfer && (isDraw
+          ? entry.isWithdrawal ? <span className="mr-1">🪙 ←</span> : <span className="mr-1">🚨</span>
+          : <span className="mr-1">🪙 →</span>)}
         {isEditableEntry && isRecurringOccurrence && <span className="mr-1">🔁</span>}
         {entry.description ?? t('untitled')}
         {entry.installmentLabel && (

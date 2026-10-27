@@ -187,6 +187,13 @@ function SnapshotCard({
         </View>
       )}
 
+      {/* The household's own savings, not debt: said plainly, no alarm box. */}
+      {snapshot.withdrawn > 0 && (
+        <Text style={styles.withdrawnText}>
+          {t('home.snapshot.withdrawnNote', { amount: money(snapshot.withdrawn) })}
+        </Text>
+      )}
+
       <Text style={styles.caption}>{t('home.snapshot.monthOnlyNote')}</Text>
     </View>
   );
@@ -515,6 +522,7 @@ const styles = StyleSheet.create({
     padding: theme.space.sm,
   },
   borrowedText: { fontSize: 14, fontWeight: '600', color: '#B91C1C' },
+  withdrawnText: { fontSize: 14, fontWeight: '600', color: theme.color.warning, marginTop: theme.space.sm },
   planCard: {
     backgroundColor: PLAN.ground,
     borderRadius: theme.radius.lg,

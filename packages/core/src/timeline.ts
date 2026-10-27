@@ -37,6 +37,13 @@ export type TimelineTx = {
   isBridge: boolean;
   bridgeSourceAccount: string | null;
   bridgeSourceMonth: string | null; // YYYY-MM — the card's spend month this bridge pays for
+  /**
+   * A draw (negative transfer) whose other side is a savings/TFSA/RRSP
+   * account or the Reserve Fund: the household's own money coming back, not
+   * borrowing (2026-10-27). Set by GET /api/timeline from the peer row's
+   * account type; absent everywhere else. Both kinds read as money in.
+   */
+  isWithdrawal?: boolean;
 };
 
 export type TimelineEntry = TimelineTx & {

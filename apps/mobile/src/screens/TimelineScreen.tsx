@@ -99,10 +99,13 @@ function EntryRow({ entry, locale, muted }: { entry: TimelineEntry; locale: Loca
     <View style={styles.entryRow}>
       <Text style={[styles.entryLabel, muted && styles.entryMuted]} numberOfLines={1}>
         {/* The web page's row markers, kept: a bridge is computed from a card's
-            cycle, a draw is borrowed money, a transfer leaves for a goal, and
-            a recurring occurrence came from a rule. */}
+            cycle, a draw is borrowed money, a withdrawal is the household's
+            own savings coming back, a transfer leaves for a goal, and a
+            recurring occurrence came from a rule. */}
         {entry.isBridge ? '💳 ' : ''}
-        {entry.type === 'transfer' && !entry.isBridge ? (entry.amount < 0 ? '🚨 ' : '🪙 ') : ''}
+        {entry.type === 'transfer' && !entry.isBridge
+          ? (entry.amount < 0 ? (entry.isWithdrawal ? '🪙 ' : '🚨 ') : '🪙 ')
+          : ''}
         {!entry.isBridge && entry.recurringItemId !== null && entry.type !== 'transfer' ? '🔁 ' : ''}
         {entry.description ?? t('timeline.list.untitled')}
       </Text>

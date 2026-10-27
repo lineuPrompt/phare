@@ -312,6 +312,15 @@ export default function SnapshotCard({
         </div>
       )}
 
+      {/* Withdrawn from savings (2026-10-27) — excluded from the figure above
+          for the same reason as borrowed cash, but it is the household's own
+          money, not debt: stated plainly, without the borrowing alarm. */}
+      {summary.totalWithdrawn > 0 && (
+        <p className="text-sm font-medium mt-2" style={{ color: '#B45309' }}>
+          {t('withdrawnNote', { amount: formatCurrency(summary.totalWithdrawn, locale) })}
+        </p>
+      )}
+
       {/* This figure is this month's cash flow only — it never carries
           forward a prior month's leftover balance. The real running balance
           (which does) lives on Timeline; this note points there so the two

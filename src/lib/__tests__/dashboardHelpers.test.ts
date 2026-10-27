@@ -43,6 +43,7 @@ describe('computeMonthTotals — baseline', () => {
       totalSavings:      0,
       totalDebtPayments: 0,
       totalBorrowed:     0,
+      totalWithdrawn:    0,
       netCashFlow:       0,
       savingsByDestination: [],
     });
@@ -264,6 +265,63 @@ describe('computeMonthTotals — debt draws', () => {
     expect(result.totalBorrowed).toBe(1000);
     expect(result.totalSavings).toBe(400);
     expect(result.netCashFlow).toBe(-400); // only the payment (savings) reduces net; the draw does not
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeMonthTotals — withdrawals (2026-10-27): a draw from a savings-type
+// account is the household's own money coming back. Out of netCashFlow like
+// a debt draw, but counted as withdrawn, never as borrowed.
+// ---------------------------------------------------------------------------
+
+describe('computeMonthTotals — withdrawals from savings', () => {
+  // A real pair, linked the way create_transfer links it.
+  const pair = (goalId: string, amount: number, n: number): TxRow[] => [
+    { id: `c${n}`, type: 'transfer', account_id: CHEQUING_ID, amount, transfer_peer_id: `g${n}` },
+    { id: `g${n}`, type: 'transfer', account_id: goalId,      amount, transfer_peer_id: `c${n}` },
+  ];
+
+  it.each([SAVINGS_ID, TFSA_ID, RRSP_ID])('a draw from %s is withdrawn, not borrowed, not savings, not income', (goalId) => {
+    const result = computeMonthTotals(pair(goalId, -500, 1), accounts);
+    expect(result.totalWithdrawn).toBe(500);
+    expect(result.totalBorrowed).toBe(0);
+    expect(result.totalSavings).toBe(0);
+    expect(result.totalIncome).toBe(0);
+    expect(result.savingsByDestination).toEqual([]);
+  });
+
+  it('a withdrawal is excluded from netCashFlow — it never makes a short month read as a surplus', () => {
+    const txns: TxRow[] = [
+      { id: 'i', type: 'income',  account_id: CHEQUING_ID, amount: 3000 },
+      { id: 'e', type: 'expense', account_id: CHEQUING_ID, amount: 3400 },
+      ...pair(SAVINGS_ID, -400, 1),
+    ];
+    const result = computeMonthTotals(txns, accounts);
+    expect(result.totalWithdrawn).toBe(400);
+    expect(result.netCashFlow).toBe(-400);
+  });
+
+  it('a debt draw and a withdrawal in the same month land in their own buckets', () => {
+    const txns = [...pair(DEBT_ID, -1000, 1), ...pair(SAVINGS_ID, -250, 2), ...pair(SAVINGS_ID, 100, 3)];
+    const result = computeMonthTotals(txns, accounts);
+    expect(result.totalBorrowed).toBe(1000);
+    expect(result.totalWithdrawn).toBe(250);
+    expect(result.totalSavings).toBe(100);
+    expect(result.netCashFlow).toBe(-100);
+  });
+
+  it('a draw whose peer cannot be resolved stays borrowed, as before withdrawals existed', () => {
+    const txns: TxRow[] = [{ id: 'c1', type: 'transfer', account_id: CHEQUING_ID, amount: -300, transfer_peer_id: 'gone' }];
+    const result = computeMonthTotals(txns, accounts);
+    expect(result.totalBorrowed).toBe(300);
+    expect(result.totalWithdrawn).toBe(0);
+  });
+
+  it('the Reserve Fund (a savings account flagged is_sinking_fund) is a withdrawal too', () => {
+    const withReserve: AccountRow[] = [...accounts, { id: 'reserve-1', type: 'savings', is_sinking_fund: true }];
+    const result = computeMonthTotals(pair('reserve-1', -120, 1), withReserve);
+    expect(result.totalWithdrawn).toBe(120);
+    expect(result.totalBorrowed).toBe(0);
   });
 });
 

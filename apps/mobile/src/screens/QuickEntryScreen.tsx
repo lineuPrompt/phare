@@ -59,8 +59,9 @@ export default function QuickEntryScreen() {
     accountId: '', date: '', description: '', categoryId: '', amount: '',
   });
   // /add?kind=transfer&goalId=… opens on Contribution with that goal chosen
-  // (the Goals screen's "Add money").
-  const params = useLocalSearchParams<{ kind?: string; goalId?: string }>();
+  // (the Goals screen's "Add money"); &transferKind=draw opens it on
+  // Withdraw (the Goals screen's "Withdraw").
+  const params = useLocalSearchParams<{ kind?: string; goalId?: string; transferKind?: string }>();
   const [kind, setKind] = useState<EntryKind>(
     params.kind === 'income' || params.kind === 'transfer' ? params.kind : 'expense'
   );
@@ -68,7 +69,9 @@ export default function QuickEntryScreen() {
   const [goals, setGoals] = useState<EntryGoal[] | null>(null);
   const [goalsErrorKey, setGoalsErrorKey] = useState<string | null>(null);
   const [goalId, setGoalId] = useState('');
-  const [transferKind, setTransferKind] = useState<'contribution' | 'draw'>('contribution');
+  const [transferKind, setTransferKind] = useState<'contribution' | 'draw'>(
+    params.transferKind === 'draw' ? 'draw' : 'contribution'
+  );
   const [saving, setSaving] = useState(false);
   const [messageKey, setMessageKey] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -227,7 +230,9 @@ export default function QuickEntryScreen() {
   const selectedGoal = goals?.find((g) => g.id === goalId) ?? null;
   const saveLabel =
     kind === 'transfer'
-      ? selectedGoal?.isDebt && transferKind === 'draw' ? t('entry.saveDraw') : t('entry.saveTransfer')
+      ? transferKind === 'draw'
+        ? selectedGoal?.isDebt ? t('entry.saveDraw') : t('entry.saveWithdrawal')
+        : t('entry.saveTransfer')
       : kind === 'income' ? t('entry.saveIncome') : t('entry.save');
 
   return (
@@ -276,10 +281,20 @@ export default function QuickEntryScreen() {
                       <Chip key={g.id} label={g.name} selected={goalId === g.id} onPress={() => { setGoalId(g.id); setMessageKey(null); setSaved(false); }} />
                     ))}
                   </View>
-                  {selectedGoal?.isDebt && (
+                  {/* In or out, for every goal — the same draw the credit
+                      line has always had, worded for what it is. */}
+                  {selectedGoal && (
                     <View style={styles.chips}>
-                      <Chip label={t('entry.kindPayment')} selected={transferKind === 'contribution'} onPress={() => setTransferKind('contribution')} />
-                      <Chip label={t('entry.kindDraw')} selected={transferKind === 'draw'} onPress={() => setTransferKind('draw')} />
+                      <Chip
+                        label={selectedGoal.isDebt ? t('entry.kindPayment') : t('entry.kindAddMoney')}
+                        selected={transferKind === 'contribution'}
+                        onPress={() => setTransferKind('contribution')}
+                      />
+                      <Chip
+                        label={selectedGoal.isDebt ? t('entry.kindDraw') : t('entry.kindWithdraw')}
+                        selected={transferKind === 'draw'}
+                        onPress={() => setTransferKind('draw')}
+                      />
                     </View>
                   )}
                 </>

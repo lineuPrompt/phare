@@ -81,5 +81,26 @@ describe('GET /api/goals — sinking fund accounts never appear as a goal', () =
     expect(res.status).toBe(200);
     expect(json.goals).toHaveLength(1);
     expect(json.goals[0].name).toBe('Disney trip');
+    // Named on its own, so the mobile app (no Reserve screen) can still move
+    // money in and out of it (2026-10-27).
+    expect(json.reserve).toEqual({ id: 'fund-1', name: 'Property tax fund' });
+  });
+
+  it('reserve is null when the household has not started a Reserve Fund', async () => {
+    const { client } = makeSupabaseMock({
+      users: [{ data: { household_id: 'hh1' }, error: null }],
+      accounts: [{
+        data: [{ id: 'sav-1', name: 'Disney trip', type: 'savings', goal_target: null, goal_target_date: null, is_sinking_fund: false }],
+        error: null,
+      }],
+      transactions: [{ data: [], error: null }],
+      recurring_items: [{ data: [], error: null }],
+      households: [{ data: { timezone: 'America/Toronto' }, error: null }],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const { GET } = await import('../route');
+    const json = await (await GET()).json();
+    expect(json.reserve).toBeNull();
   });
 });

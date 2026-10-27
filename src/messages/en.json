@@ -421,6 +421,7 @@
     "surplus": "Monthly surplus",
     "deficit": "Monthly deficit",
     "borrowedNote": "⚠ {amount} of this month's cash was borrowed. It's in your account, but you didn't earn it — so it's not in the figure above.",
+    "withdrawnNote": "{amount} of this month's cash came out of your savings. It's in your account, but it isn't this month's income — so it's not in the figure above.",
     "monthOnlyNote": "This reflects this month's cash flow only, not your running balance.",
     "viewRealBalance": "View your real balance in Timeline",
     "plan": {
@@ -783,6 +784,13 @@
     "currentlyOwed": "currently owed",
     "makePayment": "Make a payment",
     "recordDraw": "Record a draw",
+    "recordWithdrawal": "Withdraw",
+    "withdrawal": {
+      "title": "Withdraw to chequing",
+      "hint": "Moves money from here back to your chequing account. The balance goes down, and the money is never counted as income or surplus.",
+      "save": "Withdraw",
+      "insufficient": "There is {amount} here on that date. A withdrawal can't be larger than that."
+    },
     "payoffPlan": "Paying {amount}/mo · payoff {date}",
     "debtPaidOff": "Paid off",
     "draw": {
@@ -931,6 +939,8 @@
     "upcoming": "Upcoming",
     "billsPaid": "Bills paid from this fund",
     "noBillsPaid": "No bills paid from this fund yet.",
+    "withdrawals": "Withdrawn to chequing",
+    "noWithdrawals": "No withdrawals yet.",
     "confirmDeleteTitle": "Stop and remove your reserve fund?",
     "confirmDeleteStops": "This stops the {amount}/month contribution and removes the fund account.",
     "confirmDeleteUpcoming": "It cancels {count} upcoming contributions.",
@@ -1053,7 +1063,8 @@
       "savingsTransfers": "Savings transfers",
       "debtPayments": "Debt payments",
       "netFromBuckets": "Net (from buckets)",
-      "borrowed": "⚠ {amount} borrowed this month — not counted as income, savings, or a debt payment."
+      "borrowed": "⚠ {amount} borrowed this month — not counted as income, savings, or a debt payment.",
+      "withdrawn": "{amount} withdrawn from savings this month — not counted as income, savings, or a debt payment."
     },
     "dualNet": {
       "title": "Dual-Net Comparison",

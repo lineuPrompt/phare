@@ -19,7 +19,7 @@ import {
   type ChequingChainTx,
   type PlanChainMonth,
 } from '@/lib/planChainHelpers';
-import { TRANSACTION_COLUMNS, toTimelineTxs } from '@/lib/timelineLedger';
+import { TRANSACTION_COLUMNS, toTimelineTxs, markWithdrawals } from '@/lib/timelineLedger';
 
 
 // GET /api/timeline?account=<chequingId>[&windowStart=<YYYY-MM-01>]
@@ -205,7 +205,8 @@ export async function GET(request: Request) {
       .lte('date', windowEnd)
       .order('date', { ascending: true });
 
-    const transactions: TimelineTx[] = toTimelineTxs(rawTxns ?? []);
+    // A draw from savings is tagged so it never reads as borrowed money.
+    const transactions: TimelineTx[] = await markWithdrawals(supabase, householdId, toTimelineTxs(rawTxns ?? []));
 
     // ── Build ──────────────────────────────────────────────────────────────────
 
@@ -228,7 +229,7 @@ export async function GET(request: Request) {
         .order('date', { ascending: true });
 
       unbalancedDays = groupUnbalancedTransactions(
-        toTimelineTxs(rawPreAnchorTxns ?? []),
+        await markWithdrawals(supabase, householdId, toTimelineTxs(rawPreAnchorTxns ?? [])),
         windowStart,
         result.balancesStartDate
       );

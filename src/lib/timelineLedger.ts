@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { TimelineTx } from './timelineHelpers';
 
 // ---------------------------------------------------------------------------
@@ -29,4 +30,46 @@ export function toTimelineTxs(rows: Record<string, unknown>[]): TimelineTx[] {
       bridgeSourceAccount: (t.bridge_source_account ?? null) as string | null,
       bridgeSourceMonth: (t.bridge_source_month ?? null) as string | null,
     }));
+}
+
+/**
+ * Marks each draw (a negative chequing-side transfer) whose other side is a
+ * savings-type account as a withdrawal, so the Timeline does not label the
+ * household's own savings as borrowed money (2026-10-27). The source is the
+ * peer row's account type — the same rule computeMonthTotals uses. A draw
+ * whose peer cannot be found stays a plain draw, as before. A failed read
+ * throws: the caller reports it rather than guessing.
+ */
+export async function markWithdrawals(
+  supabase: SupabaseClient,
+  householdId: string,
+  txs: TimelineTx[]
+): Promise<TimelineTx[]> {
+  const peerIds = [...new Set(
+    txs.filter((t) => t.type === 'transfer' && t.amount < 0 && t.transferPeerId).map((t) => t.transferPeerId as string)
+  )];
+  if (peerIds.length === 0) return txs;
+
+  const { data: peers, error: peerErr } = await supabase
+    .from('transactions')
+    .select('id, account_id')
+    .eq('household_id', householdId)
+    .in('id', peerIds);
+  if (peerErr) throw new Error(`draw peers read failed: ${peerErr.message}`);
+
+  const accountIds = [...new Set((peers ?? []).map((p) => p.account_id as string | null).filter((id): id is string => !!id))];
+  const { data: accounts, error: acctErr } = accountIds.length === 0
+    ? { data: [], error: null }
+    : await supabase.from('accounts').select('id, type').eq('household_id', householdId).in('id', accountIds);
+  if (acctErr) throw new Error(`draw accounts read failed: ${acctErr.message}`);
+
+  const savingsTypes = new Set(['savings', 'tfsa', 'rrsp']);
+  const savingsAccounts = new Set((accounts ?? []).filter((a) => savingsTypes.has(a.type as string)).map((a) => a.id as string));
+  const withdrawalPeers = new Set((peers ?? []).filter((p) => savingsAccounts.has(p.account_id as string)).map((p) => p.id as string));
+
+  return txs.map((t) =>
+    t.type === 'transfer' && t.amount < 0 && t.transferPeerId && withdrawalPeers.has(t.transferPeerId)
+      ? { ...t, isWithdrawal: true }
+      : t
+  );
 }

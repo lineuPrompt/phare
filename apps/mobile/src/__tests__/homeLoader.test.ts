@@ -30,6 +30,7 @@ const SUMMARY = {
   totalSavings: 640.33,
   totalDebtPayments: 150.44,
   totalBorrowed: 75.55,
+  totalWithdrawn: 33.66,
   netCashFlow: 1299.12,
   savingsByDestination: [
     { accountId: 'a1', name: 'Travel', amount: 400.33 },
@@ -129,6 +130,7 @@ describe('loadHome: the snapshot is the server’s figures, to the cent', () => 
       debtPayments: 150.44,
       netCashFlow: 1299.12,
       borrowed: 75.55,
+      withdrawn: 33.66,
       awaitingDates: false,
     });
   });
@@ -152,7 +154,7 @@ describe('loadHome: the snapshot is the server’s figures, to the cent', () => 
   });
 
   it.each([
-    'totalIncome', 'totalExpenses', 'totalSavings', 'totalDebtPayments', 'totalBorrowed', 'netCashFlow',
+    'totalIncome', 'totalExpenses', 'totalSavings', 'totalDebtPayments', 'totalBorrowed', 'totalWithdrawn', 'netCashFlow',
   ])('throws when %s is missing, rather than showing zero', async (field) => {
     const summary: Record<string, unknown> = { ...SUMMARY };
     delete summary[field];

@@ -258,6 +258,7 @@
     "contribution": "Contribution",
     "addMoney": "Ajouter de l'argent",
     "makePayment": "Faire un paiement",
+    "withdraw": "Retirer",
     "newGoal": "Nouvel objectif d'épargne"
   },
   "entry": {
@@ -265,7 +266,7 @@
     "kind": {
       "expense": "Sortie d'argent",
       "income": "Entrée d'argent",
-      "transfer": "Contribution"
+      "transfer": "Épargne ou dette"
     },
     "goal": "Objectif d'épargne ou dette",
     "noGoals": "Aucun objectif d'épargne ni compte de dette pour l'instant.",
@@ -273,9 +274,12 @@
     "descriptionOptional": "Description (optionnel)",
     "kindPayment": "Paiement",
     "kindDraw": "Prélèvement",
+    "kindAddMoney": "Ajouter",
+    "kindWithdraw": "Retirer",
     "saveIncome": "Ajouter le revenu",
     "saveTransfer": "Ajouter la contribution",
     "saveDraw": "Enregistrer le prélèvement",
+    "saveWithdrawal": "Retirer vers le compte chèques",
     "open": "Ajouter une dépense",
     "account": "Compte",
     "date": "Date",
@@ -309,7 +313,8 @@
       "accountNotFound": "Ce compte n'est plus disponible. Fermez cet écran, puis rouvrez-le.",
       "payloadTooLarge": "Cette entrée est trop volumineuse pour être enregistrée.",
       "noChequing": "Phare a d'abord besoin d'un compte chèques. Ajoutez-en un dans Compte → Comptes.",
-      "saveFailed": "Phare n'a pas pu enregistrer cette dépense, et rien n'a été enregistré. Veuillez réessayer."
+      "saveFailed": "Phare n'a pas pu enregistrer cette dépense, et rien n'a été enregistré. Veuillez réessayer.",
+      "insufficientBalance": "C'est plus que ce que ce compte contient à cette date. Rien n'a été retiré."
     },
     "addAccount": "Ajouter un compte"
   },
@@ -496,6 +501,7 @@
       "surplus": "Surplus mensuel",
       "deficit": "Déficit mensuel",
       "borrowedNote": "⚠ {amount} de l'encaisse de ce mois-ci a été emprunté. Cet argent est dans votre compte, mais vous ne l'avez pas gagné — il n'est donc pas inclus dans le montant ci-dessus.",
+      "withdrawnNote": "{amount} de l'encaisse de ce mois-ci provient de votre épargne. Cet argent est dans votre compte, mais ce n'est pas un revenu du mois — il n'est donc pas inclus dans le montant ci-dessus.",
       "monthOnlyNote": "Ceci reflète uniquement le flux de trésorerie de ce mois, pas votre solde réel. Votre solde réel se trouve dans l'onglet Chronologie.",
       "actualsForMonth": "Données réelles pour {month} — pas des projections"
     },

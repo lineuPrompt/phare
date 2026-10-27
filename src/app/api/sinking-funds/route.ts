@@ -66,6 +66,7 @@ export async function GET() {
           tombstonesAfterBoundary: 0,
           contributions: [],
           upcomingContributions: [],
+          withdrawals: [],
           billsPaid: [],
         },
       });
@@ -90,10 +91,19 @@ export async function GET() {
     const toLine = (tx: typeof allTx[number]) => ({
       id: tx.id, date: tx.date, description: tx.description, amount: Number(tx.amount),
     });
-    const transferRows = allTx.filter((t) => t.type === 'transfer');
+    // A contribution is stored positive; a withdrawal (a draw back to
+    // chequing, 2026-10-27) negative on the buffer side. Split by sign so a
+    // withdrawal never reads as a contribution, and never feeds the drift
+    // check below, which compares contributions against the rule's amount.
+    const transferRows = allTx.filter((t) => t.type === 'transfer' && Number(t.amount) >= 0);
     const contributions = transferRows.filter((t) => t.date <= today).map(toLine);
     const upcomingContributions = transferRows.filter((t) => t.date > today).map(toLine)
       .sort((a, b) => a.date.localeCompare(b.date));
+    // Amount shown as a positive magnitude; past and future together, newest
+    // first, as the query already orders them.
+    const withdrawals = allTx
+      .filter((t) => t.type === 'transfer' && Number(t.amount) < 0)
+      .map((t) => ({ ...toLine(t), amount: -Number(t.amount) }));
     const billsPaid = allTx.filter((t) => t.type === 'expense' && t.date <= today).map(toLine);
 
     const { data: recurringRow } = await supabase
@@ -164,6 +174,7 @@ export async function GET() {
         ),
         contributions,
         upcomingContributions,
+        withdrawals,
         billsPaid,
       },
     });

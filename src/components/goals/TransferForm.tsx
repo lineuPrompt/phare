@@ -1,15 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
-import type { GoalAccount } from '@/components/dashboard/types';
+import { useLocale, useTranslations } from 'next-intl';
+import { formatCurrency } from '@/components/dashboard/types';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 
 interface Props {
-  goals: GoalAccount[];
+  // Only id and name are read; isDebt decides how a draw is worded. The
+  // Reserve Fund passes its account without isDebt — it is never a debt.
+  goals: { id: string; name: string; isDebt?: boolean }[];
   defaultGoalId?: string;
   // 'contribution' (default) — chequing → goal, the original behaviour.
-  // 'draw' — goal → chequing, restricted server-side to a debt account.
+  // 'draw' — goal → chequing: borrowing from a debt account, or a
+  //   withdrawal from a savings-type account or the Reserve Fund (2026-10-27).
   kind?: 'contribution' | 'draw';
   onSaved: () => void;
   onCancel?: () => void;
@@ -17,6 +20,7 @@ interface Props {
 
 export default function TransferForm({ goals, defaultGoalId, kind = 'contribution', onSaved, onCancel }: Props) {
   const t = useTranslations('goals');
+  const locale = useLocale();
   const { today } = useBusinessToday();
 
   const [goalId, setGoalId] = useState(defaultGoalId ?? goals[0]?.id ?? '');
@@ -26,6 +30,8 @@ export default function TransferForm({ goals, defaultGoalId, kind = 'contributio
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  // A draw from anything but a debt account is a withdrawal.
+  const isWithdrawal = kind === 'draw' && goals.find((g) => g.id === goalId)?.isDebt !== true;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,7 +56,13 @@ export default function TransferForm({ goals, defaultGoalId, kind = 'contributio
 
     if (!res.ok) {
       const body = await res.json();
-      setError(body.error ?? 'Error');
+      // The balance refusal has its own sentence in the household's language;
+      // anything else shows the server's own reason.
+      setError(
+        body.code === 'INSUFFICIENT_BALANCE' && typeof body.available === 'number'
+          ? t('withdrawal.insufficient', { amount: formatCurrency(body.available, locale) })
+          : body.error ?? 'Error'
+      );
       return;
     }
 
@@ -151,7 +163,11 @@ export default function TransferForm({ goals, defaultGoalId, kind = 'contributio
           className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
           style={{ background: kind === 'draw' ? '#B45309' : '#2ABFBF', color: 'white' }}
         >
-          {saving ? t('transfer.saving') : kind === 'draw' ? t('draw.save') : t('transfer.save')}
+          {saving
+            ? t('transfer.saving')
+            : kind === 'draw'
+              ? isWithdrawal ? t('withdrawal.save') : t('draw.save')
+              : t('transfer.save')}
         </button>
       </div>
     </form>

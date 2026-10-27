@@ -20,7 +20,9 @@ import type { AccountsResponse, TimezoneResponse } from './timeline';
 //   money in     POST /api/expenses  (IncomeBody — no category; the route
 //                records the creator as the income's member, as on the web)
 //   contribution POST /api/transfers (TransferBody — the atomic pair; a
-//                draw only to a debt account, as on the web)
+//                draw takes money back to chequing: borrowing from a debt,
+//                or a withdrawal from savings or the Reserve Fund, as on
+//                the web; the route refuses a withdrawal above the balance)
 //
 // THE SERVER DECIDES. This module stops a person sending something that is
 // certainly wrong (an amount it could not read, a date that does not exist),
@@ -160,25 +162,37 @@ export function buildIncomeBody(
 
 // ── A contribution to a savings goal or a debt ─────────────────────────────
 
-/** A place a contribution can go: GET /api/goals (savings, TFSA, RRSP, debt). */
+/**
+ * A place a contribution can go: GET /api/goals (savings, TFSA, RRSP, debt),
+ * plus the Reserve Fund's account, which the route names apart from the goals.
+ */
 export type EntryGoal = { id: string; name: string; isDebt: boolean };
 
 /**
- * The goals a contribution can go to. Loaded only when the person picks
- * "Contribution", so a failure here never blocks money out or money in.
+ * The goals a contribution can go to, the Reserve Fund first when it has been
+ * started — the app has no Reserve screen, so this is where money goes into it
+ * and comes back out. Loaded only when the person picks "Contribution", so a
+ * failure here never blocks money out or money in.
  */
 export async function loadTransferGoals(get: Getter): Promise<EntryGoal[]> {
-  const data = await get<{ goals?: unknown }>('/api/goals');
+  const data = await get<{ goals?: unknown; reserve?: unknown }>('/api/goals');
   if (!Array.isArray(data?.goals)) throw new Error('goals: no goal list in the answer');
-  return data.goals.map((g) => {
+  const goals = data.goals.map((g) => {
     const goal = g as { id?: unknown; name?: unknown; isDebt?: unknown };
     return { id: String(goal.id), name: String(goal.name), isDebt: goal.isDebt === true };
   });
+  const reserve = data.reserve as { id?: unknown; name?: unknown } | null | undefined;
+  return reserve && typeof reserve.id === 'string'
+    ? [{ id: reserve.id, name: String(reserve.name), isDebt: false }, ...goals]
+    : goals;
 }
 
 export type TransferDraft = {
   goalId: string;
-  /** Only read for a debt account; anything else is always a contribution. */
+  /**
+   * 'draw' takes money back to chequing: borrowing from a debt account, a
+   * withdrawal from any other. The same draw on the server for both.
+   */
   transferKind: 'contribution' | 'draw';
   date: string;
   description: string;
@@ -206,8 +220,9 @@ export function buildTransferBody(
   if (description.length > MANUAL_ENTRY_DESCRIPTION_MAX_CHARS) return { ok: false, problem: 'descriptionTooLong' };
   const amount = parseAmountInput(draft.amount);
   if (amount === null || amount <= 0) return { ok: false, problem: 'amountInvalid' };
-  // A draw is borrowing against a credit line: only a debt account has one.
-  const kind = goal.isDebt ? draft.transferKind : 'contribution';
+  // A draw works the same for every goal (2026-10-27): from a debt it is
+  // borrowing, from savings or the Reserve Fund a withdrawal.
+  const kind = draft.transferKind;
   return {
     ok: true,
     body: { date: draft.date, amount, goalAccountId: goal.id, ...(description ? { description } : {}), kind },
@@ -247,6 +262,7 @@ export const ENTRY_ERROR_KEYS: Record<string, string> = {
   NO_CHEQUING: 'entry.errors.noChequing',
   SAVE_FAILED: 'entry.errors.saveFailed',
   LOOKUP_FAILED: 'entry.errors.saveFailed',
+  INSUFFICIENT_BALANCE: 'entry.errors.insufficientBalance',
 };
 
 export function entryErrorKey(err: unknown): string {
