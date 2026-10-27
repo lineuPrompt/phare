@@ -728,7 +728,7 @@
       "title": "Ajouter une entrée",
       "moneyOut": "Sortie d'argent",
       "moneyIn": "Entrée d'argent",
-      "transfer": "Contribution",
+      "transfer": "Épargne ou dette",
       "description": "Description",
       "descriptionOptional": "Description (optionnel)",
       "category": "Catégorie...",
@@ -747,9 +747,13 @@
       "saveTransfer": "Ajouter la contribution",
       "saveDraw": "Enregistrer le prélèvement",
       "noGoals": "Créez d'abord un objectif",
-      "debtOption": "{name} (paiement)",
+      "debtOption": "{name} (dette)",
       "kindPayment": "Paiement",
-      "kindDraw": "Prélèvement"
+      "kindDraw": "Prélèvement",
+      "kindAddMoney": "Ajouter",
+      "kindWithdraw": "Retirer",
+      "saveWithdrawal": "Retirer vers le compte chèques",
+      "insufficient": "Il y a {amount} ici à cette date. Un retrait ne peut pas dépasser ce montant."
     },
     "remainingCash": {
       "label": "{month} se termine à"

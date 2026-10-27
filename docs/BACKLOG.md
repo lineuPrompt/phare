@@ -85,15 +85,21 @@ the v1.1 list separately.**
   from savings is "withdrawn", from a debt "borrowed"; both stay out of
   the surplus. The route refuses a withdrawal above the balance on its date
   (`INSUFFICIENT_BALANCE`). Web: Withdraw on each savings goal and on the
-  Reserve Fund (with its own withdrawals list); mobile: Add money /
+  Reserve Fund (with its own withdrawals list), and on the Timeline's Add
+  entry form (Reserve Fund listed first; Add money / Withdraw on savings,
+  Payment / Draw on a debt; tab renamed "Savings or debt"); mobile: Add money /
   Withdraw chips in quick entry, the Reserve Fund listed there first,
   Withdraw on Goals. Overview, Home, the audit page and the monthly review
   say "withdrawn from savings", never "borrowed".
   **Migration `20261027000000_create_transfer_draw_from_savings.sql`
-  WRITTEN, NOT APPLIED.** Order: apply it, deploy the web, then the app
-  (the new app needs `totalWithdrawn` from the server). Pre-apply VERIFY:
-  7 PASS, row 3 FAIL as expected. After applying: VERIFY must be 8/8, then
-  the live check on Zezinho Test (Claude Code).
+  APPLIED + VERIFIED LIVE 2026-10-27** (VERIFY 8/8; body md5
+  90ce1fc4280b647b54b919fdc921707e, length 4189). Live RPC probe on
+  Zezinho Test: +50 then a 30 withdrawal from a savings goal, both 200,
+  pair stored -30/-30 and peer-linked, balance 20; probe rows deleted.
+  STILL TO DO: deploy the web, then the app (the new app needs
+  `totalWithdrawn` from the server); after the web deploy, run the route
+  check on Zezinho Test (200 within balance, 400 `INSUFFICIENT_BALANCE`
+  above it).
   Follow-ups, not built: editing a withdrawal larger, or deleting an
   earlier contribution, can still take a savings balance below zero (only
   the create path checks); two withdrawals sent at the same instant could
@@ -349,7 +355,7 @@ for when it thaws:
 
 | Item | Commit |
 |---|---|
-| Withdraw from savings and the Reserve Fund (draw from any goal account; withdrawn vs borrowed) — migration written, not applied | _(Lineu)_ |
+| Withdraw from savings and the Reserve Fund (draw from any goal account; withdrawn vs borrowed) — migration applied + verified live 2026-10-27 | _(Lineu)_ |
 | Standalone S3 — accounts list, add account, chequing balance in the app; opening-balance rule moved to `@phare/core` | _(Lineu)_ |
 | Standalone S2 — month navigation (Home, Timeline, Cards); month helpers moved to `@phare/core` | _(Lineu)_ |
 | Mobile standalone audit (`docs/mobile-standalone-audit.md`), CLAUDE.md product rule, 1.1 review notes | _(Lineu)_ |

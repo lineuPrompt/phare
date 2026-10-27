@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import type { ExpenseCategory } from '@/components/expenses/types';
+import { formatCurrency } from '@/components/dashboard/types';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 
 type Cadence = 'monthly' | 'biweekly' | 'semimonthly';
@@ -22,6 +23,7 @@ export default function TimelineEntryForm({
   onCancel?: () => void;
 }) {
   const t = useTranslations('timeline.addEntry');
+  const locale = useLocale();
   const { today } = useBusinessToday();
 
   const [entryType, setEntryType] = useState<'expense' | 'income' | 'transfer'>('expense');
@@ -33,9 +35,8 @@ export default function TimelineEntryForm({
   const [cadence, setCadence] = useState<Cadence>('monthly');
   const [secondDay, setSecondDay] = useState('30');
   const [destinationAccountId, setDestinationAccountId] = useState('');
-  // Only meaningful when the resolved destination is a debt account — see
-  // resolvedDestination/isDebtDestination below. Reset to 'contribution'
-  // whenever the destination changes away from a debt account so switching
+  // In (contribution/payment) or out (draw/withdrawal), for any goal account.
+  // Reset to 'contribution' whenever the destination changes, so switching
   // goals can never leave a stale 'draw' silently selected.
   const [transferKind, setTransferKind] = useState<'contribution' | 'draw'>('contribution');
   const [saving, setSaving] = useState(false);
@@ -49,7 +50,10 @@ export default function TimelineEntryForm({
 
   const resolvedDestinationId = destinationAccountId || goalAccounts[0]?.id;
   const isDebtDestination = goalAccounts.find((g) => g.id === resolvedDestinationId)?.isDebt ?? false;
-  const effectiveKind: 'contribution' | 'draw' = isDebtDestination ? transferKind : 'contribution';
+  // Every goal account can be drawn from (2026-10-27): a draw from a debt
+  // borrows, a draw from savings or the Reserve Fund is a withdrawal.
+  const effectiveKind: 'contribution' | 'draw' = transferKind;
+  const isWithdrawal = effectiveKind === 'draw' && !isDebtDestination;
 
   const switchType = (tp: 'expense' | 'income' | 'transfer') => {
     setEntryType(tp);
@@ -111,7 +115,16 @@ export default function TimelineEntryForm({
               });
       }
 
-      if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+      if (!res.ok) {
+        const body = await res.json();
+        // The balance refusal has its own sentence in the household's
+        // language; anything else shows the server's own reason.
+        throw new Error(
+          body.code === 'INSUFFICIENT_BALANCE' && typeof body.available === 'number'
+            ? t('insufficient', { amount: formatCurrency(body.available, locale) })
+            : body.error || 'Save failed'
+        );
+      }
 
       setDescription('');
       setAmount('');
@@ -188,10 +201,11 @@ export default function TimelineEntryForm({
             placeholder={t('descriptionOptional')} className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
           <input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)}
             placeholder={t('amount')} className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inputStyle} />
-          {/* Payment vs draw — only meaningful for a debt destination. A
-              draw borrows against the credit line into chequing (the mirror
-              of a payment) and is never counted as income or surplus. */}
-          {isDebtDestination && (
+          {/* In or out, for every goal account. On a debt: payment vs draw
+              (borrowing into chequing). On savings or the Reserve Fund: add
+              money vs withdraw to chequing. Neither way out is ever counted
+              as income or surplus. */}
+          {goalAccounts.length > 0 && (
             <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
               {(['contribution', 'draw'] as const).map((k) => (
                 <button key={k} type="button" onClick={() => setTransferKind(k)}
@@ -201,7 +215,9 @@ export default function TimelineEntryForm({
                     background: transferKind === k ? '#FEF3E7' : 'white',
                     color: transferKind === k ? '#0F2044' : '#6B7280',
                   }}>
-                  {k === 'contribution' ? t('kindPayment') : t('kindDraw')}
+                  {isDebtDestination
+                    ? (k === 'contribution' ? t('kindPayment') : t('kindDraw'))
+                    : (k === 'contribution' ? t('kindAddMoney') : t('kindWithdraw'))}
                 </button>
               ))}
             </div>
@@ -299,7 +315,7 @@ export default function TimelineEntryForm({
             : entryType === 'income'
               ? t('saveIncome')
               : isTransfer
-                ? (effectiveKind === 'draw' ? t('saveDraw') : t('saveTransfer'))
+                ? (isWithdrawal ? t('saveWithdrawal') : effectiveKind === 'draw' ? t('saveDraw') : t('saveTransfer'))
                 : t('save')}
         </button>
       </div>

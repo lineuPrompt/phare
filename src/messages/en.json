@@ -728,7 +728,7 @@
       "title": "Add entry",
       "moneyOut": "Money out",
       "moneyIn": "Money in",
-      "transfer": "Contribution",
+      "transfer": "Savings or debt",
       "description": "Description",
       "descriptionOptional": "Description (optional)",
       "category": "Category...",
@@ -747,9 +747,13 @@
       "saveTransfer": "Add contribution",
       "saveDraw": "Record draw",
       "noGoals": "Create a goal first",
-      "debtOption": "{name} (payment)",
+      "debtOption": "{name} (debt)",
       "kindPayment": "Payment",
-      "kindDraw": "Draw"
+      "kindDraw": "Draw",
+      "kindAddMoney": "Add money",
+      "kindWithdraw": "Withdraw",
+      "saveWithdrawal": "Withdraw to chequing",
+      "insufficient": "There is {amount} here on that date. A withdrawal can't be larger than that."
     },
     "remainingCash": {
       "label": "{month} is closing at"

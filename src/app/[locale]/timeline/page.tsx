@@ -107,8 +107,13 @@ export default function TimelinePage() {
 
     fetch('/api/goals')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { goals: { id: string; name: string; isDebt: boolean }[] } | null) => {
-        if (d) setGoalAccounts(d.goals.map((g) => ({ id: g.id, name: g.name, isDebt: g.isDebt })));
+      .then((d: { goals: { id: string; name: string; isDebt: boolean }[]; reserve?: { id: string; name: string } | null } | null) => {
+        // The Reserve Fund is listed first, so money can be added to it or
+        // withdrawn from it here like any goal (2026-10-27).
+        if (d) setGoalAccounts([
+          ...(d.reserve ? [{ id: d.reserve.id, name: d.reserve.name, isDebt: false }] : []),
+          ...d.goals.map((g) => ({ id: g.id, name: g.name, isDebt: g.isDebt })),
+        ]);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps

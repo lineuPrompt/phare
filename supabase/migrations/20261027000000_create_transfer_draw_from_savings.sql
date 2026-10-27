@@ -2,7 +2,10 @@
 -- Phare — create_transfer: a draw may come from a savings goal, not only a debt.
 -- 2026-10-27.
 --
--- STATUS: WRITTEN — not applied. Lineu applies it in the SQL Editor.
+-- STATUS: APPLIED + VERIFIED LIVE 2026-10-27 (Lineu applied; VERIFY 8/8;
+--   md5(prosrc) 90ce1fc4280b647b54b919fdc921707e, length 4189).
+--   Live RPC probe on Zezinho Test: a savings draw is accepted and stored
+--   as a -amount pair, peer-linked; probe rows deleted.
 --
 -- THE GAP. A household could put money into its Reserve Fund or a savings
 -- goal but never take it back out to chequing: create_transfer refused a
