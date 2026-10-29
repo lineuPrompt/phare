@@ -17,12 +17,22 @@ export async function GET() {
     if (!userRow?.household_id) return NextResponse.json({ error: 'No household' }, { status: 400 });
     const householdId = userRow.household_id;
 
-    const { data: accounts } = await supabase
+    // Every read below reports its own failure (docs/tickets/
+    // goals-get-ignores-read-errors.md): a failed read used to answer 200
+    // with no goals, which clients showed as "no savings goal yet" and an
+    // offer to create one.
+    const readFailed = (what: string, err: { message: string }) => {
+      console.error(`Goals GET ${what} read error:`, err);
+      return NextResponse.json({ error: `Failed to load goals: could not read ${what}: ${err.message}` }, { status: 500 });
+    };
+
+    const { data: accounts, error: accountsErr } = await supabase
       .from('accounts')
       .select('id, name, type, goal_target, goal_target_date, is_sinking_fund')
       .eq('household_id', householdId)
       .in('type', [...GOAL_ACCOUNT_TYPES])
       .order('name', { ascending: true });
+    if (accountsErr) return readFailed('accounts', accountsErr);
 
     // A sinking fund is not a goal (it cycles — fills and drains — a goal
     // only receives) and is surfaced through the dashboard's sinkingFunds
@@ -40,12 +50,13 @@ export async function GET() {
     type TxResult = { id: string; amount: number | string; type: string; account_id: string | null; date: string; description: string | null; is_opening_balance: boolean | null };
     let txData: TxResult[] = [];
     if (goalIds.length > 0) {
-      const { data: txResult } = await supabase
+      const { data: txResult, error: txErr } = await supabase
         .from('transactions')
         .select('id, amount, type, account_id, date, description, is_opening_balance')
         .eq('household_id', householdId)
         .in('account_id', goalIds)
         .order('date', { ascending: false });
+      if (txErr) return readFailed('transactions', txErr);
       txData = (txResult ?? []) as TxResult[];
     }
 
@@ -60,13 +71,14 @@ export async function GET() {
     };
     let recurringByGoal = new Map<string, RecurringRuleRow>();
     if (goalIds.length > 0) {
-      const { data: ruleRows } = await supabase
+      const { data: ruleRows, error: rulesErr } = await supabase
         .from('recurring_items')
         .select('id, amount, cadence, anchor_date, second_day, destination_account_id, effective_from')
         .eq('household_id', householdId)
         .eq('type', 'transfer')
         .eq('active', true)
         .in('destination_account_id', goalIds);
+      if (rulesErr) return readFailed('recurring contributions', rulesErr);
       recurringByGoal = new Map(
         ((ruleRows ?? []) as RecurringRuleRow[]).map((r) => [r.destination_account_id as string, r])
       );
@@ -86,12 +98,13 @@ export async function GET() {
     const ruleIds = [...recurringByGoal.values()].map((r) => r.id);
     const tombstonesByRule = new Map<string, number>();
     if (ruleIds.length > 0) {
-      const { data: tombRows } = await supabase
+      const { data: tombRows, error: tombErr } = await supabase
         .from('recurring_skipped_dates')
         .select('recurring_item_id')
         .eq('household_id', householdId)
         .in('recurring_item_id', ruleIds)
         .gte('date', boundary);
+      if (tombErr) return readFailed('skipped contribution dates', tombErr);
       for (const row of (tombRows ?? []) as { recurring_item_id: string }[]) {
         tombstonesByRule.set(row.recurring_item_id, (tombstonesByRule.get(row.recurring_item_id) ?? 0) + 1);
       }
@@ -177,6 +190,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Goals GET error:', error);
-    return NextResponse.json({ error: 'Failed to load goals' }, { status: 500 });
+    return NextResponse.json({ error: `Failed to load goals: ${error instanceof Error ? error.message : String(error)}` }, { status: 500 });
   }
 }

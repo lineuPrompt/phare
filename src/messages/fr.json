@@ -747,6 +747,7 @@
       "saveTransfer": "Ajouter la contribution",
       "saveDraw": "Enregistrer le prélèvement",
       "noGoals": "Créez d'abord un objectif",
+      "goalsLoadError": "Vos comptes d'épargne et de dettes n'ont pas pu être chargés.",
       "debtOption": "{name} (dette)",
       "kindPayment": "Paiement",
       "kindDraw": "Prélèvement",
@@ -765,6 +766,8 @@
     "subtitle": "Épargne pour vos objectifs, votre fonds de réserve et le remboursement de vos dettes"
   },
   "goals": {
+    "loadError": "Impossible de charger vos objectifs. Veuillez réessayer.",
+    "retry": "Réessayer",
     "title": "Objectifs",
     "targetDate": "Date cible : {date}",
     "loading": "Chargement de vos objectifs...",

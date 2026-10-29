@@ -3,7 +3,10 @@
 **Filed** 2026-10-27, found while adding withdrawals (a draw from savings or
 the Reserve Fund) to the same route.
 
-**Status:** OPEN. Not fixed: outside the withdrawal change.
+**Status:** FIXED in code 2026-10-29, uncommitted. POST refuses `INVALID_AMOUNT`,
+`INVALID_DATE` and `DESCRIPTION_TOO_LONG` before any database call, with
+PATCH's codes and messages. Tests: `src/app/api/transfers/__tests__/route.test.ts`
+(8 tests, 7/7 mutants caught).
 
 ## The problem
 

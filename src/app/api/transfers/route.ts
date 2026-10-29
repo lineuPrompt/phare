@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { isCalendarDate, MANUAL_ENTRY_DESCRIPTION_MAX_CHARS, MANUAL_ENTRY_MAX_AMOUNT } from '@phare/core';
 import { GOAL_ACCOUNT_TYPES, computeGoalBalance } from '@/lib/dashboardHelpers';
 
 const GOAL_TYPE_SET = new Set<string>(GOAL_ACCOUNT_TYPES);
@@ -41,6 +42,23 @@ export async function POST(request: Request) {
     }
     if (Number(amount) <= 0) {
       return NextResponse.json({ error: 'Amount must be positive' }, { status: 400 });
+    }
+    // The same limits PATCH /api/transfers/[id] applies
+    // (docs/tickets/transfers-post-input-gaps.md): no amount past the
+    // manual-entry ceiling, a real calendar date (2026-02-30 used to reach
+    // Postgres as a raw 500), and an oversized description refused, never
+    // truncated.
+    if (Number(amount) > MANUAL_ENTRY_MAX_AMOUNT) {
+      return NextResponse.json({ error: `Amount must be at most ${MANUAL_ENTRY_MAX_AMOUNT}`, code: 'INVALID_AMOUNT' }, { status: 400 });
+    }
+    if (!isCalendarDate(date)) {
+      return NextResponse.json({ error: 'date must be a real calendar date written as YYYY-MM-DD.', code: 'INVALID_DATE' }, { status: 400 });
+    }
+    if (typeof description === 'string' && description.trim().length > MANUAL_ENTRY_DESCRIPTION_MAX_CHARS) {
+      return NextResponse.json(
+        { error: `description is ${description.trim().length} characters; the limit is ${MANUAL_ENTRY_DESCRIPTION_MAX_CHARS}.`, code: 'DESCRIPTION_TOO_LONG' },
+        { status: 400 }
+      );
     }
 
     const supabase = await createClient();

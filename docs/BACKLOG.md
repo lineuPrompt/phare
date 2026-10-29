@@ -96,19 +96,24 @@ the v1.1 list separately.**
   90ce1fc4280b647b54b919fdc921707e, length 4189). Live RPC probe on
   Zezinho Test: +50 then a 30 withdrawal from a savings goal, both 200,
   pair stored -30/-30 and peer-linked, balance 20; probe rows deleted.
-  STILL TO DO: deploy the web, then the app (the new app needs
-  `totalWithdrawn` from the server); after the web deploy, run the route
-  check on Zezinho Test (200 within balance, 400 `INSUFFICIENT_BALANCE`
-  above it).
+  Web deployed (c539bff + ccdd738); route VERIFIED LIVE 2026-10-29 on
+  phare.money as Zezinho Test: +50, withdraw 30 → 200, balance 20;
+  withdraw 100 → 400 `INSUFFICIENT_BALANCE` (available 20); probe pairs
+  deleted through DELETE /api/transfers/[id], none left. STILL TO DO: ship
+  the app (after the web, which is now live); device check of mobile
+  quick entry Withdraw.
   Follow-ups, not built: editing a withdrawal larger, or deleting an
   earlier contribution, can still take a savings balance below zero (only
   the create path checks); two withdrawals sent at the same instant could
   both pass the check.
-- **`POST /api/transfers` input checks** — the date, amount ceiling and
-  description limit its PATCH already has. —
-  [ticket](tickets/transfers-post-input-gaps.md)
-- **`GET /api/goals` ignores read errors** — a failed read answers "no
-  goals". — [ticket](tickets/goals-get-ignores-read-errors.md)
+- ~~**`POST /api/transfers` input checks**~~ FIXED in code 2026-10-29,
+  uncommitted. — [ticket](tickets/transfers-post-input-gaps.md)
+- ~~**`GET /api/goals` ignores read errors**~~ FIXED in code 2026-10-29,
+  uncommitted (route, web Goals page, Timeline entry form). —
+  [ticket](tickets/goals-get-ignores-read-errors.md)
+- **`getHouseholdTimezone` turns a failed read into Toronto time** — dates,
+  23 callers: diagnose and STOP. —
+  [ticket](tickets/household-timezone-read-error-falls-back.md)
 - **S7. Household members: list, invite, remove (owner only).**
 - **S8. Savings goals and sinking funds** (read-only first round, then
   creation).
@@ -356,6 +361,7 @@ for when it thaws:
 | Item | Commit |
 |---|---|
 | Withdraw from savings and the Reserve Fund (draw from any goal account; withdrawn vs borrowed) — migration applied + verified live 2026-10-27 | _(Lineu)_ |
+| POST /api/transfers input checks; GET /api/goals read errors shown, not "no goals" (2026-10-29) | _(Lineu)_ |
 | Standalone S3 — accounts list, add account, chequing balance in the app; opening-balance rule moved to `@phare/core` | _(Lineu)_ |
 | Standalone S2 — month navigation (Home, Timeline, Cards); month helpers moved to `@phare/core` | _(Lineu)_ |
 | Mobile standalone audit (`docs/mobile-standalone-audit.md`), CLAUDE.md product rule, 1.1 review notes | _(Lineu)_ |

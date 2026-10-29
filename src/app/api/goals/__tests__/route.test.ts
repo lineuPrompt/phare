@@ -104,3 +104,62 @@ describe('GET /api/goals — sinking fund accounts never appear as a goal', () =
     expect(json.reserve).toBeNull();
   });
 });
+
+// docs/tickets/goals-get-ignores-read-errors.md — a failed read used to answer
+// 200 with no goals ("you have no savings goals" in place of "Phare couldn't
+// read your goals"). Each read now answers 500 with its own reason.
+describe('GET /api/goals — a failed read is an error, never "no goals"', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  const ok = (data: unknown) => ({ data, error: null });
+  const boom = { data: null, error: { message: 'connection reset' } };
+  // One savings goal with an active recurring contribution, so every read
+  // in the route runs: accounts, transactions, the rule, its tombstones.
+  const healthy = () => ({
+    users: [ok({ household_id: 'hh1' })],
+    accounts: [ok([{ id: 'sav-1', name: 'Disney trip', type: 'savings', goal_target: null, goal_target_date: null, is_sinking_fund: false }])],
+    transactions: [ok([])],
+    recurring_items: [ok([{ id: 'rule-1', amount: 50, cadence: 'monthly', anchor_date: '2026-11-01', second_day: null, destination_account_id: 'sav-1', effective_from: '2026-11-01' }])],
+    recurring_skipped_dates: [ok([])],
+    households: [ok({ timezone: 'America/Toronto' })],
+  });
+
+  async function run(script: Record<string, Resolution[]>) {
+    const { client } = makeSupabaseMock(script);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const { GET } = await import('../route');
+    const res = await GET();
+    return { status: res.status, json: await res.json() };
+  }
+
+  it('the healthy script answers 200 with the goal (control: every read below is reached)', async () => {
+    const { status, json } = await run(healthy());
+    expect(status).toBe(200);
+    expect(json.goals.map((g: { id: string }) => g.id)).toEqual(['sav-1']);
+    expect(json.goals[0].recurringContribution.recurringItemId).toBe('rule-1');
+  });
+
+  it.each([
+    ['accounts', 'accounts'],
+    ['transactions', 'transactions'],
+    ['recurring_items', 'recurring contributions'],
+    ['recurring_skipped_dates', 'skipped contribution dates'],
+  ])('a failed %s read answers 500 with the real reason, not an empty list', async (table, what) => {
+    const { status, json } = await run({ ...healthy(), [table]: [boom] });
+    expect(status).toBe(500);
+    expect(json.error).toBe(`Failed to load goals: could not read ${what}: connection reset`);
+    expect(json.goals).toBeUndefined();
+  });
+
+  it('anything that throws keeps its own reason in the 500, not a bare "Failed to load goals"', async () => {
+    // No scripted households row: the mock throws when the timezone is read.
+    const { households: _omit, ...script } = healthy();
+    void _omit;
+    const { status, json } = await run(script);
+    expect(status).toBe(500);
+    expect(json.error).toBe('Failed to load goals: No scripted response for table "households" call #1');
+  });
+});

@@ -13,12 +13,14 @@ export default function TimelineEntryForm({
   accountId,
   categories,
   goalAccounts,
+  goalsLoadError = null,
   onSaved,
   onCancel,
 }: {
   accountId: string;
   categories: ExpenseCategory[];
   goalAccounts: GoalAccountOption[];
+  goalsLoadError?: string | null;
   onSaved: () => void;
   onCancel?: () => void;
 }) {
@@ -190,7 +192,7 @@ export default function TimelineEntryForm({
           <select value={destinationAccountId || goalAccounts[0]?.id || ''}
             onChange={(e) => { setDestinationAccountId(e.target.value); setTransferKind('contribution'); }}
             className="px-3 py-2.5 rounded-lg text-sm outline-none bg-white" style={inputStyle}>
-            {goalAccounts.length === 0 && <option value="">{t('noGoals')}</option>}
+            {goalAccounts.length === 0 && <option value="">{goalsLoadError ? t('goalsLoadError') : t('noGoals')}</option>}
             {goalAccounts.map((g) => (
               <option key={g.id} value={g.id}>
                 {g.isDebt ? `💳 ${t('debtOption', { name: g.name })}` : `🎯 ${g.name}`}
@@ -298,6 +300,9 @@ export default function TimelineEntryForm({
         </div>
       )}
 
+      {isTransfer && goalsLoadError && (
+        <p className="text-sm text-red-600 mb-3">{t('goalsLoadError')} {goalsLoadError}</p>
+      )}
       {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
 
       <div className="flex gap-2">

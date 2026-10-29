@@ -82,6 +82,9 @@ export default function TimelinePage() {
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [goalAccounts, setGoalAccounts] = useState<{ id: string; name: string; isDebt: boolean }[]>([]);
+  // Why the goal accounts could not be read, shown in the entry form instead
+  // of "Create a goal first" (docs/tickets/goals-get-ignores-read-errors.md).
+  const [goalsLoadError, setGoalsLoadError] = useState<string | null>(null);
 
   const todayRef = useRef<HTMLDivElement | null>(null);
 
@@ -106,7 +109,11 @@ export default function TimelinePage() {
       .catch(() => {});
 
     fetch('/api/goals')
-      .then((r) => (r.ok ? r.json() : null))
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(body?.error ?? `HTTP ${r.status}`);
+        return body;
+      })
       .then((d: { goals: { id: string; name: string; isDebt: boolean }[]; reserve?: { id: string; name: string } | null } | null) => {
         // The Reserve Fund is listed first, so money can be added to it or
         // withdrawn from it here like any goal (2026-10-27).
@@ -115,7 +122,10 @@ export default function TimelinePage() {
           ...d.goals.map((g) => ({ id: g.id, name: g.name, isDebt: g.isDebt })),
         ]);
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error('Timeline goals load error:', err);
+        setGoalsLoadError(err instanceof Error ? err.message : String(err));
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -290,6 +300,7 @@ export default function TimelinePage() {
             accountId={chequingId}
             categories={categories}
             goalAccounts={goalAccounts}
+            goalsLoadError={goalsLoadError}
             onSaved={onEntrySaved}
             onCancel={() => setShowAddEntry(false)}
           />

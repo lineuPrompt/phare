@@ -3,7 +3,14 @@
 **Filed** 2026-10-27, found while adding the Reserve Fund to its answer (for
 mobile quick entry).
 
-**Status:** OPEN. Not fixed: outside the withdrawal change.
+**Status:** FIXED in code 2026-10-29, uncommitted. All four reads (accounts,
+transactions, recurring contributions, skipped dates) answer 500 with their
+own reason, and the catch-all keeps the real message. The web Goals page
+shows the error with Try again, never "no goals yet"; the Timeline's Add
+entry form says the accounts could not be loaded. Mobile already showed the
+error. Tests: 6 new in `src/app/api/goals/__tests__/route.test.ts`, 7/7
+mutants caught. Found on the way:
+[household-timezone-read-error-falls-back.md](household-timezone-read-error-falls-back.md).
 
 ## The problem
 

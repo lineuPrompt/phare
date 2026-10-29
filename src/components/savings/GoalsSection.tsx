@@ -45,6 +45,9 @@ export default function GoalsSection({ locale }: { locale: string }) {
 
   const [goals, setGoals] = useState<GoalAccount[]>([]);
   const [loading, setLoading] = useState(true);
+  // The server's own reason when the goals could not be read. Never shown
+  // as "no goals yet": an empty list must mean the household has none.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   // Set when a goal account was created but its starting balance did not
   // save — the server's reason, shown until dismissed.
@@ -76,12 +79,19 @@ export default function GoalsSection({ locale }: { locale: string }) {
 
   const load = useCallback(() => {
     setLoading(true);
+    setLoadError(null);
     fetch('/api/goals')
       .then(async (res) => {
         if (res.status === 401) { router.push(`/${locale}/signin`); return null; }
-        return res.json();
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
+        return body;
       })
       .then((d) => { if (d) setGoals(d.goals ?? []); })
+      .catch((err) => {
+        console.error('Goals load error:', err);
+        setLoadError(err instanceof Error ? err.message : String(err));
+      })
       .finally(() => setLoading(false));
   }, [router, locale]);
 
@@ -226,7 +236,19 @@ export default function GoalsSection({ locale }: { locale: string }) {
         <p className="text-center py-12" style={{ color: '#6B7280' }}>{t('loading')}</p>
       )}
 
-      {!loading && goals.length === 0 && !showCreate && (
+      {!loading && loadError && (
+        <div className="rounded-2xl bg-white p-8 text-center" style={{ border: '1px solid #E5E7EB' }}>
+          <p className="text-sm font-semibold mb-1" style={{ color: '#DC2626' }}>{t('loadError')}</p>
+          <p className="text-xs mb-4" style={{ color: '#6B7280' }}>{loadError}</p>
+          <button type="button" onClick={load}
+            className="text-sm font-semibold px-4 py-2 rounded-xl"
+            style={{ background: '#0F2044', color: '#FFFFFF' }}>
+            {t('retry')}
+          </button>
+        </div>
+      )}
+
+      {!loading && !loadError && goals.length === 0 && !showCreate && (
         <div className="rounded-2xl bg-white p-10 text-center" style={{ border: '1px solid #E5E7EB' }}>
           <p className="text-4xl mb-3">🎯</p>
           <p className="font-medium mb-4" style={{ color: '#0F2044' }}>{t('noGoals')}</p>
@@ -241,7 +263,7 @@ export default function GoalsSection({ locale }: { locale: string }) {
       )}
 
       {/* Goals list */}
-      {!loading && goals.length > 0 && (
+      {!loading && !loadError && goals.length > 0 && (
         <div className="space-y-4">
           {goals.map((goal) => {
             const pct = !goal.isDebt && goal.goalTarget && goal.goalTarget > 0

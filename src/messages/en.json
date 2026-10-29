@@ -747,6 +747,7 @@
       "saveTransfer": "Add contribution",
       "saveDraw": "Record draw",
       "noGoals": "Create a goal first",
+      "goalsLoadError": "Your savings and debt accounts could not be loaded.",
       "debtOption": "{name} (debt)",
       "kindPayment": "Payment",
       "kindDraw": "Draw",
@@ -765,6 +766,8 @@
     "subtitle": "Savings for Goals, Reserve and Debt Payment"
   },
   "goals": {
+    "loadError": "Could not load your goals. Please try again.",
+    "retry": "Try again",
     "title": "Goals",
     "targetDate": "Target date: {date}",
     "loading": "Loading your goals...",
