@@ -14,6 +14,7 @@ import { apiGet, messageKeyFor } from '../lib/api';
 import { onEntrySaved } from '../lib/entryEvents';
 import AddEntryButton from '../components/AddEntryButton';
 import MonthNav from '../components/MonthNav';
+import BalanceTodayCard from '../components/BalanceTodayCard';
 import ActionButton from '../components/ActionButton';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { monthLinkParams, requestedMonth } from '../lib/monthLink';
@@ -443,6 +444,18 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* The Timeline's own card, from the same /api/timeline response Home
+            already loads (Lineu, 2026-11-01). Today-anchored: it stays put
+            while the month selector pages the snapshot below. Not shown
+            without an opening balance, where there is nothing to report. */}
+        {load?.context.timeline?.ok && (
+          <BalanceTodayCard
+            todayBalance={load.context.timeline.todayBalance}
+            dip={load.context.timeline.dip}
+            nextIncomeDate={load.context.timeline.nextIncomeDate}
+            locale={locale}
+          />
+        )}
         {load && <SnapshotCard snapshot={load.snapshot} month={load.month} isPastMonth={load.isPastMonth} />}
         {load && (
           <PlanCard

@@ -15,7 +15,8 @@ import AnchorPromptCard from '@/components/dashboard/AnchorPromptCard';
 import { DashboardData } from '@/components/dashboard/types';
 import Sidebar from '@/components/dashboard/Sidebar';
 import { addMonthsToMonth } from '@/lib/goalHelpers';
-import type { TimelineDay } from '@/lib/timelineHelpers';
+import type { TimelineDay, DipInfo } from '@/lib/timelineHelpers';
+import TimelineHeader from '@/components/timeline/TimelineHeader';
 import { buildMonthView, type UnbalancedDay } from '@/lib/timelineDisplayHelpers';
 import type { PlanChainMonth } from '@/lib/planChainHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
@@ -30,6 +31,9 @@ type TimelineDipResponse =
       ok: true;
       balancesStartDate: string;
       openingBalance: number;
+      todayBalance: number | null;
+      dip: DipInfo | null;
+      nextIncomeDate: string | null;
       days: TimelineDay[];
       unbalancedDays: UnbalancedDay[];
       plan: PlanResponse | null;
@@ -88,6 +92,10 @@ export default function DashboardPage() {
   const [timelineOpeningBalance, setTimelineOpeningBalance] = useState(0);
   const [timelineBalancesStartDate, setTimelineBalancesStartDate] = useState<string | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
+  // The Timeline's "Balance today" card (Lineu, 2026-11-01: shown again on
+  // the Overview, above the snapshot). Same component, same figures from the
+  // same /api/timeline response — a second display, never a recompute.
+  const [balanceCard, setBalanceCard] = useState<{ todayBalance: number | null; dip: DipInfo | null; nextIncomeDate: string | null } | null>(null);
 
   useEffect(() => {
     fetch('/api/accounts')
@@ -104,6 +112,7 @@ export default function DashboardPage() {
         setTimelineOpeningBalance(d.openingBalance);
         setTimelineBalancesStartDate(d.balancesStartDate);
         setPlan(d.plan ?? null);
+        setBalanceCard({ todayBalance: d.todayBalance, dip: d.dip, nextIncomeDate: d.nextIncomeDate });
       })
       .catch(() => {});
   }, []);
@@ -316,7 +325,10 @@ export default function DashboardPage() {
                 to do about it. The dashboard now opens on the #1 priority.
                 The dip itself is unchanged and still shown on Timeline
                 (TimelineHeader), which is where a running-balance figure
-                belongs — this was a second display of it, not its home. */}
+                belongs — this was a second display of it, not its home.
+                2026-11-01 (Lineu): the whole Timeline card (balance today +
+                the dip) is back, below the #1 priority and directly above the
+                snapshot — not at the top. */}
             <div className="space-y-6">
               {data.topRecommendation && <TopPriorityCard text={data.topRecommendation} />}
               {/* Sits directly where the projection tile would be. Without an
@@ -324,6 +336,14 @@ export default function DashboardPage() {
                   thing standing between a new household and an unexplained
                   blank space. */}
               {!hasAnchor && <AnchorPromptCard locale={locale} />}
+              {balanceCard && (
+                <TimelineHeader
+                  todayBalance={balanceCard.todayBalance}
+                  dip={balanceCard.dip}
+                  nextIncomeDate={balanceCard.nextIncomeDate}
+                  locale={locale}
+                />
+              )}
               {data.summary && (
                 <SnapshotCard
                   summary={data.summary}

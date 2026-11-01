@@ -9,11 +9,12 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { formatCADLocale, type DipStatus, type TimelineEntry, type UnbalancedDay } from '@phare/core';
+import { formatCADLocale, type TimelineEntry, type UnbalancedDay } from '@phare/core';
 import { apiGet, messageKeyFor } from '../lib/api';
 import { onEntrySaved } from '../lib/entryEvents';
 import AddEntryButton from '../components/AddEntryButton';
 import MonthNav from '../components/MonthNav';
+import BalanceTodayCard from '../components/BalanceTodayCard';
 import ActionButton from '../components/ActionButton';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { monthLinkParams, requestedMonth } from '../lib/monthLink';
@@ -63,14 +64,6 @@ const TONE: Record<AmountTone, string> = {
   income: theme.color.positive,
   draw: theme.color.warning,
   plain: theme.color.body,
-};
-
-/** classifyDip's tiers, as colours. One amber, unlike the web page. */
-const DIP_PALETTE: Record<DipStatus, { surface: string; border: string; text: string }> = {
-  none: { surface: theme.color.background, border: theme.color.border, text: theme.color.muted },
-  healthy: { surface: theme.color.accentSurface, border: theme.color.accentSurface, text: theme.color.heading },
-  amber: { surface: theme.color.warningSurface, border: theme.color.warning, text: theme.color.warning },
-  red: { surface: theme.color.dangerSurface, border: theme.color.danger, text: theme.color.danger },
 };
 
 function EntryRow({ entry, locale, muted }: { entry: TimelineEntry; locale: Locale; muted?: boolean }) {
@@ -344,11 +337,10 @@ export default function TimelineScreen() {
               monthPressLabel={t('common.monthNav.openHome', { month: formatMonthLong(view.month, locale) })}
             />
 
-            <DipHeader
+            <BalanceTodayCard
               todayBalance={load.data.todayBalance}
               dip={load.data.dip}
               nextIncomeDate={load.data.nextIncomeDate}
-              status={view.dipStatus}
               locale={locale}
             />
 
@@ -476,52 +468,6 @@ function StripRow({ label, value, color }: { label: string; value: string; color
   );
 }
 
-function DipHeader({
-  todayBalance,
-  dip,
-  nextIncomeDate,
-  status,
-  locale,
-}: {
-  todayBalance: number | null;
-  dip: { date: string; balance: number } | null;
-  nextIncomeDate: string | null;
-  status: DipStatus;
-  locale: Locale;
-}) {
-  const { t } = useI18n();
-  const palette = DIP_PALETTE[status];
-  // Only read when a dip exists, and the route sends both together or neither.
-  const payday = nextIncomeDate ? formatDayLong(nextIncomeDate, locale) : '';
-
-  return (
-    <View style={styles.card}>
-      <Text style={styles.balanceLabel}>{t('timeline.header.balanceToday')}</Text>
-      {/* null is not zero: today outside the returned window has no balance
-          to report, and $0 would read as an empty account. */}
-      <Text style={styles.balanceValue}>
-        {todayBalance !== null ? formatCADLocale(todayBalance, locale) : '—'}
-      </Text>
-
-      <View style={[styles.dipBox, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        {dip === null ? (
-          <Text style={[styles.dipText, { color: palette.text }]}>{t('timeline.header.noDip')}</Text>
-        ) : (
-          <Text style={[styles.dipText, { color: palette.text }]}>
-            {status === 'red'
-              ? t('timeline.header.dipsBelowZeroBeforePay', { payday })
-              : t('timeline.header.lowestBeforePay', { payday })}{' '}
-            <Text style={styles.dipFigure}>
-              {formatCADLocale(dip.balance, locale)} {t('timeline.header.on')}{' '}
-              {formatDayLong(dip.date, locale)}
-            </Text>
-          </Text>
-        )}
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.color.background },
   centred: { alignItems: 'center', justifyContent: 'center' },
@@ -544,16 +490,6 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 17, fontWeight: '700', color: theme.color.heading, lineHeight: 24 },
   cardBody: { fontSize: 14, lineHeight: 21, color: theme.color.muted },
-  balanceLabel: { fontSize: 13, color: theme.color.muted },
-  balanceValue: { fontSize: 30, fontWeight: '700', color: theme.color.heading },
-  dipBox: {
-    marginTop: theme.space.sm,
-    borderRadius: theme.radius.md,
-    borderWidth: 1.5,
-    padding: theme.space.md,
-  },
-  dipText: { fontSize: 14, lineHeight: 21 },
-  dipFigure: { fontWeight: '700' },
   stripRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: theme.space.sm },
   stripLabel: { fontSize: 13, color: theme.color.muted },
   stripValue: { fontSize: 14, fontWeight: '600', color: theme.color.heading, flexShrink: 1, textAlign: 'right' },

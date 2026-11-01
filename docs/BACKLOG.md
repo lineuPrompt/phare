@@ -362,6 +362,7 @@ for when it thaws:
 |---|---|
 | Withdraw from savings and the Reserve Fund (draw from any goal account; withdrawn vs borrowed) — migration applied + verified live 2026-10-27 | _(Lineu)_ |
 | POST /api/transfers input checks; GET /api/goals read errors shown, not "no goals" (2026-10-29) | _(Lineu)_ |
+| "Balance today" card on the Overview above the snapshot, web and app (same component and figures as Timeline); app version 1.1.0 (2026-11-01) | _(Lineu)_ |
 | Standalone S3 — accounts list, add account, chequing balance in the app; opening-balance rule moved to `@phare/core` | _(Lineu)_ |
 | Standalone S2 — month navigation (Home, Timeline, Cards); month helpers moved to `@phare/core` | _(Lineu)_ |
 | Mobile standalone audit (`docs/mobile-standalone-audit.md`), CLAUDE.md product rule, 1.1 review notes | _(Lineu)_ |
