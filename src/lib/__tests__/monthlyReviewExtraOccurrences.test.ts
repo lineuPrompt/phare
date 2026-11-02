@@ -114,13 +114,14 @@ async function generate(planTexts: string[], reviewTexts: string[]) {
   const { generateMonthlyReview } = await import('@/lib/monthlyReviewService');
   const fake = makeFakeCardSupabase(seed());
   let error: Error | null = null;
+  let result: { reviewText: string; topRecommendation: string } | null = null;
   try {
-    await generateMonthlyReview({ supabase: fake.client as never, householdId: HH, locale: 'en', timezone: 'America/Toronto', reviewMonth: '2026-09', userId: null });
+    result = await generateMonthlyReview({ supabase: fake.client as never, householdId: HH, locale: 'en', timezone: 'America/Toronto', reviewMonth: '2026-09', userId: null });
   } catch (e) { error = e as Error; }
   const reviewCall = createMock.mock.calls.find((c) => String(c[0].messages[0].content).includes('Their plan:\n'));
   const prompt = reviewCall ? (reviewCall[0].messages[0].content as string) : '';
   const payload = prompt ? JSON.parse(prompt.slice(prompt.indexOf('Their plan:\n') + 12, prompt.indexOf('\n\nWrite '))) : null;
-  return { payload, prompt, planPrompt: createMock.mock.calls[0][0].messages[0].content as string, fake, error };
+  return { payload, prompt, planPrompt: createMock.mock.calls[0][0].messages[0].content as string, fake, error, result };
 }
 
 describe('the review, end to end', () => {
@@ -171,15 +172,19 @@ describe('the review, end to end', () => {
     expect(payload.topRecommendation).toBe('Keep going.');
   });
 
-  it('a top recommendation with a figure from no money source fails visibly on the second try', async () => {
-    const { error } = await generate(
+  it('a top recommendation failing twice is replaced by code’s own line, and the letter is still written (2026-11-02)', async () => {
+    const { payload, error, result } = await generate(
       ['Put $500 toward savings.', 'Put $600 toward savings.'],
-      []
+      ['September was steady.']
     );
-    expect(error?.name).toBe('LetterGuardError');
-    expect(error?.message).toContain('$600');
+    // A one-line summary never throws the letter away any more.
+    expect(error).toBeNull();
+    expect(result?.reviewText).toBe('September was steady.');
+    expect(payload.topRecommendation).toBe('Read your September 2026 letter below to see where your money stands.');
+    expect(payload.topRecommendation).not.toContain('$600');
+    // Still recorded, so the failure can be found by a query.
     const failed = recordedEvents.map((row) => ({ payload: row })).find((w) => (w.payload as { event_type: string }).event_type === 'review_guard_failed');
-    expect((failed!.payload as { metadata: { kind: string; figures: string[] } }).metadata).toMatchObject({ kind: 'top_recommendation', figures: ['$600'] });
+    expect((failed!.payload as { metadata: { kind: string; figures: string[] } }).metadata).toMatchObject({ kind: 'top_recommendation', outcome: 'fallback', figures: ['$600'] });
   });
 
   it('a top recommendation using the month\'s own surplus passes', async () => {

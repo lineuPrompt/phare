@@ -342,6 +342,18 @@ export function buildFallbackReviewText(reviewMonthName: string, locale: 'en' | 
 }
 
 /**
+ * The top recommendation written by code, used when the AI's one line fails
+ * its checks twice (2026-11-02). Before, that failure threw away the whole
+ * letter: a one-line summary must never block the monthly review. Names no
+ * figure, so it can never be wrong.
+ */
+export function buildFallbackTopRecommendation(reviewMonthName: string, locale: 'en' | 'fr'): string {
+  return locale === 'fr'
+    ? `Lisez votre lettre de ${reviewMonthName} ci-dessous pour voir où en sont vos finances.`
+    : `Read your ${reviewMonthName} letter below to see where your money stands.`;
+}
+
+/**
  * True when `text` contains a literal "{tokenName}" for any of the given
  * illustrative example token names — the model echoing reviewPrompt's own
  * few-shot example syntax verbatim instead of substituting a real value

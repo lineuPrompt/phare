@@ -41,7 +41,7 @@ import { conversationsClient } from '@/lib/conversationsClient';
 import { businessMonth } from '@phare/core';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { requirePro } from '@/lib/proGate';
-import { reserveRegeneration } from '@/lib/regenerationQuotaServer';
+import { releaseRegeneration, reserveRegeneration } from '@/lib/regenerationQuotaServer';
 import { generateMonthlyReview } from '@/lib/monthlyReviewService';
 import { LetterGuardError } from '@/lib/letterGuards';
 
@@ -51,6 +51,9 @@ import { LetterGuardError } from '@/lib/letterGuards';
 // answers those questions differently — see the service's own header.
 
 export async function POST(request: Request) {
+  // The refresh this request reserved, given back if no letter comes of it
+  // (Lineu, 2026-11-02: a failed Regenerate must not count).
+  let heldReservation: { householdId: string; id: string } | null = null;
   try {
     const { locale: rawLocale } = await request.json().catch(() => ({ locale: 'en' }));
     const locale = rawLocale === 'fr' ? 'fr' : 'en';
@@ -140,6 +143,7 @@ export async function POST(request: Request) {
         { status: reservation.reason === 'exhausted' ? 429 : 503 }
       );
     }
+    heldReservation = { householdId, id: reservation.reservationId };
     const { topRecommendation, reviewText } = await generateMonthlyReview({
       supabase,
       householdId,
@@ -189,6 +193,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ saved: true, topRecommendation, reviewText, reviewMonth });
   } catch (error) {
+    // No letter was saved: the refresh goes back before the answer does.
+    if (heldReservation) await releaseRegeneration(heldReservation.householdId, heldReservation.id);
     // A letter that twice named a figure or a name its payload does not hold
     // was not saved (monthlyReviewService.ts). Said as itself, with its own
     // code, so the button can explain it in the household's language rather

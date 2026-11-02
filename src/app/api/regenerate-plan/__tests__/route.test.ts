@@ -748,6 +748,21 @@ describe('POST /api/regenerate-plan — persistence', () => {
     ]);
     expect(res.status).toBe(500);
   });
+
+  // A Regenerate that produced no letter gives its refresh back (Lineu,
+  // 2026-11-02). The refresh is the review_regenerated row the route reserved.
+  const refreshes = () => recordedEvents.filter((r) => r.event_type === 'review_regenerated');
+
+  it('a failed Regenerate does not count against the household’s refreshes', async () => {
+    await post([{ data: null, error: null }, { error: { message: 'conflict' } }]);
+    expect(refreshes()).toEqual([]);
+  });
+
+  it('a saved letter keeps its refresh counted', async () => {
+    const { res } = await post([{ data: null, error: null }, { error: null }]);
+    expect(res.status).toBe(200);
+    expect(refreshes()).toHaveLength(1);
+  });
 });
 
 describe('POST /api/regenerate-plan — the Coaching Layer', () => {

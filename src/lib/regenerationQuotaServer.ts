@@ -47,7 +47,7 @@ export async function readQuota(
 }
 
 export type ReserveResult =
-  | { ok: true; quota: QuotaState }
+  | { ok: true; quota: QuotaState; /** The reservation's own row, so a failed generation can give it back. */ reservationId: string }
   | { ok: false; reason: 'exhausted' | 'unavailable'; quota: QuotaState };
 
 /**
@@ -81,9 +81,12 @@ export async function reserveRegeneration(
 
   if (!quota.allowed) return { ok: false, reason: 'exhausted', quota };
 
+  // Its own id, chosen here, so releaseRegeneration can delete exactly this row.
+  const reservationId = crypto.randomUUID();
   const { error } = await eventWriter().from('events').insert({
     // Through the service role: members cannot write events (launch plan
     // 1.1). The count above still reads with the member's session.
+    id: reservationId,
     household_id: householdId,
     user_id: userId,
     event_type: REGENERATION_EVENT,
@@ -98,5 +101,21 @@ export async function reserveRegeneration(
   }
 
   const used = quota.used + 1;
-  return { ok: true, quota: quotaFrom(used, month) };
+  return { ok: true, quota: quotaFrom(used, month), reservationId };
+}
+
+/**
+ * Gives a refresh back (Lineu, 2026-11-02): a Regenerate that produced no
+ * letter must not count against the household's monthly refreshes. Deletes
+ * exactly the reservation's own row. A failed release is logged, never
+ * thrown: the caller is already answering the generation's own failure.
+ */
+export async function releaseRegeneration(householdId: string, reservationId: string): Promise<void> {
+  const { error } = await eventWriter()
+    .from('events')
+    .delete()
+    .eq('id', reservationId)
+    .eq('household_id', householdId)
+    .eq('event_type', REGENERATION_EVENT);
+  if (error) console.error('Regeneration quota — could not give the refresh back:', reservationId, error);
 }

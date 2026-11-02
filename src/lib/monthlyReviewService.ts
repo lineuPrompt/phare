@@ -55,6 +55,7 @@ import {
   computeStartingContribution,
   coachingFallbackApplies,
   buildFallbackReviewText,
+  buildFallbackTopRecommendation,
   containsIllustrativeTokenLeak,
   contributionRuleFact,
   monthlyShortfall,
@@ -755,7 +756,11 @@ export async function generateMonthlyReview({
       `freed-capacity event, and every dollar figure in it must be one of these, exactly or rounded to the ` +
       `dollar: ${JSON.stringify(topRecommendationSources)}. An extra expense occurrence is spending, never money ` +
       `available: never call it a windfall or a bonus, and never suggest moving it anywhere. Never predict a ` +
-      `future figure.`;
+      `future figure.` +
+      // The month in progress (a mid-month refresh): never "closed" (2026-11-02).
+      (reviewMonth === today.slice(0, 7)
+        ? `\n- THIS MONTH IS STILL IN PROGRESS (today is ${today}): never say it closed, ended or finished; describe it as "so far".`
+        : '');
 
     async function generatePlan(): Promise<{ lineClassifications?: { label?: string; category?: string; isFixed?: boolean }[]; topRecommendation?: string }> {
       const planMessage = await anthropic.messages.create({
@@ -783,8 +788,10 @@ export async function generateMonthlyReview({
     // after code has put in the debt's real payment and reframed borrowed
     // cash — those two figures are code's, so they are allowed alongside the
     // sources of available money. It may not treat an extra expense as money.
-    // One retry; a second failure saves nothing, exactly as a failing letter
-    // does.
+    // One retry; a second failure uses a line code wrote
+    // (buildFallbackTopRecommendation) and the letter goes on — a one-line
+    // summary must never throw away the whole letter (2026-11-02: 2be22642's
+    // November refresh failed twice on its mortgage's $1,500).
     const topRecommendationAllowed = [
       ...topRecommendationSources,
       ...(computedDebtPayoff ? [computedDebtPayoff.monthlyPayment] : []),
@@ -805,14 +812,14 @@ export async function generateMonthlyReview({
         await logEvent(householdId, userId, 'review_guard_failed', {
           month: reviewMonthLabel,
           kind: 'top_recommendation',
+          outcome: 'fallback',
           figures: retryTopRec.figures,
           names: [],
           framing: retryTopRec.framing,
           firstAttempt: firstTopRec,
         });
-        throw new LetterGuardError(retryTopRec.figures, [], retryTopRec.framing);
-      }
-      await logEvent(householdId, userId, 'review_text_guard_retried', {
+        topRecommendationText = buildFallbackTopRecommendation(reviewMonthName, locale);
+      } else await logEvent(householdId, userId, 'review_text_guard_retried', {
         kind: 'top_recommendation',
         triggeredBy: [
           ...(firstTopRec.figures.length > 0 ? ['figures'] : []),

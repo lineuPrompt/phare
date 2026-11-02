@@ -9,6 +9,7 @@
 // ---------------------------------------------------------------------------
 
 export type RecordedEvent = {
+  id?: unknown;
   household_id?: unknown;
   user_id?: unknown;
   event_type?: unknown;
@@ -42,6 +43,22 @@ export function fakeEventWriter() {
           if (eventWriterBehaviour.insertError) return { error: eventWriterBehaviour.insertError };
           recordedEvents.push(row);
           return { error: null };
+        },
+        // Releasing a refresh (2026-11-02): delete().eq(field, value)... removes
+        // the matching recorded rows, as the database would.
+        delete: () => {
+          const filters: [string, unknown][] = [];
+          const api = {
+            eq(field: string, value: unknown) { filters.push([field, value]); return api; },
+            then(resolve: (v: { error: null }) => unknown) {
+              for (let i = recordedEvents.length - 1; i >= 0; i--) {
+                const row = recordedEvents[i] as Record<string, unknown>;
+                if (filters.every(([f, v]) => row[f] === v)) recordedEvents.splice(i, 1);
+              }
+              return Promise.resolve({ error: null }).then(resolve);
+            },
+          };
+          return api;
         },
       };
     },
