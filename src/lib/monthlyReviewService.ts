@@ -802,7 +802,7 @@ export async function generateMonthlyReview({
       topRecommendationText = finalTopRecommendation(aiPart);
       const retryTopRec = checkTopRecommendation(topRecommendationText);
       if (retryTopRec.figures.length > 0 || retryTopRec.framing.length > 0) {
-        void logEvent(householdId, userId, 'review_guard_failed', {
+        await logEvent(householdId, userId, 'review_guard_failed', {
           month: reviewMonthLabel,
           kind: 'top_recommendation',
           figures: retryTopRec.figures,
@@ -812,7 +812,7 @@ export async function generateMonthlyReview({
         });
         throw new LetterGuardError(retryTopRec.figures, [], retryTopRec.framing);
       }
-      void logEvent(householdId, userId, 'review_text_guard_retried', {
+      await logEvent(householdId, userId, 'review_text_guard_retried', {
         kind: 'top_recommendation',
         triggeredBy: [
           ...(firstTopRec.figures.length > 0 ? ['figures'] : []),
@@ -1201,7 +1201,7 @@ export async function generateMonthlyReview({
       // month and exactly what failed, so it can be found by a query. A
       // letter with a figure code never computed is never persisted.
       if (retryViolation.figures.length > 0 || retryViolation.names.length > 0 || retryViolation.framing.length > 0) {
-        void logEvent(householdId, userId, 'review_guard_failed', {
+        await logEvent(householdId, userId, 'review_guard_failed', {
           month: reviewMonthLabel,
           kind: 'monthly_review',
           figures: retryViolation.figures,
@@ -1228,7 +1228,7 @@ export async function generateMonthlyReview({
 
       // Visibility (2026-07-28): how often the model actually violates these
       // rules.
-      void logEvent(householdId, userId, 'review_text_guard_retried', {
+      await logEvent(householdId, userId, 'review_text_guard_retried', {
         triggeredBy: violatedReasons(firstAttemptViolation),
         outcome,
       });
