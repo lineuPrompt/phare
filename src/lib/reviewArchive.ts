@@ -6,11 +6,15 @@ import { reviewForEntitlement } from '@/lib/reviewPreview';
 //
 // ONE REVIEW PER MONTH, PLUS THE STARTING PLAN. Nothing else is rendered.
 //
-//   MONTHED (review_month set)   The month's letter — from the cron, or from a
-//                                manual refresh that has not been superseded
-//                                yet. Exactly one per month: the unique index
-//                                on (household_id, review_month) guarantees it,
-//                                and both writers now go through that slot.
+//   MONTHED (review_month set)   The month's letter. Since 2026-11-02 a month
+//                                can hold two rows, one per writer (unique on
+//                                household, month and generated_by): the
+//                                month-end letter (cron) and the household's
+//                                own refresh (manual). The month-end letter is
+//                                THE letter; the refresh is kept and shown
+//                                beneath it (Lineu: "keep both"). A month with
+//                                only a refresh (the month in progress) shows
+//                                the refresh as its letter, as before.
 //   onboarding                   The letter written when the plan was first
 //                                saved. Not a review of a month; exempt.
 //   UNMONTHED monthly_review     LEGACY ONLY, and deliberately NOT RENDERED.
@@ -41,6 +45,8 @@ export type ArchiveConversation = {
   review_month: string | null;
   created_at: string;
   messages: unknown;
+  /** 'cron' (month-end), 'manual' (a refresh), or null on legacy rows. */
+  generated_by?: string | null;
 };
 
 export type ArchiveLetter = {
@@ -69,8 +75,14 @@ export type ArchiveMonth = {
    * figure and would be a lie about an empty month.
    */
   netCashFlow: number | null;
-  /** The month's letter. Exactly one — see the header. */
+  /** The month's letter: the month-end one when it exists. See the header. */
   letter: ArchiveLetter;
+  /**
+   * The household's own refresh for this month, kept beside the month-end
+   * letter. Null when there is none, or when the refresh IS `letter` (the
+   * month has no month-end letter yet).
+   */
+  refresh: ArchiveLetter | null;
 };
 
 export type ReviewArchive = {
@@ -146,7 +158,8 @@ export function groupReviewArchive(
 ): ReviewArchive {
   const { isPro, figures = {} } = options;
 
-  const monthed = new Map<string, ArchiveLetter[]>();
+  const monthEnd = new Map<string, ArchiveLetter[]>();
+  const refreshes = new Map<string, ArchiveLetter[]>();
   const onboarding: ArchiveLetter[] = [];
 
   for (const row of rows) {
@@ -162,21 +175,30 @@ export function groupReviewArchive(
     // Legacy unmonthed refresh — see the header. Skipped, not placed.
     if (!row.review_month) continue;
 
-    const list = monthed.get(row.review_month) ?? [];
+    // Legacy rows (generated_by null) were month-end letters (20260810).
+    const bucket = row.generated_by === 'manual' ? refreshes : monthEnd;
+    const list = bucket.get(row.review_month) ?? [];
     list.push(letter);
-    monthed.set(row.review_month, list);
+    bucket.set(row.review_month, list);
   }
 
-  const months: ArchiveMonth[] = [...monthed.entries()]
-    .map(([month, letters]) => ({
-      month,
-      netCashFlow: figures[month] ?? null,
-      // The unique index makes duplicates impossible going forward. Sorting and
-      // taking the newest is a belt-and-braces read, not a versioning feature:
-      // if a duplicate ever exists (a row predating the index), the household
-      // sees the most recent one rather than an arbitrary one.
-      letter: letters.sort(byCreatedAtDesc)[0],
-    }))
+  // Newest of each kind. The unique index allows one of each per month going
+  // forward; sorting is a belt-and-braces read for rows predating it.
+  const newest = (letters: ArchiveLetter[] | undefined) =>
+    letters && letters.length > 0 ? [...letters].sort(byCreatedAtDesc)[0] : null;
+
+  const allMonths = new Set([...monthEnd.keys(), ...refreshes.keys()]);
+  const months: ArchiveMonth[] = [...allMonths]
+    .map((month) => {
+      const end = newest(monthEnd.get(month));
+      const refresh = newest(refreshes.get(month));
+      return {
+        month,
+        netCashFlow: figures[month] ?? null,
+        letter: (end ?? refresh) as ArchiveLetter,
+        refresh: end ? refresh : null,
+      };
+    })
     .sort((a, b) => b.month.localeCompare(a.month));
 
   return { months, startingPlan: pickStartingPlan(onboarding).startingPlan };

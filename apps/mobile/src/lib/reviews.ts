@@ -36,6 +36,12 @@ export type ArchiveMonth = {
    */
   netCashFlow: number | null;
   letter: ArchiveLetter;
+  /**
+   * The household's own refresh for this month, kept beside the month-end
+   * letter (2026-11-02). Null when there is none; absent from servers older
+   * than that change, which reads the same.
+   */
+  refresh?: ArchiveLetter | null;
 };
 
 export type ReviewArchive = {
@@ -44,6 +50,13 @@ export type ReviewArchive = {
   startingPlan: ArchiveLetter | null;
   isPro: boolean;
 };
+
+/** A letter's createdAt as "13 October 2026" / "13 octobre 2026", as the web shows it. */
+export function formatWrittenOn(createdAt: string, locale: 'en' | 'fr'): string {
+  return new Intl.DateTimeFormat(locale === 'fr' ? 'fr-CA' : 'en-CA', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  }).format(new Date(createdAt));
+}
 
 export function fetchReviews(): Promise<ReviewArchive> {
   return apiGet<ReviewArchive>('/api/reviews');

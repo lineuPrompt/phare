@@ -37,12 +37,23 @@ describe('decideReview — the day', () => {
     expect(decideReview(candidate())).toEqual({ due: true, month: '2026-08' });
   });
 
-  it('is NOT due on any other day', () => {
-    // The month either has not ended, or was already handled on the 1st.
-    for (const day of ['2026-08-31', '2026-09-02', '2026-09-15']) {
-      expect(decideReview(candidate({ localToday: day })), day)
-        .toEqual({ due: false, reason: 'not_first_of_month' });
+  it('is still due on days 2 to 7 while the month has no review — a missed run is retried', () => {
+    for (const day of ['2026-09-02', '2026-09-03', '2026-09-07']) {
+      expect(decideReview(candidate({ localToday: day })), day).toEqual({ due: true, month: '2026-08' });
     }
+  });
+
+  it('is NOT due from the 8th on, nor on the last day of the month being reviewed', () => {
+    // 31 August: the month has not ended. 8 September on: too late to write it.
+    for (const day of ['2026-08-31', '2026-09-08', '2026-09-15']) {
+      expect(decideReview(candidate({ localToday: day })), day)
+        .toEqual({ due: false, reason: 'outside_catch_up_window' });
+    }
+  });
+
+  it('within the window, a month already written is not written again', () => {
+    expect(decideReview(candidate({ localToday: '2026-09-03', existingReviewMonths: ['2026-08'] })))
+      .toEqual({ due: false, reason: 'already_generated' });
   });
 
   it('uses the HOUSEHOLD’s local date, which is the whole point of running hourly', () => {
@@ -124,10 +135,10 @@ describe('decideReview — eligibility is ONE completed month with data', () => 
 
 describe('decideReview — ordering of the checks', () => {
   it('the day is checked before data, so a new household is not reported as dataless every hour', () => {
-    // Diagnostic clarity: 'not_first_of_month' is the honest reason on the 15th,
-    // whatever the ledger looks like.
+    // Diagnostic clarity: 'outside_catch_up_window' is the honest reason on the
+    // 15th, whatever the ledger looks like.
     expect(decideReview(candidate({ localToday: '2026-09-15', history: [] })))
-      .toEqual({ due: false, reason: 'not_first_of_month' });
+      .toEqual({ due: false, reason: 'outside_catch_up_window' });
   });
 
   it('an already-generated month wins over missing data', () => {

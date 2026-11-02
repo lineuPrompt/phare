@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
 import { formatCADLocale } from '@phare/core';
-import { fetchReviews, type ArchiveLetter, type ArchiveMonth, type ReviewArchive } from '../lib/reviews';
+import { fetchReviews, formatWrittenOn, type ArchiveLetter, type ArchiveMonth, type ReviewArchive } from '../lib/reviews';
 import { messageKeyFor } from '../lib/api';
 import { formatMonthLong } from '../lib/timelineView';
 import { useI18n } from '../i18n';
@@ -76,6 +76,18 @@ function MonthCard({ month }: { month: ArchiveMonth }) {
       </View>
 
       <Letter letter={month.letter} />
+
+      {/* The household's own refresh for the month, kept beside the
+          month-end letter (2026-11-02). */}
+      {month.refresh && (
+        <View style={styles.refresh}>
+          <Text style={styles.refreshTitle}>{t('review.refreshTitle')}</Text>
+          <Text style={styles.figureLabel}>
+            {t('review.writtenOn', { date: formatWrittenOn(month.refresh.createdAt, locale) })}
+          </Text>
+          <Letter letter={month.refresh} />
+        </View>
+      )}
     </View>
   );
 }
@@ -221,6 +233,14 @@ const styles = StyleSheet.create({
   figureLabel: { fontSize: 13, color: theme.color.muted },
   figureValue: { fontSize: 16, fontWeight: '600', color: theme.color.body },
   letter: { gap: theme.space.sm },
+  refresh: {
+    marginTop: theme.space.sm,
+    paddingTop: theme.space.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.color.border,
+    gap: theme.space.xs,
+  },
+  refreshTitle: { fontSize: 15, fontWeight: '700', color: theme.color.heading },
   recommendation: {
     borderLeftWidth: 3,
     borderLeftColor: theme.color.heading,

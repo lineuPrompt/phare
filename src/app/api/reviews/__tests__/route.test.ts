@@ -36,9 +36,18 @@ vi.mock('@/lib/supabase-server', () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: authUser }, error: null }) },
     from: (table: string) => ({
-      select: () => {
+      select: (columns?: string) => {
         if (table === 'users') return chain(userRow, table);
-        if (table === 'conversations') return chain(conversations, table);
+        // Only the columns the route asks for come back, as from the database:
+        // a fixture field the route does not select must not reach it.
+        if (table === 'conversations') {
+          const keys = String(columns ?? '').split(',').map((c) => c.trim()).filter(Boolean);
+          const rows = Array.isArray(conversations.data) && keys.length > 0
+            ? (conversations.data as Record<string, unknown>[]).map((r) =>
+                Object.fromEntries(keys.filter((k) => k in r).map((k) => [k, r[k]])))
+            : conversations.data;
+          return chain({ ...conversations, data: rows }, table);
+        }
         if (table === 'accounts') return chain(accounts, table);
         if (table === 'transactions') return chain(transactions, table);
         if (table === 'households') return chain(household, table);
@@ -173,6 +182,29 @@ describe('GET /api/reviews', () => {
     expect(res.status).toBe(200);
     expect(json.months).toEqual([]);
     expect(json.startingPlan).toBeNull();
+  });
+
+  it('keeps a month’s own refresh beside its month-end letter (keep both, 2026-11-02)', async () => {
+    household = { data: PRO_HOUSEHOLD, error: null };
+    conversations = {
+      data: [
+        {
+          id: 'oct-end', type: 'monthly_review', review_month: '2026-10', generated_by: 'cron',
+          created_at: '2026-11-03T07:40:00Z',
+          messages: [{ type: 'monthly_review', content: 'October, the whole month.' }],
+        },
+        {
+          id: 'oct-refresh', type: 'monthly_review', review_month: '2026-10', generated_by: 'manual',
+          created_at: '2026-10-13T15:00:00Z',
+          messages: [{ type: 'monthly_review', content: 'October so far.' }],
+        },
+      ],
+      error: null,
+    };
+    const json = await (await get()).json();
+    expect(json.months).toHaveLength(1);
+    expect(json.months[0].letter.id).toBe('oct-end');
+    expect(json.months[0].refresh.id).toBe('oct-refresh');
   });
 
   it('does not render a legacy unmonthed refresh', async () => {

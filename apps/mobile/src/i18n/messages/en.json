@@ -36,6 +36,8 @@
   "review": {
     "title": "Your monthly review",
     "empty": "Your first review will appear here once Phare has a full month of your household's activity.",
+    "refreshTitle": "Your refresh during the month",
+    "writtenOn": "Written on {date}",
     "netCashFlow": "Net cash flow",
     "netCashFlowUnknown": "No activity recorded",
     "startingPlan": "Your starting plan",

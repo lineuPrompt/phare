@@ -112,6 +112,54 @@ describe('groupReviewArchive', () => {
     expect(archive.months[0].letter.id).toBe('new');
   });
 
+  // Keep both (Lineu, 2026-11-02): a month can hold the month-end letter AND
+  // the household's own mid-month refresh.
+  it('shows the month-end letter as the month, with the refresh kept beside it', () => {
+    const archive = groupReviewArchive(
+      [
+        conv({ id: 'refresh', review_month: '2026-10', generated_by: 'manual', created_at: '2026-10-13T15:00:00Z' }),
+        conv({ id: 'end', review_month: '2026-10', generated_by: 'cron', created_at: '2026-11-03T07:40:00Z' }),
+      ],
+      { isPro: true }
+    );
+    expect(archive.months).toHaveLength(1);
+    expect(archive.months[0].letter.id).toBe('end');
+    expect(archive.months[0].refresh?.id).toBe('refresh');
+  });
+
+  it('the month-end letter wins even when the refresh is NEWER (a refresh pressed after the 1st)', () => {
+    const archive = groupReviewArchive(
+      [
+        conv({ id: 'end', review_month: '2026-10', generated_by: 'cron', created_at: '2026-11-01T07:40:00Z' }),
+        conv({ id: 'late-refresh', review_month: '2026-10', generated_by: 'manual', created_at: '2026-11-02T09:00:00Z' }),
+      ],
+      { isPro: true }
+    );
+    expect(archive.months[0].letter.id).toBe('end');
+    expect(archive.months[0].refresh?.id).toBe('late-refresh');
+  });
+
+  it('a month with only a refresh shows it as the letter, and no separate refresh', () => {
+    const archive = groupReviewArchive(
+      [conv({ id: 'refresh', review_month: '2026-11', generated_by: 'manual' })],
+      { isPro: true }
+    );
+    expect(archive.months[0].letter.id).toBe('refresh');
+    expect(archive.months[0].refresh).toBeNull();
+  });
+
+  it('a legacy row (generated_by null) counts as the month-end letter', () => {
+    const archive = groupReviewArchive(
+      [
+        conv({ id: 'legacy', review_month: '2026-08', generated_by: null, created_at: '2026-09-01T07:00:00Z' }),
+        conv({ id: 'refresh', review_month: '2026-08', generated_by: 'manual', created_at: '2026-09-02T07:00:00Z' }),
+      ],
+      { isPro: true }
+    );
+    expect(archive.months[0].letter.id).toBe('legacy');
+    expect(archive.months[0].refresh?.id).toBe('refresh');
+  });
+
   it('drops an in-flight claim rather than rendering a dated entry with nothing in it', () => {
     // The cron inserts its claim BEFORE generating, so `messages: []` is a real
     // transient state, not corruption.

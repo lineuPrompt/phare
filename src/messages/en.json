@@ -529,6 +529,7 @@
     "letterUnavailable": "This letter has no text.",
     "lockedTitle": "Read the rest with Phare Pro",
     "lockedBody": "You're seeing the opening of this letter. Phare Pro unlocks every letter in full, plus a 12-month projection.",
+    "refreshTitle": "Your refresh during the month",
     "writtenOn": "Written on {date}",
     "collapse": "Collapse this letter",
     "expand": "Open this letter",

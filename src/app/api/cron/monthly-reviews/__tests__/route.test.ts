@@ -26,6 +26,10 @@ let deleteError: unknown = null;
 let generateThrows = false;
 let guardFails = false;
 let ops: string[] = [];
+/** The household's local date, as businessToday would return it. */
+let today = '2026-09-01';
+/** Runs inside each generation — lets a test move the clock as a slow letter would. */
+let onGenerate: (() => void) | null = null;
 let deletedClaimIds: string[] = [];
 
 function chain(resolution: Resolution, table: string, method: string): unknown {
@@ -84,11 +88,12 @@ vi.mock('@/lib/householdTimezone', () => ({ getHouseholdTimezone: async () => 'A
 // businessToday, leave everything else real.
 vi.mock('@phare/core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@phare/core')>();
-  return { ...actual, businessToday: () => '2026-09-01' };
+  return { ...actual, businessToday: () => today };
 });
 vi.mock('@/lib/monthlyReviewService', () => ({
   generateMonthlyReview: async () => {
     ops.push('generate');
+    onGenerate?.();
     if (generateThrows) throw new Error('anthropic down');
     if (guardFails) {
       // From the module the route itself loads, so instanceof holds.
@@ -114,6 +119,9 @@ describe('monthly review cron', () => {
     deleteError = null;
     generateThrows = false;
     guardFails = false;
+    today = '2026-09-01';
+    onGenerate = null;
+    vi.restoreAllMocks();
     process.env.CRON_SECRET = 'test-secret';
     households = { data: [{ id: 'hh1', locale: 'en' }], error: null };
     // Data in August, the month reviewed on 1 September.
@@ -328,51 +336,61 @@ describe('monthly review cron', () => {
 
   // --- a manual row must not consume the month ------------------------------
   // A family who pressed Regenerate on 14 August has a real letter for
-  // '2026-08' describing half a month. If that settled the month, the cron
-  // would report `claimed_by_other` on 1 September — indistinguishable from
-  // healthy idempotency — and their August review would permanently be the
-  // mid-month draft.
+  // '2026-08' describing half a month. The month-end letter gets its OWN row
+  // (2026-11-02): the refresh is never read, replaced, emptied or deleted, and
+  // both stay in the archive. Before, the cron took the refresh's row over, and
+  // a failed or killed takeover left the mid-month draft as the month's letter
+  // for good.
 
-  it('REPLACES a manual row for the month instead of skipping it', async () => {
+  it('a manual refresh for the month does not settle it: a NEW cron row is inserted beside it', async () => {
     existingReviews = { data: [manualReview('2026-08')], error: null };
     const json = await (await runCron()).json();
 
     expect(json.outcomes[0]).toMatchObject({ status: 'generated', month: '2026-08' });
-    // Took over the existing row rather than inserting a second one — the
-    // unique index would reject that anyway.
-    expect(ops).not.toContain('insert:conversations');
+    expect(insertPayloads).toHaveLength(1);
+    expect(insertPayloads[0]).toMatchObject({ review_month: '2026-08', generated_by: 'cron', messages: [] });
+    // The only update fills the NEW claim; nothing relabels the refresh.
+    expect(updatePayloads).toHaveLength(1);
+    expect(updatePayloads[0]).toHaveProperty('messages');
+    expect(updatePayloads[0]).not.toHaveProperty('generated_by');
   });
 
-  it('the takeover NEVER empties the row it claims', async () => {
-    // The failure path deletes what it claimed. Emptying first would mean a
-    // transient Anthropic error destroys a letter the family paid a refresh
-    // for and leaves nothing behind.
-    existingReviews = { data: [manualReview('2026-08')], error: null };
-    await runCron();
-
-    const cas = updatePayloads[0];
-    expect(cas).toEqual({ generated_by: 'cron' });
-    expect(cas).not.toHaveProperty('messages');
-  });
-
-  it('a generation failure REVERTS the takeover instead of deleting the letter', async () => {
+  it('a failed generation deletes only its own empty claim, never the refresh', async () => {
     existingReviews = { data: [manualReview('2026-08')], error: null };
     generateThrows = true;
     const json = await (await runCron()).json();
 
-    // The family's letter survives untouched; only the label goes back.
-    expect(deletedClaimIds).not.toContain('manual-2026-08');
-    expect(updatePayloads[updatePayloads.length - 1]).toEqual({ generated_by: 'manual' });
+    expect(deletedClaimIds).toEqual(['claim-1']);
+    expect(updatePayloads).toEqual([]);
     expect(json.outcomes[0]).toMatchObject({ status: 'failed', reason: 'generation_failed' });
   });
 
-  it('losing the compare-and-swap reports claimed_by_other, not a double generation', async () => {
-    existingReviews = { data: [manualReview('2026-08')], error: null };
-    updateResults = [{ data: [], error: null }]; // another run flipped it first
+  it('a missed month is retried on the 3rd (catch-up), and not on the 8th', async () => {
+    today = '2026-09-03';
+    const due = await (await runCron()).json();
+    expect(due.outcomes[0]).toMatchObject({ status: 'generated', month: '2026-08' });
+
+    vi.resetModules();
+    ops = [];
+    today = '2026-09-08';
+    const late = await (await runCron()).json();
+    expect(late.outcomes[0]).toMatchObject({ status: 'skipped', reason: 'outside_catch_up_window' });
+    expect(ops).not.toContain('generate');
+  });
+
+  it('past the run budget, the remaining households are deferred and never started', async () => {
+    households = { data: [{ id: 'hh1', locale: 'en' }, { id: 'hh2', locale: 'en' }], error: null };
+    // hh1's letter takes 241 seconds: the budget is spent when hh2 comes up.
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    onGenerate = () => { now += 241_000; };
     const json = await (await runCron()).json();
 
-    expect(json.outcomes[0]).toMatchObject({ status: 'claimed_by_other', month: '2026-08' });
-    expect(ops).not.toContain('generate');
+    expect(json.outcomes).toEqual([
+      expect.objectContaining({ householdId: 'hh1', status: 'generated' }),
+      { householdId: 'hh2', status: 'deferred', reason: 'run_budget_spent' },
+    ]);
+    expect(ops.filter((o) => o === 'generate')).toHaveLength(1);
   });
 
   it('a CRON row for the month still settles it — no rewrite, no second call', async () => {

@@ -74,7 +74,7 @@ export async function GET() {
     const letters = await conversationsClient();
     const { data: conversations, error: convErr } = await letters
       .from('conversations')
-      .select('id, type, review_month, created_at, messages')
+      .select('id, type, review_month, created_at, messages, generated_by')
       .eq('household_id', householdId)
       .in('type', ['onboarding', 'monthly_review'])
       .order('created_at', { ascending: false });

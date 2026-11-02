@@ -36,6 +36,8 @@
   "review": {
     "title": "Votre bilan mensuel",
     "empty": "Votre premier bilan apparaîtra ici dès que Phare disposera d'un mois complet d'activité pour votre ménage.",
+    "refreshTitle": "Votre mise à jour en cours de mois",
+    "writtenOn": "Rédigée le {date}",
     "netCashFlow": "Flux de trésorerie net",
     "netCashFlowUnknown": "Aucune activité enregistrée",
     "startingPlan": "Votre plan de départ",

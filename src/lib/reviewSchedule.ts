@@ -30,7 +30,16 @@ export type ReviewCandidate = {
 
 export type ReviewDecision =
   | { due: true; month: string }
-  | { due: false; reason: 'not_first_of_month' | 'already_generated' | 'no_data_for_month' | 'malformed_date' };
+  | { due: false; reason: 'outside_catch_up_window' | 'already_generated' | 'no_data_for_month' | 'malformed_date' };
+
+/**
+ * The last local day of the month on which last month's review may still be
+ * written. Days 1 to 7, not only the 1st (2026-11-02): a run that is cut off,
+ * or a letter that fails, used to leave the household without that month
+ * forever, because on the 2nd the month no longer counted as due. Each later
+ * daily run now retries it, until the 7th.
+ */
+export const CATCH_UP_LAST_DAY = 7;
 
 /** The completed month, given a local date. '2026-09-01' → '2026-08'. */
 export function previousMonthOf(localDate: string): string | null {
@@ -59,10 +68,11 @@ export function decideReview(candidate: ReviewCandidate): ReviewDecision {
     return { due: false, reason: 'malformed_date' };
   }
 
-  // Only on the 1st, in the household's OWN calendar. On any other local day
-  // the month being reviewed either has not ended or has already been handled.
-  if (!localToday.endsWith('-01')) {
-    return { due: false, reason: 'not_first_of_month' };
+  // Days 1 to CATCH_UP_LAST_DAY, in the household's OWN calendar. Before the
+  // 1st the month has not ended; after the window, a month still missing is
+  // left alone rather than written weeks late.
+  if (Number(localToday.slice(8, 10)) > CATCH_UP_LAST_DAY) {
+    return { due: false, reason: 'outside_catch_up_window' };
   }
 
   const month = previousMonthOf(localToday);

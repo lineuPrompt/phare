@@ -212,17 +212,35 @@ export default function ReviewsList({ locale }: { locale: string }) {
       {/* ---- One letter per month --------------------------------------- */}
       {data.months.length > 0 && (
         <section className="space-y-3">
-          {data.months.map((entry) => (
-            <LetterRow
-              key={entry.month}
-              letter={entry.letter}
-              title={formatArchiveMonth(entry.month, locale)}
-              figure={entry.netCashFlow}
-              locale={locale}
-              open={openId === entry.letter.id}
-              onToggle={() => toggle(entry.letter.id)}
-            />
-          ))}
+          {data.months.map((entry) => {
+            // A month's own refresh, kept beside its month-end letter
+            // (2026-11-02). Read in the closure, so TS keeps the narrowing.
+            const refresh = entry.refresh;
+            return (
+              <div key={entry.month} className="space-y-2">
+                <LetterRow
+                  letter={entry.letter}
+                  title={formatArchiveMonth(entry.month, locale)}
+                  figure={entry.netCashFlow}
+                  locale={locale}
+                  open={openId === entry.letter.id}
+                  onToggle={() => toggle(entry.letter.id)}
+                />
+                {refresh && (
+                  <div className="ml-4 sm:ml-8">
+                    <LetterRow
+                      letter={refresh}
+                      title={t('refreshTitle')}
+                      subtitle={t('writtenOn', { date: formatDate(refresh.createdAt, locale) })}
+                      locale={locale}
+                      open={openId === refresh.id}
+                      onToggle={() => toggle(refresh.id)}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </section>
       )}
 

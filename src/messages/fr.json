@@ -529,6 +529,7 @@
     "letterUnavailable": "Cette lettre ne contient aucun texte.",
     "lockedTitle": "Lisez la suite avec Phare Pro",
     "lockedBody": "Vous voyez le début de cette lettre. Phare Pro débloque chaque lettre en entier, ainsi qu’une projection sur 12 mois.",
+    "refreshTitle": "Votre mise à jour en cours de mois",
     "writtenOn": "Rédigée le {date}",
     "collapse": "Réduire cette lettre",
     "expand": "Ouvrir cette lettre",

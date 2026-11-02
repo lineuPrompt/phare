@@ -17,6 +17,9 @@ const eventCalls = () => recordedEvents.map((row) => ({ table: 'events', method:
 
 type Resolution = { data?: unknown; error?: unknown; count?: number };
 
+/** Every filter call on any chain, e.g. ['eq', 'generated_by', 'cron']. */
+const chainFilters: unknown[][] = [];
+
 function makeResultChain(resolution: Resolution) {
   const handler: ProxyHandler<object> = {
     get(_, prop) {
@@ -27,7 +30,10 @@ function makeResultChain(resolution: Resolution) {
       if (prop === 'catch') {
         return (reject: (v: unknown) => unknown) => Promise.resolve(resolution).catch(reject);
       }
-      return (..._args: unknown[]) => makeResultChain(resolution);
+      return (...args: unknown[]) => {
+        chainFilters.push([prop, ...args]);
+        return makeResultChain(resolution);
+      };
     },
   };
   return new Proxy({}, handler);
@@ -674,7 +680,7 @@ describe('POST /api/regenerate-plan — persistence', () => {
     expect(reviewPrompt).not.toContain('July 2026');
   });
 
-  it('UPSERTS on (household_id, review_month) and marks the row manual', async () => {
+  it('UPSERTS into its own (household_id, review_month, manual) slot, never the month-end letter', async () => {
     const { calls } = await post([{ data: null, error: null }, { error: null }]);
 
     const upsert = calls.find((c) => c.table === 'conversations' && c.method === 'upsert');
@@ -685,7 +691,7 @@ describe('POST /api/regenerate-plan — persistence', () => {
     expect(row.generated_by).toBe('manual');
     // Inferrable only against a TOTAL unique index — a partial one makes
     // Postgres reject this outright.
-    expect(options.onConflict).toBe('household_id,review_month');
+    expect(options.onConflict).toBe('household_id,review_month,generated_by');
     // The displayed date must be when this text was written, not when the row
     // it replaced was first inserted.
     expect(String(row.created_at).startsWith('2026-08-14')).toBe(true);
@@ -703,6 +709,14 @@ describe('POST /api/regenerate-plan — persistence', () => {
     // about to produce is not at risk.
     expect(createMock).not.toHaveBeenCalled();
     expect(calls.some((c) => c.method === 'upsert')).toBe(false);
+  });
+
+  it('the in-progress check reads only the month-end row, never the household’s own refresh', async () => {
+    // A month can hold both rows (2026-11-02). Unfiltered, maybeSingle would
+    // error on two rows, and a refresh is never a claim.
+    chainFilters.length = 0;
+    await post([{ data: null, error: null }, { error: null }]);
+    expect(chainFilters).toContainEqual(['eq', 'generated_by', 'cron']);
   });
 
   it('the refusal costs no refresh — it happens before the quota is reserved', async () => {

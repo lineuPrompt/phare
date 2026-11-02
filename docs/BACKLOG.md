@@ -111,6 +111,22 @@ the v1.1 list separately.**
 - ~~**`GET /api/goals` ignores read errors**~~ FIXED in code 2026-10-29,
   uncommitted (route, web Goals page, Timeline entry form). —
   [ticket](tickets/goals-get-ignores-read-errors.md)
+- **Monthly review: the month-end letter gets its own row (Lineu, 2026-11-02).**
+  Lineu's October review was never written: his 13 October refresh held
+  October's only slot and the 1 November run could only take it over.
+  BUILT 2026-11-02, uncommitted: one letter per household, month AND writer
+  (month-end 'cron' + refresh 'manual', both shown — "keep both"); a missed
+  month is retried on days 1–7; the run stops starting households after
+  240 s. Migrations WRITTEN, NOT APPLIED: A `20261102000000` before the
+  deploy, B `20261102010000` after it is live. Deployed before 7 November,
+  the next run writes October for every household that missed it. Cause on
+  1 November (failed vs cut off) unconfirmed: the Supabase token expired.
+- **"Delete all" for a recurring bill** (Lineu, 2026-11-02). Diagnosed:
+  the card page deletes one entry at a time; the Recurring page's Delete
+  keeps past entries. Waiting on three answers (past entries? closed
+  statements? entries edited one by one?) — STOP until then. —
+  [ticket](tickets/recurring-list-delete-ignores-failure.md) (web Delete
+  ignores a failure; found on the way, not fixed)
 - **`getHouseholdTimezone` turns a failed read into Toronto time** — dates,
   23 callers: diagnose and STOP. —
   [ticket](tickets/household-timezone-read-error-falls-back.md)

@@ -107,6 +107,9 @@ export async function POST(request: Request) {
       .select('id, messages')
       .eq('household_id', householdId)
       .eq('review_month', reviewMonth)
+      // Only the month-end row can be a claim; a month may also hold this
+      // household's own refresh row (2026-11-02), which is never one.
+      .eq('generated_by', 'cron')
       .maybeSingle();
 
     if (activeClaim && ((activeClaim.messages as unknown[] | null)?.length ?? 0) === 0) {
@@ -146,15 +149,13 @@ export async function POST(request: Request) {
       userId: user.id,
     });
 
-    // ── Save: ONE REVIEW PER MONTH, so this REPLACES ─────────────────────────
-    // review_month is now set, reversing the previous rule. It used to be left
-    // NULL precisely so a refresh could never collide with the cron — but the
-    // cost was a row per press, and a household that regenerated a few times
-    // accumulated an archive that read as noise. Under one-per-month the
-    // collision is handled by `generated_by` instead: this row is 'manual', and
-    // the cron may replace it with the real end-of-month letter.
+    // ── Save: ONE REFRESH PER MONTH, so this REPLACES the previous refresh ───
+    // The row is (household, month, 'manual'): its own slot, beside the
+    // month-end letter the cron writes as (household, month, 'cron')
+    // (2026-11-02). The cron never touches this row, and the Reviews page
+    // shows both: the month-end letter, and the refresh beneath it.
     //
-    // THE PREVIOUS TEXT IS GONE, deliberately. A family who corrected an entry
+    // THE PREVIOUS REFRESH TEXT IS GONE, deliberately. A family who corrected an entry
     // and regenerated wants the corrected letter, not both. The UI warns before
     // this happens and names the month.
     //
@@ -176,9 +177,9 @@ export async function POST(request: Request) {
             { role: 'assistant', type: 'monthly_review', content: reviewText, locale },
           ],
         },
-        // Inferrable only because the unique index was made TOTAL — PostgREST
-        // emits no WHERE, and Postgres cannot infer a partial index from that.
-        { onConflict: 'household_id,review_month' }
+        // Inferrable only because the unique index is TOTAL — PostgREST emits
+        // no WHERE, and Postgres cannot infer a partial index from that.
+        { onConflict: 'household_id,review_month,generated_by' }
       );
 
     if (saveErr) {

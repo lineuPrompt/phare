@@ -58,7 +58,7 @@ import { LetterGuardError } from '@/lib/letterGuards';
 // refreshes a household paid for. Both stay in POST /api/regenerate-plan.
 //
 // IDEMPOTENCY IS A CLAIM, NOT A LOOK. The row is inserted BEFORE generating, so
-// the unique index on (household_id, review_month) is what serialises two
+// the unique index on (household_id, review_month, generated_by) is what serialises two
 // overlapping runs: the insert either wins or raises 23505. A read-then-write
 // check would leave a window in which both runs see "not generated" and both
 // pay for a generation.
@@ -98,9 +98,18 @@ export const maxDuration = 300;
 // far inside the daily gap.
 const STUCK_CLAIM_MS = 30 * 60 * 1000;
 
+// THE RUN STOPS STARTING HOUSEHOLDS AFTER THIS (2026-11-02). Households are
+// written one after another, each with two long model calls, so with enough of
+// them due the platform kills the function at maxDuration partway through one.
+// Stopping at 240s leaves a household's own generation the remaining minute
+// to finish inside the 300s ceiling. Those not reached are reported
+// 'deferred' and picked up by the next daily run: decideReview keeps last
+// month due until CATCH_UP_LAST_DAY.
+const RUN_BUDGET_MS = 240 * 1000;
+
 type Outcome = {
   householdId: string;
-  status: 'generated' | 'skipped' | 'claimed_by_other' | 'failed';
+  status: 'generated' | 'skipped' | 'claimed_by_other' | 'failed' | 'deferred';
   month?: string;
   reason?: string;
 };
@@ -120,6 +129,7 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
   const outcomes: Outcome[] = [];
+  const startedAt = Date.now();
 
   try {
     const { data: households, error } = await admin
@@ -133,6 +143,13 @@ export async function GET(request: Request) {
 
     for (const household of (households ?? []) as { id: string; locale: string | null }[]) {
       const householdId = household.id;
+
+      // Out of time: report the rest as deferred, never start one that the
+      // platform would kill halfway (see RUN_BUDGET_MS).
+      if (Date.now() - startedAt > RUN_BUDGET_MS) {
+        outcomes.push({ householdId, status: 'deferred', reason: 'run_budget_spent' });
+        continue;
+      }
 
       // PER-HOUSEHOLD ISOLATION. One family's failure must never stop the rest:
       // a bare Promise.all or an unguarded loop would abandon every household
@@ -217,11 +234,10 @@ export async function GET(request: Request) {
 
         // A MANUAL ROW DOES NOT SETTLE ITS MONTH. Someone who pressed
         // Regenerate on 14 August has a real letter for '2026-08', but it
-        // describes half a month. Counting it as generated would mean the cron
-        // reports `claimed_by_other` on 1 September — indistinguishable from
-        // healthy idempotency — and that household's August review is
-        // permanently the mid-month draft. Only 'cron' rows, and legacy rows
-        // predating the column, settle a month.
+        // describes half a month. Only 'cron' rows, and legacy rows predating
+        // the column, settle a month. The month-end letter has its OWN row
+        // (2026-11-02, unique on household, month AND generated_by): the
+        // refresh is never touched and both stay in the archive.
         const existingReviewMonths = liveRows
           .filter((r) => r.generated_by !== 'manual')
           .map((r) => r.review_month);
@@ -234,81 +250,39 @@ export async function GET(request: Request) {
 
         const month = decision.month;
 
-        // The manual row this run is about to supersede, if there is one.
-        const manualRow = liveRows.find(
-          (r) => r.review_month === month && r.generated_by === 'manual'
-        );
-
         // ---- THE CLAIM ----------------------------------------------------
-        // Two shapes, because the two cases have different things to protect.
-        //
-        // FRESH MONTH: insert an empty row. The unique index is the lock — the
-        // insert either wins or raises 23505.
-        //
-        // TAKEOVER of a manual row: flip generated_by to 'cron' and LEAVE THE
-        // TEXT ALONE. The flip is the claim (it is a compare-and-swap on
-        // generated_by='manual', so only one run can win it) and the row keeps
-        // occupying the unique slot throughout, so no second run can insert.
-        //
-        // WHY NOT EMPTY THE ROW LIKE THE FRESH PATH DOES: because the failure
-        // path deletes what it claimed. Emptying first would mean a transient
-        // Anthropic error destroys a letter the family may have paid a refresh
-        // for, and leaves nothing in its place. Holding the slot without
-        // touching the text means the worst case is the manual letter surviving
-        // one more month — which is exactly the right worst case.
-        let claimId: string;
-        let tookOverManual = false;
+        // Insert an empty 'cron' row. The unique index on (household_id,
+        // review_month, generated_by) is the lock: the insert either wins or
+        // raises 23505. A manual refresh for the same month is a different
+        // row and is never read, emptied or replaced here.
+        const { data: claim, error: claimErr } = await admin
+          .from('conversations')
+          .insert({
+            household_id: householdId,
+            // No author: a scheduled review is not written by a member, and
+            // recording one would be a small lie. conversations.user_id is
+            // already nullable (ON DELETE SET NULL against users).
+            user_id: null,
+            type: 'monthly_review',
+            review_month: month,
+            messages: [],
+            generated_by: 'cron',
+          })
+          .select('id')
+          .single();
 
-        if (manualRow) {
-          const { data: taken, error: takeErr } = await admin
-            .from('conversations')
-            .update({ generated_by: 'cron' })
-            .eq('id', manualRow.id)
-            .eq('generated_by', 'manual') // compare-and-swap
-            .select('id');
-
-          if (takeErr) {
-            console.error('Cron monthly-reviews — takeover failed:', householdId, month, takeErr);
-            outcomes.push({ householdId, status: 'failed', month, reason: 'claim_failed' });
-            continue;
-          }
-          if (!taken || taken.length === 0) {
-            // Another run flipped it first. Same meaning as a 23505.
+        if (claimErr) {
+          // 23505 — another run already claimed this month. Not an error:
+          // exactly what the claim is for.
+          if ((claimErr as { code?: string }).code === '23505') {
             outcomes.push({ householdId, status: 'claimed_by_other', month });
             continue;
           }
-          claimId = manualRow.id;
-          tookOverManual = true;
-        } else {
-          const { data: claim, error: claimErr } = await admin
-            .from('conversations')
-            .insert({
-              household_id: householdId,
-              // No author: a scheduled review is not written by a member, and
-              // recording one would be a small lie. conversations.user_id is
-              // already nullable (ON DELETE SET NULL against users).
-              user_id: null,
-              type: 'monthly_review',
-              review_month: month,
-              messages: [],
-              generated_by: 'cron',
-            })
-            .select('id')
-            .single();
-
-          if (claimErr) {
-            // 23505 — another run (or an earlier hour) already claimed this
-            // month. Not an error: exactly what the claim is for.
-            if ((claimErr as { code?: string }).code === '23505') {
-              outcomes.push({ householdId, status: 'claimed_by_other', month });
-              continue;
-            }
-            console.error('Cron monthly-reviews — claim failed:', householdId, month, claimErr);
-            outcomes.push({ householdId, status: 'failed', month, reason: 'claim_failed' });
-            continue;
-          }
-          claimId = claim.id;
+          console.error('Cron monthly-reviews — claim failed:', householdId, month, claimErr);
+          outcomes.push({ householdId, status: 'failed', month, reason: 'claim_failed' });
+          continue;
         }
+        const claimId: string = claim.id;
 
         // ---- Generate, and release the claim if it fails ------------------
         try {
@@ -334,9 +308,8 @@ export async function GET(request: Request) {
                 { role: 'assistant', type: 'top_recommendation', content: topRecommendation, locale },
                 { role: 'assistant', type: 'monthly_review', content: reviewText, locale },
               ],
-              // The date the page shows for this letter. On a takeover the row
-              // predates this text by weeks, and displaying the manual row's
-              // creation date next to the cron's letter would misdate it.
+              // The date the page shows for this letter: when the text was
+              // written, not when the empty claim was inserted.
               created_at: new Date().toISOString(),
             })
             .eq('id', claimId)
@@ -361,28 +334,14 @@ export async function GET(request: Request) {
             outcomes.push({ householdId, status: 'generated', month });
           }
         } catch (genErr) {
-          // RELEASE THE CLAIM — but "release" means something different for
-          // each shape, and getting this wrong destroys a real letter.
-          //
-          // TAKEOVER: flip generated_by back to 'manual'. The row still holds
-          // the family's own letter, untouched; reverting the label makes the
-          // month eligible again so the next run can retry the takeover.
-          // DELETING here would erase a letter they may have paid for, to clean
-          // up a claim that never emptied anything.
-          //
-          // FRESH: delete the empty row, as before. An empty claim left behind
-          // satisfies the uniqueness check on every future run, so the
-          // household would silently never receive this month's review — a
-          // permanent failure produced by a transient one.
-          const { error: cleanupErr } = tookOverManual
-            ? await admin
-                .from('conversations')
-                .update({ generated_by: 'manual' })
-                .eq('id', claimId)
-            : await admin
-                .from('conversations')
-                .delete()
-                .eq('id', claimId);
+          // RELEASE THE CLAIM: delete the empty row. Left behind, it satisfies
+          // the uniqueness check on every future run, so the household would
+          // never receive this month — a permanent failure made from a
+          // transient one. The next daily run retries (CATCH_UP_LAST_DAY).
+          const { error: cleanupErr } = await admin
+            .from('conversations')
+            .delete()
+            .eq('id', claimId);
 
           if (cleanupErr) {
             // The one case needing a human: the claim survives and will block
@@ -393,17 +352,11 @@ export async function GET(request: Request) {
             // cleanup failure tells you which row to fix and nothing about
             // whether fixing it helps.
             //
-            // The remedy differs by shape, so it is spelled out rather than
-            // left as "delete row X" — deleting a taken-over row would throw
-            // away the family's own letter, which is the opposite of the fix.
             console.error(
               'Cron monthly-reviews — GENERATION FAILED AND CLAIM COULD NOT BE RELEASED. ' +
-              'Row %s, month %s: %s, or this household never gets that month. ' +
-              'Generation error:',
+              'Row %s, month %s: DELETE the row (it is an empty claim), or this household ' +
+              'never gets that month. Generation error:',
               claimId, month,
-              tookOverManual
-                ? "SET generated_by='manual' (do NOT delete — the row holds the family's own letter)"
-                : 'DELETE the row (it is an empty claim)',
               genErr, '| Cleanup error:', cleanupErr
             );
             outcomes.push({ householdId, status: 'failed', month, reason: 'claim_stuck' });
