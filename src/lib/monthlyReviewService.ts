@@ -755,8 +755,9 @@ export async function generateMonthlyReview({
       `- topRecommendation may direct money only from the month's net cash flow, the starting contribution, or a ` +
       `freed-capacity event, and every dollar figure in it must be one of these, exactly or rounded to the ` +
       `dollar: ${JSON.stringify(topRecommendationSources)}. An extra expense occurrence is spending, never money ` +
-      `available: never call it a windfall or a bonus, and never suggest moving it anywhere. Never predict a ` +
-      `future figure.` +
+      `available: never call it a windfall or a bonus, and never suggest moving it anywhere. You may quote an ` +
+      `extra occurrence's own amount to explain the month: ${JSON.stringify([...extraExpenses, ...extraIncome].map((e) => e.extraAmount))}. ` +
+      `Never predict a future figure.` +
       // The month in progress (a mid-month refresh): never "closed" (2026-11-02).
       (reviewMonth === today.slice(0, 7)
         ? `\n- THIS MONTH IS STILL IN PROGRESS (today is ${today}): never say it closed, ended or finished; describe it as "so far".`
@@ -794,6 +795,11 @@ export async function generateMonthlyReview({
     // November refresh failed twice on its mortgage's $1,500).
     const topRecommendationAllowed = [
       ...topRecommendationSources,
+      // An extra occurrence's own amount may be QUOTED to explain the month
+      // (a deficit "driven by a third mortgage payment of $1,500"); the
+      // framing check still refuses any sentence that moves it (2026-11-02).
+      ...extraExpenses.map((e) => e.extraAmount),
+      ...extraIncome.map((e) => e.extraAmount),
       ...(computedDebtPayoff ? [computedDebtPayoff.monthlyPayment] : []),
       ...(totalBorrowed > 0 ? [totalBorrowed] : []),
     ];
@@ -818,7 +824,14 @@ export async function generateMonthlyReview({
           framing: retryTopRec.framing,
           firstAttempt: firstTopRec,
         });
-        topRecommendationText = buildFallbackTopRecommendation(reviewMonthName, locale);
+        topRecommendationText = buildFallbackTopRecommendation({
+          reviewMonthName,
+          locale,
+          monthInProgress: reviewMonth === today.slice(0, 7),
+          netCashFlow,
+          topNeedName: topNeed?.name ?? null,
+          startingContribution,
+        });
       } else await logEvent(householdId, userId, 'review_text_guard_retried', {
         kind: 'top_recommendation',
         triggeredBy: [

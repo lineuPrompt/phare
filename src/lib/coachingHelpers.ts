@@ -11,7 +11,7 @@
  * context.
  */
 
-import { monthlyEquivalent, type IncomeFrequency } from '@phare/core';
+import { formatCADLocale, monthlyEquivalent, type IncomeFrequency } from '@phare/core';
 import { monthsBetween } from './goalHelpers';
 import { envelopeStatus } from './envelopeHelpers';
 
@@ -342,15 +342,41 @@ export function buildFallbackReviewText(reviewMonthName: string, locale: 'en' | 
 }
 
 /**
- * The top recommendation written by code, used when the AI's one line fails
- * its checks twice (2026-11-02). Before, that failure threw away the whole
- * letter: a one-line summary must never block the monthly review. Names no
- * figure, so it can never be wrong.
+ * The top recommendation written by code, used when the AI's line fails its
+ * checks twice (2026-11-02) — a real priority, never "read your letter".
+ * Every figure and name comes from code: the month's own net cash flow, the
+ * top-ranked need and its starting contribution (the same values the AI was
+ * given). Before, that failure threw the whole letter away.
  */
-export function buildFallbackTopRecommendation(reviewMonthName: string, locale: 'en' | 'fr'): string {
+export function buildFallbackTopRecommendation(input: {
+  reviewMonthName: string;
+  locale: 'en' | 'fr';
+  monthInProgress: boolean;
+  netCashFlow: number;
+  topNeedName: string | null;
+  startingContribution: number;
+}): string {
+  const { reviewMonthName, locale, monthInProgress, netCashFlow, topNeedName, startingContribution } = input;
+  const money = (n: number) => formatCADLocale(Math.abs(n), locale);
+  const month = reviewMonthName.charAt(0).toUpperCase() + reviewMonthName.slice(1);
+  if (netCashFlow < 0) {
+    if (locale === 'fr') {
+      return monthInProgress
+        ? `${month} affiche un déficit de ${money(netCashFlow)} jusqu'ici\u00a0: couvrez-le avant d'ajouter quoi que ce soit.`
+        : `${month} s'est terminé avec un déficit de ${money(netCashFlow)}\u00a0: couvrez-le avant d'ajouter quoi que ce soit.`;
+    }
+    return monthInProgress
+      ? `${month} is running a deficit of ${money(netCashFlow)} so far: cover it before adding anything new.`
+      : `${month} closed with a deficit of ${money(netCashFlow)}: cover it before adding anything new.`;
+  }
+  if (topNeedName && startingContribution > 0) {
+    return locale === 'fr'
+      ? `Mettez ${money(startingContribution)} de côté pour ${topNeedName} ce mois-ci.`
+      : `Put ${money(startingContribution)} toward ${topNeedName} this month.`;
+  }
   return locale === 'fr'
-    ? `Lisez votre lettre de ${reviewMonthName} ci-dessous pour voir où en sont vos finances.`
-    : `Read your ${reviewMonthName} letter below to see where your money stands.`;
+    ? `Gardez votre plan tel quel ce mois-ci\u00a0: rien n'a besoin de changer.`
+    : `Keep your plan as it is this month: nothing needs to change.`;
 }
 
 /**

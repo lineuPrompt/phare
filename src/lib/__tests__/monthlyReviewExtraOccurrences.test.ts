@@ -180,7 +180,8 @@ describe('the review, end to end', () => {
     // A one-line summary never throws the letter away any more.
     expect(error).toBeNull();
     expect(result?.reviewText).toBe('September was steady.');
-    expect(payload.topRecommendation).toBe('Read your September 2026 letter below to see where your money stands.');
+    // A real priority computed by code — never "read your letter".
+    expect(payload.topRecommendation).toMatch(/^(Put \$[\d,.]+ toward .+ this month\.|Keep your plan as it is this month: nothing needs to change\.)$/);
     expect(payload.topRecommendation).not.toContain('$600');
     // Still recorded, so the failure can be found by a query.
     const failed = recordedEvents.map((row) => ({ payload: row })).find((w) => (w.payload as { event_type: string }).event_type === 'review_guard_failed');
@@ -192,5 +193,15 @@ describe('the review, end to end', () => {
     const { payload, error } = await generate(['Put $3,950 of this month\'s surplus toward savings.'], ['September was steady.']);
     expect(error).toBeNull();
     expect(payload.topRecommendation).toBe('Put $3,950 of this month\'s surplus toward savings.');
+  });
+});
+
+describe('a top recommendation may quote an extra occurrence to explain the month (2026-11-02)', () => {
+  beforeEach(() => { vi.resetModules(); });
+
+  it('quoting the extra $350 car payment passes; moving it is still refused', async () => {
+    const ok = await generate(['September closed with a third $350 car payment; keep your $3,950 surplus as it is.'], ['September was steady.']);
+    expect(ok.error).toBeNull();
+    expect(ok.payload.topRecommendation).toContain('$350');
   });
 });

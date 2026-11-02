@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  buildFallbackTopRecommendation,
   computeSinkingFundUrgency,
   rankFundingNeeds,
   computeTypicalSurplus,
@@ -348,5 +349,34 @@ describe('containsIllustrativeTokenLeak', () => {
     const text = 'Your plan sets aside $300/month for {name}, once it clears in {freesOn}.';
     // "{name}" is a real fund name here, but "{freesOn}" never was set up as one.
     expect(containsIllustrativeTokenLeak(text, tokens, ['{name}'])).toBe(true);
+  });
+});
+
+describe('buildFallbackTopRecommendation — a real priority, computed by code (2026-11-02)', () => {
+  const base = { reviewMonthName: 'November 2026', locale: 'en' as const, monthInProgress: true, netCashFlow: 0, topNeedName: null, startingContribution: 0 };
+
+  it('a deficit comes first, as it stands so far', () => {
+    expect(buildFallbackTopRecommendation({ ...base, netCashFlow: -3803.14 }))
+      .toBe('November 2026 is running a deficit of $3,803.14 so far: cover it before adding anything new.');
+  });
+
+  it('a month that has ended says closed', () => {
+    expect(buildFallbackTopRecommendation({ ...base, monthInProgress: false, netCashFlow: -10 }))
+      .toBe('November 2026 closed with a deficit of $10.00: cover it before adding anything new.');
+  });
+
+  it('a surplus funds the top need with the starting contribution', () => {
+    expect(buildFallbackTopRecommendation({ ...base, netCashFlow: 900, topNeedName: 'Ferias e Viagens', startingContribution: 250 }))
+      .toBe('Put $250.00 toward Ferias e Viagens this month.');
+  });
+
+  it('nothing to fund: keep the plan', () => {
+    expect(buildFallbackTopRecommendation({ ...base, netCashFlow: 900 }))
+      .toBe('Keep your plan as it is this month: nothing needs to change.');
+  });
+
+  it('French: capitalised month, fr-CA money, U+00A0 before the colon', () => {
+    expect(buildFallbackTopRecommendation({ ...base, locale: 'fr', reviewMonthName: 'novembre 2026', netCashFlow: -3803.14 }))
+      .toBe("Novembre 2026 affiche un déficit de 3\u00a0803,14\u00a0$ jusqu'ici\u00a0: couvrez-le avant d'ajouter quoi que ce soit.");
   });
 });
