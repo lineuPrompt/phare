@@ -102,7 +102,7 @@
     "deviceHeading": "Device",
     "localeLabel": "Detected locale",
     "streamProbeHeading": "Non-streaming API probe",
-    "streamProbeExplain": "Calls /api/review-stream?stream=0 to prove React Native's fetch can read a non-streamed body. This one call spends Anthropic tokens.",
+    "streamProbeExplain": "Calls /api/review-stream?stream=0 to prove React Native's fetch can read a non-streamed body. This one call spends Anthropic tokens and one of the household's monthly review generations.",
     "streamProbeRun": "Run probe (spends tokens)",
     "streamProbeRunning": "Running…",
     "streamProbeOk": "Received {chars} characters as JSON",
@@ -594,6 +594,7 @@
     "confirmDelete": "Yes, delete",
     "cancel": "Cancel",
     "errors": {
+      "wouldGoNegative": "That would take this savings account below zero, so nothing was changed.",
       "gone": "This entry no longer exists. It may have been changed somewhere else."
     },
     "detachHint": "This is part of a recurring rule. Saving edits only this occurrence — the rule itself is unchanged.",

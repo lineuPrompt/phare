@@ -761,6 +761,9 @@
     },
     "horizonLocked": "{count, plural, one {# mois de plus} other {# mois de plus}} de votre échéancier avec Phare Pro"
   },
+  "transferRefusal": {
+    "wouldGoNegative": "Cela ferait passer {account} à {amount} le {date}. Un compte d'épargne ne peut pas descendre sous zéro."
+  },
   "recurringDelete": {
     "question": "Cette entrée est récurrente. Que voulez-vous supprimer?",
     "justThis": "Seulement celle-ci",

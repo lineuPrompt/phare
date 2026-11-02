@@ -124,5 +124,8 @@ export function editProblemKey(problem: EditProblem): string {
  */
 export function editErrorKey(err: unknown): string {
   if (err instanceof ApiError && err.status === 409) return 'edit.errors.gone';
+  // The savings floor (2026-11-02): the change would take a savings account
+  // below zero, so the server changed nothing.
+  if (err instanceof ApiError && err.code === 'BALANCE_WOULD_GO_NEGATIVE') return 'edit.errors.wouldGoNegative';
   return messageKeyFor(err);
 }

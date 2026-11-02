@@ -37,6 +37,10 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, today,
   const [isEditing, setIsEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
+  // The server's own reason when an edit or a delete is refused. Both used to
+  // be silent: the edit only logged, the delete never read the answer
+  // (docs/tickets/recurring-list-delete-ignores-failure.md).
+  const [error, setError] = useState('');
 
   // Edit state — initialised when user clicks Edit
   const [editDesc, setEditDesc] = useState('');
@@ -67,10 +71,11 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, today,
     setIsEditing(true);
   };
 
-  const cancelEdit = () => setIsEditing(false);
+  const cancelEdit = () => { setIsEditing(false); setError(''); };
 
   const saveEdit = async () => {
     setSaving(true);
+    setError('');
     try {
       const res = await fetch(`/api/recurring/${item.id}`, {
         method: 'PATCH',
@@ -88,20 +93,38 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, today,
         }),
       });
       if (!res.ok) {
-        console.error('Failed to update recurring item:', await res.json().catch(() => null));
+        const body = await res.json().catch(() => null);
+        console.error('Failed to update recurring item:', body);
+        setError(body?.error ?? `HTTP ${res.status}`);
         return;
       }
       setIsEditing(false);
       onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
   };
 
   const doDelete = async () => {
-    await fetch(`/api/recurring/${item.id}`, { method: 'DELETE' });
-    setConfirmDelete(false);
-    onChanged();
+    setSaving(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/recurring/${item.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        // The dialog stays open with the reason: the line is still there.
+        setError(body?.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      setConfirmDelete(false);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const canSaveEdit =
@@ -237,6 +260,7 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, today,
               {t('cancel')}
             </button>
           </div>
+          {error && <p className="w-full text-sm" style={{ color: '#DC2626' }}>{error}</p>}
         </div>
       </div>
     );
@@ -315,16 +339,18 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, today,
           >
             <p className="font-semibold mb-2" style={{ color: '#0F2044' }}>{t('confirmTitle')}</p>
             <p className="text-sm mb-5" style={{ color: '#6B7280' }}>{t('confirmBody')}</p>
+            {error && <p className="text-sm mb-3" style={{ color: '#DC2626' }}>{error}</p>}
             <div className="flex flex-col gap-2">
               <button
                 onClick={doDelete}
+                disabled={saving}
                 className="w-full py-2.5 rounded-full text-white text-sm font-medium cursor-pointer"
                 style={{ background: '#DC2626' }}
               >
                 {t('confirmDelete')}
               </button>
               <button
-                onClick={() => setConfirmDelete(false)}
+                onClick={() => { setConfirmDelete(false); setError(''); }}
                 className="w-full py-2.5 rounded-full text-sm font-medium cursor-pointer"
                 style={{ color: '#6B7280' }}
               >

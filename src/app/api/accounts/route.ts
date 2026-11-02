@@ -126,10 +126,19 @@ export async function POST(request: Request) {
     // happening today.
     let openingErr: string | null = null;
     if (wantsOpeningBalance) {
-      const timezone = await getHouseholdTimezone(supabase, householdId);
-      openingErr = await setOpeningBalance(
-        supabase, householdId, account.id, Number(openingBalance), businessToday(timezone)
-      );
+      // The account already exists here: a timezone failure is reported as
+      // the balance not saved, never as a bare 500 that invites a second create.
+      let today: string | null = null;
+      try {
+        today = businessToday(await getHouseholdTimezone(supabase, householdId));
+      } catch (tzErr) {
+        openingErr = tzErr instanceof Error ? tzErr.message : String(tzErr);
+      }
+      if (today) {
+        openingErr = await setOpeningBalance(
+          supabase, householdId, account.id, Number(openingBalance), today
+        );
+      }
       if (openingErr) console.error('Account opening balance insert error:', openingErr);
     }
 

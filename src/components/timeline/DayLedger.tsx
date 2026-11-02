@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { deleteRecurringFromToday } from '@/lib/recurringSeriesDelete';
+import { transferRefusal } from '@/lib/transferRefusal';
 import Link from 'next/link';
 import type { RefObject } from 'react';
 import type { MonthView } from '@/lib/timelineDisplayHelpers';
@@ -77,6 +78,7 @@ export function sourceHref(
 function TransferControls({ entry, locale, onChanged }: { entry: TimelineTx; locale: string; onChanged: () => void }) {
   const t = useTranslations('timeline.list');
   const tr = useTranslations('recurringDelete');
+  const tRefusal = useTranslations('transferRefusal');
   const [isEditing, setIsEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [date, setDate] = useState(entry.date);
@@ -99,7 +101,7 @@ function TransferControls({ entry, locale, onChanged }: { entry: TimelineTx; loc
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: parseFloat(amount), date, description: description.trim() || null }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+      if (!res.ok) throw new Error(await transferRefusal(res, tRefusal, locale));
       setIsEditing(false);
       onChanged();
     } catch (err) {
@@ -113,7 +115,7 @@ function TransferControls({ entry, locale, onChanged }: { entry: TimelineTx; loc
     setSaving(true);
     try {
       const res = await fetch(`/api/transfers/${entry.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+      if (!res.ok) throw new Error(await transferRefusal(res, tRefusal, locale));
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');

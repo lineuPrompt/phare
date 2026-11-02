@@ -102,10 +102,12 @@ the v1.1 list separately.**
   deleted through DELETE /api/transfers/[id], none left. STILL TO DO: ship
   the app (after the web, which is now live); device check of mobile
   quick entry Withdraw.
-  Follow-ups, not built: editing a withdrawal larger, or deleting an
-  earlier contribution, can still take a savings balance below zero (only
-  the create path checks); two withdrawals sent at the same instant could
-  both pass the check.
+  Floor on edit/delete BUILT 2026-11-02, uncommitted: after an edit or a
+  delete a savings-type account never goes below zero, or below the lowest
+  it already reaches (400 BALANCE_WOULD_GO_NEGATIVE, said in EN/FR on the
+  Goals page, the Timeline and the app; the Goals page's history edit and
+  delete used to fail in silence). Still open: two withdrawals sent at the
+  same instant could both pass the check.
 - ~~**`POST /api/transfers` input checks**~~ FIXED in code 2026-10-29,
   uncommitted. — [ticket](tickets/transfers-post-input-gaps.md)
 - ~~**`GET /api/goals` ignores read errors**~~ FIXED in code 2026-10-29,
@@ -130,9 +132,17 @@ the v1.1 list separately.**
   Not yet checked live (needs the deploy). Found on the way, not fixed:
   [ticket](tickets/recurring-list-delete-ignores-failure.md) (the Recurring
   page's own Delete ignores a failure).
-- **`getHouseholdTimezone` turns a failed read into Toronto time** — dates,
-  23 callers: diagnose and STOP. —
+- ~~**`getHouseholdTimezone` turns a failed read into Toronto time**~~ FIXED
+  in code 2026-11-02, uncommitted. —
   [ticket](tickets/household-timezone-read-error-falls-back.md)
+- **Monthly review name guard false alarm** (2026-11-02): 2be22642's October
+  letter failed twice on "Viagens", the category inside its goal "Ferias e
+  Viagens". FIXED in code, uncommitted: every name the letter is given is
+  allowed (goals, funds, debt line, category lines). Once deployed, the next
+  daily run (days 1–7) writes October; check conversations for 2be22642.
+- **Mid-month refresh said the month "closed"** (Zezinho, 2 November). FIXED
+  in code, uncommitted: the prompt says when the month is in progress, with
+  today's date, and its tone example follows.
 - **S7. Household members: list, invite, remove (owner only).**
 - **S8. Savings goals and sinking funds** (read-only first round, then
   creation).
@@ -244,7 +254,7 @@ the v1.1 list separately.**
    *Set aside by Lineu, 2026-10-09, in favour of items 6 and 7. Not
    started. On iOS the ticket's failure mode cannot occur while the
    association file claims no paths.*
-3. **The diagnostics probe calls review-stream without a session**
+3. ~~**The diagnostics probe calls review-stream without a session**~~ FIXED in code 2026-11-02, uncommitted (sends the bearer token).
    (decided 2026-09-28: send the bearer token; keep it a manual, labelled
    button, one review generation per deliberate press; do not retire it). —
    [ticket](tickets/diagnostics-probe-review-stream-401.md)

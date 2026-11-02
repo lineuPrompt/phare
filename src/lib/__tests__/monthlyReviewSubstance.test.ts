@@ -358,3 +358,28 @@ describe('cardLetterFacts', () => {
     expect(facts.topOverspends.map((o) => o.category)).toEqual(['Épicerie et pharmacie', 'Loisirs']);
   });
 });
+
+// A refresh pressed mid-month reviews the month in progress, and its letter
+// said that month "closed" (Zezinho Test, 2 November 2026). Today here is
+// 1 October 2026: October is in progress, September has ended.
+describe('the letter knows whether its month has ended (2026-11-02)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T12:00:00-04:00'));
+  });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('the month in progress: told so, with today, and an in-progress tone example', async () => {
+    const { prompt } = await generate('2026-10', 'October so far is steady.');
+    expect(prompt).toContain('THIS MONTH IS STILL IN PROGRESS: today is 2026-10-01.');
+    expect(prompt).toContain('Never say it closed, ended or finished');
+    expect(prompt).not.toContain('closed with a surplus');
+  });
+
+  it('a month that has ended: no in-progress rule, the closed tone example', async () => {
+    const { prompt } = await generate('2026-09');
+    expect(prompt).not.toContain('STILL IN PROGRESS');
+    expect(prompt).toContain('September 2026 closed with a surplus');
+  });
+});

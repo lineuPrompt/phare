@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { isCalendarDate, MANUAL_ENTRY_DESCRIPTION_MAX_CHARS, MANUAL_ENTRY_MAX_AMOUNT } from '@phare/core';
+import { lowestGoalBalance } from '@/lib/dashboardHelpers';
 
 async function getHousehold(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -114,6 +115,81 @@ function tombstoneFailed(reason: string) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// THE SAVINGS FLOOR ON EDIT AND DELETE (2026-11-02).
+//
+// POST refuses a withdrawal above the balance on its date. Editing or deleting
+// could still go around it: a withdrawal edited larger, a contribution edited
+// smaller or later, or a contribution deleted from under a later withdrawal.
+// So after the change, a savings-type account (savings, TFSA, RRSP, the
+// Reserve Fund) must never reach a balance below zero — or below the lowest it
+// already reaches, so an account that already dips (a Reserve paying a bill
+// before it is funded) is not locked against every change. A debt account has
+// no floor: borrowing is what makes it negative. Same balance rule as the
+// Goals page (computeGoalBalance), at every date of the account's rows.
+// ---------------------------------------------------------------------------
+
+const SAVINGS_TYPES = new Set(['savings', 'tfsa', 'rrsp']);
+
+async function savingsFloorRefusal(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  householdId: string,
+  ids: string[],
+  change: { kind: 'delete' } | { kind: 'patch'; signedAmount: number; date: string | null }
+): Promise<NextResponse | null> {
+  const lookupFailed = (what: string, message: string) =>
+    NextResponse.json({ error: `Could not check the account balance (${what}): ${message}`, code: 'LOOKUP_FAILED' }, { status: 500 });
+
+  const { data: pairRows, error: pairErr } = await supabase
+    .from('transactions')
+    .select('id, account_id')
+    .in('id', ids)
+    .eq('household_id', householdId);
+  if (pairErr) return lookupFailed('pair', pairErr.message);
+
+  const accountIds = [...new Set((pairRows ?? []).map((r) => r.account_id as string | null).filter((a): a is string => !!a))];
+  if (accountIds.length === 0) return null;
+  const { data: accounts, error: acctErr } = await supabase
+    .from('accounts')
+    .select('id, name, type')
+    .in('id', accountIds)
+    .eq('household_id', householdId);
+  if (acctErr) return lookupFailed('accounts', acctErr.message);
+
+  const goal = (accounts ?? []).find((a) => SAVINGS_TYPES.has(a.type as string));
+  if (!goal) return null;
+  const goalRowId = (pairRows ?? []).find((r) => r.account_id === goal.id)?.id as string | undefined;
+  if (!goalRowId) return null;
+
+  const { data: rows, error: rowsErr } = await supabase
+    .from('transactions')
+    .select('id, amount, type, account_id, date')
+    .eq('household_id', householdId)
+    .eq('account_id', goal.id);
+  if (rowsErr) return lookupFailed('rows', rowsErr.message);
+
+  const current = (rows ?? []) as { id: string; amount: number | string; type: string; account_id: string; date: string }[];
+  const after = change.kind === 'delete'
+    ? current.filter((r) => r.id !== goalRowId)
+    : current.map((r) => (r.id === goalRowId ? { ...r, amount: change.signedAmount, date: change.date ?? r.date } : r));
+
+  const before = lowestGoalBalance(current, goal.id as string);
+  const low = lowestGoalBalance(after, goal.id as string);
+  if (low && low.balance < 0 && low.balance < (before?.balance ?? 0) - 0.005) {
+    return NextResponse.json(
+      {
+        error: `This would take ${goal.name} to ${low.balance.toFixed(2)} on ${low.date}; a savings account cannot go below zero.`,
+        code: 'BALANCE_WOULD_GO_NEGATIVE',
+        account: goal.name,
+        date: low.date,
+        balance: low.balance,
+      },
+      { status: 400 }
+    );
+  }
+  return null;
+}
+
 // PATCH: update a transfer's amount, date, and/or description on BOTH sides of the pair.
 // Works correctly when given either the chequing-side or goal-side id,
 // and recovers from a broken peer link on either side.
@@ -173,6 +249,12 @@ export async function PATCH(
     if (date) patch.date = date;
     if (description !== undefined) patch.description = description?.trim() ?? null;
 
+    // Before anything is written, tombstone included.
+    const floor = await savingsFloorRefusal(supabase, householdId, ids, {
+      kind: 'patch', signedAmount: sign * Number(amount), date: date || null,
+    });
+    if (floor) return floor;
+
     // Detach-on-edit (Part A3, transfer flavor): editing a single
     // materialized recurring contribution/debt-payment occurrence tombstones
     // its original date so a later rule edit can't regenerate it, then
@@ -228,6 +310,10 @@ export async function DELETE(
     if (isOpeningBalance) {
       return NextResponse.json(OPENING_BALANCE_LOCKED, { status: 400 });
     }
+
+    // Before anything is written, tombstone included.
+    const floor = await savingsFloorRefusal(supabase, householdId, ids, { kind: 'delete' });
+    if (floor) return floor;
 
     // Detach-on-delete (Part A3, transfer flavor): tombstone before the pair
     // disappears, same rationale as the PATCH branch above.

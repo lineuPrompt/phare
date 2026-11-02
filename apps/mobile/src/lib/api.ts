@@ -147,24 +147,4 @@ export function apiPatch<T>(path: string, body: unknown): Promise<T> {
   );
 }
 
-/**
- * POST to a route that takes no credential.
- *
- * Exactly one caller: the /api/review-stream?stream=0 probe on the
- * diagnostics screen. That route is unauthenticated by design (it reads
- * nothing from the database — see its own header), and sending a bearer token
- * to it would be misleading about what it proves.
- */
-export function apiPostUnauthenticated<T>(path: string, body: unknown): Promise<T> {
-  return request<T>(
-    path,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    },
-    { authenticated: false }
-  );
-}
-
 export { ApiError, messageKeyFor, type ApiErrorKind } from './apiErrors';

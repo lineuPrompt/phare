@@ -3,8 +3,11 @@
 **Filed** 2026-10-29, found while fixing GET /api/goals' silent read errors
 ([goals-get-ignores-read-errors.md](goals-get-ignores-read-errors.md)).
 
-**Status:** OPEN. Not fixed: dates touch 23 routes, so it needs a diagnosis
-and Lineu's approval first (CLAUDE.md §6).
+**Status:** FIXED in code 2026-11-02, uncommitted (Lineu: finish the pending
+tasks). The helper throws on a failed read. Every caller checked: each
+answers 500 with the reason from its own catch; the quota helpers fail
+closed; account create keeps its "account created, balance not saved"
+answer. Tests: 3 + 1, 2/2 mutants caught.
 
 ## The problem
 

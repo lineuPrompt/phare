@@ -137,3 +137,15 @@ describe('LetterGuardError', () => {
     expect(e.names).toEqual(['Shopping']);
   });
 });
+
+describe('findNamesNotInPayload — a goal name that holds a category name (2be22642, 2026-11-01)', () => {
+  const known = ['Viagens', 'Restaurants'];
+
+  it('the goal "Ferias e Viagens", given to the letter, is not the category "Viagens"', () => {
+    expect(findNamesNotInPayload('Ferias e Viagens received $200 in October.', known, ['Ferias e Viagens'])).toEqual([]);
+  });
+
+  it('the category "Viagens" named on its own, not given, is still refused', () => {
+    expect(findNamesNotInPayload('Ferias e Viagens grew, and Viagens ran over.', known, ['Ferias e Viagens'])).toEqual(['Viagens']);
+  });
+});

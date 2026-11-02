@@ -761,6 +761,9 @@
     },
     "horizonLocked": "{count, plural, one {# more month} other {# more months}} of your timeline with Phare Pro"
   },
+  "transferRefusal": {
+    "wouldGoNegative": "This would take {account} to {amount} on {date}. A savings account can't go below zero."
+  },
   "recurringDelete": {
     "question": "This entry repeats. What should be deleted?",
     "justThis": "Just this one",

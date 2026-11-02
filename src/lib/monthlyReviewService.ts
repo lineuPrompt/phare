@@ -988,12 +988,26 @@ export async function generateMonthlyReview({
     // use must be listed here too, or a leaked one goes undetected.
     const REVIEW_PROMPT_ILLUSTRATIVE_TOKENS = ['name', 'month', 'need', 'freesOn'] as const;
 
+    // A refresh pressed mid-month reviews the month IN PROGRESS. Its letter
+    // used to say the month "closed" (Zezinho Test, 2 November): the tone
+    // example below did, and nothing told the model the month was still
+    // running (2026-11-02).
+    const monthInProgress = reviewMonth === today.slice(0, 7);
+    const monthStateRule = monthInProgress
+      ? `THIS MONTH IS STILL IN PROGRESS: today is ${today}. Never say it closed, ended or finished; describe it ` +
+        `as it stands so far ("so far this month", "to date"), and its figures as what has happened up to today.\n\n`
+      : '';
+    const toneExample = monthInProgress
+      ? `${reviewMonthName} is running a surplus so far, but two of your cards are already past the goals you set.`
+      : `${reviewMonthName} closed with a surplus, but two of your cards ran past the goals you set.`;
+
     const reviewPrompt =
       `You are Phare, a financial planning system for Canadian households. Write this household's monthly review in ${lang}.\n\n` +
       `Their plan:\n${JSON.stringify(letterPayload)}\n\n` +
       `Write up to FOUR paragraphs. Specific numbers. One clear recommendation. Plain language. ` +
       `It must feel like a letter from a trusted financial advisor, not a report.\n\n` +
-      `Good tone: "${reviewMonthName} closed with a surplus, but two of your cards ran past the goals you set."\n` +
+      monthStateRule +
+      `Good tone: "${toneExample}"\n` +
       `Bad tone: "Based on a comprehensive analysis of your financial data..."\n\n` +
       `Open with how the month actually went, as "month.result" and "cards" say it: do not open with praise ` +
       `for a month that ran a deficit or went over its card goals. End with the one thing to do this month. ` +
@@ -1136,7 +1150,17 @@ export async function generateMonthlyReview({
         .flatMap((c) => [c.name, c.name_fr, categoryDisplayName(c, 'fr')])
         .filter((n): n is string => typeof n === 'string' && n.length > 0),
     ];
-    const payloadNames = cards.flatMap((c) => [c.name, ...c.topOverspends.map((o) => o.category)]);
+    // Allowed: every name the letter was GIVEN — the cards and their
+    // overspends, and its goals, funds, debt line and category lines
+    // (realEntityNames). A goal named "Ferias e Viagens" holds the category
+    // name "Viagens"; with only the cards allowed, the guard read the goal as
+    // an invented category and rejected 2be22642's October letter twice
+    // (2026-11-01). Allowed names are masked before checking, so the category
+    // inside the goal's name passes, and "Viagens" alone is still refused.
+    const payloadNames = [
+      ...cards.flatMap((c) => [c.name, ...c.topOverspends.map((o) => o.category)]),
+      ...realEntityNames,
+    ];
 
     type Violation = { figures: string[]; names: string[]; framing: string[]; borrowed: boolean; token: boolean };
     function checkReviewGuards(text: string): Violation {

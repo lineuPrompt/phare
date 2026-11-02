@@ -27,6 +27,7 @@ import { projectedContribution } from '@/lib/goalHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 import ContributionEditor from '@/components/savings/ContributionEditor';
 import ContributionDriftNotice from '@/components/savings/ContributionDriftNotice';
+import { transferRefusal } from '@/lib/transferRefusal';
 
 // Inline edit state for a single transfer row
 type TransferEdit = {
@@ -40,6 +41,10 @@ export default function GoalsSection({ locale }: { locale: string }) {
   const t = useTranslations('goals');
   const tGoalsRecurring = useTranslations('goals.recurring');
   const tEditor = useTranslations('contributionEditor');
+  const tRefusal = useTranslations('transferRefusal');
+  // Why a history entry's edit or delete was refused — both used to fail in
+  // silence (the edit only logged, the delete never read the answer).
+  const [transferError, setTransferError] = useState('');
   const router = useRouter();
   const { today: businessTodayDate } = useBusinessToday();
 
@@ -159,6 +164,7 @@ export default function GoalsSection({ locale }: { locale: string }) {
     const parsed = parseFloat(editing.amount);
     if (!parsed || parsed <= 0) return;
     setSaving(true);
+    setTransferError('');
     const res = await fetch(`/api/transfers/${editing.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -170,7 +176,7 @@ export default function GoalsSection({ locale }: { locale: string }) {
     });
     setSaving(false);
     if (!res.ok) {
-      console.error('Failed to update transfer:', await res.json().catch(() => null));
+      setTransferError(await transferRefusal(res, tRefusal, locale));
       return;
     }
     setEditing(null);
@@ -178,7 +184,13 @@ export default function GoalsSection({ locale }: { locale: string }) {
   }
 
   async function doDelete(id: string) {
-    await fetch(`/api/transfers/${id}`, { method: 'DELETE' });
+    setTransferError('');
+    const res = await fetch(`/api/transfers/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      // The dialog stays open with the reason: the entry is still there.
+      setTransferError(await transferRefusal(res, tRefusal, locale));
+      return;
+    }
     setConfirmDelete(null);
     load();
   }
@@ -595,10 +607,11 @@ export default function GoalsSection({ locale }: { locale: string }) {
                               style={{ background: '#2ABFBF' }}
                             >✓</button>
                             <button
-                              onClick={() => setEditing(null)}
+                              onClick={() => { setEditing(null); setTransferError(''); }}
                               className="px-3 py-1.5 rounded text-sm cursor-pointer"
                               style={{ color: '#6B7280' }}
                             >✕</button>
+                            {transferError && <p className="w-full text-xs" style={{ color: '#DC2626' }}>{transferError}</p>}
                           </div>
                         );
                       }
@@ -728,6 +741,7 @@ export default function GoalsSection({ locale }: { locale: string }) {
               {' — '}
               {formatCurrency(confirmDelete.amount, locale)}
             </p>
+            {transferError && <p className="text-sm mb-3" style={{ color: '#DC2626' }}>{transferError}</p>}
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => doDelete(confirmDelete.id)}
@@ -735,7 +749,7 @@ export default function GoalsSection({ locale }: { locale: string }) {
                 style={{ background: '#DC2626' }}
               >{t('confirmDeleteBtn')}</button>
               <button
-                onClick={() => setConfirmDelete(null)}
+                onClick={() => { setConfirmDelete(null); setTransferError(''); }}
                 className="w-full py-2.5 rounded-full text-sm font-medium cursor-pointer"
                 style={{ color: '#6B7280' }}
               >{t('cancelEdit')}</button>

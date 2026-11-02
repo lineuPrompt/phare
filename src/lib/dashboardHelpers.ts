@@ -370,3 +370,27 @@ export function computeGoalBalance(
     }, 0);
   return Math.round(total * 100) / 100;
 }
+
+/**
+ * The lowest balance a goal account reaches on any date of its own rows, and
+ * the first date it gets there — computeGoalBalance at each of those dates,
+ * future-dated rows included (2026-11-02). Used so an edit or a delete never
+ * takes a savings account below zero, or lower than it already goes. Null
+ * when the account has no rows.
+ */
+export function lowestGoalBalance(
+  transactions: TxRow[],
+  goalAccountId: string
+): { date: string; balance: number } | null {
+  const dates = [...new Set(
+    transactions
+      .filter((tx) => tx.account_id === goalAccountId && tx.date !== undefined)
+      .map((tx) => tx.date as string)
+  )].sort();
+  let lowest: { date: string; balance: number } | null = null;
+  for (const date of dates) {
+    const balance = computeGoalBalance(transactions, goalAccountId, date);
+    if (lowest === null || balance < lowest.balance) lowest = { date, balance };
+  }
+  return lowest;
+}

@@ -2,7 +2,9 @@
 
 **Filed** 2026-11-02, found while diagnosing "delete all recurring entries".
 
-**Status:** OPEN. Not fixed: outside that diagnosis.
+**Status:** FIXED in code 2026-11-02, uncommitted. Delete keeps the dialog
+open with the server's reason; the edit path was silent too (it only
+logged) and now shows its reason. Unverified on screen (no web DOM test).
 
 ## The problem
 

@@ -47,7 +47,13 @@ function makeSupabaseMock(script: Record<string, Resolution[]>) {
 }
 
 vi.mock('@/lib/supabase-server', () => ({ createClient: vi.fn() }));
-vi.mock('@/lib/householdTimezone', () => ({ getHouseholdTimezone: async () => 'America/Toronto' }));
+let timezoneFails = false;
+vi.mock('@/lib/householdTimezone', () => ({
+  getHouseholdTimezone: async () => {
+    if (timezoneFails) throw new Error("could not read the household's timezone: connection reset");
+    return 'America/Toronto';
+  },
+}));
 
 const setOpeningBalance = vi.fn();
 vi.mock('@/lib/openingBalance', () => ({ setOpeningBalance: (...a: unknown[]) => setOpeningBalance(...a) }));
@@ -103,6 +109,26 @@ describe('POST /api/accounts', () => {
     vi.resetModules();
     setOpeningBalance.mockReset();
     logEvent.mockReset();
+    timezoneFails = false;
+  });
+
+  it('a failed timezone read after the account exists: opening_balance_failed with the account, never a bare 500', async () => {
+    // getHouseholdTimezone throws on a failed read (2026-11-02). Here the
+    // account is already created, so the answer must still carry it.
+    timezoneFails = true;
+    const { client } = makeSupabaseMock({
+      users: [USER],
+      accounts: [{ data: [{ sort_order: 1 }], error: null }, { data: SAVINGS, error: null }],
+    });
+    const { POST } = await route(client);
+
+    const res = await POST(post({ name: 'Trip', type: 'savings', goalTarget: 3000, openingBalance: 500 }));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.code).toBe('opening_balance_failed');
+    expect(json.error).toContain("could not read the household's timezone: connection reset");
+    expect(json.account).toEqual(SAVINGS);
+    expect(setOpeningBalance).not.toHaveBeenCalled();
   });
 
   it('a failed opening balance: 500 opening_balance_failed with the reason AND the created account', async () => {

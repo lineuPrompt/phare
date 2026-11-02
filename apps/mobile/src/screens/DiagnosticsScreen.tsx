@@ -3,7 +3,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { businessToday, formatCAD, formatCADLocale } from '@phare/core';
 import { TIMEZONE_PROBE } from '../lib/startupProbe';
-import { apiPostUnauthenticated } from '../lib/api';
+import { apiPost } from '../lib/api';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
@@ -107,7 +107,10 @@ export default function DiagnosticsScreen() {
       // React Native's fetch does not populate response.body, so the default
       // streamed response is unreadable here; this call is the proof that the
       // non-streaming mode is what mobile needs.
-      const body = await apiPostUnauthenticated<{ review: string }>(
+      // Signed in: the route needs a session and counts the call against the
+      // household's monthly review generations. Without the token it answered
+      // 401 on every device (docs/tickets/diagnostics-probe-review-stream-401.md).
+      const body = await apiPost<{ review: string }>(
         '/api/review-stream?stream=0',
         PROBE_PLAN
       );

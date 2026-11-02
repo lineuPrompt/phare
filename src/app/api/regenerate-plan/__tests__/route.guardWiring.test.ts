@@ -199,15 +199,19 @@ describe('POST /api/regenerate-plan — guard call-site argument wiring (structu
     enforceDebtFigureInTopRecommendationMock.mockClear();
   });
 
-  it('the names guard receives every household category name, both languages, and only the payload cards as allowed', async () => {
+  it('the names guard receives every household category name, both languages, and as allowed every name the letter was given', async () => {
     const res = await runGuardWiringFixture('fr');
     expect(res.status).toBe(200);
 
     expect(findNamesNotInPayloadMock).toHaveBeenCalled();
     const [, knownNames, allowedNames] = findNamesNotInPayloadMock.mock.calls[0];
     expect(knownNames).toEqual(expect.arrayContaining(['Shopping', 'Magasinage', 'Housing']));
-    // No card here, so the payload's cards allow no name at all.
-    expect(allowedNames).toEqual([]);
+    // No card here; the letter's own goals, funds, debt line and category
+    // lines are allowed (2026-11-02: a goal name holding a category name was
+    // read as an invented category).
+    expect(allowedNames).toEqual(expect.arrayContaining(['Vacation fund', 'Credit Line', 'Museum Membership']));
+    // ...and nothing the letter was not given.
+    expect(allowedNames).not.toContain('Shopping');
   });
 
   it('the figure guard receives the exact payload the letter was written from', async () => {

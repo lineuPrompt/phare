@@ -102,3 +102,9 @@ describe('recurringSeriesPath — "All from today on" (2026-11-02)', () => {
     expect(recurringSeriesPath('a/b')).toBe('/api/recurring/a%2Fb');
   });
 });
+
+describe('editErrorKey — the savings floor (2026-11-02)', () => {
+  it('a change that would take a savings account below zero has its own message', () => {
+    expect(editErrorKey(new ApiError('server', 400, 'BALANCE_WOULD_GO_NEGATIVE'))).toBe('edit.errors.wouldGoNegative');
+  });
+});

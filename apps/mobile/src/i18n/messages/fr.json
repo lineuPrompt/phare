@@ -102,7 +102,7 @@
     "deviceHeading": "Appareil",
     "localeLabel": "Langue détectée",
     "streamProbeHeading": "Sonde de l'API non diffusée",
-    "streamProbeExplain": "Appelle /api/review-stream?stream=0 afin de vérifier que le fetch de React Native peut lire un corps non diffusé. Cet appel consomme des jetons Anthropic.",
+    "streamProbeExplain": "Appelle /api/review-stream?stream=0 afin de vérifier que le fetch de React Native peut lire un corps non diffusé. Cet appel consomme des jetons Anthropic et l'une des générations de bilan mensuelles du ménage.",
     "streamProbeRun": "Lancer la sonde (consomme des jetons)",
     "streamProbeRunning": "En cours…",
     "streamProbeOk": "{chars} caractères reçus en JSON",
@@ -594,6 +594,7 @@
     "confirmDelete": "Oui, supprimer",
     "cancel": "Annuler",
     "errors": {
+      "wouldGoNegative": "Cela ferait passer ce compte d'épargne sous zéro; rien n'a été modifié.",
       "gone": "Cette entrée n'existe plus. Elle a peut-être été modifiée ailleurs."
     },
     "detachHint": "Cette entrée fait partie d'une règle récurrente. Enregistrer ne modifie que cette occurrence — la règle elle-même reste inchangée.",
