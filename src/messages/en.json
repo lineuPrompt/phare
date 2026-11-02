@@ -692,7 +692,6 @@
       "cancel": "Cancel",
       "confirmDelete": "Delete this transfer?",
       "confirmDeleteEntry": "Delete this entry?",
-      "confirmDeleteOccurrence": "Delete just this occurrence? The recurring rule is unchanged — future occurrences keep their usual amount.",
       "detachHint": "This is part of a recurring rule. Saving edits only this occurrence — the rule itself is unchanged.",
       "moneyOut": "Money out",
       "moneyIn": "Money in",
@@ -761,6 +760,12 @@
       "label": "{month} is closing at"
     },
     "horizonLocked": "{count, plural, one {# more month} other {# more months}} of your timeline with Phare Pro"
+  },
+  "recurringDelete": {
+    "question": "This entry repeats. What should be deleted?",
+    "justThis": "Just this one",
+    "allFromToday": "All from today on",
+    "hint": "“All from today on” also removes the recurring line itself. Past entries, and entries you changed on their own, stay."
   },
   "savings": {
     "title": "Goals",

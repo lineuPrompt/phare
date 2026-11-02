@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { deleteRecurringFromToday } from '@/lib/recurringSeriesDelete';
 import Link from 'next/link';
 import type { RefObject } from 'react';
 import type { MonthView } from '@/lib/timelineDisplayHelpers';
@@ -75,6 +76,7 @@ export function sourceHref(
 // regenerate that date and silently revert or resurrect it.
 function TransferControls({ entry, locale, onChanged }: { entry: TimelineTx; locale: string; onChanged: () => void }) {
   const t = useTranslations('timeline.list');
+  const tr = useTranslations('recurringDelete');
   const [isEditing, setIsEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [date, setDate] = useState(entry.date);
@@ -119,6 +121,21 @@ function TransferControls({ entry, locale, onChanged }: { entry: TimelineTx; loc
     }
   };
 
+  // "All from today on" (recurringSeriesDelete.ts): the entry's whole rule,
+  // from today. Only offered while the entry still belongs to its rule.
+  const removeSeries = async () => {
+    if (!entry.recurringItemId) return;
+    setSaving(true);
+    setError('');
+    try {
+      await deleteRecurringFromToday(entry.recurringItemId);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed');
+      setSaving(false);
+    }
+  };
+
   const isRecurringOccurrence = entry.recurringItemId !== null;
 
   if (isEditing) {
@@ -150,10 +167,20 @@ function TransferControls({ entry, locale, onChanged }: { entry: TimelineTx; loc
     return (
       <div className="w-full flex flex-wrap items-center gap-2 py-1.5 px-2 rounded-lg" style={{ background: '#FEF2F2' }}>
         <p className="w-full text-xs" style={{ color: '#DC2626' }}>
-          {isRecurringOccurrence ? t('confirmDeleteOccurrence') : t('confirmDelete')}
+          {isRecurringOccurrence ? tr('question') : t('confirmDelete')}
         </p>
-        <button onClick={remove} disabled={saving} className="text-xs font-semibold cursor-pointer disabled:opacity-50" style={{ color: '#DC2626' }}>{t('delete')}</button>
-        <button onClick={() => setConfirmDelete(false)} className="text-xs cursor-pointer" style={{ color: '#6B7280' }}>{t('cancel')}</button>
+        {isRecurringOccurrence ? (
+          <>
+            <button onClick={remove} disabled={saving} className="text-xs font-semibold cursor-pointer disabled:opacity-50" style={{ color: '#DC2626' }}>{tr('justThis')}</button>
+            <button onClick={removeSeries} disabled={saving} className="text-xs font-semibold cursor-pointer disabled:opacity-50" style={{ color: '#DC2626' }}>{tr('allFromToday')}</button>
+          </>
+        ) : (
+          <button onClick={remove} disabled={saving} className="text-xs font-semibold cursor-pointer disabled:opacity-50" style={{ color: '#DC2626' }}>{t('delete')}</button>
+        )}
+        <button onClick={() => { setConfirmDelete(false); setError(''); }} className="text-xs cursor-pointer" style={{ color: '#6B7280' }}>{t('cancel')}</button>
+        {isRecurringOccurrence && <p className="w-full text-xs" style={{ color: '#6B7280' }}>{tr('hint')}</p>}
+        {/* A refused delete says why; it used to show nothing here. */}
+        {error && <p className="w-full text-xs" style={{ color: '#DC2626' }}>{error}</p>}
       </div>
     );
   }
@@ -182,6 +209,7 @@ function EntryControls({
   onChanged: () => void;
 }) {
   const t = useTranslations('timeline.list');
+  const tr = useTranslations('recurringDelete');
   const [isEditing, setIsEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [date, setDate] = useState(entry.date);
@@ -235,6 +263,21 @@ function EntryControls({
     }
   };
 
+  // "All from today on" (recurringSeriesDelete.ts): the entry's whole rule,
+  // from today. Only offered while the entry still belongs to its rule.
+  const removeSeries = async () => {
+    if (!entry.recurringItemId) return;
+    setSaving(true);
+    setError('');
+    try {
+      await deleteRecurringFromToday(entry.recurringItemId);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed');
+      setSaving(false);
+    }
+  };
+
   if (isEditing) {
     return (
       <div className="w-full flex flex-wrap items-center gap-2 py-1.5 px-2 rounded-lg" style={{ background: '#F0FDFD' }}>
@@ -276,10 +319,20 @@ function EntryControls({
     return (
       <div className="w-full flex flex-wrap items-center gap-2 py-1.5 px-2 rounded-lg" style={{ background: '#FEF2F2' }}>
         <p className="w-full text-xs" style={{ color: '#DC2626' }}>
-          {isRecurringOccurrence ? t('confirmDeleteOccurrence') : t('confirmDeleteEntry')}
+          {isRecurringOccurrence ? tr('question') : t('confirmDeleteEntry')}
         </p>
-        <button onClick={remove} disabled={saving} className="text-xs font-semibold cursor-pointer disabled:opacity-50" style={{ color: '#DC2626' }}>{t('delete')}</button>
-        <button onClick={() => setConfirmDelete(false)} className="text-xs cursor-pointer" style={{ color: '#6B7280' }}>{t('cancel')}</button>
+        {isRecurringOccurrence ? (
+          <>
+            <button onClick={remove} disabled={saving} className="text-xs font-semibold cursor-pointer disabled:opacity-50" style={{ color: '#DC2626' }}>{tr('justThis')}</button>
+            <button onClick={removeSeries} disabled={saving} className="text-xs font-semibold cursor-pointer disabled:opacity-50" style={{ color: '#DC2626' }}>{tr('allFromToday')}</button>
+          </>
+        ) : (
+          <button onClick={remove} disabled={saving} className="text-xs font-semibold cursor-pointer disabled:opacity-50" style={{ color: '#DC2626' }}>{t('delete')}</button>
+        )}
+        <button onClick={() => { setConfirmDelete(false); setError(''); }} className="text-xs cursor-pointer" style={{ color: '#6B7280' }}>{t('cancel')}</button>
+        {isRecurringOccurrence && <p className="w-full text-xs" style={{ color: '#6B7280' }}>{tr('hint')}</p>}
+        {/* A refused delete says why; it used to show nothing here. */}
+        {error && <p className="w-full text-xs" style={{ color: '#DC2626' }}>{error}</p>}
       </div>
     );
   }

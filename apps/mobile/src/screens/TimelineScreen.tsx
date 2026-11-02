@@ -85,6 +85,7 @@ function EntryRow({ entry, locale, muted }: { entry: TimelineEntry; locale: Loca
         description: entry.description ?? '',
         amount: amountField(entry.amount),
         recurring: entry.recurringItemId !== null ? '1' : '0',
+        ruleId: entry.recurringItemId ?? '',
       },
     });
 

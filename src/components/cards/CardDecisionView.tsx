@@ -12,6 +12,7 @@ import {
 import { formatCurrency, formatSignedAmount } from '@/components/expenses/types';
 import { EnvelopeStatus, envelopeStatus, sumWarning, CategoryEntryLine, UNCATEGORIZED_ROW_ID, CycleState, PastPlanState } from '@/lib/envelopeHelpers';
 import { cardCycleContext, statementCycleWindow } from '@phare/core';
+import { deleteRecurringFromToday } from '@/lib/recurringSeriesDelete';
 
 function formatShortDate(iso: string, locale: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString(
@@ -115,6 +116,7 @@ function SortableHeader({
 // edit form (date/description/amount), plus delete with a confirm step.
 function EntryLine({ entry, locale, onChanged, categoryId: initialCategoryId, categories }: { entry: CategoryEntryLine; locale: string; onChanged: () => void; categoryId: string | null; categories: { id: string; name: string }[] }) {
   const t = useTranslations('cards.decision.entries');
+  const tr = useTranslations('recurringDelete');
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [date, setDate] = useState(entry.date);
@@ -160,6 +162,40 @@ function EntryLine({ entry, locale, onChanged, categoryId: initialCategoryId, ca
     }
   };
 
+  // "All from today on": the entry's whole recurring rule, from today
+  // (recurringSeriesDelete.ts). Only offered while the entry still belongs
+  // to its rule.
+  const removeSeries = async () => {
+    if (!entry.recurringItemId) return;
+    setSaving(true);
+    setError('');
+    try {
+      await deleteRecurringFromToday(entry.recurringItemId);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed');
+      setSaving(false);
+    }
+  };
+
+  if (confirmingDelete && entry.recurringItemId) {
+    return (
+      <div className="py-2 px-2 rounded-lg space-y-1.5" style={{ background: '#FEF2F2' }}>
+        <p className="text-xs" style={{ color: '#374151' }}>
+          {entry.date} · {entry.description ?? '—'} · <span style={{ color: signed.color }}>{signed.text}</span>
+        </p>
+        <p className="text-xs font-medium" style={{ color: '#DC2626' }}>{tr('question')}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={remove} disabled={saving} className="text-xs font-semibold cursor-pointer disabled:opacity-50" style={{ color: '#DC2626' }}>{tr('justThis')}</button>
+          <button onClick={removeSeries} disabled={saving} className="text-xs font-semibold cursor-pointer disabled:opacity-50" style={{ color: '#DC2626' }}>{tr('allFromToday')}</button>
+          <button onClick={() => { setConfirmingDelete(false); setError(''); }} className="text-xs cursor-pointer" style={{ color: '#6B7280' }}>{t('cancel')}</button>
+        </div>
+        <p className="text-xs" style={{ color: '#6B7280' }}>{tr('hint')}</p>
+        {error && <p className="text-xs" style={{ color: '#DC2626' }}>{error}</p>}
+      </div>
+    );
+  }
+
   if (editing) {
     return (
       <div className="flex flex-wrap items-center gap-2 py-1.5 px-2 rounded-lg" style={{ background: '#F9FAFB' }}>
@@ -188,6 +224,7 @@ function EntryLine({ entry, locale, onChanged, categoryId: initialCategoryId, ca
   }
 
   return (
+    <div>
     <div className="flex items-center gap-3 py-1.5 px-2">
       <span className="text-xs w-24 shrink-0" style={{ color: '#9CA3AF' }}>{entry.date}</span>
       <span className="flex-1 min-w-0 truncate text-xs" style={{ color: '#374151' }}>
@@ -209,6 +246,9 @@ function EntryLine({ entry, locale, onChanged, categoryId: initialCategoryId, ca
           <button onClick={() => setConfirmingDelete(false)} className="text-xs cursor-pointer" style={{ color: '#6B7280' }}>{t('cancel')}</button>
         </div>
       )}
+    </div>
+    {/* A refused delete says why; it used to show nothing outside edit mode. */}
+    {error && <p className="px-2 pb-1.5 text-xs" style={{ color: '#DC2626' }}>{error}</p>}
     </div>
   );
 }

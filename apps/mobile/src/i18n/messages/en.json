@@ -597,7 +597,10 @@
       "gone": "This entry no longer exists. It may have been changed somewhere else."
     },
     "detachHint": "This is part of a recurring rule. Saving edits only this occurrence — the rule itself is unchanged.",
-    "deleteOccurrenceConfirm": "Delete just this occurrence? The recurring rule is unchanged — future occurrences keep their usual amount."
+    "recurringDeleteQuestion": "This entry repeats. What should be deleted?",
+    "deleteJustThis": "Just this one",
+    "deleteAllFromToday": "All from today on",
+    "deleteAllFromTodayHint": "“All from today on” also removes the recurring line itself. Past entries, and entries you changed on their own, stay."
   },
   "pro": {
     "title": "Phare Pro",

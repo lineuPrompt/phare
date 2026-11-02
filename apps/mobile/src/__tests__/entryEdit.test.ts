@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MANUAL_ENTRY_DESCRIPTION_MAX_CHARS } from '@phare/core';
 import { ApiError } from '../lib/apiErrors';
-import { amountField, buildEditBody, editableKind, editErrorKey, editProblemKey, entryPath, type EditDraft } from '../lib/entryEdit';
+import { amountField, buildEditBody, editableKind, editErrorKey, editProblemKey, entryPath, recurringSeriesPath, type EditDraft } from '../lib/entryEdit';
 
 const draft = (over: Partial<EditDraft> = {}): EditDraft => ({
   date: '2026-10-14', description: 'Groceries', amount: '86,40', categoryId: '', ...over,
@@ -93,5 +93,12 @@ describe('message keys', () => {
     expect(editProblemKey('descriptionRequired')).toBe('entry.problems.descriptionRequired');
     expect(editProblemKey('descriptionTooLong')).toBe('entry.problems.descriptionTooLong');
     expect(editProblemKey('amountInvalid')).toBe('entry.problems.amountInvalid');
+  });
+});
+
+describe('recurringSeriesPath — "All from today on" (2026-11-02)', () => {
+  it('is the rule’s own DELETE, never the entry’s', () => {
+    expect(recurringSeriesPath('rule-1')).toBe('/api/recurring/rule-1');
+    expect(recurringSeriesPath('a/b')).toBe('/api/recurring/a%2Fb');
   });
 });

@@ -29,8 +29,14 @@ export function makeFakeCardSupabase(seed: Record<string, Row[]>, opts: { userId
     return (store[table] ??= []);
   }
 
-  function selectChain(table: string) {
+  function selectChain(table: string, columns?: string) {
     const filters: Filter[] = [];
+    // A plain column list on transactions is honoured, as the database would:
+    // a fixture field the route does not select must not reach it. (Embedded
+    // selects like 'categories(name)' are left whole.)
+    const projected = table === 'transactions' && columns && !/[(*]/.test(columns)
+      ? columns.split(',').map((c) => c.trim()).filter(Boolean)
+      : null;
     let orderBy: { field: string; ascending: boolean } | null = null;
     let limitN: number | null = null;
 
@@ -44,7 +50,8 @@ export function makeFakeCardSupabase(seed: Record<string, Row[]>, opts: { userId
         });
       }
       if (limitN !== null) result = result.slice(0, limitN);
-      return result.map((r) => ({ ...r }));
+      return result.map((r) =>
+        projected ? Object.fromEntries(projected.filter((k) => k in r).map((k) => [k, r[k]])) : { ...r });
     };
     const failure = () => ({ data: null, error: { message: `simulated ${table} failure` } });
 
@@ -101,7 +108,7 @@ export function makeFakeCardSupabase(seed: Record<string, Row[]>, opts: { userId
     auth: { getUser: async () => ({ data: { user: { id: opts.userId ?? 'user-1' } }, error: null }) },
     from(table: string) {
       return {
-        select: () => selectChain(table),
+        select: (columns?: string) => selectChain(table, columns),
         upsert(row: Row, o?: { onConflict?: string }) {
           writes.push({ op: 'upsert', table, payload: row });
           const keys = (o?.onConflict ?? '').split(',').filter(Boolean);

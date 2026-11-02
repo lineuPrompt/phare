@@ -19,6 +19,7 @@ import {
   editErrorKey,
   editProblemKey,
   entryPath,
+  recurringSeriesPath,
   type EditableKind,
   type EditDraft,
 } from '../lib/entryEdit';
@@ -37,6 +38,8 @@ export type EditEntryParams = {
   description?: string;
   amount?: string;
   recurring?: string;
+  /** The entry's recurring rule, for "All from today on"; '' when none. */
+  ruleId?: string;
 };
 
 /**
@@ -54,6 +57,7 @@ export default function EditEntryScreen() {
   const kind: EditableKind | null = params.kind === 'transfer' ? 'transfer' : params.kind === 'entry' ? 'entry' : null;
   const entryType = params.type === 'income' || params.type === 'expense' || params.type === 'transfer' ? params.type : null;
   const isRecurring = params.recurring === '1';
+  const ruleId = isRecurring && params.ruleId ? params.ruleId : null;
 
   const [draft, setDraft] = useState<EditDraft>({
     date: params.date ?? '',
@@ -134,6 +138,26 @@ export default function EditEntryScreen() {
     }
   };
 
+  // "All from today on": the rule and its entries from today. A refusal
+  // shows the same error box as any other failed delete.
+  const removeSeries = async () => {
+    if (!ruleId) return;
+    setBusy('deleting');
+    setMessageKey(null);
+    try {
+      const { status } = await apiDelete(recurringSeriesPath(ruleId), {});
+      if (status !== 200) throw new Error(`delete answered ${status}`);
+      emitEntrySaved();
+      close();
+    } catch (err) {
+      console.error('Edit entry series delete error:', err);
+      setMessageKey(editErrorKey(err));
+      setConfirmingDelete(false);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const header = (
     <View style={styles.header}>
       <Text style={styles.title}>{kind === 'transfer' ? t('edit.titleTransfer') : t('edit.title')}</Text>
@@ -158,7 +182,7 @@ export default function EditEntryScreen() {
   }
 
   const deleteQuestion = isRecurring
-    ? t('edit.deleteOccurrenceConfirm')
+    ? t('edit.recurringDeleteQuestion')
     : kind === 'transfer'
       ? t('edit.deleteTransferConfirm')
       : t('edit.deleteEntryConfirm');
@@ -236,8 +260,16 @@ export default function EditEntryScreen() {
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{deleteQuestion}</Text>
               <Pressable accessibilityRole="button" onPress={() => void remove()} disabled={busy !== null} hitSlop={8}>
-                <Text style={styles.retry}>{busy === 'deleting' ? t('edit.deleting') : t('edit.confirmDelete')}</Text>
+                <Text style={styles.retry}>
+                  {busy === 'deleting' ? t('edit.deleting') : isRecurring ? t('edit.deleteJustThis') : t('edit.confirmDelete')}
+                </Text>
               </Pressable>
+              {ruleId && busy === null && (
+                <Pressable accessibilityRole="button" onPress={() => void removeSeries()} hitSlop={8}>
+                  <Text style={styles.retry}>{t('edit.deleteAllFromToday')}</Text>
+                </Pressable>
+              )}
+              {ruleId && <Text style={styles.close}>{t('edit.deleteAllFromTodayHint')}</Text>}
               <Pressable accessibilityRole="button" onPress={() => setConfirmingDelete(false)} hitSlop={8}>
                 <Text style={styles.close}>{t('edit.cancel')}</Text>
               </Pressable>

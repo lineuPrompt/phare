@@ -26,12 +26,15 @@ export type CategoryEntryLine = {
   amount: number;
   type: 'expense' | 'income';
   installmentLabel: string | null;
+  /** The recurring rule this entry still belongs to; null once edited alone. */
+  recurringItemId: string | null;
 };
 
 export type CardTxRow = EnvTx & {
   id: string;
   description: string | null;
   installment_label: string | null;
+  recurring_item_id?: string | null;
 };
 
 function r2(n: number): number {
@@ -136,6 +139,7 @@ export function groupEntriesByCategory(
       amount: Number(t.amount),
       type: t.type as 'expense' | 'income',
       installmentLabel: t.installment_label,
+      recurringItemId: t.recurring_item_id ?? null,
     };
 
     if (t.category_id) {

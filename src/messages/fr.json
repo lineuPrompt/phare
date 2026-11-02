@@ -692,7 +692,6 @@
       "cancel": "Annuler",
       "confirmDelete": "Supprimer ce transfert?",
       "confirmDeleteEntry": "Supprimer cette entrée?",
-      "confirmDeleteOccurrence": "Supprimer seulement cette occurrence? La règle récurrente reste inchangée — les prochaines occurrences garderont leur montant habituel.",
       "detachHint": "Cette entrée fait partie d'une règle récurrente. Enregistrer ne modifie que cette occurrence — la règle elle-même reste inchangée.",
       "moneyOut": "Sortie d'argent",
       "moneyIn": "Entrée d'argent",
@@ -761,6 +760,12 @@
       "label": "{month} se termine à"
     },
     "horizonLocked": "{count, plural, one {# mois de plus} other {# mois de plus}} de votre échéancier avec Phare Pro"
+  },
+  "recurringDelete": {
+    "question": "Cette entrée est récurrente. Que voulez-vous supprimer?",
+    "justThis": "Seulement celle-ci",
+    "allFromToday": "Toutes à partir d'aujourd'hui",
+    "hint": "« Toutes à partir d'aujourd'hui » retire aussi la ligne récurrente elle-même. Les entrées passées, et celles que vous avez modifiées une à une, restent."
   },
   "savings": {
     "title": "Objectifs",

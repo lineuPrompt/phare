@@ -19,6 +19,7 @@ function entry(over: Partial<CategoryEntryLine> = {}): CategoryEntryLine {
     amount: 10,
     type: 'expense',
     installmentLabel: null,
+    recurringItemId: null,
     ...over,
   };
 }

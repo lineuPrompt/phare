@@ -597,7 +597,10 @@
       "gone": "Cette entrée n'existe plus. Elle a peut-être été modifiée ailleurs."
     },
     "detachHint": "Cette entrée fait partie d'une règle récurrente. Enregistrer ne modifie que cette occurrence — la règle elle-même reste inchangée.",
-    "deleteOccurrenceConfirm": "Supprimer seulement cette occurrence? La règle récurrente reste inchangée — les prochaines occurrences garderont leur montant habituel."
+    "recurringDeleteQuestion": "Cette entrée est récurrente. Que voulez-vous supprimer?",
+    "deleteJustThis": "Seulement celle-ci",
+    "deleteAllFromToday": "Toutes à partir d'aujourd'hui",
+    "deleteAllFromTodayHint": "« Toutes à partir d'aujourd'hui » retire aussi la ligne récurrente elle-même. Les entrées passées, et celles que vous avez modifiées une à une, restent."
   },
   "pro": {
     "title": "Phare Pro",

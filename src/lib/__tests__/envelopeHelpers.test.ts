@@ -580,6 +580,24 @@ function cardTx(
 }
 
 describe('groupEntriesByCategory — statement-cycle display contract', () => {
+  it('each entry carries its recurring rule, so the card page can offer "All from today on" (2026-11-02)', () => {
+    const { byCategory } = groupEntriesByCategory(
+      [
+        { ...cardTx('rec', 40, '2026-07-05', CAT_GROCERY), recurring_item_id: 'rule-1' },
+        { ...cardTx('alone', 40, '2026-07-06', CAT_GROCERY), recurring_item_id: null },
+        cardTx('legacy', 40, '2026-07-07', CAT_GROCERY),
+      ],
+      VISA,
+      '2026-07',
+      null
+    );
+    expect(byCategory[CAT_GROCERY]?.map((e) => [e.id, e.recurringItemId])).toEqual([
+      ['rec', 'rule-1'],
+      ['alone', null],
+      ['legacy', null],
+    ]);
+  });
+
   it('groups entries by category, scoped to the cycle window (closeDay null = plain calendar month)', () => {
     const { byCategory, uncategorized } = groupEntriesByCategory(
       [

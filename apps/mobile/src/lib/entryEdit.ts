@@ -49,6 +49,16 @@ export function entryPath(kind: EditableKind, id: string): string {
   return `/api/${kind === 'transfer' ? 'transfers' : 'expenses'}/${encodeURIComponent(id)}`;
 }
 
+/**
+ * "All from today on" (2026-11-02): the entry's whole recurring rule, through
+ * the rule's own DELETE — it removes the rule and every row it still owns
+ * dated today or later. Past entries, and entries edited one by one (no
+ * longer owned by the rule), stay.
+ */
+export function recurringSeriesPath(ruleId: string): string {
+  return `/api/recurring/${encodeURIComponent(ruleId)}`;
+}
+
 export type EditDraft = {
   date: string;
   description: string;

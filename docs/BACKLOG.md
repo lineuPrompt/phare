@@ -121,12 +121,15 @@ the v1.1 list separately.**
   deploy, B `20261102010000` after it is live. Deployed before 7 November,
   the next run writes October for every household that missed it. Cause on
   1 November (failed vs cut off) unconfirmed: the Supabase token expired.
-- **"Delete all" for a recurring bill** (Lineu, 2026-11-02). Diagnosed:
-  the card page deletes one entry at a time; the Recurring page's Delete
-  keeps past entries. Waiting on three answers (past entries? closed
-  statements? entries edited one by one?) — STOP until then. —
-  [ticket](tickets/recurring-list-delete-ignores-failure.md) (web Delete
-  ignores a failure; found on the way, not fixed)
+- **"Delete all" for a recurring bill** (Lineu, 2026-11-02). BUILT,
+  uncommitted. Deleting a recurring entry (card page and Timeline on the web,
+  Timeline in the app) asks "Just this one" or "All from today on". All from
+  today on = the rule's own DELETE: the rule and its entries dated today or
+  later; past entries and entries edited one by one stay (Lineu's answers).
+  The delete confirmations on those screens now show a refusal's reason.
+  Not yet checked live (needs the deploy). Found on the way, not fixed:
+  [ticket](tickets/recurring-list-delete-ignores-failure.md) (the Recurring
+  page's own Delete ignores a failure).
 - **`getHouseholdTimezone` turns a failed read into Toronto time** — dates,
   23 callers: diagnose and STOP. —
   [ticket](tickets/household-timezone-read-error-falls-back.md)

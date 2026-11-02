@@ -85,7 +85,7 @@ export async function GET(request: Request) {
     // to the cycle window itself, not the calendar month.
     const { data: rawTxns } = await supabase
       .from('transactions')
-      .select('id, account_id, amount, category_id, type, date, is_bridge, description, installment_label')
+      .select('id, account_id, amount, category_id, type, date, is_bridge, description, installment_label, recurring_item_id')
       .eq('household_id', householdId)
       .eq('account_id', cardId)
       .gte('date', cycleWindow.start)

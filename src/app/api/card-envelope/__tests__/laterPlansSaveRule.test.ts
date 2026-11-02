@@ -216,3 +216,28 @@ describe('fetchLaterOwnPlanMonths never lists a closed month', () => {
     expect(months).toEqual(['2026-10', '2026-11', '2026-12']);
   });
 });
+
+// "All from today on" on the card page (2026-11-02) needs each entry's
+// recurring rule. The fake returns only the columns the route selects, so this
+// fails if the route stops reading recurring_item_id.
+describe('GET /api/card-envelope — entries carry their recurring rule', () => {
+  beforeEach(() => { vi.resetModules(); vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-29T12:00:00-04:00')); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('a recurring card bill names its rule; an entry edited alone names none', async () => {
+    const data = seed(false);
+    data.transactions = [
+      { id: 'bill-oct', household_id: 'hh-1', account_id: CARD, amount: 40, category_id: GROCERIES, type: 'expense',
+        date: '2026-10-05', is_bridge: false, description: 'Streaming', installment_label: null, recurring_item_id: 'rule-1' },
+      { id: 'edited', household_id: 'hh-1', account_id: CARD, amount: 45, category_id: GROCERIES, type: 'expense',
+        date: '2026-10-06', is_bridge: false, description: 'Streaming', installment_label: null, recurring_item_id: null },
+    ];
+    const { client } = makeFakeCardSupabase(data);
+    const json = await get(client, '2026-10');
+    const lines = (json.entriesByCategory[GROCERIES] ?? []) as { id: string; recurringItemId: string | null }[];
+    expect(lines.map((l) => [l.id, l.recurringItemId])).toEqual([
+      ['bill-oct', 'rule-1'],
+      ['edited', null],
+    ]);
+  });
+});
