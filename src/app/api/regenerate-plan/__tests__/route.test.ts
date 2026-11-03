@@ -41,12 +41,18 @@ function makeResultChain(resolution: Resolution) {
 
 type Call = { table: string; method: string; args: unknown[] };
 
+const TREND_READS = ['account_id, amount, type, date, category_id, is_bridge', 'generated_by, created_at, messages'];
+
 function makeSupabaseMock(script: Record<string, Resolution[]>) {
   const cursors: Record<string, number> = {};
   const calls: Call[] = [];
 
   function entry(table: string, method: string, args: unknown[]) {
     calls.push({ table, method, args });
+    // The letter's trend reads (2026-11-03): spending by category over real
+    // months, and last month's letter. Answered empty and outside the script,
+    // so each fixture's call order stays what it tests.
+    if (method === 'select' && TREND_READS.includes(args[0] as string)) return makeResultChain({ data: [], error: null });
     const idx = cursors[table] ?? 0;
     cursors[table] = idx + 1;
     const list = script[table] ?? [];

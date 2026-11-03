@@ -99,7 +99,12 @@ function makeSupabaseMock(script: Record<string, Resolution[]>) {
   const client = {
     auth: { getUser: async () => ({ data: { user: { id: 'user-1' } }, error: null }) },
     from: (table: string) => ({
-      select: (..._args: unknown[]) => entry(table),
+      // The letter's trend reads (2026-11-03): answered empty and outside
+      // the script, so each fixture's call order stays what it tests.
+      select: (...args: unknown[]) =>
+        ['account_id, amount, type, date, category_id, is_bridge', 'generated_by, created_at, messages'].includes(args[0] as string)
+          ? makeResultChain({ data: [], error: null })
+          : entry(table),
       insert: (..._args: unknown[]) => entry(table),
       upsert: (..._args: unknown[]) => entry(table),
     }),

@@ -42,6 +42,7 @@ import { loadCardCycleFacts, overTargetFromCardFacts, cardLetterFacts, type Card
 import { loadMonthAhead, type MonthAheadFacts } from '@/lib/reviewMonthAhead';
 import { checkLetterFigures, checkTopRecommendationFigures, findExpenseMisframing, findNamesNotInPayload, LetterGuardError } from '@/lib/letterGuards';
 import { categoryDisplayName } from '@/lib/categoryTranslations';
+import { categoryTrends, balanceProgress, previousRecommendation, type TrendTx, type BalanceProgress } from '@/lib/reviewTrends';
 import { enforceDebtFigureInTopRecommendation, enforceBorrowedCashFraming, containsUnsubstitutedToken, DEBT_PAYMENT_PLACEHOLDER } from '@/lib/topRecommendationHelpers';
 import { logEvent } from '@/lib/eventLogger';
 import {
@@ -962,6 +963,63 @@ export async function generateMonthlyReview({
 
     const cards = cardFacts.map((c) => cardLetterFacts(c, locale));
 
+    // ── What changed, over real months (2026-11-03, reviewTrends.ts) ─────────
+    // The month before was the letter's only comparison, on two totals, so
+    // similar months got the same advice. Per-category spending, each goal's,
+    // the reserve's and the debt's balance month by month, and last month's
+    // own recommendation — all computed here, only narrated by the letter.
+    const { data: categoryRows, error: categoryErr } = await supabase
+      .from('categories')
+      .select('id, name, name_fr')
+      .eq('household_id', householdId);
+    if (categoryErr) throw new Error(`categories read failed: ${categoryErr.message}`);
+    const namedMonth = (m: string) => ({
+      month: m,
+      name: new Date(`${m}-01T00:00:00`).toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', { month: 'long', year: 'numeric' }),
+    });
+    const trendMonths = [3, 2, 1, 0].map((n) => namedMonth(addMonthsToMonth(reviewMonthLabel, -n)));
+    // From a month earlier than the first one shown: a card's statement cycle
+    // starts in the month before the one it closes in.
+    const { data: trendRows, error: trendErr } = await supabase
+      .from('transactions')
+      .select('account_id, amount, type, date, category_id, is_bridge')
+      .eq('household_id', householdId)
+      .gte('date', `${addMonthsToMonth(reviewMonthLabel, -4)}-01`)
+      .lt('date', monthEnd);
+    if (trendErr) throw new Error(`transactions read failed: ${trendErr.message}`);
+    const categoryTrendFacts = categoryTrends({
+      rows: (trendRows ?? []) as TrendTx[],
+      chequingIds: [...chequingIds] as string[],
+      cards: cardAccounts.map((a) => ({ id: a.id as string, closeDay: (a.statement_close_day ?? null) as number | null })),
+      categoryNames: new Map(
+        ((categoryRows ?? []) as { id: string; name: string | null; name_fr: string | null }[])
+          .filter((c) => typeof c.name === 'string' && c.name.length > 0)
+          .map((c) => [c.id, categoryDisplayName({ name: c.name as string, name_fr: c.name_fr }, locale)])
+      ),
+      months: trendMonths,
+      today,
+      monthInProgress: reviewMonth === today.slice(0, 7),
+    });
+    const progress = [
+      ...nonDebtGoals.map((g) => ({ accountId: g.accountId, name: g.name, kind: 'goal' as const })),
+      ...(bufferAccountId ? [{ accountId: bufferAccountId as string, name: accountNameById.get(bufferAccountId) ?? 'sinkingFundBuffer', kind: 'reserve' as const }] : []),
+      ...(debtGoalLine ? [{ accountId: debtGoalLine.accountId, name: debtGoalLine.name, kind: 'debt' as const }] : []),
+    ]
+      .map((a) => balanceProgress({ rows: goalTxData, ...a, months: trendMonths, today }))
+      .filter((p): p is BalanceProgress => p !== null);
+    const previousMonthLabel = addMonthsToMonth(reviewMonthLabel, -1);
+    const { data: previousLetters, error: previousLetterErr } = await supabase
+      .from('conversations')
+      .select('generated_by, created_at, messages')
+      .eq('household_id', householdId)
+      .eq('type', 'monthly_review')
+      .eq('review_month', previousMonthLabel);
+    if (previousLetterErr) throw new Error(`conversations read failed: ${previousLetterErr.message}`);
+    const lastRecommendation = previousRecommendation(
+      (previousLetters ?? []) as { generated_by: string | null; created_at: string; messages: unknown }[],
+      namedMonth(previousMonthLabel).name
+    );
+
     // ── THE LETTER'S PAYLOAD (2026-10-10) ────────────────────────────────────
     // Every number below is code-computed from the shared helpers; the letter
     // may restate them and nothing else (the figure guard enforces it).
@@ -973,6 +1031,9 @@ export async function generateMonthlyReview({
       savingsByDestination: savingsLines,
       recurringTransfers: committedTransfers,
       previousMonth: previousMonthFacts,
+      categoryTrends: categoryTrendFacts,
+      progress,
+      previousRecommendation: lastRecommendation,
       cards,
       monthAhead,
       incomeLines: classifiedCategories
@@ -1030,7 +1091,9 @@ export async function generateMonthlyReview({
       `Good tone: "${toneExample}"\n` +
       `Bad tone: "Based on a comprehensive analysis of your financial data..."\n\n` +
       `Open with how the month actually went, as "month.result" and "cards" say it: do not open with praise ` +
-      `for a month that ran a deficit or went over its card goals. End with the one thing to do this month. ` +
+      `for a month that ran a deficit or went over its card goals. Then what CHANGED: the categories that moved ` +
+      `("categoryTrends") and how each balance moved ("progress"). Then last month's recommendation, if there was ` +
+      `one, and the month ahead. End with the one thing to do this month. ` +
       `Write ONLY the review text, no preamble, no headings.\n\n` +
       `Hard rules — every one of these caused a real, published mistake before, do not repeat any of them:\n` +
       `- The reviewed month is "reviewMonth" above: ${reviewMonthName}. Refer to it by exactly this name. ` +
@@ -1045,13 +1108,29 @@ export async function generateMonthlyReview({
       `from the plan, a date, or a count of months from it.\n` +
       `- CARDS AND CATEGORIES: you may name any card in "cards" and any category in a card's "topOverspends", ` +
       `with their own figures exactly as given (goal, spent, overGoalBy, previousCycleSpent, spentChange; plan, ` +
-      `actual, over, previousActual, change). Write each name exactly as given. Never name any other card or ` +
-      `spending category. A card with "open": true has a statement cycle that has not closed yet: it and its ` +
+      `actual, over, previousActual, change), and any category in "categoryTrends". Write each name exactly as ` +
+      `given. Never name any other card or spending category. A card with "open": true has a statement cycle that has not closed yet: it and its ` +
       `categories are "running ahead of the goal so far", never "over goal" or "went over". A card with no ` +
       `"overGoalBy" did not go past its goal; a card whose "goal" is null has no goal.\n` +
       `- THE MONTH AHEAD: "monthAhead" is the next month's chequing balance as dated today: its lowest point and ` +
       `the day it is reached, and whether any day is dated below zero. If it is null, say nothing about next ` +
-      `month's balance with a number.\n` +
+      `month's balance with a number. "largestBillsBeforeLowest" are the biggest bills dated before that lowest ` +
+      `day: you may name them, with their own amount and date, as what takes the balance down.\n` +
+      `- WHAT CHANGED: "categoryTrends" is spending per category in each real month shown ("months", oldest ` +
+      `first; card categories by statement cycle, as the Cards page shows them). Say what moved, using ` +
+      `"biggestIncrease" and "biggestDecrease" (chosen for you: do not pick others as "the biggest") and a ` +
+      `category's "changeVsLastMonth", "highestOfMonths" ("the highest of the last N months") or ` +
+      `"lowestOfMonths". Never say a category went up or down without one of those fields saying so. If ` +
+      `"monthInProgress" is true, the reviewed month is only partly spent: never compare it with a full month. ` +
+      `If "categoryTrends" is null, there is not enough history: say nothing about trends.\n` +
+      `- PROGRESS: "progress" is each goal's, the reserve's ("kind": "reserve") and the debt's balance at the end ` +
+      `of each month shown, and its "change" from the first month shown to the last. Say how it moved with ` +
+      `those figures, naming the months. A "change" of 0 means it did not move: say so plainly.\n` +
+      `- LAST MONTH'S RECOMMENDATION: "previousRecommendation" (null means none) is what the previous letter ` +
+      `asked for, and its "figures" are last month's figures, never this month's. Say in one sentence what this ` +
+      `month's figures show about it ("depositedThisMonth", "progress", "categoryTrends"). Never say it was or was ` +
+      `not followed unless one of those figures shows it. Do not repeat it in the same words: if this month's ` +
+      `priority is the same, say it is still the priority and what is different now.\n` +
       `- ON-TRACK CLAIMS: for any goal or debt, you may state its status only by directly restating what "goals"/` +
       `"debtPayoff" already say — never assert or imply "on track", "behind", or "funded" beyond exactly what ` +
       `those fields say for that specific goal. "onTrackAtActualContribution" (present only when it can be ` +
@@ -1157,11 +1236,7 @@ export async function generateMonthlyReview({
     // payload's "cards" carry. Replaces the category-sourcing check, which
     // allowed one category near a few phrases. Card names are not listed:
     // every credit card is in "cards", so a card name is always allowed.
-    const { data: categoryRows, error: categoryErr } = await supabase
-      .from('categories')
-      .select('name, name_fr')
-      .eq('household_id', householdId);
-    if (categoryErr) throw new Error(`categories read failed: ${categoryErr.message}`);
+    // (categoryRows: read above, with the trends.)
     // Every way the household's categories are written, in both languages —
     // including the seed translation the Cards page shows when name_fr is empty.
     const knownNames = [
@@ -1180,6 +1255,11 @@ export async function generateMonthlyReview({
     const payloadNames = [
       ...cards.flatMap((c) => [c.name, ...c.topOverspends.map((o) => o.category)]),
       ...realEntityNames,
+      // The categories the trends carry, and the bills before next month's
+      // lowest day (2026-11-03).
+      ...(categoryTrendFacts?.categories.map((c) => c.name) ?? []),
+      ...progress.map((p) => p.name),
+      ...(monthAhead?.largestBillsBeforeLowest.map((b) => b.description) ?? []),
     ];
 
     type Violation = { figures: string[]; names: string[]; framing: string[]; borrowed: boolean; token: boolean };

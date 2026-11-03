@@ -157,7 +157,11 @@ describe('generateMonthlyReview — golden output', () => {
     // would force one shape on both.
     const result = await generate();
     expect(Object.keys(result).sort()).toEqual(['reviewText', 'topRecommendation']);
-    expect(queries.some((q) => q.table === 'conversations')).toBe(false);
+    // It READS last month's letter (its recommendation, 2026-11-03), and
+    // only that: never this month's row.
+    const letterQueries = queries.filter((q) => q.table === 'conversations');
+    expect(letterQueries.length).toBeLessThanOrEqual(1);
+    for (const q of letterQueries) expect(q.filters).toContainEqual(['review_month', '2026-06']);
   });
 
   it('makes both AI calls — the plan and the review', async () => {

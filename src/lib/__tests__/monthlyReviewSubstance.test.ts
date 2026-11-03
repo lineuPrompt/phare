@@ -33,9 +33,11 @@ const VISA = 'visa';
 const COSTCO = 'costco';
 const TRAVEL = 'goal-travel';
 const BUFFER = 'buffer';
-const C = { shopping: 'cat-shop', unexpected: 'cat-unexp', groceries: 'cat-groc', restaurants: 'cat-rest' };
+const C = { shopping: 'cat-shop', unexpected: 'cat-unexp', groceries: 'cat-groc', restaurants: 'cat-rest', childcare: 'cat-child' };
 const CAT_NAMES: Record<string, string> = {
   [C.shopping]: 'Shopping', [C.unexpected]: 'Unexpected', [C.groceries]: 'Groceries & Pharmacy', [C.restaurants]: 'Restaurants',
+  // No plan and no spending: in no card and in no trend.
+  [C.childcare]: 'Childcare',
 };
 
 let n = 0;
@@ -98,8 +100,11 @@ function seed(): Record<string, Row[]> {
       tx(CHQ, '2026-09-02', 5000, 'income', { description: 'Salary' }),
       tx(CHQ, '2026-09-03', 4500, 'expense', { description: 'Mortgage' }),
       ...transfer(TRAVEL, '2026-09-12', 125),
+      tx(CHQ, '2026-10-02', 50, 'expense', { description: 'Phone' }),
       tx(CHQ, '2026-10-05', 4200, 'expense', { description: 'Mortgage' }),
       tx(CHQ, '2026-10-15', 3000, 'income', { description: 'Salary' }),
+      // After October's lowest day: never one of the bills that cause it.
+      tx(CHQ, '2026-10-20', 2500, 'expense', { description: 'Roof' }),
     ],
     events: [],
   };
@@ -230,11 +235,18 @@ describe('monthly review — Part B substance', () => {
     it('its lowest balance, the day, and the first day below zero — card payments included', async () => {
       const { payload } = await generate();
       // From the Sep 1 anchor of 1000: +5000 −4500 −125 = 1375 at Sep 30.
-      // Oct 3 Costco's September cycle −1933.12 → −558.12 (first below zero);
-      // Oct 5 −4200 → −4758.12; Oct 10 Visa's September cycle −3371.96 →
-      // −8130.08 (lowest); Oct 15 +3000.
+      // Oct 2 Phone −50 → 1325; Oct 3 Costco's September cycle −1933.12 →
+      // −608.12 (first below zero); Oct 5 −4200 → −4808.12; Oct 10 Visa's
+      // September cycle −3371.96 → −8180.08 (lowest); Oct 15 +3000.
       expect(payload.monthAhead).toEqual({
-        month: '2026-10', lowestBalance: -8130.08, lowestDate: '2026-10-10', anyDayBelowZero: true, firstDayBelowZero: '2026-10-03',
+        month: '2026-10', lowestBalance: -8180.08, lowestDate: '2026-10-10', anyDayBelowZero: true, firstDayBelowZero: '2026-10-03',
+        // The three biggest bills dated through the lowest day: not Phone, the
+        // fourth; not Oct 20's Roof, after it (the balance is then −7680.08).
+        largestBillsBeforeLowest: [
+          { description: 'Mortgage', amount: 4200, date: '2026-10-05' },
+          { description: 'Visa Avion payment', amount: 3371.96, date: '2026-10-10' },
+          { description: 'Costco Julia payment', amount: 1933.12, date: '2026-10-03' },
+        ],
       });
     });
 
@@ -251,6 +263,49 @@ describe('monthly review — Part B substance', () => {
       const prompt = createMock.mock.calls[1][0].messages[0].content as string;
       expect(prompt).toContain('"monthAhead":null');
       expect(fake.writes.filter((w) => w.table === 'transactions')).toEqual([]);
+    });
+  });
+
+  describe('what changed over real months (2026-11-03)', () => {
+    it('per-category trends: cards by statement cycle, months with no spending left out', async () => {
+      const { payload } = await generate();
+      const t = payload.categoryTrends;
+      expect(t.months.map((m: { month: string }) => m.month)).toEqual(['2026-08', '2026-09']);
+      // Unexpected: Visa 1366.96 + Costco 1933.12 in September's cycles;
+      // Visa 190.33 + Costco 449.6 in August's.
+      expect(t.categories.find((c: { name: string }) => c.name === 'Unexpected')).toMatchObject({
+        thisMonth: 3300.08, lastMonth: 639.93, changeVsLastMonth: 2660.15,
+      });
+      expect(t.biggestIncrease).toEqual({ name: 'Unexpected', change: 2660.15 });
+      expect(t.biggestDecrease).toEqual({ name: 'Groceries & Pharmacy', change: -769.53 });
+    });
+
+    it('progress: the reserve\'s balance at each month end; a goal with one month has none', async () => {
+      const { payload } = await generate();
+      expect(payload.progress).toEqual([{
+        name: 'Sinking funds', kind: 'reserve', change: 0,
+        balances: [{ month: '2026-08', balance: 425.52 }, { month: '2026-09', balance: 425.52 }],
+      }]);
+    });
+
+    it('last month\'s recommendation, quoted from its own letter', async () => {
+      createMock.mockReset();
+      createMock
+        .mockResolvedValueOnce(aiReturns(JSON.stringify({ lineClassifications: [], topRecommendation: 'Keep going.' })))
+        .mockResolvedValueOnce(aiReturns('September was steady.'));
+      const { generateMonthlyReview } = await import('@/lib/monthlyReviewService');
+      const store = seed();
+      store.conversations = [
+        { household_id: HH, type: 'monthly_review', review_month: '2026-08', generated_by: 'cron', created_at: '2026-09-01',
+          messages: [{ type: 'top_recommendation', content: 'Put $258.85 toward Property tax.' }] },
+        // Later, so it would win if the read were not scoped to the household.
+        { household_id: 'other', type: 'monthly_review', review_month: '2026-08', generated_by: 'cron', created_at: '2026-09-02',
+          messages: [{ type: 'top_recommendation', content: 'Not this household.' }] },
+      ];
+      await generateMonthlyReview({ supabase: makeFakeCardSupabase(store).client as never, householdId: HH, locale: 'en', timezone: 'America/Toronto', reviewMonth: '2026-09', userId: 'user-1' });
+      const prompt = createMock.mock.calls[1][0].messages[0].content as string;
+      const payload = JSON.parse(prompt.slice(prompt.indexOf('Their plan:\n') + 12, prompt.indexOf('\n\nWrite ')));
+      expect(payload.previousRecommendation).toEqual({ month: 'August 2026', text: 'Put $258.85 toward Property tax.', figures: [258.85] });
     });
   });
 
@@ -303,15 +358,21 @@ describe('monthly review — Part B substance', () => {
       expect(result!.reviewText).toContain('Visa Avion');
     });
 
-    it('naming a category absent from the payload\'s cards is rejected: retried, then nothing saved and the name recorded', async () => {
-      // Restaurants has a plan on Visa, but it is not a top overspend, so the
-      // payload's cards do not carry it.
-      const { error } = await generate('2026-09', 'Restaurants came in at $793.75.', 'Restaurants again, at $793.75.');
+    it('naming a category absent from the payload is rejected: retried, then nothing saved and the name recorded', async () => {
+      // Childcare is the household's, but no card and no trend carries it.
+      const { error } = await generate('2026-09', 'Childcare came in at $793.75.', 'Childcare again, at $793.75.');
       expect((error as Error).name).toBe('LetterGuardError');
       const failed = recordedEvents.map((row) => ({ payload: row })).find((w) => (w.payload as { event_type: string }).event_type === 'review_guard_failed');
       expect((failed!.payload as { household_id: string; metadata: { names: string[]; month: string } })).toMatchObject({
-        household_id: HH, metadata: { names: ['Restaurants'], month: '2026-09' },
+        household_id: HH, metadata: { names: ['Childcare'], month: '2026-09' },
       });
+    });
+
+    it('a category the trends carry may be named, though no card carries it (2026-11-03)', async () => {
+      // Restaurants has a plan on Visa but is not a top overspend: before the
+      // trends, naming it was refused.
+      const { error } = await generate('2026-09', 'Restaurants came in at $793.75.');
+      expect(error).toBeNull();
     });
   });
 });

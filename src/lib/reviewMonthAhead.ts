@@ -32,6 +32,11 @@ export type MonthAheadFacts = {
   anyDayBelowZero: boolean;
   /** First day whose end-of-day balance is below zero; present only when there is one. */
   firstDayBelowZero?: string;
+  /**
+   * The three largest chequing expenses dated from the 1st through the lowest
+   * day — what takes the balance down to its lowest point (2026-11-03).
+   */
+  largestBillsBeforeLowest: { description: string; amount: number; date: string }[];
 };
 
 function lastDayOf(month: string): string {
@@ -102,7 +107,13 @@ export async function loadMonthAhead(params: {
   if (!view) return null;
 
   const firstBelow = result.days.find((d) => d.date.startsWith(month) && d.endOfDayBalance < 0);
+  const largestBillsBeforeLowest = ((rawTxns ?? []) as unknown as { description: string | null; amount: number | string; type: string; date: string }[])
+    .filter((t) => t.type === 'expense' && t.date >= windowStart && t.date <= view.lowest.date && t.description)
+    .map((t) => ({ description: t.description as string, amount: Number(t.amount), date: t.date }))
+    .sort((a, b) => b.amount - a.amount || a.date.localeCompare(b.date))
+    .slice(0, 3);
   return {
+    largestBillsBeforeLowest,
     month,
     lowestBalance: view.lowest.balance,
     lowestDate: view.lowest.date,

@@ -281,6 +281,13 @@ the v1.1 list separately.**
   [ticket](tickets/monthly-recurring-dated-first-of-month.md); Lineu edits
   2be22642's seven lines on the Recurring page himself.
 
+- **Top recommendation falls back to code's line on Zezinho Test** (found
+  2026-11-03, QA of the trends letter): in EN and FR the AI's priority failed
+  its check twice and code's "Put $200.00 toward …" was used. Cause not
+  confirmed; likely the AI quoting the goal's $5,000 target, which is not in
+  topRecommendationAllowed. Diagnose from the `review_guard_failed` event of a
+  real refresh before changing the allowed list (AI output: STOP for approval).
+
 ## LINEU (needs Lineu, not code)
 
 - **Device checklist on iPhone** (onboarding, quick entry, French keypad,
@@ -389,6 +396,7 @@ for when it thaws:
 
 | Item | Commit |
 |---|---|
+| Monthly letter compares real months (2026-11-03): per-category trends with code-picked biggest increase/decrease, balance progress per goal/reserve/debt, last month's recommendation quoted, the bills before next month's lowest day; QA'd with a real letter over Zezinho Test data (in memory, nothing written) | _(Lineu)_ |
 | Withdraw from savings and the Reserve Fund (draw from any goal account; withdrawn vs borrowed) — migration applied + verified live 2026-10-27 | _(Lineu)_ |
 | POST /api/transfers input checks; GET /api/goals read errors shown, not "no goals" (2026-10-29) | _(Lineu)_ |
 | "Balance today" card on the Overview above the snapshot, web and app (same component and figures as Timeline); app version 1.1.0 (2026-11-01) | _(Lineu)_ |
