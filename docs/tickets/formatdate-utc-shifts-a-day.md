@@ -2,7 +2,11 @@
 
 **Filed** 2026-11-04, found while showing a recurring rule's end date.
 
-**Status:** OPEN.
+**Status:** FIXED in code 2026-11-04, uncommitted. No screen was wrong: every
+caller passes a full timestamp (`created_at`). `formatDate` now reads a bare
+date as a calendar day (through `readableDate`), so a future caller can't hit it.
+Test: `src/components/dashboard/__tests__/formatDate.test.ts` (fails on the old
+code: "June 29, 2027").
 
 ## The problem
 

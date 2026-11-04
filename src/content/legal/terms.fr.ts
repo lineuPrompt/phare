@@ -52,7 +52,7 @@ const termsFr: LegalDocument = {
       heading: 'Tarifs et paiement',
       body: [
         'Phare offre un forfait gratuit et un forfait payant, **Phare Pro**.',
-        '**Phare Pro coûte 15 $ CA par mois ou 150 $ CA par année.** Les prix sont en dollars canadiens. Les paiements sont traités par Stripe; nous ne conservons pas votre numéro de carte.',
+        '**Le prix de Phare Pro vous est indiqué avant que vous vous abonniez**, en dollars canadiens, au mois ou à l’année. Sur le Web, les paiements sont traités par Stripe; nous ne conservons pas votre numéro de carte. Dans l’application iPhone, les paiements sont traités par Apple au moyen de votre compte Apple, selon les conditions d’Apple.',
         'Les abonnements se renouvellent automatiquement — chaque mois pour les forfaits mensuels, chaque année pour les forfaits annuels — au prix en vigueur au renouvellement. Nous vous préviendrons à l’avance de tout changement de prix, et vous pourrez annuler avant qu’il ne prenne effet.',
         'Certains ménages peuvent recevoir un accès promotionnel ou gratuit pour une période donnée. À la fin de cette période, le compte revient au forfait gratuit à moins que vous ne vous abonniez. Nous ne vous facturerons jamais sans que vous ayez saisi des renseignements de paiement.',
       ],
@@ -61,7 +61,8 @@ const termsFr: LegalDocument = {
       id: 'refunds',
       heading: 'Remboursements',
       body: [
-        '**Vous pouvez demander un remboursement complet dans les 30 jours suivant tout paiement**, mensuel ou annuel, pour quelque raison que ce soit. Écrivez à **support@phare.money** et nous vous rembourserons.',
+        '**Pour un abonnement payé sur le Web, vous pouvez demander un remboursement complet dans les 30 jours suivant tout paiement**, mensuel ou annuel, pour quelque raison que ce soit. Écrivez à **support@phare.money** et nous vous rembourserons.',
+        'Un abonnement souscrit dans l’application iPhone est facturé par Apple : son remboursement se demande donc à Apple, selon les règles de remboursement d’Apple.',
         'Passé 30 jours, un paiement n’est pas remboursable, mais vous pouvez annuler en tout temps. L’annulation met fin au prochain renouvellement; vous conservez l’accès jusqu’à la fin de la période déjà payée.',
       ],
     },
@@ -69,7 +70,7 @@ const termsFr: LegalDocument = {
       id: 'deletion',
       heading: 'Annulation et suppression',
       body: [
-        'Vous pouvez annuler votre abonnement en tout temps depuis l’application. Vous conservez l’accès Pro jusqu’à la fin de la période payée, puis passez au forfait gratuit.',
+        'Vous pouvez annuler votre abonnement en tout temps : sur le Web depuis la page Ménage, ou, pour un abonnement souscrit dans l’application iPhone, dans les réglages d’abonnement de votre compte Apple. Vous conservez l’accès Pro jusqu’à la fin de la période payée, puis passez au forfait gratuit.',
         'Vous pouvez supprimer votre compte entièrement depuis la page Ménage. La suppression est définitive et sans délai de grâce — nous vous recommandons d’exporter vos données d’abord, ce que la même page permet. Ce que la suppression retire et ce qu’elle conserve est décrit dans notre politique de confidentialité, et diffère selon qu’il reste ou non quelqu’un dans votre ménage.',
       ],
     },

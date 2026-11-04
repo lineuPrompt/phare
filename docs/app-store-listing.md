@@ -182,6 +182,63 @@ off, features in the app depend on a subscription again. Guideline
 3.1.3(b) then requires that subscription to be sold in the app too, so
 in-app purchase must ship first (BACKLOG, before any public launch).
 
+## 3c. In-app purchase: what to paste (written 2026-11-04)
+
+For the first build that sells Phare Pro through Apple. Replaces §3 and §3b.
+
+### Products (App Store Connect → Subscriptions → Phare Pro)
+
+Prices are set in App Store Connect only (CAD 14.99 and 149.00); never type
+them into the app or these texts.
+
+| Product | Language | Display name | Description (max 55 characters) |
+|---|---|---|---|
+| `phare.app.pro.monthly` | English (Canada) | Phare Pro, monthly | Plan further ahead and read the full monthly review. |
+| `phare.app.pro.monthly` | French (Canada) | Phare Pro, mensuel | Planifiez plus loin et lisez la revue mensuelle complète. |
+| `phare.app.pro.yearly` | English (Canada) | Phare Pro, yearly | Plan further ahead and read the full monthly review. |
+| `phare.app.pro.yearly` | French (Canada) | Phare Pro, annuel | Planifiez plus loin et lisez la revue mensuelle complète. |
+
+Subscription group display name: **Phare Pro** (both languages).
+
+The French description is 57 characters; if App Store Connect refuses it, use
+"Planifiez plus loin; lisez toute la revue mensuelle." (52).
+
+**Review screenshot** (one per product): the Phare Pro screen (More → Account →
+See Phare Pro) on the non-Pro demo account, showing both products and their
+Apple prices.
+
+### App Privacy: one change
+
+Add **Purchases → Purchase History**: used for **App Functionality**,
+**linked** to the user's identity, **not** used for tracking. (Phare keeps the
+subscription's identifier, plan, status and renewal dates to unlock Pro.)
+Everything else stays as in §2.
+
+### App Review notes
+
+> **Demo accounts**
+> Household with Phare Pro: `<DEMO_EMAIL>` / `<DEMO_PASSWORD>`
+> Household without Phare Pro, to test the purchase: `<DEMO2_EMAIL>` / `<DEMO2_PASSWORD>`
+> Both have several months of example data, two credit cards and a monthly plan.
+>
+> **What the app is**
+> Phare is a household planning system. The iOS app runs a household's plan on its own: income and bill dates, spending, credit cards, savings goals and the monthly review, without visiting our website.
+>
+> **In-app purchase**
+> Phare Pro is an auto-renewable subscription (monthly or yearly) sold through Apple. Sign in with the account without Pro, then More → Account → See Phare Pro. The screen shows Apple's own prices, the renewal terms, Restore Purchases, and links to the Terms of Use and the Privacy Policy. Only the owner of a household can subscribe. Households can also subscribe on our website; the app does not link to or mention that.
+>
+> **Account deletion**
+> More → Account → Delete my account. Deletion is immediate and permanent; the app offers a transaction export first. If an Apple subscription is still renewing, the app explains how to cancel it first and still allows deletion.
+>
+> **Please do not delete the demo accounts** — it would remove their households and history. If you need to test deletion, we can provide another account on request at support@phare.money.
+>
+> **Privacy policy:** More → Account → Privacy policy (also at https://phare.money/en/privacy).
+
+When sign-up ships in the app (S1), add under "What the app is": "You can
+also create a new account in the app (Sign in → Create an account)." and
+change the deletion paragraph's last sentence to "To test deletion, please
+create a new account in the app."
+
 ---
 
 ## 4. Demo household — setup steps (Lineu)

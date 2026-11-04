@@ -30,6 +30,10 @@ the v1.1 list separately.**
   2026-10-16** ("that was a mistake"). The business model ($15/$150 CAD)
   stays. No free-for-all switch is to be built.
 - **S1. Sign-up, in-app password reset, accepting updated terms.**
+  **Decisions (Lineu, 2026-11-04: "common sense, the easiest"):** record
+  `platform` on the signup event (yes); email links open the app (yes);
+  the Terms drop the price (done, above). Plan awaiting approval (auth +
+  DB).
   **STOP, blocked 2026-10-15.** Three things fall outside the
   pre-approval:
   - the `signup` event needs `platform: 'mobile'`: a `handle_new_user`
@@ -290,8 +294,21 @@ the v1.1 list separately.**
 
 - **Plain edit of a split rule rewrites dates before its start** (found
   2026-11-04). **STOP.** — [ticket](tickets/recurring-metadata-edit-ignores-effective-from.md)
-- **Web `formatDate` shows the day before in Canada** (found 2026-11-04). —
+- ~~**Web `formatDate` shows the day before in Canada**~~ FIXED in code
+  2026-11-04, uncommitted (no screen was wrong yet). —
   [ticket](tickets/formatdate-utc-shifts-a-day.md)
+- **Terms and Privacy: price removed, Apple billing added** (Lineu,
+  2026-11-04: "remove it, the easiest"). BUILT, uncommitted. Terms: the Pro
+  price is "shown before you subscribe"; Stripe on the web, Apple in the
+  app; Apple refunds and cancelling through Apple. Privacy: Stripe for the
+  web, Apple added. `CURRENT_LEGAL_VERSION` NOT bumped yet: a bump makes
+  every app user accept again, and the app can only send them to
+  phare.money until S1's in-app acceptance ships. Bump it in the same
+  deploy as S1. `lastUpdated` goes with the bump. Counsel review still
+  advised.
+- **App Store texts for in-app purchase** written 2026-11-04:
+  [app-store-listing.md §3c](app-store-listing.md) (product names and
+  descriptions EN/FR, App Privacy "Purchase History", review notes).
 
 ## LINEU (needs Lineu, not code)
 

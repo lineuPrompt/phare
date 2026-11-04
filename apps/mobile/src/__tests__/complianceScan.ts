@@ -80,18 +80,16 @@ export const FORBIDDEN_TEXT: readonly (readonly [label: string, pattern: RegExp]
  *
  * Today: the Privacy Policy's Stripe paragraph, EN and FR, shown on the app's
  * Privacy screen (App Store 5.1.1(i)). It names who processes payments; the
- * app links to nothing and sells nothing. Its wording ("once paid
- * subscriptions are available") is stale — billing has been live since
- * August — and goes to counsel with the Terms. Until it changes, it is
- * excused exactly as written.
+ * app links to nothing and sells nothing. It is excused exactly
+ * as written (updated 2026-11-04: Stripe for the web, Apple for the app).
  *
  * Pinned by sourceCompliance.test.ts: each entry must appear verbatim in
  * @phare/core's PRIVACY_POLICY, and must still contain a forbidden hit, so an
  * entry fails the moment the sentence changes or stops needing an excuse.
  */
 export const POLICY_SENTENCE_ALLOWLIST = [
-  '**Stripe** — payment processing, once paid subscriptions are available (receives your billing information; Phare does not store your card number)',
-  '**Stripe** — traitement des paiements, une fois les abonnements payants offerts (reçoit vos renseignements de facturation; Phare ne conserve pas votre numéro de carte)',
+  '**Stripe** — payment processing for subscriptions bought on the web (receives your billing information; Phare does not store your card number)',
+  '**Stripe** — traitement des paiements des abonnements souscrits sur le Web (reçoit vos renseignements de facturation; Phare ne conserve pas votre numéro de carte)',
 ] as const;
 
 /** Everything of our own that is excused, for the source and bundle scans. */

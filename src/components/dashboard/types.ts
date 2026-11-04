@@ -185,7 +185,10 @@ export function readableDate(iso: string, locale: string): string {
   );
 }
 
+// A bare 'YYYY-MM-DD' is a calendar day, not UTC midnight: `new Date()` would
+// read it as UTC and print the day before anywhere in Canada.
 export function formatDate(iso: string, locale: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return readableDate(iso, locale);
   return new Date(iso).toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', {
     year: 'numeric', month: 'long', day: 'numeric',
   });

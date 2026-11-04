@@ -65,7 +65,7 @@ const termsEn: LegalDocument = {
       heading: 'Pricing and payment',
       body: [
         'Phare offers a free tier and a paid tier, **Phare Pro**.',
-        '**Phare Pro costs $15 CAD per month, or $150 CAD per year.** Prices are in Canadian dollars. Payment is processed by Stripe; we do not store your card number.',
+        '**The price of Phare Pro is shown before you subscribe**, in Canadian dollars, monthly or yearly. On the web, payment is processed by Stripe; we do not store your card number. In the iPhone app, payment is processed by Apple through your Apple Account, under Apple’s terms.',
         'Subscriptions renew automatically — monthly plans each month, annual plans each year — at the price in effect at renewal. We will tell you in advance if a price changes, and you can cancel before it takes effect.',
         'Some households may be given promotional or complimentary access for a period. When that period ends, the account reverts to the free tier unless you subscribe. We will not charge you without your having entered payment details.',
       ],
@@ -74,7 +74,8 @@ const termsEn: LegalDocument = {
       id: 'refunds',
       heading: 'Refunds',
       body: [
-        '**You may request a full refund within 30 days of any charge**, whether monthly or annual, for any reason. Write to **support@phare.money** and we will refund it.',
+        '**For a subscription paid on the web, you may request a full refund within 30 days of any charge**, whether monthly or annual, for any reason. Write to **support@phare.money** and we will refund it.',
+        'A subscription bought in the iPhone app is charged by Apple, so refunds for it are requested from Apple, under Apple’s refund rules.',
         'After 30 days, a charge is not refundable, but you can cancel at any time. Cancelling stops the next renewal; you keep access for the rest of the period you have already paid for.',
       ],
     },
@@ -82,7 +83,7 @@ const termsEn: LegalDocument = {
       id: 'deletion',
       heading: 'Cancelling and deleting',
       body: [
-        'You can cancel your subscription at any time from within the app. You keep Pro access until the end of the paid period, then move to the free tier.',
+        'You can cancel your subscription at any time: on the web from the Household page, or, for a subscription bought in the iPhone app, from your Apple Account’s subscription settings. You keep Pro access until the end of the paid period, then move to the free tier.',
         'You can delete your account entirely from the Household page. Deletion is permanent and there is no grace period — we recommend exporting your data first, which the same page offers. What deletion removes and what it keeps is set out in our Privacy Policy, and differs depending on whether anyone else remains in your household.',
       ],
     },
