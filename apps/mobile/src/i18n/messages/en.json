@@ -202,6 +202,7 @@
     "needsDateHint": "These aren't in your plan until they have a date.",
     "addDate": "Add a date",
     "noDate": "No date yet",
+    "endsOn": "ends {date}",
     "empty": "No recurring income or bills yet.",
     "new": {
       "income": "New income",
@@ -227,6 +228,9 @@
       "goal": "Savings goal or debt",
       "appliesFrom": "Applies from",
       "appliesFromHint": "Earlier months keep the old figures. It can't start before today.",
+      "endDate": "Ends on (optional)",
+      "endDateNone": "No end date",
+      "endDateHint": "Leave empty and it keeps going. With a date, nothing is added after it.",
       "save": "Save",
       "saving": "Saving…",
       "delete": "Delete",
@@ -246,7 +250,10 @@
       "accountRequired": "Choose an account.",
       "goalRequired": "Choose a goal or debt account.",
       "effectiveFromInvalid": "Enter the date it applies from as YYYY-MM-DD.",
-      "effectiveFromPast": "It can't apply from a past date: past months keep their real figures."
+      "effectiveFromPast": "It can't apply from a past date: past months keep their real figures.",
+      "endDateInvalid": "Enter the end date as YYYY-MM-DD.",
+      "endDatePast": "The end date can't be in the past: past months stay as they happened.",
+      "endDateBeforeStart": "The end date has to be on or after the date it starts."
     }
   },
   "goals": {

@@ -19,7 +19,8 @@ type Cadence = 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
  *
  * Accepts all editable fields: description, amount, cadence, anchorDate,
  * secondDay, categoryId, accountId, destinationAccountId (transfer only),
- * memberId, and effectiveFrom (only consulted on the split path below). A
+ * memberId, endDate (null clears it), and effectiveFrom (only consulted on
+ * the split path below). A
  * rule's `type` itself is never editable — the source/goal shape differs
  * enough (category vs. destination account) that changing type would need
  * to reconstruct half the row; delete and recreate instead.
@@ -69,7 +70,7 @@ export async function PATCH(
     // Load current rule (needed to fall back to existing values for omitted fields)
     const { data: current, error: loadErr } = await supabase
       .from('recurring_items')
-      .select('id, household_id, member_id, description, amount, type, cadence, anchor_date, second_day, category_id, account_id, destination_account_id, active')
+      .select('id, household_id, member_id, description, amount, type, cadence, anchor_date, second_day, end_date, category_id, account_id, destination_account_id, active')
       .eq('id', id)
       .eq('household_id', householdId)
       .single();
@@ -100,6 +101,9 @@ export async function PATCH(
     // fall back to the current value when the field is entirely absent from
     // the request body, never when it was sent as null on purpose.
     const newMemberId    = 'memberId' in body ? (body.memberId ?? null) : current.member_id;
+    // Nullable like memberId: absent keeps it, null (or '') clears it and the
+    // rule keeps going (2026-11-04).
+    const newEndDate: string | null = 'endDate' in body ? (body.endDate || null) : (current.end_date ?? null);
 
     if (!['monthly', 'biweekly', 'semimonthly', 'weekly'].includes(newCadence)) {
       return NextResponse.json({ error: 'Invalid cadence' }, { status: 400 });
@@ -158,6 +162,18 @@ export async function PATCH(
     const timezone = await getHouseholdTimezone(supabase, householdId);
     const todayStr = businessToday(timezone);
 
+    // An end date never reaches back before today: rows already dated are
+    // history, and ending the rule earlier would delete them (CLAUDE.md §4).
+    // An unchanged end date is never re-judged.
+    if (newEndDate !== (current.end_date ?? null) && newEndDate !== null) {
+      if (!isCalendarDate(newEndDate)) {
+        return NextResponse.json({ error: 'Invalid end date' }, { status: 400 });
+      }
+      if (newEndDate < todayStr) {
+        return NextResponse.json({ error: "The end date can't be in the past — past occurrences stay as they happened." }, { status: 400 });
+      }
+    }
+
     // The anchor is compared by what the cadence actually READS, not by the
     // raw stored string (sameAnchorSchedule): for monthly/semimonthly only
     // the day-of-month is ever used, so re-picking the same day in a
@@ -176,7 +192,7 @@ export async function PATCH(
       return await splitRule({
         supabase, householdId, oldRuleId: id, todayStr, body,
         newDescription, newAmount, newCadence: newCadence as Cadence, newAnchorDate, newSecondDay,
-        newCategoryId, newAccountId, newDestinationId, newMemberId,
+        newCategoryId, newAccountId, newDestinationId, newMemberId, newEndDate,
         type: current.type as 'income' | 'expense' | 'transfer',
       });
     }
@@ -195,6 +211,7 @@ export async function PATCH(
         account_id:  newAccountId,
         destination_account_id: newDestinationId,
         member_id:   newMemberId,
+        end_date:    newEndDate,
       })
       .eq('id', id)
       .eq('household_id', householdId)
@@ -234,7 +251,7 @@ export async function PATCH(
           { cadence: newCadence as Cadence, anchorDate: newAnchorDate, secondDay: newSecondDay },
           todayStr,
           12
-        )
+        ).filter((d) => newEndDate === null || d <= newEndDate)
       : [];
 
     // Never regenerate a date the household already detached from this rule
@@ -320,12 +337,13 @@ async function splitRule(args: {
   newAccountId: string;
   newDestinationId: string | null;
   newMemberId: string | null;
+  newEndDate: string | null;
   type: 'income' | 'expense' | 'transfer';
 }) {
   const {
     supabase, householdId, oldRuleId, todayStr, body,
     newDescription, newAmount, newCadence, newAnchorDate, newSecondDay,
-    newCategoryId, newAccountId, newDestinationId, newMemberId, type,
+    newCategoryId, newAccountId, newDestinationId, newMemberId, newEndDate, type,
   } = args;
   const isTransfer = type === 'transfer';
 
@@ -338,6 +356,9 @@ async function splitRule(args: {
   }
   if (effectiveFrom < todayStr) {
     return NextResponse.json({ error: "Effective date can't be in the past — past occurrences keep their real value." }, { status: 400 });
+  }
+  if (newEndDate !== null && newEndDate < effectiveFrom) {
+    return NextResponse.json({ error: 'The end date must be on or after the date the change takes effect' }, { status: 400 });
   }
 
   // 1. Freeze the current rule as history — no further edits, no further
@@ -385,6 +406,7 @@ async function splitRule(args: {
       second_day: newSecondDay,
       active: true,
       effective_from: effectiveFrom,
+      end_date: newEndDate,
       predecessor_id: oldRuleId,
     })
     .select('id')
@@ -424,7 +446,7 @@ async function splitRule(args: {
     { cadence: newCadence, anchorDate: newAnchorDate, secondDay: newSecondDay },
     effectiveFrom,
     12
-  ).filter((d) => d >= effectiveFrom);
+  ).filter((d) => d >= effectiveFrom && (newEndDate === null || d <= newEndDate));
 
   const { data: skippedRows } = rawDates.length
     ? await supabase

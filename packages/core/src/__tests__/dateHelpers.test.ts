@@ -805,3 +805,38 @@ describe('addCalendarDays', () => {
     }
   });
 });
+
+import { topUpOccurrences } from '../dateHelpers';
+
+describe('topUpOccurrences — the daily top-up (2026-11-04)', () => {
+  const monthly = { cadence: 'monthly' as const, anchorDate: '2026-10-05' };
+
+  it('the dates after the rule\'s last one, through the 12th month from today', () => {
+    // Rows written through September 2027; today is 4 November 2026: the
+    // window runs to October 2027, so October 2027 is added, and nothing else;
+    // on 1 December it runs to November 2027.
+    expect(topUpOccurrences(monthly, '2027-09-05', '2026-11-04')).toEqual(['2027-10-05']);
+    expect(topUpOccurrences(monthly, '2027-09-05', '2026-12-01')).toEqual(['2027-10-05', '2027-11-05']);
+  });
+
+  it('nothing on or before the last date: a tombstone or row already there is never written twice', () => {
+    expect(topUpOccurrences(monthly, '2027-11-05', '2026-12-01')).toEqual([]);
+  });
+
+  it('a rule behind by months is continued from the current month, never into past months', () => {
+    expect(topUpOccurrences(monthly, '2026-06-05', '2026-12-01')[0]).toBe('2026-12-05');
+  });
+
+  it('never before effectiveFrom, never after endDate', () => {
+    expect(topUpOccurrences({ ...monthly, effectiveFrom: '2027-03-01' }, '2026-01-01', '2026-12-01')[0]).toBe('2027-03-05');
+    expect(topUpOccurrences({ ...monthly, endDate: '2027-02-05' }, '2026-01-01', '2026-12-01')).toEqual([
+      '2026-12-05', '2027-01-05', '2027-02-05',
+    ]);
+  });
+
+  it('biweekly keeps its 14-day rhythm across the join', () => {
+    const dates = topUpOccurrences({ cadence: 'biweekly', anchorDate: '2026-10-02' }, '2027-10-14', '2026-12-01');
+    // Oct 14 is on the rhythm (2026-10-02 + 26 × 14 days); the window ends with November 2027.
+    expect(dates).toEqual(['2027-10-28', '2027-11-11', '2027-11-25']);
+  });
+});

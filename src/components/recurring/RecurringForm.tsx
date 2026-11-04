@@ -25,6 +25,8 @@ export default function RecurringForm({
   const [cadence, setCadence] = useState<'monthly' | 'biweekly' | 'semimonthly' | 'weekly'>('monthly');
   const [anchorDate, setAnchorDate] = useState(today);
   const [secondDay, setSecondDay] = useState('30');
+  // '' = no end date: the rule keeps going (2026-11-04).
+  const [endDate, setEndDate] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [accountId, setAccountId] = useState('');
   const [destinationAccountId, setDestinationAccountId] = useState('');
@@ -61,12 +63,14 @@ export default function RecurringForm({
           categoryId: isTransfer ? null : (categoryId || null),
           accountId: isTransfer ? null : resolvedAccountId,
           destinationAccountId: isTransfer ? resolvedDestinationId : null,
+          endDate: endDate || null,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
       setDescription('');
       setAmount('');
       setCategoryId('');
+      setEndDate('');
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -154,6 +158,13 @@ export default function RecurringForm({
             className="ml-2 w-20 px-3 py-1.5 rounded-lg text-sm outline-none" style={inputStyle} />
         </div>
       )}
+
+      <div className="mb-4">
+        <label className="text-sm" style={{ color: '#6B7280' }}>{t('endDate')}</label>
+        <input type="date" value={endDate} min={anchorDate || undefined} onChange={(e) => setEndDate(e.target.value)}
+          className="ml-2 px-3 py-1.5 rounded-lg text-sm outline-none" style={inputStyle} />
+        <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>{t('endDateHint')}</p>
+      </div>
 
       {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
 

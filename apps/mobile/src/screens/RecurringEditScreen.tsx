@@ -260,6 +260,18 @@ export default function RecurringEditScreen() {
             </>
           )}
 
+          <Text style={styles.label}>{t('recurring.editor.endDate')}</Text>
+          <TextInput
+            style={styles.input}
+            value={draft.endDate}
+            onChangeText={(endDate) => update({ endDate })}
+            placeholder={t('recurring.editor.endDateNone')}
+            keyboardType="numbers-and-punctuation"
+            autoCorrect={false}
+            accessibilityLabel={t('recurring.editor.endDate')}
+          />
+          <Text style={styles.hint}>{t('recurring.editor.endDateHint')}</Text>
+
           {asksFrom && (
             <>
               <Text style={styles.label}>{t('recurring.editor.appliesFrom')}</Text>

@@ -1,4 +1,4 @@
-import { formatCurrency } from '@/components/dashboard/types';
+import { formatCurrency, readableDate } from '@/components/dashboard/types';
 
 // ---------------------------------------------------------------------------
 // What a refused transfer edit or delete says (2026-11-02).
@@ -11,16 +11,6 @@ import { formatCurrency } from '@/components/dashboard/types';
 // ---------------------------------------------------------------------------
 
 type Translate = (key: string, values?: Record<string, string>) => string;
-
-/** 'YYYY-MM-DD' as a readable date, parsed as a LOCAL date (never shifted a day by UTC). */
-function readableDate(iso: string, locale: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  if (!m) return iso;
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString(
-    locale === 'fr' ? 'fr-CA' : 'en-CA',
-    { day: 'numeric', month: 'long', year: 'numeric' }
-  );
-}
 
 export async function transferRefusal(res: Response, t: Translate, locale: string): Promise<string> {
   const body = (await res.json().catch(() => null)) as

@@ -631,3 +631,126 @@ describe('PATCH /api/recurring/[id] — Part B split-into-two-rules', () => {
     expect(generated.every((t) => (t.date as string).slice(8) === '22')).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// END DATE (2026-11-04): a rule keeps going unless the household sets one.
+// Dates are relative to the real today: the routes read the clock.
+// ---------------------------------------------------------------------------
+describe('recurring end date', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  const todayStr = businessToday('America/Toronto');
+  const monthStart = `${todayStr.slice(0, 7)}-01`;
+  // The 28th, three months on: inside the 12-month window, before its end.
+  const [ty, tm] = todayStr.split('-').map(Number);
+  const plus3 = new Date(Date.UTC(ty, tm - 1 + 3, 28)).toISOString().slice(0, 10);
+
+  function seedWithRule(extra: Record<string, unknown> = {}) {
+    const rule = {
+      id: 'ri-gym', household_id: HOUSEHOLD, member_id: null, description: 'Gym', amount: 50,
+      type: 'expense', cadence: 'monthly', anchor_date: '2020-01-05', second_day: null, end_date: null,
+      category_id: 'cat-1', account_id: CHEQUING, destination_account_id: null, active: true, ...extra,
+    } as unknown as Row;
+    const rows = materializeFromMonthStart({ cadence: 'monthly', anchorDate: '2020-01-05' }, todayStr, 12).map((date, i) => ({
+      id: `tx-${i}`, household_id: HOUSEHOLD, account_id: CHEQUING, member_id: null, category_id: 'cat-1',
+      amount: 50, description: 'Gym', date, type: 'expense', source: 'manual', recurring_item_id: 'ri-gym',
+    } as unknown as Row));
+    return makeFakeSupabase({ ...baseSeed(), recurring_items: [rule], transactions: rows });
+  }
+
+  async function patch(supabase: ReturnType<typeof makeFakeSupabase>, body: Record<string, unknown>) {
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
+    const { PATCH } = await import('../route');
+    return PATCH(
+      new Request('http://localhost/api/recurring/ri-gym', { method: 'PATCH', body: JSON.stringify(body) }),
+      { params: Promise.resolve({ id: 'ri-gym' }) }
+    );
+  }
+
+  it('setting one ends the rule there: later occurrences go, earlier ones and the rule stay', async () => {
+    const supabase = seedWithRule();
+    const res = await patch(supabase, { endDate: plus3 });
+    expect(res.status).toBe(200);
+    const dates = supabase.rows('transactions').map((t) => t.date as string).sort();
+    expect(dates.length).toBeGreaterThan(0);
+    expect(dates.every((d) => d <= plus3)).toBe(true);
+    expect(dates[0]).toBe(materializeFromMonthStart({ cadence: 'monthly', anchorDate: '2020-01-05' }, todayStr, 1)[0]);
+    expect(supabase.rows('recurring_items')[0]).toMatchObject({ end_date: plus3, active: true });
+  });
+
+  it('clearing it brings the full 12 months back', async () => {
+    const supabase = seedWithRule({ end_date: plus3 });
+    supabase.rows('transactions').splice(0); // the cut-off rule's rows are gone…
+    const res = await patch(supabase, { endDate: null });
+    expect(res.status).toBe(200);
+    expect(supabase.rows('transactions')).toHaveLength(12); // …and the year is back.
+    expect(supabase.rows('recurring_items')[0].end_date).toBeNull();
+  });
+
+  it('an end date in the past is refused, and nothing is touched', async () => {
+    const supabase = seedWithRule();
+    const res = await patch(supabase, { endDate: '2020-06-01' });
+    expect(res.status).toBe(400);
+    expect(supabase.rows('transactions')).toHaveLength(12);
+    expect(supabase.rows('recurring_items')[0].end_date).toBeNull();
+  });
+
+  it('an end date already in the past is not re-judged when something else is edited', async () => {
+    const supabase = seedWithRule({ end_date: '2020-06-01' });
+    supabase.rows('transactions').splice(0);
+    const res = await patch(supabase, { description: 'Gym club' });
+    expect(res.status).toBe(200);
+    expect(supabase.rows('transactions')).toHaveLength(0);
+  });
+
+  it('a split carries the end date to the new rule and never writes past it', async () => {
+    const supabase = seedWithRule({ end_date: plus3 });
+    const res = await patch(supabase, { amount: 60 });
+    expect(res.status).toBe(200);
+    const successor = supabase.rows('recurring_items').find((r) => r.id !== 'ri-gym')!;
+    expect(successor).toMatchObject({ end_date: plus3, active: true });
+    const written = supabase.rows('transactions').filter((t) => t.recurring_item_id === successor.id);
+    expect(written.length).toBeGreaterThan(0);
+    expect(written.every((t) => (t.date as string) <= plus3)).toBe(true);
+  });
+
+  it('POST: a new rule with an end date is written up to it, and stores it', async () => {
+    const supabase = makeFakeSupabase({
+      ...baseSeed(),
+      household_members: [{ id: 'm-1', household_id: HOUSEHOLD, user_id: 'user-1' } as unknown as Row],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
+    const { POST } = await import('../../route');
+    const res = await POST(new Request('http://localhost/api/recurring', {
+      method: 'POST',
+      body: JSON.stringify({ description: 'Gym', amount: 50, type: 'expense', cadence: 'monthly', anchorDate: monthStart, categoryId: 'cat-1', accountId: CHEQUING, endDate: plus3 }),
+    }));
+    expect(res.status).toBe(200);
+    expect(supabase.rows('recurring_items')[0].end_date).toBe(plus3);
+    const dates = supabase.rows('transactions').map((t) => t.date as string);
+    expect(dates).toHaveLength(4); // this month and the three after
+    expect(dates.every((d) => d <= plus3)).toBe(true);
+  });
+
+  it('POST: an end date before the first date is refused', async () => {
+    // With a member: without one the route refuses earlier, for another reason.
+    const supabase = makeFakeSupabase({
+      ...baseSeed(),
+      household_members: [{ id: 'm-1', household_id: HOUSEHOLD, user_id: 'user-1' } as unknown as Row],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(supabase);
+    const { POST } = await import('../../route');
+    const res = await POST(new Request('http://localhost/api/recurring', {
+      method: 'POST',
+      body: JSON.stringify({ description: 'Gym', amount: 50, type: 'expense', cadence: 'monthly', anchorDate: '2026-12-05', categoryId: 'cat-1', accountId: CHEQUING, endDate: '2026-11-30' }),
+    }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('The end date must be on or after the first date');
+    expect(supabase.rows('recurring_items')).toHaveLength(0);
+  });
+});

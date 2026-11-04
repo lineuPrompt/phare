@@ -288,6 +288,11 @@ the v1.1 list separately.**
   topRecommendationAllowed. Diagnose from the `review_guard_failed` event of a
   real refresh before changing the allowed list (AI output: STOP for approval).
 
+- **Plain edit of a split rule rewrites dates before its start** (found
+  2026-11-04). **STOP.** — [ticket](tickets/recurring-metadata-edit-ignores-effective-from.md)
+- **Web `formatDate` shows the day before in Canada** (found 2026-11-04). —
+  [ticket](tickets/formatdate-utc-shifts-a-day.md)
+
 ## LINEU (needs Lineu, not code)
 
 - **Device checklist on iPhone** (onboarding, quick entry, French keypad,
@@ -396,6 +401,7 @@ for when it thaws:
 
 | Item | Commit |
 |---|---|
+| Recurring entries keep going (2026-11-04): the daily 07:00 job tops every active rule up to 12 months ahead (deleted or edited-alone dates never come back); optional end date on web and app; migration 20261104000000 WRITTEN, not applied | _(Lineu)_ |
 | Monthly letter compares real months (2026-11-03): per-category trends with code-picked biggest increase/decrease, balance progress per goal/reserve/debt, last month's recommendation quoted, the bills before next month's lowest day; QA'd with a real letter over Zezinho Test data (in memory, nothing written) | _(Lineu)_ |
 | Withdraw from savings and the Reserve Fund (draw from any goal account; withdrawn vs borrowed) — migration applied + verified live 2026-10-27 | _(Lineu)_ |
 | POST /api/transfers input checks; GET /api/goals read errors shown, not "no goals" (2026-10-29) | _(Lineu)_ |

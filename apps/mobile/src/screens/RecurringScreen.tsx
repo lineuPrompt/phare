@@ -73,7 +73,8 @@ export default function RecurringScreen() {
 
   const row = (line: RecurringLine) => {
     const where = line.type === 'transfer' ? line.destinationName : line.type === 'expense' ? line.categoryName : line.accountName;
-    const when = line.anchorDate ? `${t(cadenceKey(line.cadence))} · ${formatDayLong(line.anchorDate, locale)}` : t('recurring.noDate');
+    const when = (line.anchorDate ? `${t(cadenceKey(line.cadence))} · ${formatDayLong(line.anchorDate, locale)}` : t('recurring.noDate'))
+      + (line.endDate ? ` · ${t('recurring.endsOn', { date: formatDayLong(line.endDate, locale) })}` : '');
     return (
       <Pressable
         key={line.id}

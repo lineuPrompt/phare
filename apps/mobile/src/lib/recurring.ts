@@ -25,6 +25,10 @@ import type { Getter } from './timelineLoader';
 //                                the past). Otherwise it edits in place.
 //   DELETE /api/recurring/[id]   today-onward occurrences go; the past stays
 //
+// END DATE (2026-11-04): optional. Without one a rule keeps going (the
+// server continues it 12 months ahead every day); with one, nothing is
+// written after it. An edit never sets one in the past.
+//
 // THE SERVER DECIDES. willApplyFromDate mirrors its rule (core's
 // sameAnchorSchedule, the same function the route calls) only so the screen
 // can ask "applies from" when it matters; the route is what splits or not.
@@ -42,6 +46,8 @@ export type RecurringLine = {
   /** null: onboarding left it without a date — nothing materializes yet. */
   anchorDate: string | null;
   secondDay: number | null;
+  /** The last day an occurrence may fall on; null: it keeps going. */
+  endDate: string | null;
   categoryId: string | null;
   categoryName: string | null;
   accountId: string | null;
@@ -92,6 +98,7 @@ export function parseRecurring(raw: unknown, today: string): RecurringData {
       cadence,
       anchorDate: typeof it.anchor_date === 'string' ? it.anchor_date : null,
       secondDay: typeof it.second_day === 'number' ? it.second_day : null,
+      endDate: typeof it.end_date === 'string' ? it.end_date : null,
       categoryId: typeof it.category_id === 'string' ? it.category_id : null,
       categoryName: nameOf(it.categories),
       accountId: typeof it.account_id === 'string' ? it.account_id : null,
@@ -148,6 +155,8 @@ export type RecurringDraft = {
   destinationId: string;
   /** When a value change will apply from: YYYY-MM-DD. */
   effectiveFrom: string;
+  /** YYYY-MM-DD, or '' for no end date. */
+  endDate: string;
 };
 
 export function draftForLine(line: RecurringLine, today: string): RecurringDraft {
@@ -162,6 +171,7 @@ export function draftForLine(line: RecurringLine, today: string): RecurringDraft
     accountId: line.accountId ?? '',
     destinationId: line.destinationId ?? '',
     effectiveFrom: firstOfNextMonth(today),
+    endDate: line.endDate ?? '',
   };
 }
 
@@ -177,6 +187,7 @@ export function draftForNew(type: RecurringType, data: RecurringData): Recurring
     accountId: data.accounts[0]?.id ?? '',
     destinationId: type === 'transfer' ? data.goalAccounts[0]?.id ?? '' : '',
     effectiveFrom: firstOfNextMonth(data.today),
+    endDate: '',
   };
 }
 
@@ -191,7 +202,10 @@ export type RecurringProblem =
   | 'accountRequired'
   | 'goalRequired'
   | 'effectiveFromInvalid'
-  | 'effectiveFromPast';
+  | 'effectiveFromPast'
+  | 'endDateInvalid'
+  | 'endDatePast'
+  | 'endDateBeforeStart';
 
 type Checked = {
   description: string;
@@ -250,6 +264,8 @@ export type PatchBody = {
   accountId?: string;
   destinationAccountId?: string;
   effectiveFrom?: string;
+  /** Sent only when it changed; null clears it. */
+  endDate?: string | null;
 };
 
 /** The PATCH body for an edit, or the first thing to fix. A dated line stays dated. */
@@ -279,6 +295,14 @@ export function buildPatchBody(
     if (from < today) return { ok: false, problem: 'effectiveFromPast' };
     body.effectiveFrom = from;
   }
+  const endDate = draft.endDate.trim() || null;
+  if (endDate !== line.endDate) {
+    if (endDate !== null && !isCalendarDate(endDate)) return { ok: false, problem: 'endDateInvalid' };
+    // As the route: never in the past, and never before the change applies.
+    if (endDate !== null && endDate < today) return { ok: false, problem: 'endDatePast' };
+    if (endDate !== null && body.effectiveFrom && endDate < body.effectiveFrom) return { ok: false, problem: 'endDateBeforeStart' };
+    body.endDate = endDate;
+  }
   return { ok: true, body };
 }
 
@@ -292,6 +316,7 @@ export type CreateBody = {
   categoryId?: string;
   accountId?: string;
   destinationAccountId?: string;
+  endDate?: string;
 };
 
 /** The POST body for a new line. A new line always has a date: without one nothing would appear. */
@@ -312,6 +337,12 @@ export function buildCreateBody(draft: RecurringDraft): { ok: true; body: Create
     body.accountId = draft.accountId;
     if (draft.type === 'expense') body.categoryId = draft.categoryId;
   }
+  const endDate = draft.endDate.trim();
+  if (endDate) {
+    if (!isCalendarDate(endDate)) return { ok: false, problem: 'endDateInvalid' };
+    if (endDate < body.anchorDate) return { ok: false, problem: 'endDateBeforeStart' };
+    body.endDate = endDate;
+  }
   return { ok: true, body };
 }
 
@@ -329,6 +360,9 @@ export function recurringProblemKey(problem: RecurringProblem): string {
     case 'goalRequired': return 'recurring.problems.goalRequired';
     case 'effectiveFromInvalid': return 'recurring.problems.effectiveFromInvalid';
     case 'effectiveFromPast': return 'recurring.problems.effectiveFromPast';
+    case 'endDateInvalid': return 'recurring.problems.endDateInvalid';
+    case 'endDatePast': return 'recurring.problems.endDatePast';
+    case 'endDateBeforeStart': return 'recurring.problems.endDateBeforeStart';
   }
 }
 

@@ -1010,7 +1010,9 @@
       "saving": "Enregistrement...",
       "save": "Ajouter",
       "category": "Catégorie...",
-      "noGoals": "Créez d'abord un objectif"
+      "noGoals": "Créez d'abord un objectif",
+      "endDate": "Se termine le (facultatif)",
+      "endDateHint": "Laissez vide pour qu'il continue. Avec une date, rien n'est ajouté après."
     },
     "list": {
       "empty": "Aucune ligne récurrente. Ajoutez votre hypothèque, salaire, prêts ci-dessus.",
@@ -1028,6 +1030,9 @@
       "cancel": "Annuler",
       "effectiveFrom": "En vigueur à partir de",
       "effectiveFromHint": "S'applique seulement si vous changez le montant, la fréquence ou la date de paie — tout ce qui précède cette date garde son ancienne valeur.",
+      "endDate": "Se termine le",
+      "endDateHint": "Facultatif. Laissez vide pour qu'il continue; avec une date, rien n'est ajouté après.",
+      "endsOn": "prend fin le {date}",
       "cadence": {
         "monthly": "Mensuel",
         "biweekly": "Aux 2 semaines",

@@ -175,6 +175,16 @@ export function monthName(n: number | null, locale: string) {
   );
 }
 
+/** 'YYYY-MM-DD' as a readable date, parsed as a LOCAL date (never shifted a day by UTC). */
+export function readableDate(iso: string, locale: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString(
+    locale === 'fr' ? 'fr-CA' : 'en-CA',
+    { day: 'numeric', month: 'long', year: 'numeric' }
+  );
+}
+
 export function formatDate(iso: string, locale: string) {
   return new Date(iso).toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', {
     year: 'numeric', month: 'long', day: 'numeric',

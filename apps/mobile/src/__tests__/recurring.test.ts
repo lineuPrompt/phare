@@ -41,7 +41,7 @@ describe('reading the list', () => {
   it('reads every line, numerics sent as text included, with the joined names', () => {
     expect(line('ri-pay')).toEqual({
       id: 'ri-pay', description: 'Paycheque', amount: 2749.06, type: 'income', cadence: 'biweekly',
-      anchorDate: '2026-10-09', secondDay: null, categoryId: null, categoryName: null,
+      anchorDate: '2026-10-09', secondDay: null, endDate: null, categoryId: null, categoryName: null,
       accountId: 'chq', accountName: 'Chequing', destinationId: null, destinationName: null,
     });
     expect(line('ri-save')).toMatchObject({ destinationName: 'Europe trip', secondDay: 30 });
@@ -206,9 +206,44 @@ describe('a new line', () => {
 
 describe('messages', () => {
   it('every problem has its message in both languages', () => {
-    const problems: RecurringProblem[] = ['descriptionRequired', 'descriptionTooLong', 'amountInvalid', 'dateRequired', 'dateInvalid', 'secondDayInvalid', 'categoryRequired', 'accountRequired', 'goalRequired', 'effectiveFromInvalid', 'effectiveFromPast'];
+    const problems: RecurringProblem[] = ['descriptionRequired', 'descriptionTooLong', 'amountInvalid', 'dateRequired', 'dateInvalid', 'secondDayInvalid', 'categoryRequired', 'accountRequired', 'goalRequired', 'effectiveFromInvalid', 'effectiveFromPast', 'endDateInvalid', 'endDatePast', 'endDateBeforeStart'];
     for (const catalog of [en, fr] as Catalog[]) {
       for (const p of problems) expect(lookup(catalog, recurringProblemKey(p)), p).toBeTruthy();
     }
+  });
+});
+
+describe('the end date (2026-11-04)', () => {
+  const ended = parseRecurring({ ...ANSWER, items: [{ ...ANSWER.items[1], end_date: '2027-06-30' }] }, TODAY).lines[0];
+
+  it('is read from the list, and opens in the form; none opens empty', () => {
+    expect(ended.endDate).toBe('2027-06-30');
+    expect(draftForLine(ended, TODAY).endDate).toBe('2027-06-30');
+    expect(draftForLine(line('ri-rent'), TODAY).endDate).toBe('');
+  });
+
+  it('an edit sends it only when it changed; emptying it sends null (it keeps going)', () => {
+    const d = draftForLine(ended, TODAY);
+    const same = buildPatchBody(ended, d, TODAY);
+    expect(same.ok && 'endDate' in same.body).toBe(false);
+    expect(buildPatchBody(ended, { ...d, endDate: '' }, TODAY)).toMatchObject({ ok: true, body: { endDate: null } });
+    expect(buildPatchBody(line('ri-rent'), { ...draftForLine(line('ri-rent'), TODAY), endDate: '2027-01-31' }, TODAY))
+      .toMatchObject({ ok: true, body: { endDate: '2027-01-31' } });
+  });
+
+  it('an edit refuses a malformed or past end date, or one before the change applies', () => {
+    const d = draftForLine(line('ri-rent'), TODAY);
+    expect(buildPatchBody(line('ri-rent'), { ...d, endDate: '2027-02-30' }, TODAY)).toEqual({ ok: false, problem: 'endDateInvalid' });
+    expect(buildPatchBody(line('ri-rent'), { ...d, endDate: '2026-10-22' }, TODAY)).toEqual({ ok: false, problem: 'endDatePast' });
+    expect(buildPatchBody(line('ri-rent'), { ...d, amount: '1900', effectiveFrom: '2026-12-01', endDate: '2026-11-15' }, TODAY))
+      .toEqual({ ok: false, problem: 'endDateBeforeStart' });
+  });
+
+  it('a new line sends it, never before its first date; empty sends none', () => {
+    const d: RecurringDraft = { ...draftForNew('expense', data), description: 'Phone', amount: '60', anchorDate: '2026-11-03', categoryId: 'cat-h' };
+    expect(buildCreateBody({ ...d, endDate: '2027-03-03' })).toMatchObject({ ok: true, body: { endDate: '2027-03-03' } });
+    const none = buildCreateBody(d);
+    expect(none.ok && 'endDate' in none.body).toBe(false);
+    expect(buildCreateBody({ ...d, endDate: '2026-11-02' })).toEqual({ ok: false, problem: 'endDateBeforeStart' });
   });
 });

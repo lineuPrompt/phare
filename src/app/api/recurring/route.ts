@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { businessToday, materializeFromMonthStart } from '@phare/core';
+import { businessToday, materializeFromMonthStart, isCalendarDate } from '@phare/core';
 import { GOAL_ACCOUNT_TYPES } from '@/lib/dashboardHelpers';
 import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { materializeTransferOccurrences } from '@/lib/recurringTransferHelpers';
@@ -35,7 +35,7 @@ export async function GET() {
     const { data: items, error: itemsErr } = await supabase
       .from('recurring_items')
       .select(
-        'id, description, amount, type, cadence, anchor_date, second_day, active, category_id, account_id, destination_account_id, member_id, ' +
+        'id, description, amount, type, cadence, anchor_date, second_day, end_date, active, category_id, account_id, destination_account_id, member_id, ' +
         'categories(name), accounts!recurring_items_account_id_fkey(name, type), ' +
         'destination_accounts:accounts!recurring_items_destination_account_id_fkey(name), household_members(name)'
       )
@@ -98,8 +98,16 @@ export async function GET() {
 // pair so a later edit/delete can find and remove them together.
 export async function POST(request: Request) {
   try {
-    const { description, amount, type, cadence, anchorDate, secondDay, categoryId, accountId, destinationAccountId } =
+    const { description, amount, type, cadence, anchorDate, secondDay, categoryId, accountId, destinationAccountId, endDate: rawEndDate } =
       await request.json();
+    // Optional (2026-11-04): no end date means the rule keeps going.
+    const endDate: string | null = rawEndDate || null;
+    if (endDate !== null && !isCalendarDate(endDate)) {
+      return NextResponse.json({ error: 'Invalid end date' }, { status: 400 });
+    }
+    if (endDate !== null && anchorDate && endDate < anchorDate) {
+      return NextResponse.json({ error: 'The end date must be on or after the first date' }, { status: 400 });
+    }
 
     if (!description?.trim() || !amount || !type || !cadence) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -194,6 +202,7 @@ export async function POST(request: Request) {
         cadence,
         anchor_date: anchorDate || null,
         second_day: secondDay ?? null,
+        end_date: endDate,
       })
       .select('id')
       .single();
@@ -214,6 +223,7 @@ export async function POST(request: Request) {
     const monthStart = `${today.slice(0, 7)}-01`;
     const dates = anchorDate
       ? materializeFromMonthStart({ cadence, anchorDate, secondDay: secondDay ?? null }, today, 12)
+          .filter((d) => endDate === null || d <= endDate)
       : [];
 
     if (type === 'transfer') {

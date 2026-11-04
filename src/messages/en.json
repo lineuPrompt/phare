@@ -1010,7 +1010,9 @@
       "saving": "Saving...",
       "save": "Add",
       "category": "Category...",
-      "noGoals": "Create a goal first"
+      "noGoals": "Create a goal first",
+      "endDate": "Ends on (optional)",
+      "endDateHint": "Leave empty and it keeps going. With a date, nothing is added after it."
     },
     "list": {
       "empty": "No recurring lines yet. Add your mortgage, salary, loans above.",
@@ -1028,6 +1030,9 @@
       "cancel": "Cancel",
       "effectiveFrom": "Effective from",
       "effectiveFromHint": "Only applies if you change the amount, cadence, or pay date — everything before this date keeps its old value.",
+      "endDate": "Ends on",
+      "endDateHint": "Optional. Leave empty and it keeps going; with a date, nothing is added after it.",
+      "endsOn": "ends {date}",
       "cadence": {
         "monthly": "Monthly",
         "biweekly": "Every 2 weeks",

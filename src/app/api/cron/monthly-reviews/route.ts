@@ -5,6 +5,7 @@ import { getHouseholdTimezone } from '@/lib/householdTimezone';
 import { decideReview } from '@/lib/reviewSchedule';
 import { generateMonthlyReview } from '@/lib/monthlyReviewService';
 import { LetterGuardError } from '@/lib/letterGuards';
+import { topUpRecurringRules } from '@/lib/recurringTopUp';
 
 // ---------------------------------------------------------------------------
 // GET /api/cron/monthly-reviews — month-end review generation.
@@ -107,6 +108,8 @@ const STUCK_CLAIM_MS = 30 * 60 * 1000;
 // month due until CATCH_UP_LAST_DAY.
 const RUN_BUDGET_MS = 240 * 1000;
 
+type TopUpOutcome = { householdId: string; inserted: number; errors: string[] };
+
 type Outcome = {
   householdId: string;
   status: 'generated' | 'skipped' | 'claimed_by_other' | 'failed' | 'deferred';
@@ -129,6 +132,7 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
   const outcomes: Outcome[] = [];
+  const topUps: TopUpOutcome[] = [];
   const startedAt = Date.now();
 
   try {
@@ -139,6 +143,28 @@ export async function GET(request: Request) {
     if (error) {
       console.error('Cron monthly-reviews — could not list households:', error);
       return NextResponse.json({ error: 'household_list_failed' }, { status: 503 });
+    }
+
+    // ---- RECURRING TOP-UP, EVERY HOUSEHOLD, BEFORE ANY LETTER (2026-11-04) --
+    // Keeps each active recurring rule 12 months ahead (recurringTopUp.ts):
+    // rows were written once at creation and ran out after a year. First, so
+    // a letter written below reads a ledger that is already complete; in this
+    // daily job rather than a second cron entry, because a cron entry Vercel
+    // Hobby refuses blocks every deployment (see SCHEDULE above). A household
+    // whose top-up fails is reported and still gets its letter.
+    for (const household of (households ?? []) as { id: string }[]) {
+      try {
+        const today = businessToday(await getHouseholdTimezone(admin, household.id));
+        const result = await topUpRecurringRules(admin, household.id, today);
+        if (result.inserted > 0 || result.errors.length > 0) {
+          topUps.push({ householdId: household.id, inserted: result.inserted, errors: result.errors });
+        }
+      } catch (err) {
+        topUps.push({ householdId: household.id, inserted: 0, errors: [err instanceof Error ? err.message : String(err)] });
+      }
+    }
+    if (topUps.some((t) => t.errors.length > 0)) {
+      console.error('Cron monthly-reviews — recurring top-up failures:', JSON.stringify(topUps.filter((t) => t.errors.length > 0)));
     }
 
     for (const household of (households ?? []) as { id: string; locale: string | null }[]) {
@@ -388,16 +414,16 @@ export async function GET(request: Request) {
     // reason looked identical in Vercel's logs: one 200 and a duration.
     console.log(
       'Cron monthly-reviews —',
-      JSON.stringify({ checked: outcomes.length, generated, failed, outcomes })
+      JSON.stringify({ checked: outcomes.length, generated, failed, outcomes, topUps })
     );
 
     // Always 200 once authenticated: a non-2xx makes Vercel retry the WHOLE
     // sweep, re-walking every household to re-skip them. Per-household failures
     // are reported in the body and logged, and the claim design makes the next
     // scheduled run the natural retry.
-    return NextResponse.json({ ok: true, checked: outcomes.length, generated, failed, outcomes });
+    return NextResponse.json({ ok: true, checked: outcomes.length, generated, failed, outcomes, topUps });
   } catch (err) {
     console.error('Cron monthly-reviews — sweep threw:', err);
-    return NextResponse.json({ error: 'sweep_failed', outcomes }, { status: 500 });
+    return NextResponse.json({ error: 'sweep_failed', outcomes, topUps }, { status: 500 });
   }
 }

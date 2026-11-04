@@ -8,6 +8,8 @@ export type RecurringItem = {
   // semi-monthly income parsed from an import, before an anchor is captured).
   anchor_date: string | null;
   second_day: number | null;
+  // The last day an occurrence may fall on; null: it keeps going (2026-11-04).
+  end_date: string | null;
   active: boolean;
   category_id: string | null;
   account_id: string;

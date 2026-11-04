@@ -202,6 +202,7 @@
     "needsDateHint": "Ces éléments ne font pas partie de votre plan tant qu'ils n'ont pas de date.",
     "addDate": "Ajouter une date",
     "noDate": "Pas encore de date",
+    "endsOn": "prend fin le {date}",
     "empty": "Aucun revenu ni facture récurrents pour l'instant.",
     "new": {
       "income": "Nouveau revenu",
@@ -227,6 +228,9 @@
       "goal": "Objectif d'épargne ou dette",
       "appliesFrom": "S'applique à partir du",
       "appliesFromHint": "Les mois précédents gardent les anciens montants. Pas avant aujourd'hui.",
+      "endDate": "Se termine le (facultatif)",
+      "endDateNone": "Aucune date de fin",
+      "endDateHint": "Laissez vide pour qu'il continue. Avec une date, rien n'est ajouté après.",
       "save": "Enregistrer",
       "saving": "Enregistrement…",
       "delete": "Supprimer",
@@ -246,7 +250,10 @@
       "accountRequired": "Choisissez un compte.",
       "goalRequired": "Choisissez un objectif ou un compte de dette.",
       "effectiveFromInvalid": "Indiquez la date d'application sous la forme AAAA-MM-JJ.",
-      "effectiveFromPast": "Elle ne peut pas commencer à une date passée : les mois passés gardent leurs vrais montants."
+      "effectiveFromPast": "Elle ne peut pas commencer à une date passée : les mois passés gardent leurs vrais montants.",
+      "endDateInvalid": "Inscrivez la date de fin au format AAAA-MM-JJ.",
+      "endDatePast": "La date de fin ne peut pas être passée : les mois passés restent tels qu'ils ont eu lieu.",
+      "endDateBeforeStart": "La date de fin doit tomber le jour du début ou après."
     }
   },
   "goals": {

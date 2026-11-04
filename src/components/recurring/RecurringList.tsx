@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RecurringItem, RecurringAccount, RecurringCategory, RecurringGoalAccount, formatCurrency } from './types';
 import { formatSignedAmount } from '@/components/expenses/types';
+import { readableDate } from '@/components/dashboard/types';
 import { monthlyEquivalent } from '@phare/core';
 import { nextOccurrence, firstOfNextMonth } from '@phare/core';
 import { useBusinessToday } from '@/lib/useBusinessToday';
@@ -55,6 +56,8 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, today,
   // change — that's when an edit splits the rule instead of mutating it in
   // place (Timeline Part B). Defaults to the 1st of next month; adjustable.
   const [editEffectiveFrom, setEditEffectiveFrom] = useState('');
+  // '' = no end date: the rule keeps going.
+  const [editEndDate, setEditEndDate] = useState('');
 
   const inputStyle = { border: '1px solid #D1D5DB', color: '#0F2044' };
 
@@ -68,6 +71,7 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, today,
     setEditAccountId(item.account_id);
     setEditDestinationId(item.destination_account_id ?? '');
     setEditEffectiveFrom(firstOfNextMonth(today));
+    setEditEndDate(item.end_date ?? '');
     setIsEditing(true);
   };
 
@@ -90,6 +94,7 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, today,
           accountId: editAccountId,
           destinationAccountId: editDestinationId || null,
           effectiveFrom: editEffectiveFrom || undefined,
+          endDate: editEndDate || null,
         }),
       });
       if (!res.ok) {
@@ -202,6 +207,18 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, today,
               title={t('effectiveFromHint')}
             />
           </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{ color: '#6B7280' }}>{t('endDate')}</span>
+            <input
+              type="date"
+              value={editEndDate}
+              min={today}
+              onChange={(e) => setEditEndDate(e.target.value)}
+              className="px-2 py-1.5 rounded text-sm outline-none"
+              style={inputStyle}
+              title={t('endDateHint')}
+            />
+          </div>
         </div>
         {/* Row 3: transfer → destination goal; income/expense → account + category */}
         <div className="flex flex-wrap gap-2">
@@ -302,6 +319,7 @@ function RecurringRow({ item, accounts, categories, goalAccounts, locale, today,
             {item.accounts?.name ? ` · ${item.accounts.type === 'chequing' ? '🏦' : '💳'} ${item.accounts.name}` : ''}
             {isTransfer && item.destination_accounts?.name ? ` · → 🎯 ${item.destination_accounts.name}` : ''}
             {!item.anchor_date ? ` · ⚠ ${t('needsPayDate')}` : ''}
+            {item.end_date ? ` · ${t('endsOn', { date: readableDate(item.end_date, locale) })}` : ''}
           </p>
         </div>
         <span

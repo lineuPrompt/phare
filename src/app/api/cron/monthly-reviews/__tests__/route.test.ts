@@ -79,6 +79,17 @@ vi.mock('@/lib/supabase-admin', () => ({
   }),
 }));
 
+// The recurring top-up (2026-11-04): which households it ran for, in order
+// with the rest of the run, and one that throws.
+let topUpThrowsFor: string | null = null;
+vi.mock('@/lib/recurringTopUp', () => ({
+  topUpRecurringRules: async (_admin: unknown, householdId: string, day: string) => {
+    ops.push(`topUp:${householdId}:${day}`);
+    if (householdId === topUpThrowsFor) throw new Error('recurring_items read failed: boom');
+    return { rules: 2, topped: 1, inserted: 3, errors: [] };
+  },
+}));
+
 vi.mock('@/lib/householdTimezone', () => ({ getHouseholdTimezone: async () => 'America/Toronto' }));
 // Spreads the real module rather than replacing it wholesale. This used to be
 // `vi.mock('@/lib/dateHelpers', () => ({ businessToday: ... }))`, which was
@@ -121,6 +132,7 @@ describe('monthly review cron', () => {
     guardFails = false;
     today = '2026-09-01';
     onGenerate = null;
+    topUpThrowsFor = null;
     vi.restoreAllMocks();
     process.env.CRON_SECRET = 'test-secret';
     households = { data: [{ id: 'hh1', locale: 'en' }], error: null };
@@ -182,6 +194,26 @@ describe('monthly review cron', () => {
     expect(json.generated).toBe(1);
     expect(json.outcomes[0]).toMatchObject({ status: 'generated', month: '2026-08' });
     expect(ops).toContain('update:conversations');
+  });
+
+  // --- the recurring top-up (2026-11-04) ----------------------------------
+
+  it('tops up every household, on its own today, before any letter is written', async () => {
+    households = { data: [{ id: 'hh1', locale: 'en' }, { id: 'hh2', locale: 'fr' }], error: null };
+    const json = await (await runCron()).json();
+    expect(ops.filter((o) => o.startsWith('topUp:'))).toEqual(['topUp:hh1:2026-09-01', 'topUp:hh2:2026-09-01']);
+    expect(ops.indexOf('topUp:hh2:2026-09-01')).toBeLessThan(ops.indexOf('generate'));
+    expect(json.topUps).toEqual([
+      { householdId: 'hh1', inserted: 3, errors: [] },
+      { householdId: 'hh2', inserted: 3, errors: [] },
+    ]);
+  });
+
+  it('a household whose top-up fails is reported, and still gets its letter', async () => {
+    topUpThrowsFor = 'hh1';
+    const json = await (await runCron()).json();
+    expect(json.topUps).toEqual([{ householdId: 'hh1', inserted: 0, errors: ['recurring_items read failed: boom'] }]);
+    expect(json.generated).toBe(1);
   });
 
   // --- idempotency --------------------------------------------------------

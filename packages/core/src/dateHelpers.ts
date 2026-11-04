@@ -281,6 +281,37 @@ export function materializeFromMonthStart(
 }
 
 /**
+ * THE DATES A DAILY TOP-UP ADDS TO A RULE (2026-11-04). A rule's rows were
+ * written once, 12 months ahead, when it was created or edited, and nothing
+ * added more: a rule created in October 2026 ran out after September 2027, so
+ * the household's plan (and, a year on, its current month) emptied.
+ *
+ * The same 12-month window every rule is materialized over (the current month
+ * and the 11 after it), keeping only dates AFTER `lastDate` — the rule's latest
+ * row or tombstone, so nothing the household deleted or edited alone is ever
+ * written back, and nothing already there is written twice. Never before
+ * `effectiveFrom` (a split rule's start) and never after `endDate`.
+ */
+export function topUpOccurrences(
+  rule: {
+    cadence: 'monthly' | 'biweekly' | 'semimonthly' | 'weekly';
+    anchorDate: string;
+    secondDay?: number | null;
+    effectiveFrom?: string | null;
+    endDate?: string | null;
+  },
+  lastDate: string,
+  today: string
+): string[] {
+  return materializeFromMonthStart(rule, today, 12).filter(
+    (d) =>
+      d > lastDate &&
+      (!rule.effectiveFrom || d >= rule.effectiveFrom) &&
+      (!rule.endDate || d <= rule.endDate)
+  );
+}
+
+/**
  * Filters a rule's freshly-computed occurrence dates down to the ones that
  * should actually be (re)inserted — dropping any date the household has
  * already detached from this rule (edited a single occurrence, or deleted
