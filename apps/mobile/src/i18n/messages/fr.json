@@ -189,7 +189,8 @@
   },
   "more": {
     "goals": "Objectifs",
-    "recurring": "Récurrents"
+    "recurring": "Récurrents",
+    "household": "Foyer"
   },
   "recurring": {
     "title": "Récurrents",
@@ -646,5 +647,18 @@
       "products": "Phare Pro n'est pas offert dans l'App Store pour le moment. Veuillez réessayer plus tard.",
       "store": "L'App Store n'a pas pu terminer l'achat. Rien n'a été facturé."
     }
+  },
+  "members": {
+    "title": "Foyer",
+    "empty": "Aucun membre pour l’instant.",
+    "you": "vous",
+    "formerName": "Ancien membre",
+    "former": "Ancien membre",
+    "pending": "En attente",
+    "owner": "Propriétaire",
+    "member": "Membre",
+    "notInvited": "Pas encore invité",
+    "roleUnknown": "Rôle indisponible",
+    "detailsUnavailable": "Détails du compte indisponibles"
   }
 }

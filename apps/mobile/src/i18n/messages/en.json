@@ -189,7 +189,8 @@
   },
   "more": {
     "goals": "Goals",
-    "recurring": "Recurring"
+    "recurring": "Recurring",
+    "household": "Household"
   },
   "recurring": {
     "title": "Recurring",
@@ -646,5 +647,18 @@
       "products": "Phare Pro isn't available from the App Store right now. Please try again later.",
       "store": "The App Store couldn't complete the purchase. Nothing was charged."
     }
+  },
+  "members": {
+    "title": "Household",
+    "empty": "No members yet.",
+    "you": "you",
+    "formerName": "Former member",
+    "former": "Former member",
+    "pending": "Pending",
+    "owner": "Owner",
+    "member": "Member",
+    "notInvited": "Not invited yet",
+    "roleUnknown": "Role unavailable",
+    "detailsUnavailable": "Account details unavailable"
   }
 }

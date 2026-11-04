@@ -148,6 +148,13 @@ the v1.1 list separately.**
   in code, uncommitted: the prompt says when the month is in progress, with
   today's date, and its tone example follows.
 - **S7. Household members: list, invite, remove (owner only).**
+  List BUILT 2026-11-04, uncommitted: More → Household (after Recurring, as
+  the web sidebar): names, email, Owner / Member / Not invited yet / Role
+  unavailable, Pending, Former member, "(you)". `memberRoleView` moved into
+  `@phare/core` (web re-exports it). Route verified live as Zezinho Test with
+  the app's bearer token (200, owner, isMe). Shown to members too (the route
+  answers both; the web hides the page from members). Invite, remove and
+  make owner: not started (auth + deletion, plan first).
 - **S8. Savings goals and sinking funds** (read-only first round, then
   creation).
 - **S9. Generating a new monthly review / regenerating the plan.**

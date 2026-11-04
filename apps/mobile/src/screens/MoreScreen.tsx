@@ -8,19 +8,19 @@ import { theme } from '../theme';
  * The More tab (Lineu, 2026-10-23): the web sidebar's secondary items, as a
  * short menu, in its order. Overview, Timeline and Credit Cards are the tabs
  * (the sidebar's first three, same labels); everything else opens from here.
- * Household gets its row when its screen exists — no placeholders.
+ * Household (members, read-only for now) joined on 2026-11-04.
  */
 export default function MoreScreen() {
   const { t } = useI18n();
   const router = useRouter();
 
-  // The web sidebar's order: Goals, Reviews, Recurring (Household joins when
-  // it is built). Account sits apart, as the web keeps it out of the sidebar.
+  // The web sidebar's order: Goals, Reviews, Recurring, Household. Account sits apart, as the web keeps it out of the sidebar.
   const groups: { label: string; href: Href }[][] = [
     [
       { label: t('more.goals'), href: '/goals' },
       { label: t('tabs.review'), href: '/reviews' },
       { label: t('more.recurring'), href: '/recurring' },
+      { label: t('more.household'), href: '/members' },
     ],
     [{ label: t('tabs.account'), href: '/account' }],
   ];

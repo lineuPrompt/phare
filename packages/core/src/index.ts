@@ -25,3 +25,4 @@ export * from './onboardingFunnel';
 export * from './categories';
 export * from './privacyPolicy';
 export * from './cardPlan';
+export * from './members';
