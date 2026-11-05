@@ -330,9 +330,20 @@ export async function POST(request: Request) {
     // `admin` is already in scope from the member-cap check above — one
     // service-role client per request, and one consistent name, which is what
     // the RLS read-compatibility check keys off.
+    // SECURITY (2026-11-05): the household and role go in app_metadata, which
+    // only the service role can write. handle_new_user reads them from there
+    // (migration 20261105000000). user_metadata is the client's own field:
+    // a public sign-up can put anything in it, so a household_id read from it
+    // let anyone join any household as owner
+    // (docs/tickets/signup-metadata-joins-any-household.md). The copy left in
+    // user_metadata is only for the old trigger until the migration is applied.
     const { data: newUser, error: createError } = await admin.auth.admin.createUser({
       email: email.trim(),
       email_confirm: true,
+      app_metadata: {
+        household_id: caller.householdId,
+        role,
+      },
       user_metadata: {
         household_id: caller.householdId,
         role,

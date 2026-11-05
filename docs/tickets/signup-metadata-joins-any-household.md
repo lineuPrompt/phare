@@ -2,7 +2,11 @@
 
 **Filed** 2026-11-05, found while preparing in-app sign-up (S1).
 
-**Status:** OPEN — SECURITY. Auth + trigger: waiting for Lineu's approval.
+**Status:** FIX BUILT 2026-11-05 (Lineu: "yes security"), uncommitted.
+Invite route writes `app_metadata` (3/3 mutants caught); migration
+`20261105000000_handle_new_user_app_metadata.sql` WRITTEN, not applied —
+apply it AFTER the invite change is deployed. Still to do after applying: the
+live test in step 3 below.
 
 ## The problem
 

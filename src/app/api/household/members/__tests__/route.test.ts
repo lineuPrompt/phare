@@ -852,4 +852,26 @@ describe('POST /api/household/members — auth, validation, Admin API failures',
     expect(createUserMock).toHaveBeenCalledTimes(1);
     expect(resetPasswordMock).toHaveBeenCalledTimes(1);
   });
+
+  // SECURITY (2026-11-05): handle_new_user reads the household and role from
+  // app_metadata, which only the service role can write. A household in
+  // user_metadata alone is what any public sign-up can forge.
+  it('puts the household and the role in app_metadata, the field only the server can write', async () => {
+    createUserMock.mockResolvedValue({ data: { user: { id: 'new-auth-user-app-meta' } }, error: null });
+    resetPasswordMock.mockResolvedValue({ error: null });
+    await useSession({
+      users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
+      household_members: [
+        { count: 0, error: null },
+        { data: [], error: null },
+        { data: null, error: null },
+      ],
+    });
+
+    await postMembers({ ...VALID, role: 'owner' });
+
+    expect(createUserMock).toHaveBeenCalledTimes(1);
+    const args = createUserMock.mock.calls[0][0] as { app_metadata?: Record<string, unknown> };
+    expect(args.app_metadata).toEqual({ household_id: 'hh1', role: 'owner' });
+  });
 });
