@@ -321,8 +321,8 @@ export async function POST(request: Request) {
     // -----------------------------------------------------------------------
     // 3. Use Admin API (service role) to create the auth user
     //
-    // Metadata is written into raw_user_meta_data — the handle_new_user
-    // trigger reads household_id from there to skip household creation.
+    // The household comes from member_invites (below), not from metadata;
+    // user_metadata carries the name only.
     //
     // email_confirm: true so the member doesn't need a separate verify step;
     // they set their password via the recovery link instead.
@@ -330,29 +330,45 @@ export async function POST(request: Request) {
     // `admin` is already in scope from the member-cap check above — one
     // service-role client per request, and one consistent name, which is what
     // the RLS read-compatibility check keys off.
-    // SECURITY (2026-11-05): the household and role go in app_metadata, which
-    // only the service role can write. handle_new_user reads them from there
-    // (migration 20261105000000). user_metadata is the client's own field:
-    // a public sign-up can put anything in it, so a household_id read from it
-    // let anyone join any household as owner
-    // (docs/tickets/signup-metadata-joins-any-household.md). The copy left in
-    // user_metadata is only for the old trigger until the migration is applied.
+    // SECURITY (2026-11-05, docs/tickets/signup-metadata-joins-any-household.md).
+    // The household and role an invited account joins come from a row in
+    // member_invites — a table only the service role can touch — never from
+    // anything the account's own sign-up carries. handle_new_user (migration
+    // 20261105010000) reads this row by email when the auth user is created,
+    // consumes it, and joins that household; with no row it creates a new
+    // household, as for any sign-up.
+    //
+    // Not app_metadata (tried in 20261105000000): GoTrue's createUser inserts
+    // the auth user first and sets app_metadata afterwards, so the trigger saw
+    // it empty and gave every invitee a household of their own.
+    //
+    // Written BEFORE the auth user exists, so the trigger finds it. One row
+    // per address (unique email): a re-invite replaces the old row.
+    const { error: clearInviteError } = await admin.from('member_invites').delete().eq('email', normalizedEmail);
+    const { error: inviteError } = clearInviteError
+      ? { error: clearInviteError }
+      : await admin.from('member_invites').insert({ email: normalizedEmail, household_id: caller.householdId, role });
+    if (inviteError) {
+      console.error('Member invite row write failed:', inviteError);
+      return NextResponse.json({ error: `Could not record the invite: ${inviteError.message}` }, { status: 500 });
+    }
+
     const { data: newUser, error: createError } = await admin.auth.admin.createUser({
       email: email.trim(),
       email_confirm: true,
-      app_metadata: {
-        household_id: caller.householdId,
-        role,
-      },
       user_metadata: {
-        household_id: caller.householdId,
-        role,
         full_name: fullName.trim(),
       },
     });
 
     if (createError) {
       console.error('Admin createUser error:', createError);
+      // No account was created, so the invite row must not outlive this
+      // request: whoever later signs up with this address would join here.
+      const { error: dropInviteError } = await admin.from('member_invites').delete().eq('email', normalizedEmail);
+      if (dropInviteError) {
+        console.error('Member invite row cleanup failed (row left behind; delete it by email):', normalizedEmail, dropInviteError);
+      }
       const alreadyExists =
         createError.message.toLowerCase().includes('already registered') ||
         createError.message.toLowerCase().includes('already exists') ||
@@ -386,6 +402,7 @@ export async function POST(request: Request) {
           .single();
 
         if (existingRow?.household_id === caller.householdId) {
+          // (The invite row was already dropped above: this person exists.)
           const appOrigin = new URL(request.url).origin;
           await admin.auth.resetPasswordForEmail(email.trim(), {
             redirectTo: `${appOrigin}/auth/callback?next=/${caller.locale}/dashboard`,
@@ -399,6 +416,32 @@ export async function POST(request: Request) {
         );
       }
       return NextResponse.json({ error: createError.message }, { status: 500 });
+    }
+
+    // -----------------------------------------------------------------------
+    // 3a. PROVE WHERE THE ACCOUNT LANDED. The trigger decides the household;
+    // this route must not report success on its say-so. On 2026-11-05 every
+    // invite silently created a household of its own and this route still
+    // answered 200. Read the account's users row back: anything but the
+    // caller's household is a failed invite, said as one.
+    // -----------------------------------------------------------------------
+    const newUserId = newUser.user?.id ?? null;
+    const { data: landedRow, error: landedError } = newUserId
+      ? await admin.from('users').select('household_id, role').eq('id', newUserId).maybeSingle()
+      : { data: null, error: { message: 'createUser returned no user' } };
+    if (landedError || !landedRow || landedRow.household_id !== caller.householdId) {
+      console.error('Invite landed in the wrong household (userId for ops):', newUserId, {
+        expected: caller.householdId,
+        got: landedRow?.household_id ?? null,
+        error: landedError ?? null,
+      });
+      return NextResponse.json(
+        {
+          error: 'The account was created but did not join your household. Nothing was sent. Contact support before inviting this person again.',
+          code: 'invite_landed_elsewhere',
+        },
+        { status: 500 }
+      );
     }
 
     // -----------------------------------------------------------------------

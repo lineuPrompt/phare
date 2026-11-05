@@ -98,17 +98,25 @@ vi.mock('@/lib/supabase-admin', () => ({
     // and the attach logic below both run.
     from: (table: string) => {
       if (table === 'household_members' && adminDb) return adminDb.client.from(table);
-      const nullChain = (): unknown =>
+      const chainOf = (resolution: unknown): unknown =>
         new Proxy({}, {
           get(_, prop) {
             if (prop === 'then') {
-              return (resolve: (v: unknown) => unknown) =>
-                Promise.resolve({ data: null, error: null }).then(resolve);
+              return (resolve: (v: unknown) => unknown) => Promise.resolve(resolution).then(resolve);
             }
-            return () => nullChain();
+            return () => chainOf(resolution);
           },
         });
-      return { select: () => nullChain() };
+      const nullChain = () => chainOf({ data: null, error: null });
+      // The invite row (2026-11-05): written and dropped without fuss here.
+      if (table === 'member_invites') return { delete: () => nullChain(), insert: () => nullChain() };
+      return {
+        select: (columns?: unknown) =>
+          // The route's read-back of where the new account landed: here.
+          table === 'users' && columns === 'household_id, role'
+            ? chainOf({ data: { household_id: 'hh1', role: 'member' }, error: null })
+            : nullChain(),
+      };
     },
   }),
 }));

@@ -3,6 +3,13 @@
 -- the signup event records its platform.
 -- 2026-11-05. Lineu: "yes security".
 --
+-- SUPERSEDED by 20261105010000_member_invites.sql. This version closed the
+--   hole but BROKE INVITES: GoTrue's createUser sets app_metadata after the
+--   INSERT the trigger fires on, so every invitee got a household of its own
+--   (live test, 2026-11-05: Cliffs Trudge landed in a new household as owner;
+--   that account was deleted through DELETE /api/household). Its VERIFY read
+--   only the function's text, which is why it passed.
+--
 -- STATUS: APPLIED 2026-11-05 by Lineu (the function, in the SQL Editor);
 --   VERIFY run live by Claude the same day: 9/9 PASS (one function, household
 --   and role from app_metadata only, signup event with platform, Path A/B and

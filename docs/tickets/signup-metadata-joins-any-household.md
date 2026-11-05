@@ -2,8 +2,14 @@
 
 **Filed** 2026-11-05, found while preparing in-app sign-up (S1).
 
-**Status:** FIXED 2026-11-05. Invite change committed (c5f12a6); migration
-APPLIED, VERIFY 9/9 PASS live. Remaining: the live invite test.
+**Status:** SECOND FIX BUILT 2026-11-05 (Lineu: "yes invite fix"),
+uncommitted. The first fix (20261105000000, app_metadata) closed the hole
+but broke invites — app_metadata is set after the trigger fires. Now: a
+server-only `member_invites` table written before the account exists, read
+and consumed by the trigger; the route reads back where the account landed
+and refuses to report success otherwise (8/8 mutants caught). Migration
+`20261105010000_member_invites.sql` WRITTEN, not applied. Until it and the
+deploy are both live, invites don't work: send none.
 Earlier: FIX BUILT 2026-11-05 (Lineu: "yes security").
 Invite route writes `app_metadata` (3/3 mutants caught); migration
 `20261105000000_handle_new_user_app_metadata.sql` WRITTEN, not applied —

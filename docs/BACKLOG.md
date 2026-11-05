@@ -51,16 +51,22 @@ the v1.1 list separately.**
   **WAITING:** the `signup` event's platform needs the trigger migration,
   held for the security fix below (one migration for both).
 - **SECURITY: a sign-up can join any household as owner through its
-  metadata** (found 2026-11-05). No sign of abuse. FIX BUILT 2026-11-05
-  (Lineu: "yes security"), uncommitted: the invite writes `app_metadata`;
-  migration `20261105000000` (WRITTEN, not applied) reads the household and
-  role from there only, and adds `platform` to the signup event. ORDER:
-  deploy, then apply. —
+  metadata** (found 2026-11-05). No sign of abuse. First fix
+  (`20261105000000`, app_metadata; committed c5f12a6, APPLIED) closed the
+  hole but BROKE INVITES (app_metadata is set after the trigger runs; caught
+  by the live invite test). Second fix BUILT 2026-11-05, uncommitted:
+  server-only `member_invites` table + trigger reads it + the route checks
+  where the account landed. Migration `20261105010000` WRITTEN, not applied.
+  ORDER: apply, then deploy, then the live test. NO INVITES until then. —
   [ticket](tickets/signup-metadata-joins-any-household.md)
 - S1 live test 2026-11-05 on the deployed site (emulator, throwaway
   asian.rocky3618@…, household **73157e93**: exclude from every count):
   sign-up → 8-digit code → confirmed, consent recorded at 2026-11-05,
-  `signup` event, onboarding shown. Reset: code requested, waiting on Lineu.
+  `signup` event, onboarding shown. Reset: code requested from the app's
+  Forgot password screen; the emulator then died, so the code was entered
+  through the app's own two calls (verifyOtp recovery + updateUser) from a
+  script: new password signs in, old one refused (400). The reset screen's
+  second step is still unseen on a device.
   **STOP, blocked 2026-10-15.** Three things fall outside the
   pre-approval:
   - the `signup` event needs `platform: 'mobile'`: a `handle_new_user`

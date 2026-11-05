@@ -105,22 +105,75 @@ function adminMembersFrom() {
   return { select: start('select'), update: start('update'), delete: start('delete'), insert: start('insert') };
 }
 
+// member_invites (2026-11-05): the server-only row that tells handle_new_user
+// which household an invited account joins. Every call is logged in `order`
+// with createUser, so a test can prove the row is written BEFORE the account.
+const order: string[] = [];
+let inviteCalls: AdminChain[] = [];
+let inviteErrors: Partial<Record<'delete' | 'insert', { message: string }>> = {};
+// Where the trigger put the new account: what the route's read-back sees.
+let landed: Resolution = { data: { household_id: 'hh1', role: 'member' }, error: null };
+
+function adminInvitesFrom() {
+  const start = (method: 'delete' | 'insert') => (...args: unknown[]) => {
+    const chain: AdminChain = { method, args, filters: [] };
+    inviteCalls.push(chain);
+    order.push(`member_invites.${method}`);
+    const resolution = { data: null, error: inviteErrors[method] ?? null };
+    const link = (): unknown =>
+      new Proxy({}, {
+        get(_, prop) {
+          if (prop === 'then') {
+            return (resolve: (v: unknown) => unknown) => Promise.resolve(resolution).then(resolve);
+          }
+          return (...a: unknown[]) => {
+            if (prop === 'eq') chain.filters.push([a[0] as string, a[1]]);
+            return link();
+          };
+        },
+      });
+    return link();
+  };
+  return { delete: start('delete'), insert: start('insert') };
+}
+
 beforeEach(() => {
   adminMembers = null;
+  order.length = 0;
+  inviteCalls = [];
+  inviteErrors = {};
+  landed = { data: { household_id: 'hh1', role: 'member' }, error: null };
 });
 
 vi.mock('@/lib/supabase-admin', () => ({
   createAdminClient: () => ({
     auth: {
       admin: {
-        createUser: (...args: unknown[]) => createUserMock(...args),
+        createUser: (...args: unknown[]) => {
+          order.push('createUser');
+          return createUserMock(...args);
+        },
         getUserById: (...args: unknown[]) => getUserByIdMock(...args),
       },
       resetPasswordForEmail: (...args: unknown[]) => resetPasswordMock(...args),
     },
-    from: (table: string) => table === 'household_members' ? adminMembersFrom() : ({
+    from: (table: string) => table === 'household_members' ? adminMembersFrom()
+      : table === 'member_invites' ? adminInvitesFrom()
+      : ({
       select: (...args: unknown[]) => {
         adminFromCalls.push({ table, args });
+        // The route's read-back of where the new account landed.
+        if (table === 'users' && args[0] === 'household_id, role') {
+          order.push('users.readBack');
+          const landedChain = (): unknown =>
+            new Proxy({}, {
+              get(_, prop) {
+                if (prop === 'then') return (resolve: (v: unknown) => unknown) => Promise.resolve(landed).then(resolve);
+                return () => landedChain();
+              },
+            });
+          return landedChain();
+        }
         // Fall back to an empty result so a test that doesn't care about the
         // admin lookup doesn't have to script it. Inlined rather than reusing
         // makeResultChain: vi.mock factories are hoisted above it.
@@ -853,25 +906,103 @@ describe('POST /api/household/members — auth, validation, Admin API failures',
     expect(resetPasswordMock).toHaveBeenCalledTimes(1);
   });
 
-  // SECURITY (2026-11-05): handle_new_user reads the household and role from
-  // app_metadata, which only the service role can write. A household in
-  // user_metadata alone is what any public sign-up can forge.
-  it('puts the household and the role in app_metadata, the field only the server can write', async () => {
-    createUserMock.mockResolvedValue({ data: { user: { id: 'new-auth-user-app-meta' } }, error: null });
+});
+
+// ---------------------------------------------------------------------------
+// SECURITY (2026-11-05, docs/tickets/signup-metadata-joins-any-household.md).
+// The household an invited account joins comes from a member_invites row the
+// route writes BEFORE creating the account; handle_new_user reads it by email.
+// Nothing the sign-up itself carries may name a household. And the route
+// reads back where the account landed, so a trigger that put it elsewhere is
+// a failed invite, never a silent 200.
+// ---------------------------------------------------------------------------
+describe('POST /api/household/members — the invite row and the landing check', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    createUserMock.mockReset();
+    resetPasswordMock.mockReset();
+    createUserMock.mockResolvedValue({ data: { user: { id: 'new-auth-user' } }, error: null });
     resetPasswordMock.mockResolvedValue({ error: null });
-    await useSession({
-      users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
-      household_members: [
-        { count: 0, error: null },
-        { data: [], error: null },
-        { data: null, error: null },
-      ],
-    });
+  });
 
-    await postMembers({ ...VALID, role: 'owner' });
+  async function useSession(script: Record<string, Resolution[]>) {
+    const mock = makeSupabaseMock(script);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(mock.client);
+    return mock;
+  }
+  const VALID = { email: 'marc@example.com', fullName: 'Marc Nobody', role: 'member' };
 
-    expect(createUserMock).toHaveBeenCalledTimes(1);
-    const args = createUserMock.mock.calls[0][0] as { app_metadata?: Record<string, unknown> };
-    expect(args.app_metadata).toEqual({ household_id: 'hh1', role: 'owner' });
+  const OWNER_SESSION = {
+    users: [{ data: { household_id: 'hh1', role: 'owner' }, error: null }],
+    household_members: [
+      { count: 0, error: null },
+      { data: [], error: null },
+    ],
+  };
+
+  it('writes the invite row (this household, this role, the lowercased email) before the account exists', async () => {
+    await useSession(OWNER_SESSION);
+    const res = await postMembers({ email: '  Marc@Example.COM ', fullName: 'Marc Nobody', role: 'owner' });
+
+    expect(res.status).toBe(200);
+    expect(order.slice(0, 3)).toEqual(['member_invites.delete', 'member_invites.insert', 'createUser']);
+    expect(inviteCalls[0].filters).toEqual([['email', 'marc@example.com']]);
+    expect(inviteCalls[1].args[0]).toEqual({ email: 'marc@example.com', household_id: 'hh1', role: 'owner' });
+  });
+
+  it('puts no household and no role in anything the account itself carries', async () => {
+    await useSession(OWNER_SESSION);
+    await postMembers(VALID);
+
+    const args = JSON.stringify(createUserMock.mock.calls[0][0]);
+    expect(args).not.toContain('household_id');
+    expect(args).not.toContain('"role"');
+    expect(args).toContain('Marc Nobody');
+  });
+
+  it('creates nothing when the invite row cannot be written', async () => {
+    inviteErrors = { insert: { message: 'permission denied' } };
+    await useSession(OWNER_SESSION);
+    const res = await postMembers(VALID);
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toContain('Could not record the invite: permission denied');
+    expect(createUserMock).not.toHaveBeenCalled();
+  });
+
+  it('drops the invite row when the account cannot be created', async () => {
+    createUserMock.mockResolvedValue({ data: null, error: { message: 'Database error creating new user', status: 500 } });
+    await useSession(OWNER_SESSION);
+    const res = await postMembers(VALID);
+
+    expect(res.status).toBe(500);
+    expect(order).toEqual(['member_invites.delete', 'member_invites.insert', 'createUser', 'member_invites.delete']);
+    expect(inviteCalls[2].filters).toEqual([['email', 'marc@example.com']]);
+  });
+
+  it('an account that landed in another household is a failed invite: 500, no email sent', async () => {
+    landed = { data: { household_id: 'some-new-household', role: 'owner' }, error: null };
+    await useSession(OWNER_SESSION);
+    const res = await postMembers(VALID);
+    const json = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(json.code).toBe('invite_landed_elsewhere');
+    expect(json.success).toBeUndefined();
+    expect(resetPasswordMock).not.toHaveBeenCalled();
+  });
+
+  it('an account with no users row, or a failed read-back, is a failed invite too', async () => {
+    landed = { data: null, error: null };
+    await useSession(OWNER_SESSION);
+    expect((await postMembers(VALID)).status).toBe(500);
+
+    vi.resetModules();
+    landed = { data: null, error: { message: 'read failed' } };
+    await useSession(OWNER_SESSION);
+    const res = await postMembers(VALID);
+    expect(res.status).toBe(500);
+    expect(resetPasswordMock).not.toHaveBeenCalled();
   });
 });

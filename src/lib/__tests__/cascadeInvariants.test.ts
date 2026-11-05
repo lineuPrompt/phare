@@ -128,6 +128,9 @@ describe('cascade invariants for account deletion', () => {
       // NOT a foreign key (see 20260804000000_member_self_deletion.sql); this
       // household_id cascade is what bounds its lifetime instead.
       'member_deletion_requests',
+      // A pending invite holds the invitee's email; a deleted household's
+      // pending invites must go with it (20261105010000_member_invites.sql).
+      'member_invites',
       'monthly_goals',
       'recurring_items',
       'recurring_skipped_dates',
