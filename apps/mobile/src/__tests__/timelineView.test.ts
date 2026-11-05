@@ -16,7 +16,7 @@ import {
   buildMonthView as buildMonthViewViaWebPath,
   availableMonths as availableMonthsViaWebPath,
 } from '../../../../src/lib/timelineDisplayHelpers';
-import { buildTimelineView, entryAmount, formatDayLong, formatDayShort, timelineMonths } from '../lib/timelineView';
+import { buildTimelineView, entryAmount, formatDateLong, formatDayLong, formatDayShort, timelineMonths } from '../lib/timelineView';
 import type { TimelineOk } from '../lib/timeline';
 
 // ---------------------------------------------------------------------------
@@ -318,6 +318,12 @@ describe('dates do not depend on the device clock', () => {
   it('renders both locales', () => {
     expect(formatDayLong('2026-09-30', 'en')).toBe('September 30');
     expect(formatDayLong('2026-09-30', 'fr')).toBe('30 septembre');
+  });
+
+  it('a date that can be years away carries its year (goal targets, end dates)', () => {
+    expect(formatDateLong('2028-12-28', 'en')).toBe('December 28, 2028');
+    expect(formatDateLong('2028-12-28', 'fr')).toBe('28 décembre 2028');
+    expect(inZone('Pacific/Midway', () => formatDateLong('2028-12-28', 'en'))).toBe('December 28, 2028');
   });
 });
 

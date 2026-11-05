@@ -8,7 +8,7 @@ import { loadReserveFund, type ReserveFund } from '../lib/reserveFund';
 import { cadenceKey } from '../lib/recurring';
 import { cardFigure } from '../lib/cardsLoader';
 import { onEntrySaved } from '../lib/entryEvents';
-import { formatDayLong } from '../lib/timelineView';
+import { formatDateLong, formatDayLong } from '../lib/timelineView';
 import ActionButton from '../components/ActionButton';
 import BackToMore from '../components/BackToMore';
 import { useI18n } from '../i18n';
@@ -155,11 +155,11 @@ export default function GoalsScreen() {
             {g.target !== null && !g.isDebt && (
               <Text style={styles.detail}>
                 {t('goals.target')} {cardFigure(g.target, locale)}
-                {g.targetDate ? ` · ${t('goals.by')} ${formatDayLong(g.targetDate, locale)}` : ''}
+                {g.targetDate ? ` · ${t('goals.by')} ${formatDateLong(g.targetDate, locale)}` : ''}
               </Text>
             )}
             {g.isDebt && g.targetDate && (
-              <Text style={styles.detail}>{t('goals.payoffBy')} {formatDayLong(g.targetDate, locale)}</Text>
+              <Text style={styles.detail}>{t('goals.payoffBy')} {formatDateLong(g.targetDate, locale)}</Text>
             )}
             {g.contribution && (
               <Text style={styles.detail}>

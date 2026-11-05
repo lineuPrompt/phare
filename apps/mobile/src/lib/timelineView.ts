@@ -205,6 +205,14 @@ export function formatDayLong(iso: string, locale: Locale): string {
   return intl(locale, { day: 'numeric', month: 'long' }).format(noonUTC(iso));
 }
 
+/**
+ * With the year: for dates that can be years away (a goal's target date, a
+ * rule's end date). "by December 28" for a 2028 target read as next month.
+ */
+export function formatDateLong(iso: string, locale: Locale): string {
+  return intl(locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(noonUTC(iso));
+}
+
 // ── Entry amounts ───────────────────────────────────────────────────────────
 
 /** How one entry's amount reads. Tones map to colours in the screen. */

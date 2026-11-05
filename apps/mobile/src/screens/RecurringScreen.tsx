@@ -6,7 +6,7 @@ import { apiGet, messageKeyFor } from '../lib/api';
 import { cadenceKey, loadRecurring, sectionsOf, type RecurringData, type RecurringLine } from '../lib/recurring';
 import { cardFigure } from '../lib/cardsLoader';
 import { onEntrySaved } from '../lib/entryEvents';
-import { formatDayLong } from '../lib/timelineView';
+import { formatDateLong, formatDayLong } from '../lib/timelineView';
 import BackToMore from '../components/BackToMore';
 import Chip from '../components/Chip';
 import { useI18n } from '../i18n';
@@ -74,7 +74,7 @@ export default function RecurringScreen() {
   const row = (line: RecurringLine) => {
     const where = line.type === 'transfer' ? line.destinationName : line.type === 'expense' ? line.categoryName : line.accountName;
     const when = (line.anchorDate ? `${t(cadenceKey(line.cadence))} · ${formatDayLong(line.anchorDate, locale)}` : t('recurring.noDate'))
-      + (line.endDate ? ` · ${t('recurring.endsOn', { date: formatDayLong(line.endDate, locale) })}` : '');
+      + (line.endDate ? ` · ${t('recurring.endsOn', { date: formatDateLong(line.endDate, locale) })}` : '');
     return (
       <Pressable
         key={line.id}
