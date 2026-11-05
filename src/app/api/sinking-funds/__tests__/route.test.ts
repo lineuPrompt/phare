@@ -237,3 +237,52 @@ describe('GET /api/sinking-funds', () => {
     expect(json.buffer.totalMonthlyProvision).toBe(300);
   });
 });
+
+// A failed read must say so, never answer 200 with a $0 Reserve Fund.
+describe('GET /api/sinking-funds: a failed read is reported', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  const started = { data: [{ id: 'sf-1', name: 'Property tax', annual_amount: 3600, monthly_provision: 300, due_month: 3, linked_account_id: 'buffer-1' }], error: null };
+  const boom = { data: null, error: { message: 'boom' } };
+
+  async function run(script: Record<string, Resolution[]>) {
+    const { client } = makeSupabaseMock({ users: [{ data: { household_id: 'hh1' }, error: null }], households: [{ data: { timezone: 'America/Toronto' }, error: null }], ...script });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const { GET } = await import('../route');
+    const res = await GET();
+    return { status: res.status, json: await res.json() };
+  }
+
+  it('the funds read', async () => {
+    const { status, json } = await run({ sinking_funds: [boom] });
+    expect(status).toBe(500);
+    expect(json.error).toBe('Failed to load reserve funds: could not read sinking_funds: boom');
+  });
+
+  it('the Reserve Fund\'s transactions', async () => {
+    const { status, json } = await run({ sinking_funds: [started], transactions: [boom] });
+    expect(status).toBe(500);
+    expect(json.error).toContain('could not read transactions: boom');
+    expect(json.buffer).toBeUndefined();
+  });
+
+  it('the contribution rule', async () => {
+    const { status, json } = await run({ sinking_funds: [started], transactions: [{ data: [], error: null }], recurring_items: [boom] });
+    expect(status).toBe(500);
+    expect(json.error).toContain('could not read recurring_items: boom');
+  });
+
+  it('the skipped-dates count', async () => {
+    const { status, json } = await run({
+      sinking_funds: [started],
+      transactions: [{ data: [], error: null }],
+      recurring_items: [{ data: { id: 'ri-1', amount: 708, cadence: 'monthly', anchor_date: '2026-07-01', second_day: null }, error: null }],
+      recurring_skipped_dates: [{ count: null, error: { message: 'boom' } }],
+    });
+    expect(status).toBe(500);
+    expect(json.error).toContain('could not read recurring_skipped_dates: boom');
+  });
+});

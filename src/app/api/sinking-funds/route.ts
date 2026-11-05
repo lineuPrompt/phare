@@ -27,10 +27,19 @@ export async function GET() {
     if (!userRow?.household_id) return NextResponse.json({ error: 'No household' }, { status: 400 });
     const householdId = userRow.household_id;
 
-    const { data: fundRows } = await supabase
+    // Every read below reports its own failure, as GET /api/goals does: a
+    // failed read used to answer 200 with a $0 Reserve Fund and no funds,
+    // which every client showed as the real figure.
+    const readFailed = (what: string, err: { message: string }) => {
+      console.error(`Sinking funds GET ${what} read error:`, err);
+      return NextResponse.json({ error: `Failed to load reserve funds: could not read ${what}: ${err.message}` }, { status: 500 });
+    };
+
+    const { data: fundRows, error: fundsErr } = await supabase
       .from('sinking_funds')
       .select('id, name, annual_amount, monthly_provision, due_month, linked_account_id, active')
       .eq('household_id', householdId);
+    if (fundsErr) return readFailed('sinking_funds', fundsErr);
     const funds = (fundRows ?? []).map((sf) => ({
       id: sf.id,
       name: sf.name,
@@ -75,12 +84,13 @@ export async function GET() {
     const timezone = await getHouseholdTimezone(supabase, householdId);
     const today = businessToday(timezone);
 
-    const { data: txRows } = await supabase
+    const { data: txRows, error: txErr } = await supabase
       .from('transactions')
       .select('id, amount, type, account_id, date, description')
       .eq('household_id', householdId)
       .eq('account_id', linkedAccountId)
       .order('date', { ascending: false });
+    if (txErr) return readFailed('transactions', txErr);
     const allTx = (txRows ?? []) as {
       id: string; amount: number | string; type: string; account_id: string | null;
       date: string; description: string | null;
@@ -106,7 +116,7 @@ export async function GET() {
       .map((t) => ({ ...toLine(t), amount: -Number(t.amount) }));
     const billsPaid = allTx.filter((t) => t.type === 'expense' && t.date <= today).map(toLine);
 
-    const { data: recurringRow } = await supabase
+    const { data: recurringRow, error: ruleErr } = await supabase
       .from('recurring_items')
       .select('id, amount, cadence, anchor_date, second_day, effective_from')
       .eq('household_id', householdId)
@@ -114,6 +124,7 @@ export async function GET() {
       .eq('type', 'transfer')
       .eq('active', true)
       .maybeSingle();
+    if (ruleErr) return readFailed('recurring_items', ruleErr);
 
     const recurringItemId = recurringRow?.id ?? null;
     const contributionAmount = recurringRow ? Number(recurringRow.amount) : null;
@@ -132,12 +143,13 @@ export async function GET() {
     // BEFORE the household commits, rather than letting them find out after.
     let tombstonesAfterBoundary = 0;
     if (recurringItemId) {
-      const { count } = await supabase
+      const { count, error: skippedErr } = await supabase
         .from('recurring_skipped_dates')
         .select('date', { count: 'exact', head: true })
         .eq('household_id', householdId)
         .eq('recurring_item_id', recurringItemId)
         .gte('date', firstOfNextMonth(today));
+      if (skippedErr) return readFailed('recurring_skipped_dates', skippedErr);
       tombstonesAfterBoundary = count ?? 0;
     }
     const nextContributionDate = recurringRow

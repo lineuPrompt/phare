@@ -660,5 +660,13 @@
     "notInvited": "Pas encore invité",
     "roleUnknown": "Rôle indisponible",
     "detailsUnavailable": "Détails du compte indisponibles"
+  },
+  "reserve": {
+    "title": "Fonds de réserve",
+    "notStarted": "Pas encore démarré : aucun compte ni contribution n’existe.",
+    "next": "prochaine le",
+    "covers": "Ce qu’il couvre",
+    "excluded": "exclu",
+    "perYear": "{amount} par année"
   }
 }

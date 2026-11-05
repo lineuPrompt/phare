@@ -660,5 +660,13 @@
     "notInvited": "Not invited yet",
     "roleUnknown": "Role unavailable",
     "detailsUnavailable": "Account details unavailable"
+  },
+  "reserve": {
+    "title": "Reserve Fund",
+    "notStarted": "Not started yet: no account or contribution exists.",
+    "next": "next",
+    "covers": "What it covers",
+    "excluded": "excluded",
+    "perYear": "{amount} per year"
   }
 }

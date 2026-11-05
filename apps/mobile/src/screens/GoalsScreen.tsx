@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { apiGet, messageKeyFor } from '../lib/api';
 import { loadGoals, type Goal } from '../lib/goals';
+import { loadReserveFund, type ReserveFund } from '../lib/reserveFund';
 import { cadenceKey } from '../lib/recurring';
 import { cardFigure } from '../lib/cardsLoader';
 import { onEntrySaved } from '../lib/entryEvents';
@@ -17,26 +18,31 @@ import { theme } from '../theme';
  * Goals: savings goals and debts, from More (as on the web sidebar). Every
  * figure is the server's (GET /api/goals). "Add money" opens quick entry on
  * Contribution with this goal chosen; a new goal is a new savings account.
+ * The Reserve Fund comes first, as on the web Goals page (GET
+ * /api/sinking-funds): its balance, contribution and what it covers.
  */
 export default function GoalsScreen() {
   const { t, locale } = useI18n();
   const router = useRouter();
   const [goals, setGoals] = useState<Goal[] | null>(null);
+  const [reserve, setReserve] = useState<ReserveFund | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchGoals = useCallback(async (): Promise<{ goals: Goal[] } | { errorKey: string }> => {
+  const fetchGoals = useCallback(async (): Promise<{ goals: Goal[]; reserve: ReserveFund } | { errorKey: string }> => {
     try {
-      return { goals: await loadGoals(apiGet) };
+      const [goals, reserve] = await Promise.all([loadGoals(apiGet), loadReserveFund(apiGet)]);
+      return { goals, reserve };
     } catch (err) {
       console.error('Goals load error:', err);
       return { errorKey: messageKeyFor(err) };
     }
   }, []);
 
-  const apply = useCallback((outcome: { goals: Goal[] } | { errorKey: string }) => {
+  const apply = useCallback((outcome: { goals: Goal[]; reserve: ReserveFund } | { errorKey: string }) => {
     if ('goals' in outcome) {
       setGoals(outcome.goals);
+      setReserve(outcome.reserve);
       setErrorKey(null);
     } else {
       setErrorKey(outcome.errorKey);
@@ -87,6 +93,53 @@ export default function GoalsScreen() {
             <Pressable accessibilityRole="button" onPress={() => void onRefresh()} hitSlop={8}>
               <Text style={styles.retry}>{t('common.retry')}</Text>
             </Pressable>
+          </View>
+        )}
+
+        {reserve && (reserve.accountId || reserve.funds.length > 0) && (
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <Text style={styles.name} numberOfLines={1}>{t('reserve.title')}</Text>
+              {reserve.accountId && <Text style={styles.balance}>{cardFigure(reserve.balance, locale)}</Text>}
+            </View>
+            {reserve.accountId ? (
+              <Text style={styles.detail}>{t('goals.savedToday')}</Text>
+            ) : (
+              <Text style={styles.detail}>{t('reserve.notStarted')}</Text>
+            )}
+            {reserve.contribution && (
+              <Text style={styles.detail}>
+                {t('goals.contribution')} {cardFigure(reserve.contribution.amount, locale)} · {t(cadenceKey(reserve.contribution.cadence))}
+                {reserve.contribution.nextDate ? ` · ${t('reserve.next')} ${formatDayLong(reserve.contribution.nextDate, locale)}` : ''}
+              </Text>
+            )}
+            {reserve.funds.length > 0 && <Text style={styles.subhead}>{t('reserve.covers')}</Text>}
+            {reserve.funds.map((f) => (
+              <View key={f.id} style={styles.row}>
+                <Text style={[styles.detail, styles.fundName, !f.active && styles.excluded]} numberOfLines={1}>
+                  {f.name}{f.active ? '' : ` · ${t('reserve.excluded')}`}
+                </Text>
+                <Text style={[styles.detail, !f.active && styles.excluded]}>{t('reserve.perYear', { amount: cardFigure(f.annual, locale) })}</Text>
+              </View>
+            ))}
+            {reserve.accountId && (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push({ pathname: '/add', params: { kind: 'transfer', goalId: reserve.accountId ?? '' } })}
+                  hitSlop={8}
+                >
+                  <Text style={styles.action}>{t('goals.addMoney')} ›</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push({ pathname: '/add', params: { kind: 'transfer', goalId: reserve.accountId ?? '', transferKind: 'draw' } })}
+                  hitSlop={8}
+                >
+                  <Text style={styles.action}>{t('goals.withdraw')} ›</Text>
+                </Pressable>
+              </>
+            )}
           </View>
         )}
 
@@ -161,6 +214,9 @@ const styles = StyleSheet.create({
   name: { flex: 1, fontSize: 17, fontWeight: '700', color: theme.color.heading },
   balance: { fontSize: 17, fontWeight: '700', color: theme.color.heading },
   detail: { fontSize: 13, color: theme.color.muted },
+  subhead: { fontSize: 13, fontWeight: '700', color: theme.color.body, marginTop: theme.space.sm },
+  fundName: { flex: 1 },
+  excluded: { opacity: 0.6 },
   action: { fontSize: 14, fontWeight: '700', color: theme.color.heading, marginTop: theme.space.sm },
   errorBox: {
     backgroundColor: theme.color.dangerSurface,

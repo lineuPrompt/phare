@@ -152,11 +152,21 @@ the v1.1 list separately.**
   the web sidebar): names, email, Owner / Member / Not invited yet / Role
   unavailable, Pending, Former member, "(you)". `memberRoleView` moved into
   `@phare/core` (web re-exports it). Route verified live as Zezinho Test with
-  the app's bearer token (200, owner, isMe). Shown to members too (the route
+  the app's bearer token (200, owner, isMe). On screen 2026-11-05 (Android
+  emulator, dev build 88fc5e7e): as Zezinho Test (Owner, you) and as the
+  invited member Ridge Hazel (Member, you); the invite showed Pending until
+  it was accepted. Shown to members too (the route
   answers both; the web hides the page from members). Invite, remove and
   make owner: not started (auth + deletion, plan first).
 - **S8. Savings goals and sinking funds** (read-only first round, then
   creation).
+  Reserve Fund BUILT 2026-11-05, uncommitted: first card on Goals (as on
+  the web Goals page): balance today, contribution and next date, what it
+  covers (each fund per year; excluded ones dimmed), Add money / Withdraw
+  through quick entry. Hidden when there is no fund and no account. GET
+  /api/sinking-funds now reports its four reads' failures (500) instead of
+  a $0 Reserve Fund — needs the deploy. On screen: only the "none" case
+  (Zezinho Test has no fund; funds are created by save-plan only).
 - **S9. Generating a new monthly review / regenerating the plan.**
 - **SECURITY, FIRST: any signed-in member can give their own household Pro**
   (found 2026-10-16). The live `households` policy allows ALL commands and
@@ -425,7 +435,7 @@ for when it thaws:
 
 | Item | Commit |
 |---|---|
-| Recurring entries keep going (2026-11-04): the daily 07:00 job tops every active rule up to 12 months ahead (deleted or edited-alone dates never come back); optional end date on web and app; migration 20261104000000 WRITTEN, not applied | _(Lineu)_ |
+| Recurring entries keep going (2026-11-04): the daily 07:00 job tops every active rule up to 12 months ahead (deleted or edited-alone dates never come back); optional end date on web and app; migration 20261104000000 APPLIED; first run VERIFIED LIVE 2026-11-05 (all 3 real households reach Oct 2027, biweekly rhythm kept, 0 duplicates) | _(Lineu)_ |
 | Monthly letter compares real months (2026-11-03): per-category trends with code-picked biggest increase/decrease, balance progress per goal/reserve/debt, last month's recommendation quoted, the bills before next month's lowest day; QA'd with a real letter over Zezinho Test data (in memory, nothing written) | _(Lineu)_ |
 | Withdraw from savings and the Reserve Fund (draw from any goal account; withdrawn vs borrowed) — migration applied + verified live 2026-10-27 | _(Lineu)_ |
 | POST /api/transfers input checks; GET /api/goals read errors shown, not "no goals" (2026-10-29) | _(Lineu)_ |
