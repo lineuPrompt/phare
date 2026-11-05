@@ -3,7 +3,12 @@
 -- the signup event records its platform.
 -- 2026-11-05. Lineu: "yes security".
 --
--- STATUS: WRITTEN, NOT APPLIED.
+-- STATUS: APPLIED 2026-11-05 by Lineu (the function, in the SQL Editor);
+--   VERIFY run live by Claude the same day: 9/9 PASS (one function, household
+--   and role from app_metadata only, signup event with platform, Path A/B and
+--   the empty-string guard kept, SECURITY DEFINER + search_path, trigger
+--   bound and enabled). Invite change committed in c5f12a6. Still to prove:
+--   a real invite joins (live test with a throwaway inbox).
 --
 -- APPLY ORDER: AFTER the deploy that makes the invite route write
 -- app_metadata (src/app/api/household/members/route.ts, same change).

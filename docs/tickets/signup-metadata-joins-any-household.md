@@ -2,7 +2,9 @@
 
 **Filed** 2026-11-05, found while preparing in-app sign-up (S1).
 
-**Status:** FIX BUILT 2026-11-05 (Lineu: "yes security"), uncommitted.
+**Status:** FIXED 2026-11-05. Invite change committed (c5f12a6); migration
+APPLIED, VERIFY 9/9 PASS live. Remaining: the live invite test.
+Earlier: FIX BUILT 2026-11-05 (Lineu: "yes security").
 Invite route writes `app_metadata` (3/3 mutants caught); migration
 `20261105000000_handle_new_user_app_metadata.sql` WRITTEN, not applied —
 apply it AFTER the invite change is deployed. Still to do after applying: the
