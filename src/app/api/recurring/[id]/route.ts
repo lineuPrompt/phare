@@ -70,7 +70,7 @@ export async function PATCH(
     // Load current rule (needed to fall back to existing values for omitted fields)
     const { data: current, error: loadErr } = await supabase
       .from('recurring_items')
-      .select('id, household_id, member_id, description, amount, type, cadence, anchor_date, second_day, end_date, category_id, account_id, destination_account_id, active')
+      .select('id, household_id, member_id, description, amount, type, cadence, anchor_date, second_day, end_date, effective_from, category_id, account_id, destination_account_id, active')
       .eq('id', id)
       .eq('household_id', householdId)
       .single();
@@ -224,13 +224,51 @@ export async function PATCH(
     }
 
     const monthStartStr = `${todayStr.slice(0, 7)}-01`;
+    // A rule born of a split starts at its effective date: the dates before it
+    // belong to its predecessor. Writing it from the month start would give the
+    // month both rules' rows — the bill twice (docs/tickets/
+    // recurring-metadata-edit-ignores-effective-from.md).
+    const startsOn: string | null = current.effective_from ?? null;
 
-    // Delete all this-month-onward linked rows (keyed by recurring_item_id —
-    // no orphan risk; for a transfer this removes both sides of every future
-    // pair in one statement). Month start, not today: the whole current
-    // month is regenerated under the (metadata-only) new values, not just
-    // its not-yet-occurred remainder — safe here because amount/cadence
-    // never move on this path.
+    // Re-materialize — only when there's a known anchor date. No anchor yet
+    // means no dated instances, not a fabricated guess.
+    const canMaterialize = !!newAnchorDate;
+    const rawDates = canMaterialize
+      ? materializeFromMonthStart(
+          { cadence: newCadence as Cadence, anchorDate: newAnchorDate, secondDay: newSecondDay },
+          todayStr,
+          12
+        ).filter((d) => (startsOn === null || d >= startsOn) && (newEndDate === null || d <= newEndDate))
+      : [];
+
+    // Never regenerate a date the household already detached from this rule
+    // (Part A3: edited or deleted a single occurrence) — without this, this
+    // very re-materialization step is exactly what would silently revert
+    // that edit or resurrect that deletion. A failed read must stop here for
+    // the same reason: an empty list would resurrect every one of them.
+    const { data: skippedRows, error: skippedErr } = rawDates.length
+      ? await supabase
+          .from('recurring_skipped_dates')
+          .select('date')
+          .eq('household_id', householdId)
+          .eq('recurring_item_id', id)
+      : { data: [] as { date: string }[] | null, error: null };
+    if (skippedErr) {
+      console.error('Recurring PATCH skipped-dates read error:', skippedErr);
+      return NextResponse.json({ error: `Rule updated; its entries were left as they were: could not read skipped dates: ${skippedErr.message}`, updated: true, materialized: 0 }, { status: 500 });
+    }
+    const skippedDates = new Set((skippedRows ?? []).map((r) => r.date as string));
+    const dates = excludeSkippedDates(rawDates, skippedDates);
+
+    // Delete this rule's rows from the month start on (keyed by
+    // recurring_item_id — no orphan risk; for a transfer this removes both
+    // sides of every future pair in one statement). Month start, not today:
+    // the whole current month is regenerated under the (metadata-only) new
+    // values, not just its not-yet-occurred remainder — safe here because
+    // amount/cadence never move on this path. Month start, not the floor: a
+    // split rule's own row before its effective date can only be a duplicate
+    // the old code wrote, and this clears it. After the skipped-dates read,
+    // so a failed read deletes nothing.
     const { error: deleteErr } = await supabase
       .from('transactions')
       .delete()
@@ -242,31 +280,6 @@ export async function PATCH(
       console.error('Recurring PATCH txn cleanup error:', deleteErr);
       return NextResponse.json({ error: deleteErr.message }, { status: 500 });
     }
-
-    // Re-materialize — only when there's a known anchor date. No anchor yet
-    // means no dated instances, not a fabricated guess.
-    const canMaterialize = !!newAnchorDate;
-    const rawDates = canMaterialize
-      ? materializeFromMonthStart(
-          { cadence: newCadence as Cadence, anchorDate: newAnchorDate, secondDay: newSecondDay },
-          todayStr,
-          12
-        ).filter((d) => newEndDate === null || d <= newEndDate)
-      : [];
-
-    // Never regenerate a date the household already detached from this rule
-    // (Part A3: edited or deleted a single occurrence) — without this, this
-    // very re-materialization step is exactly what would silently revert
-    // that edit or resurrect that deletion.
-    const { data: skippedRows } = rawDates.length
-      ? await supabase
-          .from('recurring_skipped_dates')
-          .select('date')
-          .eq('household_id', householdId)
-          .eq('recurring_item_id', id)
-      : { data: [] as { date: string }[] | null };
-    const skippedDates = new Set((skippedRows ?? []).map((r) => r.date as string));
-    const dates = excludeSkippedDates(rawDates, skippedDates);
 
     if (isTransfer) {
       let materialized = 0;

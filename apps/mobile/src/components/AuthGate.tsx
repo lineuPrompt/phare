@@ -1,7 +1,9 @@
+import { useSyncExternalStore } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useSession } from '../lib/useSession';
 import { gateView } from '../lib/authGate';
-import SignInScreen from '../screens/SignInScreen';
+import { isAuthHeld, subscribeAuthHold } from '../lib/authHold';
+import SignedOutFlow from './SignedOutFlow';
 import { theme } from '../theme';
 
 /**
@@ -22,7 +24,8 @@ import { theme } from '../theme';
  * which a redirect to the index would have thrown away.
  */
 export default function AuthGate({ children }: { children: React.ReactNode }) {
-  const view = gateView(useSession());
+  const held = useSyncExternalStore(subscribeAuthHold, isAuthHeld);
+  const view = gateView(useSession(), held);
 
   if (view === 'loading') {
     return (
@@ -32,7 +35,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return view === 'content' ? <>{children}</> : <SignInScreen />;
+  return view === 'content' ? <>{children}</> : <SignedOutFlow />;
 }
 
 const styles = StyleSheet.create({

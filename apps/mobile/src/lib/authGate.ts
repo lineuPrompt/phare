@@ -14,7 +14,10 @@ import type { SessionState } from './useSession';
  */
 export type GateView = 'loading' | 'signIn' | 'content';
 
-export function gateView(session: SessionState): GateView {
+export function gateView(session: SessionState, held = false): GateView {
   if (session.status === 'loading') return 'loading';
+  // A sign-up or reset still finishing (authHold.ts) keeps its screen even
+  // though its code has just signed the person in.
+  if (held) return 'signIn';
   return session.status === 'signedIn' ? 'content' : 'signIn';
 }

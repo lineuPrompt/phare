@@ -90,6 +90,11 @@ export const FORBIDDEN_TEXT: readonly (readonly [label: string, pattern: RegExp]
 export const POLICY_SENTENCE_ALLOWLIST = [
   '**Stripe** — payment processing for subscriptions bought on the web (receives your billing information; Phare does not store your card number)',
   '**Stripe** — traitement des paiements des abonnements souscrits sur le Web (reçoit vos renseignements de facturation; Phare ne conserve pas votre numéro de carte)',
+  // The Terms' payment paragraph (2026-11-05, Terms moved to @phare/core for
+  // sign-up consent in the app): it names who processes payments, as the
+  // Privacy Policy does. No price, no link.
+  '**The price of Phare Pro is shown before you subscribe**, in Canadian dollars, monthly or yearly. On the web, payment is processed by Stripe; we do not store your card number. In the iPhone app, payment is processed by Apple through your Apple Account, under Apple’s terms.',
+  '**Le prix de Phare Pro vous est indiqué avant que vous vous abonniez**, en dollars canadiens, au mois ou à l’année. Sur le Web, les paiements sont traités par Stripe; nous ne conservons pas votre numéro de carte. Dans l’application iPhone, les paiements sont traités par Apple au moyen de votre compte Apple, selon les conditions d’Apple.',
 ] as const;
 
 /** Everything of our own that is excused, for the source and bundle scans. */

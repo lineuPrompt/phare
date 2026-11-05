@@ -280,6 +280,7 @@ describe('the auth gate on a deep link', () => {
       '_layout.tsx', //      the root: the time-zone gate and the Stack
       'diagnostics.tsx', //  development builds only (redirects home in production); reads no household data
       'privacy.tsx', //      the Privacy Policy: readable by anyone, reads no household data
+      'terms.tsx', //        the Terms: read before an account exists (sign-up consent), no household data
     ]);
     const entries = fs.readdirSync(APP_DIR) as string[];
     // Guards the listing itself: an empty read would make the loop pass.

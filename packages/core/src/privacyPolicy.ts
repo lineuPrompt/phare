@@ -44,7 +44,7 @@ export type LegalDocument = {
 
 const privacyEn: LegalDocument = {
   title: 'Privacy Policy',
-  lastUpdated: '2026-08-03',
+  lastUpdated: '2026-11-05',
   intro: [
     'Phare is operated by **Lineu Prompt Graeff**, a sole proprietor based in Quebec, Canada.',
     'This policy explains what we collect, where it lives, who else sees it, and what you can do about it. It is written to be read, not skimmed past. If anything here is unclear, write to **support@phare.money**.',
@@ -190,7 +190,7 @@ const privacyEn: LegalDocument = {
 
 const privacyFr: LegalDocument = {
   title: 'Politique de confidentialité',
-  lastUpdated: '2026-08-03',
+  lastUpdated: '2026-11-05',
   intro: [
     'Phare est exploité par **Lineu Prompt Graeff**, travailleur autonome établi au Québec, Canada.',
     'Cette politique explique ce que nous recueillons, où ces renseignements sont conservés, qui d’autre y a accès et ce que vous pouvez faire à ce sujet. Elle est écrite pour être lue, pas pour être survolée. Si quelque chose n’est pas clair, écrivez-nous à **support@phare.money**.',

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { FORBIDDEN_TEXT, findViolations, OWN_COPY_ALLOWLIST, POLICY_SENTENCE_ALLOWLIST } from './complianceScan';
-import { PRIVACY_POLICY, SEED_EXPENSE_CATEGORIES } from '@phare/core';
+import { PRIVACY_POLICY, SEED_EXPENSE_CATEGORIES, TERMS_OF_SERVICE } from '@phare/core';
 
 // ---------------------------------------------------------------------------
 // APP STORE COMPLIANCE, CHECKED OVER ALL SOURCE — not just the catalogues.
@@ -113,6 +113,12 @@ describe('our own excused copy is pinned (2026-10-02)', () => {
     const [en, fr] = POLICY_SENTENCE_ALLOWLIST;
     expect(PRIVACY_POLICY.en.sections.flatMap((s) => s.body)).toContain(en);
     expect(PRIVACY_POLICY.fr.sections.flatMap((s) => s.body)).toContain(fr);
+  });
+
+  it('each Terms allowlist sentence appears verbatim in the Terms, EN then FR (2026-11-05)', () => {
+    const [, , en, fr] = POLICY_SENTENCE_ALLOWLIST;
+    expect(TERMS_OF_SERVICE.en.sections.flatMap((s) => s.body)).toContain(en);
+    expect(TERMS_OF_SERVICE.fr.sections.flatMap((s) => s.body)).toContain(fr);
   });
 
   it('each policy sentence still needs its excuse — it contains a forbidden hit', () => {

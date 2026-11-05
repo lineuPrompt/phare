@@ -670,6 +670,102 @@ describe('recurring end date', () => {
     );
   }
 
+  // A split successor starts at its effective date; the month before it is
+  // its predecessor's. A plain edit must not give that month both rules' rows.
+  function seedSplit(effectiveFrom: string) {
+    const all = materializeFromMonthStart({ cadence: 'monthly', anchorDate: '2020-01-05' }, todayStr, 12);
+    const row = (id: string, date: string, rule: string, amount: number) => ({
+      id, household_id: HOUSEHOLD, account_id: CHEQUING, member_id: null, category_id: 'cat-1',
+      amount, description: 'Gym', date, type: 'expense', source: 'manual', recurring_item_id: rule,
+    } as unknown as Row);
+    const supabase = makeFakeSupabase({
+      ...baseSeed(),
+      recurring_items: [
+        { id: 'ri-old', household_id: HOUSEHOLD, member_id: null, description: 'Gym', amount: 50, type: 'expense', cadence: 'monthly', anchor_date: '2020-01-05', second_day: null, end_date: null, effective_from: null, category_id: 'cat-1', account_id: CHEQUING, destination_account_id: null, active: false } as unknown as Row,
+        { id: 'ri-gym', household_id: HOUSEHOLD, member_id: null, description: 'Gym', amount: 60, type: 'expense', cadence: 'monthly', anchor_date: '2020-01-05', second_day: null, end_date: null, effective_from: effectiveFrom, predecessor_id: 'ri-old', category_id: 'cat-1', account_id: CHEQUING, destination_account_id: null, active: true } as unknown as Row,
+      ],
+      transactions: [
+        ...all.filter((d) => d < effectiveFrom).map((d, i) => row(`old-${i}`, d, 'ri-old', 50)),
+        ...all.filter((d) => d >= effectiveFrom).map((d, i) => row(`new-${i}`, d, 'ri-gym', 60)),
+      ],
+    });
+    return { supabase, all };
+  }
+
+  it('a plain edit of a split rule effective next month leaves this month to its predecessor (no bill twice)', async () => {
+    const nextMonth = firstOfNextMonth(todayStr);
+    const { supabase, all } = seedSplit(nextMonth);
+    const res = await patch(supabase, { description: 'Gym club' });
+    expect(res.status).toBe(200);
+    const rows = supabase.rows('transactions');
+    // One row per date, never two.
+    expect(new Set(rows.map((t) => t.date)).size).toBe(rows.length);
+    expect(rows).toHaveLength(all.length);
+    const mine = rows.filter((t) => t.recurring_item_id === 'ri-gym');
+    expect(mine.every((t) => (t.date as string) >= nextMonth)).toBe(true);
+    expect(mine).toHaveLength(all.filter((d) => d >= nextMonth).length);
+    expect(mine.every((t) => t.description === 'Gym club')).toBe(true);
+    // This month's row is still the predecessor's, at its amount.
+    const thisMonth = rows.filter((t) => (t.date as string) < nextMonth);
+    expect(thisMonth.length).toBeGreaterThan(0);
+    expect(thisMonth.every((t) => t.recurring_item_id === 'ri-old' && t.amount === 50)).toBe(true);
+  });
+
+  it('a split rule whose effective date has passed is rewritten from the month start as before; its past rows stay', async () => {
+    const { supabase, all } = seedSplit('2020-03-01');
+    // Two past months of this rule's own history: never rewritten.
+    const past = ['2020-03-05', '2020-04-05'].map((date, i) => ({
+      id: `past-${i}`, household_id: HOUSEHOLD, account_id: CHEQUING, member_id: null, category_id: 'cat-1',
+      amount: 60, description: 'Gym', date, type: 'expense', source: 'manual', recurring_item_id: 'ri-gym',
+    } as unknown as Row));
+    supabase.rows('transactions').push(...past);
+    const res = await patch(supabase, { description: 'Gym club' });
+    expect(res.status).toBe(200);
+    const mine = supabase.rows('transactions').filter((t) => t.recurring_item_id === 'ri-gym');
+    expect(mine).toHaveLength(all.length + 2);
+    expect(mine.filter((t) => t.description === 'Gym').map((t) => t.date).sort()).toEqual(['2020-03-05', '2020-04-05']);
+    expect(mine.filter((t) => t.description === 'Gym club').map((t) => t.date).sort()).toEqual(all);
+  });
+
+  it('a duplicate the old code left this month, before the effective date, is cleared by the next edit', async () => {
+    const nextMonth = firstOfNextMonth(todayStr);
+    const { supabase, all } = seedSplit(nextMonth);
+    const thisMonth = all.filter((d) => d < nextMonth);
+    supabase.rows('transactions').push(...thisMonth.map((date, i) => ({
+      id: `dup-${i}`, household_id: HOUSEHOLD, account_id: CHEQUING, member_id: null, category_id: 'cat-1',
+      amount: 60, description: 'Gym', date, type: 'expense', source: 'manual', recurring_item_id: 'ri-gym',
+    } as unknown as Row)));
+    const res = await patch(supabase, { description: 'Gym club' });
+    expect(res.status).toBe(200);
+    const rows = supabase.rows('transactions');
+    expect(new Set(rows.map((t) => t.date)).size).toBe(rows.length);
+    expect(rows.filter((t) => (t.date as string) < nextMonth).every((t) => t.recurring_item_id === 'ri-old')).toBe(true);
+  });
+
+  it('a failed skipped-dates read stops the edit before any entry is deleted', async () => {
+    const supabase = seedWithRule();
+    const realFrom = supabase.from;
+    const failing = {
+      ...supabase,
+      from(name: string) {
+        if (name !== 'recurring_skipped_dates') return realFrom(name);
+        const chain = {
+          eq() { return chain; },
+          then(resolve: (v: { data: null; error: { message: string } }) => unknown) {
+            return Promise.resolve({ data: null, error: { message: 'boom' } }).then(resolve);
+          },
+        };
+        return { select: () => chain };
+      },
+    };
+    const res = await patch(failing as unknown as ReturnType<typeof makeFakeSupabase>, { description: 'Gym club' });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toContain('could not read skipped dates: boom');
+    const rows = supabase.rows('transactions');
+    expect(rows).toHaveLength(12);
+    expect(rows.every((t) => t.description === 'Gym')).toBe(true);
+  });
+
   it('setting one ends the rule there: later occurrences go, earlier ones and the rule stay', async () => {
     const supabase = seedWithRule();
     const res = await patch(supabase, { endDate: plus3 });

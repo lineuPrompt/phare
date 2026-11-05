@@ -1,21 +1,22 @@
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { PRIVACY_POLICY } from '@phare/core';
+import { PRIVACY_POLICY, TERMS_OF_SERVICE } from '@phare/core';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
 import { boldRuns, legalBlocks } from '../lib/legalDocument';
 
 /**
- * The Privacy Policy, inside the app (App Store 5.1.1(i)): the same text the
- * web /privacy page shows, from @phare/core, in the app's language. No web
- * view and no link out — the web pages carry pricing, which this app must not
- * lead to (3.1.1).
+ * The Privacy Policy or the Terms of Service, inside the app (App Store
+ * 5.1.1(i); the Terms since 2026-11-05, for consent at sign-up and for updated
+ * terms): the same text the web pages show, from @phare/core, in the app's
+ * language. No web view and no link out — the web pages carry pricing, which
+ * this app must not lead to (3.1.1).
  */
-export default function PrivacyScreen() {
+export default function PrivacyScreen({ doc = 'privacy' }: { doc?: 'privacy' | 'terms' }) {
   const { t, locale } = useI18n();
   const router = useRouter();
-  const blocks = legalBlocks(PRIVACY_POLICY[locale]);
+  const blocks = legalBlocks((doc === 'terms' ? TERMS_OF_SERVICE : PRIVACY_POLICY)[locale]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>

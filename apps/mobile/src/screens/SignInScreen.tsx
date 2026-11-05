@@ -5,7 +5,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -13,22 +12,21 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { authStyles as styles } from '../components/authStyles';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
 /**
  * Password sign-in — the same call the web app makes.
  *
- * src/app/[locale]/signin/page.tsx:106 is
+ * src/app/[locale]/signin/page.tsx is
  * `supabase.auth.signInWithPassword({ email, password })` and nothing else: no
  * custom endpoint, no server action. This is that call, so a household's
  * existing credentials work here with no migration and no second account.
  *
- * SIGN-UP AND RESET ARE DELIBERATELY ABSENT. Both exist on the web and both
- * carry obligations this scaffold does not implement — signup must capture
- * legal consent at the same moment (CURRENT_LEGAL_VERSION, /api/legal/accept),
- * and reset goes through an emailed link that Universal Links have to catch.
- * A half-built version of either is worse than a pointer to the website.
+ * Creating an account and resetting a password happen in the app too
+ * (2026-11-05): SignUpScreen and ResetPasswordScreen, reached from the two
+ * links below.
  *
  * THE ERROR IS NOT THE SERVER'S. Supabase returns English strings written for
  * developers ("Invalid login credentials"); this app is bilingual, so the
@@ -37,7 +35,7 @@ import { theme } from '../theme';
  * the web reset flow makes the same choice, and saying which one is wrong
  * confirms whether an address has an account.
  */
-export default function SignInScreen() {
+export default function SignInScreen({ onCreateAccount, onForgot }: { onCreateAccount: () => void; onForgot: () => void }) {
   const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -136,49 +134,16 @@ export default function SignInScreen() {
             )}
           </Pressable>
 
-          <Text style={styles.hint}>{t('signIn.forgotHint')}</Text>
+          <View style={styles.links}>
+            <Pressable accessibilityRole="button" onPress={onForgot} hitSlop={8} disabled={submitting}>
+              <Text style={styles.link}>{t('signIn.forgot')}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={onCreateAccount} hitSlop={8} disabled={submitting}>
+              <Text style={styles.link}>{t('signIn.create')}</Text>
+            </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: theme.color.background },
-  flex: { flex: 1 },
-  content: { padding: theme.space.lg, gap: theme.space.md },
-  title: { fontSize: 28, fontWeight: '700', color: theme.color.heading },
-  subtitle: { fontSize: 15, color: theme.color.muted, marginBottom: theme.space.sm },
-  field: { gap: theme.space.xs },
-  label: { fontSize: 13, fontWeight: '600', color: theme.color.body },
-  input: {
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
-    paddingHorizontal: theme.space.md,
-    paddingVertical: theme.space.md,
-    fontSize: 16,
-    color: theme.color.body,
-  },
-  button: {
-    marginTop: theme.space.sm,
-    backgroundColor: theme.color.heading,
-    borderRadius: theme.radius.md,
-    paddingVertical: theme.space.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 52,
-  },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  hint: { fontSize: 13, color: theme.color.muted, marginTop: theme.space.sm },
-  errorBox: {
-    backgroundColor: theme.color.dangerSurface,
-    borderWidth: 1,
-    borderColor: theme.color.dangerBorder,
-    borderRadius: theme.radius.md,
-    padding: theme.space.md,
-  },
-  errorText: { color: theme.color.danger, fontSize: 14 },
-});

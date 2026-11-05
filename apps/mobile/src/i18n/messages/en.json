@@ -22,7 +22,7 @@
   },
   "signIn": {
     "title": "Sign in",
-    "subtitle": "Use the same email and password as the website.",
+    "subtitle": "Welcome back. Sign in to your household’s plan.",
     "emailLabel": "Email",
     "emailPlaceholder": "you@example.com",
     "passwordLabel": "Password",
@@ -31,7 +31,8 @@
     "submitting": "Signing in…",
     "failed": "That email and password didn't match. Please check them and try again.",
     "offline": "Couldn't reach Phare. Check your connection and try again.",
-    "forgotHint": "Forgot your password? Reset it on phare.money, then sign in here."
+    "forgot": "Forgot your password?",
+    "create": "New to Phare? Create an account"
   },
   "review": {
     "title": "Your monthly review",
@@ -329,7 +330,13 @@
     "addAccount": "Add an account"
   },
   "terms": {
-    "updated": "Our terms were updated. Review and accept them on phare.money, then sign in again."
+    "updated": "Our Terms of Service and Privacy Policy were updated. Please read them and accept them to continue.",
+    "readTerms": "Read the Terms of Service",
+    "readPrivacy": "Read the Privacy Policy",
+    "accept": "I accept",
+    "errors": {
+      "outdatedApp": "This version of the app shows older terms. Update the app, then accept them."
+    }
   },
   "onboarding": {
     "form": {
@@ -668,5 +675,45 @@
     "covers": "What it covers",
     "excluded": "excluded",
     "perYear": "{amount} per year"
+  },
+  "signUp": {
+    "title": "Create an account",
+    "subtitle": "One account per person. Your household and its plan come next.",
+    "back": "Back",
+    "name": "Your name",
+    "passwordHint": "At least 8 characters.",
+    "consentStart": "I agree to the ",
+    "terms": "Terms of Service",
+    "consentMiddle": " and the ",
+    "privacy": "Privacy Policy",
+    "consentEnd": ".",
+    "submit": "Create my account",
+    "codeTitle": "Check your email",
+    "codeSent": "We sent a code to {email}. Enter it here to confirm your account.",
+    "code": "Code from the email",
+    "confirm": "Confirm",
+    "resend": "Send a new code",
+    "resent": "A new code is on its way.",
+    "problems": {
+      "nameMissing": "Enter your name.",
+      "emailInvalid": "Enter a valid email address.",
+      "passwordShort": "Use at least 8 characters for the password.",
+      "consentMissing": "To create an account, agree to the Terms of Service and the Privacy Policy."
+    },
+    "errors": {
+      "offline": "Couldn’t reach Phare. Check your connection and try again.",
+      "rateLimited": "Too many tries. Wait a minute, then try again.",
+      "passwordWeak": "That password is too easy to guess. Choose a stronger one.",
+      "codeInvalid": "That code didn’t work. Check it, or send a new one.",
+      "failed": "That didn’t work. Please try again."
+    }
+  },
+  "reset": {
+    "title": "Reset your password",
+    "subtitle": "Enter your email. If it has an account, we’ll send it a code.",
+    "send": "Send the code",
+    "codeSent": "If {email} has an account, a code is on its way. Enter it with your new password.",
+    "newPassword": "New password",
+    "save": "Save the new password"
   }
 }

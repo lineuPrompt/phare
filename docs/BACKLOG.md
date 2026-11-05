@@ -34,6 +34,25 @@ the v1.1 list separately.**
   `platform` on the signup event (yes); email links open the app (yes);
   the Terms drop the price (done, above). Plan awaiting approval (auth +
   DB).
+  **BUILT 2026-11-05 (Lineu: "Yes sign-up"), uncommitted.** Sign in →
+  "Create an account" (name, email, password, consent box with the Terms
+  and the Privacy Policy readable in the app) → 6-digit code from the email
+  (verifyOtp) → consent recorded → onboarding. "Forgot your password?" →
+  POST /api/auth/forgot-password → code + new password. Updated terms: read
+  and accept in the app. Codes, not links: links into an app break in Gmail.
+  Terms moved to `@phare/core` (`TERMS_OF_SERVICE`, `CURRENT_LEGAL_VERSION`);
+  version BUMPED to 2026-11-05 (everyone accepts again after the deploy).
+  On screen (Android emulator): sign-in links, Create account, the consent
+  box, both links (fixed: the first build's links ticked the box instead).
+  NOT yet checked: the code steps live (need the email templates below),
+  the reset screen and Android Back on screen (emulator hung).
+  **LINEU before testing:** add `{{ .Token }}` to the Supabase "Confirm
+  signup" and "Reset password" email templates.
+  **WAITING:** the `signup` event's platform needs the trigger migration,
+  held for the security fix below (one migration for both).
+- **SECURITY: a sign-up can join any household as owner through its
+  metadata** (found 2026-11-05). No sign of abuse. **STOP, approval.** —
+  [ticket](tickets/signup-metadata-joins-any-household.md)
   **STOP, blocked 2026-10-15.** Three things fall outside the
   pre-approval:
   - the `signup` event needs `platform: 'mobile'`: a `handle_new_user`
@@ -309,8 +328,13 @@ the v1.1 list separately.**
   topRecommendationAllowed. Diagnose from the `review_guard_failed` event of a
   real refresh before changing the allowed list (AI output: STOP for approval).
 
-- **Plain edit of a split rule rewrites dates before its start** (found
-  2026-11-04). **STOP.** — [ticket](tickets/recurring-metadata-edit-ignores-effective-from.md)
+- ~~**Plain edit of a split rule rewrites dates before its start**~~ (the
+  "double bill") FIXED in code 2026-11-05, uncommitted. Live check on Zezinho
+  Test after the deploy. —
+  [ticket](tickets/recurring-metadata-edit-ignores-effective-from.md)
+- **A split can bring back deleted entries when a skipped-dates read fails**
+  (found 2026-11-05). **STOP.** —
+  [ticket](tickets/recurring-split-tombstone-reads-ignored.md)
 - ~~**Web `formatDate` shows the day before in Canada**~~ FIXED in code
   2026-11-04, uncommitted (no screen was wrong yet). —
   [ticket](tickets/formatdate-utc-shifts-a-day.md)

@@ -74,10 +74,18 @@ describe('the plan gate', () => {
 });
 
 describe('the terms block copy', () => {
-  it('says exactly what was asked, in English', () => {
+  it('says exactly what was asked, in English (accepted in the app since 2026-11-05)', () => {
     expect(en.terms.updated).toBe(
-      'Our terms were updated. Review and accept them on phare.money, then sign in again.'
+      'Our Terms of Service and Privacy Policy were updated. Please read them and accept them to continue.'
     );
+  });
+
+  it.each([
+    ['en', en],
+    ['fr', fr],
+  ])('%s never sends the person to the website for it', (_locale, messages) => {
+    const all = JSON.stringify({ terms: messages.terms, signIn: messages.signIn, signUp: messages.signUp, reset: messages.reset });
+    expect(all).not.toMatch(/phare\.money|website|site Web|site web/i);
   });
 
   it.each([

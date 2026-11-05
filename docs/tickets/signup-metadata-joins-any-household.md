@@ -1,0 +1,46 @@
+# A sign-up can join any household, as owner, through its metadata
+
+**Filed** 2026-11-05, found while preparing in-app sign-up (S1).
+
+**Status:** OPEN — SECURITY. Auth + trigger: waiting for Lineu's approval.
+
+## The problem
+
+`handle_new_user` (live body md5 3552de0f65e1a14014472a995e865380) takes
+"Path B — provisioned member" whenever `raw_user_meta_data->>'household_id'`
+is set, and uses `raw_user_meta_data->>'role'` as the role:
+
+```sql
+provisioned_household_id := NEW.raw_user_meta_data->>'household_id';
+...
+provisioned_role := COALESCE(NEW.raw_user_meta_data->>'role', 'member');
+INSERT INTO users (id, household_id, email, full_name, role) VALUES (..., provisioned_household_id::uuid, ..., provisioned_role);
+```
+
+`raw_user_meta_data` is what the CLIENT sends: `supabase.auth.signUp({ ...,
+options: { data: { household_id, role: 'owner' } } })` with the public key.
+Anyone who knows a household's id can create an account inside it, as an
+owner, and read every figure it has. Email confirmation doesn't stop it: the
+trigger runs when the auth user is created, and the attacker confirms their
+own address.
+
+Who knows a household id: every member, past and present (`/api/me` returns
+it), including a removed member.
+
+## Exposure (read 2026-11-05)
+
+Only two users ever joined an existing household: 2be22642's second owner
+(2026-07-15) and Ridge Hazel in Zezinho Test (2026-11-05, today's test
+invite). Both are real invites. No sign of abuse.
+
+## The fix (proposed)
+
+`raw_app_meta_data` can only be written with the service role. So:
+
+1. Invite route (`POST /api/household/members`, `admin.auth.admin.createUser`):
+   also write `app_metadata: { household_id, role }`. Deploy this first.
+2. Migration: `handle_new_user` reads `household_id` and `role` from
+   `NEW.raw_app_meta_data` only. Same migration adds `platform` to the
+   `signup` event (S1). Check the full body survived with `SELECT prosrc`.
+3. Test live with a throwaway account: a public sign-up sending
+   `household_id` gets a new household of its own; a real invite still joins.

@@ -1,13 +1,30 @@
+import { CURRENT_LEGAL_VERSION } from '@phare/core';
 import type { Getter } from './timelineLoader';
+import { ApiError, messageKeyFor } from './apiErrors';
+
+/** Records acceptance of the documents this build shows. */
+export async function acceptCurrentTerms(post: <T>(path: string, body: unknown) => Promise<T>): Promise<void> {
+  await post('/api/legal/accept', { version: CURRENT_LEGAL_VERSION });
+}
+
+/**
+ * 409 version_mismatch: the server holds newer documents than this build
+ * shows; accepting what the person hasn't read would be no consent at all, so
+ * they're told to update the app. Anything else is the usual failure kind.
+ */
+export function acceptErrorKeyFor(err: unknown): string {
+  if (err instanceof ApiError && err.status === 409) return 'terms.errors.outdatedApp';
+  return messageKeyFor(err);
+}
 
 // ---------------------------------------------------------------------------
 // What a signed-in person may see, decided after sign-in and before any tab.
 //
 // TERMS. /api/me computes termsCurrent server-side: accepted, AND accepted
-// the current version. Accepting happens on the web only — the Terms carry
-// prices, so neither a link to them nor a copy of them belongs in this app.
-// When termsCurrent is false the app shows one plain sentence and a way to
-// sign out, nothing else.
+// the current version. Since 2026-11-05 the person accepts in the app: the
+// Terms no longer state a price, live in @phare/core, and are shown at /terms;
+// accepting is the web's own POST /api/legal/accept with the version this
+// build carries (acceptCurrentTerms).
 //
 // A MISSING FLAG IS NOT A PASS. If /api/me answers without a boolean
 // termsCurrent, this throws and the gate shows an error with a retry. Reading

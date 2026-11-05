@@ -18,7 +18,11 @@
  * Format is a date, not a semver, because that is what a reader of a legal
  * document expects to see and what the documents themselves display.
  */
-export const CURRENT_LEGAL_VERSION = '2026-08-03';
+import { CURRENT_LEGAL_VERSION } from '@phare/core';
+
+// The value now lives in @phare/core (termsOfService.ts), next to the Terms,
+// so the app records consent against the same version. Bump it there.
+export { CURRENT_LEGAL_VERSION };
 
 /** True when a stored acceptance still matches the documents in force. */
 export function hasAcceptedCurrent(

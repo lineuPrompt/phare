@@ -91,6 +91,22 @@ export function apiPost<T>(path: string, body: unknown): Promise<T> {
 }
 
 /**
+ * POST with no session (the reset request: the person can't sign in yet).
+ * Same error classification as every other call.
+ */
+export function apiPostPublic<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(
+    path,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+    { authenticated: false }
+  );
+}
+
+/**
  * Authenticated POST whose answer has no body (a 204, e.g. POST /api/events).
  * Non-2xx still throws an ApiError like every other call.
  */

@@ -2,7 +2,14 @@
 
 **Filed** 2026-11-04, found while adding the recurring end date.
 
-**Status:** OPEN. Dates / materialization: diagnose and STOP for approval.
+**Status:** FIXED in code 2026-11-05 (Lineu: "yes double bill"),
+uncommitted. A plain edit writes a split rule only from its
+`effective_from`; it still deletes its own rows from the month start, which
+also clears a duplicate the old code left. The skipped-dates read now comes
+before the delete and stops the edit on failure. Tests in
+`split.test.ts` (5 mutants of 6 caught; the 6th, the select list, is invisible
+to the fake and was checked against the live schema). Live check on Zezinho
+Test after the deploy.
 
 ## The problem
 

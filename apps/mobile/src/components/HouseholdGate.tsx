@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { apiGet, messageKeyFor } from '../lib/api';
-import { loadHouseholdState, type HouseholdState } from '../lib/householdGate';
+import { useRouter } from 'expo-router';
+import { apiGet, apiPost, messageKeyFor } from '../lib/api';
+import { acceptCurrentTerms, acceptErrorKeyFor, loadHouseholdState, type HouseholdState } from '../lib/householdGate';
 import { supabase } from '../lib/supabase';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import { useI18n } from '../i18n';
@@ -18,6 +19,7 @@ import { theme } from '../theme';
  */
 export default function HouseholdGate({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
+  const router = useRouter();
   const [state, setState] = useState<HouseholdState | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [signOutFailed, setSignOutFailed] = useState(false);
@@ -65,6 +67,24 @@ export default function HouseholdGate({ children }: { children: React.ReactNode 
 
   const retry = async () => apply(await fetchState());
 
+  // Updated terms, accepted in the app: the web's own call, then the gate asks
+  // the server again rather than assuming it stuck.
+  const [accepting, setAccepting] = useState(false);
+  const [acceptErrorKey, setAcceptErrorKey] = useState<string | null>(null);
+  const accept = async () => {
+    setAccepting(true);
+    setAcceptErrorKey(null);
+    try {
+      await acceptCurrentTerms(apiPost);
+      await retry();
+    } catch (err) {
+      console.error('Accepting the terms failed:', err);
+      setAcceptErrorKey(acceptErrorKeyFor(err));
+    } finally {
+      setAccepting(false);
+    }
+  };
+
   if (state?.kind === 'ready') return <>{children}</>;
 
   // No plan yet: onboarding replaces the tabs. Finishing it (or asking to
@@ -85,9 +105,29 @@ export default function HouseholdGate({ children }: { children: React.ReactNode 
           </>
         )}
 
-        {/* Plain text, deliberately: no link to the Terms and nothing that
-            could carry a price. Accepting happens on the web. */}
-        {state?.kind === 'termsOutdated' && <Text style={styles.body}>{t('terms.updated')}</Text>}
+        {/* Accepted here since 2026-11-05: the Terms and the Privacy Policy
+            are readable in the app (from @phare/core, no price, no link out),
+            and the acceptance is the web's own call. */}
+        {state?.kind === 'termsOutdated' && (
+          <>
+            <Text style={styles.body}>{t('terms.updated')}</Text>
+            <Pressable accessibilityRole="link" onPress={() => router.push('/terms')} hitSlop={8}>
+              <Text style={styles.action}>{t('terms.readTerms')}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="link" onPress={() => router.push('/privacy')} hitSlop={8}>
+              <Text style={styles.action}>{t('terms.readPrivacy')}</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void accept()}
+              disabled={accepting}
+              style={[styles.button, accepting && styles.buttonDisabled]}
+            >
+              {accepting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>{t('terms.accept')}</Text>}
+            </Pressable>
+            {acceptErrorKey && <Text style={styles.error}>{t(acceptErrorKey)}</Text>}
+          </>
+        )}
 
         {(errorKey || state?.kind === 'termsOutdated') && (
           <Pressable accessibilityRole="button" onPress={() => void signOut()} hitSlop={8}>
@@ -113,4 +153,15 @@ const styles = StyleSheet.create({
   action: { fontSize: 15, fontWeight: '700', color: theme.color.heading },
   signOut: { fontSize: 15, color: theme.color.muted },
   error: { fontSize: 14, color: theme.color.danger, textAlign: 'center' },
+  button: {
+    alignSelf: 'stretch',
+    backgroundColor: theme.color.heading,
+    borderRadius: theme.radius.md,
+    paddingVertical: theme.space.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  buttonDisabled: { opacity: 0.5 },
+  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });
