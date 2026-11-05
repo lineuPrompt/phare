@@ -2,7 +2,15 @@
 -- Phare — invites join a household through a server-only table, member_invites.
 -- 2026-11-05. Lineu: "yes invite fix".
 --
--- STATUS: WRITTEN, NOT APPLIED.
+-- STATUS: APPLIED 2026-11-05 by Lineu; VERIFY 10/10 PASS (run live by
+--   Claude). PROVEN LIVE the same day, after the deploy (2deeeda):
+--   - a real invite (Rocky Test → fern.tick…) joined Rocky Test as member,
+--     no stray household, the member_invites row consumed;
+--   - a public signUp carrying household_id = Rocky Test and role = owner in
+--     its metadata got a household of its own ("Summit Forged"), Rocky Test
+--     unchanged at 2 users; its signup event recorded platform 'web'.
+--   Every test account and household was then deleted through the app's own
+--   deletion routes; 0 left, 0 pending invites.
 --
 -- APPLY ORDER: this migration FIRST, then deploy the route change
 -- (src/app/api/household/members/route.ts, same change). Until both are in,

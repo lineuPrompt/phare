@@ -56,8 +56,12 @@ the v1.1 list separately.**
   hole but BROKE INVITES (app_metadata is set after the trigger runs; caught
   by the live invite test). Second fix BUILT 2026-11-05, uncommitted:
   server-only `member_invites` table + trigger reads it + the route checks
-  where the account landed. Migration `20261105010000` WRITTEN, not applied.
-  ORDER: apply, then deploy, then the live test. NO INVITES until then. —
+  where the account landed. **FIXED AND PROVEN LIVE 2026-11-05** (2deeeda,
+  migration `20261105010000` APPLIED, VERIFY 10/10): real invite joins,
+  forged sign-up gets its own household. Invites are safe again. All test
+  accounts (Rocky Test, Fern, Summit, Cliffs, Ridge) deleted through the
+  app's deletion routes; Zezinho Test keeps Ridge's "Former member" row, by
+  design. —
   [ticket](tickets/signup-metadata-joins-any-household.md)
 - S1 live test 2026-11-05 on the deployed site (emulator, throwaway
   asian.rocky3618@…, household **73157e93**: exclude from every count):

@@ -2,8 +2,10 @@
 
 **Filed** 2026-11-05, found while preparing in-app sign-up (S1).
 
-**Status:** SECOND FIX BUILT 2026-11-05 (Lineu: "yes invite fix"),
-uncommitted. The first fix (20261105000000, app_metadata) closed the hole
+**Status:** FIXED AND PROVEN LIVE 2026-11-05 (2deeeda + migration
+20261105010000, VERIFY 10/10): a real invite joins; a sign-up forging a
+household in its metadata gets its own. Test accounts all deleted.
+Earlier: SECOND FIX BUILT 2026-11-05 (Lineu: "yes invite fix"). The first fix (20261105000000, app_metadata) closed the hole
 but broke invites — app_metadata is set after the trigger fires. Now: a
 server-only `member_invites` table written before the account exists, read
 and consumed by the trigger; the route reads back where the account landed
