@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { I18nProvider } from '../src/i18n';
 import TimeZoneErrorScreen from '../src/screens/TimeZoneErrorScreen';
+import HomeOnSignOut from '../src/components/HomeOnSignOut';
 import { theme } from '../src/theme';
 
 export default function RootLayout() {
@@ -30,6 +31,8 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <I18nProvider>
         <StatusBar style="dark" />
+        {/* Signing back in opens on the Overview, wherever sign-out happened. */}
+        <HomeOnSignOut />
         <Stack
           screenOptions={{
             headerShown: false,

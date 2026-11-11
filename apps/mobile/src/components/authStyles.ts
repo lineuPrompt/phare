@@ -5,6 +5,18 @@ import { theme } from '../theme';
 export const authStyles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.color.background },
   flex: { flex: 1 },
+  brand: { alignItems: 'center', gap: theme.space.sm, marginTop: theme.space.lg, marginBottom: theme.space.sm },
+  logo: {
+    width: 96,
+    height: 96,
+    borderRadius: 24,
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  wordmark: { fontSize: 20, fontWeight: '800', letterSpacing: 1, color: theme.color.heading },
+  centred: { textAlign: 'center' },
   content: { padding: theme.space.lg, gap: theme.space.md },
   title: { fontSize: 28, fontWeight: '700', color: theme.color.heading },
   subtitle: { fontSize: 15, lineHeight: 22, color: theme.color.muted, marginBottom: theme.space.sm },
@@ -35,6 +47,7 @@ export const authStyles = StyleSheet.create({
   link: { fontSize: 15, fontWeight: '600', color: theme.color.heading },
   inlineLink: { fontWeight: '700', color: theme.color.heading, textDecorationLine: 'underline' },
   links: { gap: theme.space.md, marginTop: theme.space.sm },
+  linksCentred: { alignItems: 'center' },
   back: { alignSelf: 'flex-start', paddingVertical: theme.space.xs },
   consent: { flexDirection: 'row', gap: theme.space.sm, alignItems: 'flex-start' },
   box: {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,6 +16,11 @@ import { supabase } from '../lib/supabase';
 import { authStyles as styles } from '../components/authStyles';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
+
+// The app icon, scaled down (288 px, ~90 KB) so the sign-in screen opens on
+// the same lighthouse the home screen showed a moment before.
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro's static image asset form
+const LOGO = require('../../assets/logo.png') as number;
 
 /**
  * Password sign-in — the same call the web app makes.
@@ -77,8 +83,12 @@ export default function SignInScreen({ onCreateAccount, onForgot }: { onCreateAc
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>{t('signIn.title')}</Text>
-          <Text style={styles.subtitle}>{t('signIn.subtitle')}</Text>
+          <View style={styles.brand}>
+            <Image source={LOGO} style={styles.logo} alt="" accessibilityIgnoresInvertColors />
+            <Text style={styles.wordmark}>Phare</Text>
+          </View>
+          <Text style={[styles.title, styles.centred]}>{t('signIn.title')}</Text>
+          <Text style={[styles.subtitle, styles.centred]}>{t('signIn.subtitle')}</Text>
 
           {errorKey && (
             <View style={styles.errorBox}>
@@ -134,7 +144,7 @@ export default function SignInScreen({ onCreateAccount, onForgot }: { onCreateAc
             )}
           </Pressable>
 
-          <View style={styles.links}>
+          <View style={[styles.links, styles.linksCentred]}>
             <Pressable accessibilityRole="button" onPress={onForgot} hitSlop={8} disabled={submitting}>
               <Text style={styles.link}>{t('signIn.forgot')}</Text>
             </Pressable>
