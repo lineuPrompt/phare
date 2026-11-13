@@ -223,7 +223,7 @@
       "amount": "Montant",
       "cadence": "Fréquence",
       "date": "Date",
-      "dateHint": "Un jour où il a lieu, sous la forme AAAA-MM-JJ.",
+      "dateHint": "Un jour où il a lieu.",
       "secondDay": "Deuxième jour du mois",
       "category": "Catégorie",
       "account": "Compte",
@@ -232,7 +232,8 @@
       "appliesFromHint": "Les mois précédents gardent les anciens montants. Pas avant aujourd'hui.",
       "endDate": "Se termine le (facultatif)",
       "endDateNone": "Aucune date de fin",
-      "endDateHint": "Laissez vide pour qu'il continue. Avec une date, rien n'est ajouté après.",
+      "endDateClear": "Retirer la date de fin",
+      "endDateHint": "Sans date de fin, il continue. Avec une date, rien n'est ajouté après.",
       "save": "Enregistrer",
       "saving": "Enregistrement…",
       "delete": "Supprimer",
@@ -246,14 +247,14 @@
       "descriptionTooLong": "Cette description est trop longue. Limitez-la à {max} caractères.",
       "amountInvalid": "Indiquez un montant supérieur à zéro, comme 1500 ou 1500,50.",
       "dateRequired": "Indiquez un jour où il a lieu.",
-      "dateInvalid": "Indiquez une vraie date, sous la forme AAAA-MM-JJ.",
+      "dateInvalid": "Choisissez une date.",
       "secondDayInvalid": "Le deuxième jour est un jour du mois, de 1 à 31.",
       "categoryRequired": "Choisissez une catégorie.",
       "accountRequired": "Choisissez un compte.",
       "goalRequired": "Choisissez un objectif ou un compte de dette.",
-      "effectiveFromInvalid": "Indiquez la date d'application sous la forme AAAA-MM-JJ.",
+      "effectiveFromInvalid": "Choisissez la date à partir de laquelle il s'applique.",
       "effectiveFromPast": "Elle ne peut pas commencer à une date passée : les mois passés gardent leurs vrais montants.",
-      "endDateInvalid": "Inscrivez la date de fin au format AAAA-MM-JJ.",
+      "endDateInvalid": "Choisissez une date de fin, ou retirez-la.",
       "endDatePast": "La date de fin ne peut pas être passée : les mois passés restent tels qu'ils ont eu lieu.",
       "endDateBeforeStart": "La date de fin doit tomber le jour du début ou après."
     }
@@ -294,7 +295,7 @@
     "open": "Ajouter une dépense",
     "account": "Compte",
     "date": "Date",
-    "datePlaceholder": "AAAA-MM-JJ",
+    "datePlaceholder": "Choisir une date",
     "today": "Aujourd'hui",
     "yesterday": "Hier",
     "description": "Description",
@@ -308,7 +309,7 @@
     "problems": {
       "goalRequired": "Choisissez un objectif ou un compte de dette.",
       "accountRequired": "Choisissez un compte.",
-      "dateInvalid": "Entrez une date valide, au format AAAA-MM-JJ.",
+      "dateInvalid": "Choisissez une date.",
       "descriptionRequired": "Ajoutez une description.",
       "descriptionTooLong": "Cette description est trop longue : {max} caractères au maximum.",
       "categoryRequired": "Choisissez une catégorie.",
@@ -316,7 +317,7 @@
     },
     "errors": {
       "invalidAmount": "Phare n'a pas pu accepter ce montant. Entrez un montant supérieur à zéro, avec au plus deux décimales.",
-      "invalidDate": "Phare n'a pas pu accepter cette date. Entrez une date valide, au format AAAA-MM-JJ.",
+      "invalidDate": "Phare n'a pas pu accepter cette date. Choisissez-en une autre.",
       "descriptionRequired": "Ajoutez une description.",
       "descriptionTooLong": "Cette description est trop longue : {max} caractères au maximum.",
       "categoryRequired": "Choisissez une catégorie.",
@@ -425,7 +426,7 @@
         "tooFar": "C'est à plus de {days} jours — le prochain versement devrait être plus proche.",
         "range": "Entrez un jour entre 1 et 31.",
         "same": "Les deux jours doivent être différents.",
-        "date": "Entrez une date valide, au format AAAA-MM-JJ.",
+        "date": "Choisissez une date.",
         "cadence": "Celui-ci ne peut pas être daté ici. Vous pouvez le faire sur phare.money."
       }
     },
@@ -580,7 +581,7 @@
     "amount": "Solde",
     "amountHint": "Mettez un signe moins si le compte est à découvert.",
     "date": "En date du",
-    "datePlaceholder": "AAAA-MM-JJ",
+    "datePlaceholder": "Choisir une date",
     "today": "Aujourd'hui",
     "save": "Enregistrer le solde",
     "saving": "Enregistrement…",
@@ -591,7 +592,7 @@
     "addChequing": "Ajouter un compte chèques",
     "problems": {
       "amountInvalid": "Entrez le solde en chiffres, comme 1250 ou -40,25 — sans $ ni espaces.",
-      "dateInvalid": "Entrez la date au format AAAA-MM-JJ.",
+      "dateInvalid": "Choisissez une date.",
       "dateInFuture": "La date ne peut pas être dans le futur."
     }
   },

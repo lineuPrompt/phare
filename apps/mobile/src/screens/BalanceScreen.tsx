@@ -17,6 +17,7 @@ import { balanceProblemKey, loadBalanceForm, planBalance, type BalanceForm } fro
 import { emitEntrySaved } from '../lib/entryEvents';
 import { formatDayLong } from '../lib/timelineView';
 import Chip from '../components/Chip';
+import DateField from '../components/DateField';
 import { formStyles as styles } from '../components/formStyles';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
@@ -183,17 +184,15 @@ export default function BalanceScreen() {
           <View style={styles.chips}>
             <Chip label={t('balance.today')} selected={date === form.today} onPress={() => setDate(form.today)} />
           </View>
-          <TextInput
-            style={styles.input}
+          <DateField
             value={date}
-            onChangeText={(value) => {
+            onChange={(value) => {
               setDate(value);
               setMessageKey(null);
               setSaved(false);
             }}
+            fallback={form.today}
             placeholder={t('balance.datePlaceholder')}
-            keyboardType="numbers-and-punctuation"
-            autoCorrect={false}
             accessibilityLabel={t('balance.date')}
           />
 

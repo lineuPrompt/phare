@@ -29,6 +29,7 @@ import {
 } from '../lib/quickEntry';
 import { emitEntrySaved } from '../lib/entryEvents';
 import Chip from '../components/Chip';
+import DateField from '../components/DateField';
 import ActionButton from '../components/ActionButton';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
@@ -323,13 +324,11 @@ export default function QuickEntryScreen() {
                   onPress={() => update({ date: yesterday })}
                 />
               </View>
-              <TextInput
-                style={styles.input}
+              <DateField
                 value={draft.date}
-                onChangeText={(date) => update({ date })}
+                onChange={(date) => update({ date })}
+                fallback={today}
                 placeholder={t('entry.datePlaceholder')}
-                keyboardType="numbers-and-punctuation"
-                autoCorrect={false}
                 accessibilityLabel={t('entry.date')}
               />
 

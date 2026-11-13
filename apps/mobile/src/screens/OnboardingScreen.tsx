@@ -32,6 +32,7 @@ import {
 } from '../lib/onboardingFlow';
 import { ApiError } from '../lib/apiErrors';
 import { createFunnelEmitter, MOBILE_STEP_OF } from '../lib/funnelEvents';
+import DateField from '../components/DateField';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
@@ -474,6 +475,19 @@ function PayDates({
   const [confirmSkip, setConfirmSkip] = useState(false);
   const [today, setToday] = useState<string | null>(null);
 
+  // The date picker opens on the household's today. If this fails the picker
+  // waits, and Save asks again and shows the error (saveOne below).
+  useEffect(() => {
+    let live = true;
+    runner
+      .householdToday()
+      .then((day) => live && setToday(day))
+      .catch((err) => console.error('Pay dates timezone error:', err));
+    return () => {
+      live = false;
+    };
+  }, [runner]);
+
   const saveOne = async (item: PayDateItem) => {
     setStatus((s) => ({ ...s, [item.id]: { state: 'saving' } }));
     let day = today;
@@ -524,11 +538,10 @@ function PayDates({
             ) : (
               <>
                 <Text style={styles.label}>{t('onboarding.payDates.nextPayDateLabel')}</Text>
-                <TextInput
-                  style={styles.input}
+                <DateField
                   value={input.nextPayDate}
-                  onChangeText={(v) => set({ nextPayDate: v })}
-                  keyboardType="numbers-and-punctuation"
+                  onChange={(v) => set({ nextPayDate: v })}
+                  fallback={today ?? undefined}
                   placeholder={t('entry.datePlaceholder')}
                   accessibilityLabel={t('onboarding.payDates.nextPayDateLabel')}
                 />

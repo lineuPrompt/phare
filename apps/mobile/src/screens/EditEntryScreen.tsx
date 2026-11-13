@@ -25,6 +25,7 @@ import {
 } from '../lib/entryEdit';
 import { emitEntrySaved } from '../lib/entryEvents';
 import Chip from '../components/Chip';
+import DateField from '../components/DateField';
 import { formStyles as styles } from '../components/formStyles';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
@@ -197,13 +198,10 @@ export default function EditEntryScreen() {
           {kind === 'transfer' && <Text style={styles.intro}>{t('edit.transferHint')}</Text>}
 
           <Text style={styles.label}>{t('entry.date')}</Text>
-          <TextInput
-            style={styles.input}
+          <DateField
             value={draft.date}
-            onChangeText={(date) => update({ date })}
+            onChange={(date) => update({ date })}
             placeholder={t('entry.datePlaceholder')}
-            keyboardType="numbers-and-punctuation"
-            autoCorrect={false}
             accessibilityLabel={t('entry.date')}
           />
 

@@ -369,6 +369,15 @@ the v1.1 list separately.**
   [app-store-listing.md §3c](app-store-listing.md) (product names and
   descriptions EN/FR, App Privacy "Purchase History", review notes).
 
+- **STOP — Open card statement: show what's spent so far** (Lineu,
+  2026-11-13). The plan card counts an open statement as max(budget,
+  actual) and labels it "budget". Evaluated: counting actual alone would
+  overstate "Cash you'll actually have" until the statement closes (Visa
+  Avion: ~$1,751 spent of $3,000 with 14 days left). Proposal: keep the
+  math, add "spent so far · closes <date>" to the open statement's line
+  (web + app; adds `actual` to `CardCostTerm` in
+  `src/lib/planChainHelpers.ts`). Waiting for Lineu's approval.
+
 ## LINEU (needs Lineu, not code)
 
 - **Device checklist on iPhone** (onboarding, quick entry, French keypad,
@@ -397,12 +406,6 @@ the v1.1 list separately.**
 
 **Mobile, after the iOS submission** (no new features before it):
 
-- **Onboarding pay-date step: a date picker instead of typed `YYYY-MM-DD`**
-  (Lineu, 2026-10-14, during device check C). Today the field is free text
-  checked against "within the next 14 days". A native picker
-  (`@react-native-community/datetimepicker`) is a native module: it needs a
-  new development build and an Expo-SDK-pinned version (see the pnpm/Expo
-  peer pinning rule). The quick-entry date field has the same shape.
 
 **Web, found 2026-10-14 during the device checklist:**
 
@@ -477,6 +480,7 @@ for when it thaws:
 
 | Item | Commit |
 |---|---|
+| Date pickers on every date field in the app (2026-11-13): quick entry, edit entry, balance, onboarding next payday, recurring date / end date / applies from; `@react-native-community/datetimepicker` 9.1.0 (SDK 57 pin) — needs a new build | _(Lineu)_ |
 | Recurring entries keep going (2026-11-04): the daily 07:00 job tops every active rule up to 12 months ahead (deleted or edited-alone dates never come back); optional end date on web and app; migration 20261104000000 APPLIED; first run VERIFIED LIVE 2026-11-05 (all 3 real households reach Oct 2027, biweekly rhythm kept, 0 duplicates) | _(Lineu)_ |
 | Monthly letter compares real months (2026-11-03): per-category trends with code-picked biggest increase/decrease, balance progress per goal/reserve/debt, last month's recommendation quoted, the bills before next month's lowest day; QA'd with a real letter over Zezinho Test data (in memory, nothing written) | _(Lineu)_ |
 | Withdraw from savings and the Reserve Fund (draw from any goal account; withdrawn vs borrowed) — migration applied + verified live 2026-10-27 | _(Lineu)_ |

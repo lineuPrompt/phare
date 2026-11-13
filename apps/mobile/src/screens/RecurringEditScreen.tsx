@@ -30,6 +30,7 @@ import {
 } from '../lib/recurring';
 import { emitEntrySaved } from '../lib/entryEvents';
 import Chip from '../components/Chip';
+import DateField from '../components/DateField';
 import { formStyles as styles } from '../components/formStyles';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
@@ -206,13 +207,11 @@ export default function RecurringEditScreen() {
           </View>
 
           <Text style={styles.label}>{t('recurring.editor.date')}</Text>
-          <TextInput
-            style={styles.input}
+          <DateField
             value={draft.anchorDate}
-            onChangeText={(anchorDate) => update({ anchorDate })}
-            placeholder="2026-11-01"
-            keyboardType="numbers-and-punctuation"
-            autoCorrect={false}
+            onChange={(anchorDate) => update({ anchorDate })}
+            fallback={data.today}
+            placeholder={t('entry.datePlaceholder')}
             accessibilityLabel={t('recurring.editor.date')}
           />
           <Text style={styles.hint}>{t('recurring.editor.dateHint')}</Text>
@@ -261,26 +260,25 @@ export default function RecurringEditScreen() {
           )}
 
           <Text style={styles.label}>{t('recurring.editor.endDate')}</Text>
-          <TextInput
-            style={styles.input}
+          <DateField
             value={draft.endDate}
-            onChangeText={(endDate) => update({ endDate })}
+            onChange={(endDate) => update({ endDate })}
+            fallback={data.today}
             placeholder={t('recurring.editor.endDateNone')}
-            keyboardType="numbers-and-punctuation"
-            autoCorrect={false}
             accessibilityLabel={t('recurring.editor.endDate')}
+            onClear={() => update({ endDate: '' })}
+            clearLabel={t('recurring.editor.endDateClear')}
           />
           <Text style={styles.hint}>{t('recurring.editor.endDateHint')}</Text>
 
           {asksFrom && (
             <>
               <Text style={styles.label}>{t('recurring.editor.appliesFrom')}</Text>
-              <TextInput
-                style={styles.input}
+              <DateField
                 value={draft.effectiveFrom}
-                onChangeText={(effectiveFrom) => update({ effectiveFrom })}
-                keyboardType="numbers-and-punctuation"
-                autoCorrect={false}
+                onChange={(effectiveFrom) => update({ effectiveFrom })}
+                fallback={data.today}
+                placeholder={t('entry.datePlaceholder')}
                 accessibilityLabel={t('recurring.editor.appliesFrom')}
               />
               <Text style={styles.hint}>{t('recurring.editor.appliesFromHint')}</Text>

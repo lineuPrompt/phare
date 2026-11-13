@@ -223,7 +223,7 @@
       "amount": "Amount",
       "cadence": "How often",
       "date": "Date",
-      "dateHint": "A day it happens on, written as YYYY-MM-DD.",
+      "dateHint": "A day it happens on.",
       "secondDay": "Second day of the month",
       "category": "Category",
       "account": "Account",
@@ -232,7 +232,8 @@
       "appliesFromHint": "Earlier months keep the old figures. It can't start before today.",
       "endDate": "Ends on (optional)",
       "endDateNone": "No end date",
-      "endDateHint": "Leave empty and it keeps going. With a date, nothing is added after it.",
+      "endDateClear": "Remove the end date",
+      "endDateHint": "With no end date it keeps going. With one, nothing is added after it.",
       "save": "Save",
       "saving": "Saving…",
       "delete": "Delete",
@@ -246,14 +247,14 @@
       "descriptionTooLong": "That description is too long. Keep it to {max} characters.",
       "amountInvalid": "Enter an amount above zero, like 1500 or 1500.50.",
       "dateRequired": "Enter a day it happens on.",
-      "dateInvalid": "Enter a real date, written as YYYY-MM-DD.",
+      "dateInvalid": "Pick a date.",
       "secondDayInvalid": "The second day is a day of the month, 1 to 31.",
       "categoryRequired": "Choose a category.",
       "accountRequired": "Choose an account.",
       "goalRequired": "Choose a goal or debt account.",
-      "effectiveFromInvalid": "Enter the date it applies from as YYYY-MM-DD.",
+      "effectiveFromInvalid": "Pick the date it applies from.",
       "effectiveFromPast": "It can't apply from a past date: past months keep their real figures.",
-      "endDateInvalid": "Enter the end date as YYYY-MM-DD.",
+      "endDateInvalid": "Pick an end date, or remove it.",
       "endDatePast": "The end date can't be in the past: past months stay as they happened.",
       "endDateBeforeStart": "The end date has to be on or after the date it starts."
     }
@@ -294,7 +295,7 @@
     "open": "Add an expense",
     "account": "Account",
     "date": "Date",
-    "datePlaceholder": "YYYY-MM-DD",
+    "datePlaceholder": "Pick a date",
     "today": "Today",
     "yesterday": "Yesterday",
     "description": "Description",
@@ -308,7 +309,7 @@
     "problems": {
       "goalRequired": "Choose a goal or debt account.",
       "accountRequired": "Choose an account.",
-      "dateInvalid": "Enter a real date, written as YYYY-MM-DD.",
+      "dateInvalid": "Pick a date.",
       "descriptionRequired": "Add a description.",
       "descriptionTooLong": "That description is too long. Keep it to {max} characters.",
       "categoryRequired": "Choose a category.",
@@ -316,7 +317,7 @@
     },
     "errors": {
       "invalidAmount": "Phare couldn't accept that amount. Enter an amount above zero, with at most two decimals.",
-      "invalidDate": "Phare couldn't accept that date. Enter a real date, written as YYYY-MM-DD.",
+      "invalidDate": "Phare couldn't accept that date. Pick another one.",
       "descriptionRequired": "Add a description.",
       "descriptionTooLong": "That description is too long. Keep it to {max} characters.",
       "categoryRequired": "Choose a category.",
@@ -425,7 +426,7 @@
         "tooFar": "That's more than {days} days away — the next payment should be sooner.",
         "range": "Enter a day between 1 and 31.",
         "same": "The two days must be different.",
-        "date": "Enter a real date, written as YYYY-MM-DD.",
+        "date": "Pick a date.",
         "cadence": "This one can't be dated here. You can set it on phare.money."
       }
     },
@@ -580,7 +581,7 @@
     "amount": "Balance",
     "amountHint": "Use a minus sign if the account is overdrawn.",
     "date": "On",
-    "datePlaceholder": "YYYY-MM-DD",
+    "datePlaceholder": "Pick a date",
     "today": "Today",
     "save": "Save balance",
     "saving": "Saving…",
@@ -591,7 +592,7 @@
     "addChequing": "Add a chequing account",
     "problems": {
       "amountInvalid": "Enter the balance as a number, like 1250 or -40.25 — no $ or spaces.",
-      "dateInvalid": "Enter the date as YYYY-MM-DD.",
+      "dateInvalid": "Pick a date.",
       "dateInFuture": "The date can't be in the future."
     }
   },
