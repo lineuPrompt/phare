@@ -240,8 +240,10 @@ function PlanCard({
   }
 
   // Literal keys, one per basis, so the i18n parity test can see each one.
-  const cardLine = (basis: CardBasis, card: string, amount: string) =>
-    basis === 'actual' ? t('home.plan.basisActual', { card, amount })
+  // A statement still running reads "actual, statement still open" (planChainHelpers.ts).
+  const cardLine = (basis: CardBasis, inProgress: boolean, card: string, amount: string) =>
+    basis === 'actual' && inProgress ? t('home.plan.basisSoFar', { card, amount })
+      : basis === 'actual' ? t('home.plan.basisActual', { card, amount })
       : basis === 'budget' ? t('home.plan.basisBudget', { card, amount })
       : basis === 'max' ? t('home.plan.basisMax', { card, amount })
       : t('home.plan.basisPosted', { card });
@@ -279,7 +281,7 @@ function PlanCard({
         <View style={styles.planCards}>
           {plan.cards.map((card) => (
             <Text key={card.cardId} style={styles.planCardLine}>
-              {cardLine(card.basis, card.cardName, money(card.amount))}
+              {cardLine(card.basis, card.inProgress, card.cardName, money(card.amount))}
             </Text>
           ))}
         </View>

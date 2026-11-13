@@ -41,7 +41,7 @@ describe('computeCardEnvelopeRemainders', () => {
     expect(r.deduction).toBe(0); // 650 already recorded/reflected; nothing further to add
   });
 
-  it('in-progress cycle, under budget: uses budget — the planning value', () => {
+  it('in-progress cycle, under budget: uses actual so far, not the budget (Lineu, 2026-11-13)', () => {
     const [r] = computeCardEnvelopeRemainders({
       cards: [CARD],
       cardBudgets: new Map([['card-1', 500]]),
@@ -50,9 +50,51 @@ describe('computeCardEnvelopeRemainders', () => {
       today: '2026-07-20',
     });
     expect(r.closed).toBe(false);
+    expect(r.inProgress).toBe(true);
     expect(r.actual).toBe(200);
-    expect(r.payment).toBe(500);
-    expect(r.deduction).toBe(300); // the unspent 300 not yet in the real bridge
+    expect(r.payment).toBe(200); // NOT the 500 budget: the statement as it stands today
+    expect(r.deduction).toBe(0);
+  });
+
+  it('a cycle starting today is in progress; the day before it starts, the budget stands in', () => {
+    const card15 = { id: 'card-1', name: 'Visa', statement_close_day: 15 }; // Aug cycle: 07-16..08-15
+    const args = {
+      cards: [card15],
+      cardBudgets: new Map([['card-1', 500]]),
+      transactions: [{ account_id: 'card-1', date: '2026-07-16', type: 'expense', amount: 40 }],
+      cycleMonth: '2026-08',
+    };
+    const [started] = computeCardEnvelopeRemainders({ ...args, today: '2026-07-16' });
+    expect(started.inProgress).toBe(true);
+    expect(started.payment).toBe(40);
+    const [notYet] = computeCardEnvelopeRemainders({ ...args, today: '2026-07-15' });
+    expect(notYet.inProgress).toBe(false);
+    expect(notYet.closed).toBe(false);
+    expect(notYet.payment).toBe(500);
+  });
+
+  it('a future cycle whose dated card entries already exceed the budget uses them (max)', () => {
+    const [r] = computeCardEnvelopeRemainders({
+      cards: [CARD],
+      cardBudgets: new Map([['card-1', 500]]),
+      transactions: [{ account_id: 'card-1', date: '2026-11-03', type: 'expense', amount: 620 }],
+      cycleMonth: '2026-11',
+      today: '2026-07-20',
+    });
+    expect(r.inProgress).toBe(false);
+    expect(r.payment).toBe(620);
+  });
+
+  it('a closed cycle is not in progress', () => {
+    const [r] = computeCardEnvelopeRemainders({
+      cards: [CARD],
+      cardBudgets: new Map([['card-1', 500]]),
+      transactions: [],
+      cycleMonth: '2026-06',
+      today: '2026-07-05',
+    });
+    expect(r.closed).toBe(true);
+    expect(r.inProgress).toBe(false);
   });
 
   it('entirely future cycle (no transactions yet) uses the budget as the planning value', () => {
@@ -152,8 +194,8 @@ describe('computeCardEnvelopeRemainders', () => {
       today: '2026-07-20',
     });
     expect(r.actual).toBe(200);
-    expect(r.payment).toBe(500); // under budget → planning value
-    expect(r.deduction).toBe(300);
+    expect(r.payment).toBe(200); // in progress → net actual so far
+    expect(r.deduction).toBe(0);
   });
 
   it('scopes each card to its own statement cycle window and ignores other cards entries', () => {
@@ -175,7 +217,7 @@ describe('computeCardEnvelopeRemainders', () => {
   });
 
   describe('closed-cycle boundary', () => {
-    it('a cycle that closes exactly today is still treated as open', () => {
+    it('a cycle that closes exactly today is still open — in progress, so actual so far', () => {
       const [r] = computeCardEnvelopeRemainders({
         cards: [CARD],
         cardBudgets: new Map([['card-1', 500]]),
@@ -184,7 +226,8 @@ describe('computeCardEnvelopeRemainders', () => {
         today: '2026-07-31',
       });
       expect(r.closed).toBe(false);
-      expect(r.payment).toBe(500);
+      expect(r.inProgress).toBe(true);
+      expect(r.payment).toBe(200);
     });
 
     it('the day after the close date, the cycle is closed', () => {
@@ -204,29 +247,29 @@ describe('computeCardEnvelopeRemainders', () => {
 describe('computeProjectedMonthEnd', () => {
   it('subtracts only the deduction (unspent budget beyond real recorded spend) from the closing balance', () => {
     const remainders: CardCycleRemainder[] = [
-      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 200, closed: false, payment: 500, deduction: 300, noData: false },
+      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 200, closed: false, inProgress: false, payment: 500, deduction: 300, noData: false },
     ];
     expect(computeProjectedMonthEnd(1000, remainders)).toBe(700);
   });
 
   it('never double-counts: a cycle already fully reflected in the closing balance contributes nothing further', () => {
     const remainders: CardCycleRemainder[] = [
-      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 500, closed: false, payment: 500, deduction: 0, noData: false },
+      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 500, closed: false, inProgress: false, payment: 500, deduction: 0, noData: false },
     ];
     expect(computeProjectedMonthEnd(1000, remainders)).toBe(1000);
   });
 
   it('sums deductions across multiple cards', () => {
     const remainders: CardCycleRemainder[] = [
-      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 200, closed: false, payment: 500, deduction: 300, noData: false },
-      { cardId: 'card-2', cardName: 'Mastercard', budget: 200, actual: 50, closed: false, payment: 200, deduction: 150, noData: false },
+      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 200, closed: false, inProgress: false, payment: 500, deduction: 300, noData: false },
+      { cardId: 'card-2', cardName: 'Mastercard', budget: 200, actual: 50, closed: false, inProgress: false, payment: 200, deduction: 150, noData: false },
     ];
     expect(computeProjectedMonthEnd(1000, remainders)).toBe(550);
   });
 
   it('never silently ignores real card spending: a no-envelope card with actual spend contributes exactly its actual, via the baseline, with zero further deduction', () => {
     const remainders: CardCycleRemainder[] = [
-      { cardId: 'card-1', cardName: 'Visa', budget: null, actual: 320, closed: false, payment: 320, deduction: 0, noData: false },
+      { cardId: 'card-1', cardName: 'Visa', budget: null, actual: 320, closed: false, inProgress: false, payment: 320, deduction: 0, noData: false },
     ];
     // closingBalance passed in already reflects the real 320 via the bridge —
     // the projection must not additionally add OR remove anything for it.
@@ -235,14 +278,14 @@ describe('computeProjectedMonthEnd', () => {
 
   it('a genuinely no-data card contributes nothing', () => {
     const remainders: CardCycleRemainder[] = [
-      { cardId: 'card-1', cardName: 'Visa', budget: null, actual: 0, closed: false, payment: 0, deduction: 0, noData: true },
+      { cardId: 'card-1', cardName: 'Visa', budget: null, actual: 0, closed: false, inProgress: false, payment: 0, deduction: 0, noData: true },
     ];
     expect(computeProjectedMonthEnd(1000, remainders)).toBe(1000);
   });
 
   it('a closed cycle contributes nothing further, even if it finished under budget', () => {
     const remainders: CardCycleRemainder[] = [
-      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 100, closed: true, payment: 100, deduction: 0, noData: false },
+      { cardId: 'card-1', cardName: 'Visa', budget: 500, actual: 100, closed: true, inProgress: false, payment: 100, deduction: 0, noData: false },
     ];
     expect(computeProjectedMonthEnd(1000, remainders)).toBe(1000);
   });

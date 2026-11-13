@@ -432,6 +432,7 @@
       "labelRemainder": "If the rest of {month} goes as budgeted",
       "labelFull": "If {month} goes as budgeted",
       "basisActual": "{card}: {amount} — actual",
+      "basisSoFar": "{card}: {amount} — actual, statement still open",
       "basisBudget": "{card}: {amount} — budget",
       "basisMax": "{card}: {amount} — over budget, using actual",
       "basisPosted": "{card}: already paid — included in today's balance",

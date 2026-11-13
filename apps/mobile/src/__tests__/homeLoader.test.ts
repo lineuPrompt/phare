@@ -181,8 +181,9 @@ describe('loadHome: the plan card', () => {
       balance: 2811.07,
       isPartialMonth: true,
       cards: [
-        { cardId: 'v', cardName: 'Visa', basis: 'budget', amount: 900 },
-        { cardId: 'm', cardName: 'Mastercard', basis: 'posted', amount: 0 },
+        // The fixture has no inProgress (a server from before 2026-11-13): false.
+        { cardId: 'v', cardName: 'Visa', basis: 'budget', amount: 900, inProgress: false },
+        { cardId: 'm', cardName: 'Mastercard', basis: 'posted', amount: 0, inProgress: false },
       ],
       awaitingDates: false,
     });
@@ -236,6 +237,36 @@ describe('loadHome: the plan card', () => {
       }),
     }));
     await expect(loadHome(r.get, MID_OCT)).rejects.toThrow('unknown card basis "forecast"');
+  });
+
+  it('a statement still running comes through flagged, for the "statement still open" line', async () => {
+    const r = recorder(table({
+      [homeTimelinePath('chq')]: timeline({
+        plan: {
+          months: [{
+            ...PLAN_MONTH,
+            cardCost: [
+              { cardId: 'v', cardName: 'Visa', basis: 'actual', amount: 1750.69, inProgress: true },
+              { cardId: 'm', cardName: 'Mastercard', basis: 'actual', amount: 80, inProgress: false },
+            ],
+          }],
+        },
+      }),
+    }));
+    const { plan } = await loadHome(r.get, MID_OCT);
+    expect(plan.kind === 'ready' ? plan.cards.map((c) => [c.cardName, c.inProgress]) : null).toEqual([
+      ['Visa', true],
+      ['Mastercard', false],
+    ]);
+  });
+
+  it('throws on an inProgress that is not a boolean, rather than guess', async () => {
+    const r = recorder(table({
+      [homeTimelinePath('chq')]: timeline({
+        plan: { months: [{ ...PLAN_MONTH, cardCost: [{ cardId: 'v', cardName: 'Visa', basis: 'actual', amount: 1, inProgress: 'yes' }] }] },
+      }),
+    }));
+    await expect(loadHome(r.get, MID_OCT)).rejects.toThrow('card inProgress is not a boolean');
   });
 });
 

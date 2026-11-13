@@ -53,7 +53,8 @@ type PlanMonthPayload = {
   month: string;
   isPartialMonth: boolean;
   balance: number;
-  cardCost: { cardId: string; cardName: string; basis: CardBasis; amount: number }[];
+  /** inProgress: absent from a server older than 2026-11-13. */
+  cardCost: { cardId: string; cardName: string; basis: CardBasis; amount: number; inProgress?: boolean }[];
   unanchoredIncomeCount: number;
   unanchoredExpenseCount: number;
 };
@@ -116,7 +117,8 @@ export type HomePlan =
       /** The plan's balance at month end. */
       balance: number;
       isPartialMonth: boolean;
-      cards: { cardId: string; cardName: string; basis: CardBasis; amount: number }[];
+      /** inProgress: a statement still running — `amount` is what's on it so far. */
+      cards: { cardId: string; cardName: string; basis: CardBasis; amount: number; inProgress: boolean }[];
       awaitingDates: boolean;
     };
 
@@ -208,11 +210,16 @@ function planFrom(data: HomeTimelineResponse, month: string): HomePlan {
     isPartialMonth: planMonth.isPartialMonth === true,
     cards: planMonth.cardCost.map((c) => {
       if (!BASES.includes(c.basis)) throw new Error(`home: unknown card basis "${String(c.basis)}"`);
+      // Absent = a server from before the flag existed: nothing is "so far".
+      if (c.inProgress !== undefined && typeof c.inProgress !== 'boolean') {
+        throw new Error(`home: card inProgress is not a boolean`);
+      }
       return {
         cardId: c.cardId,
         cardName: c.cardName,
         basis: c.basis,
         amount: amount(c.amount, 'card cost'),
+        inProgress: c.inProgress === true,
       };
     }),
     awaitingDates:

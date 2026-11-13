@@ -34,14 +34,19 @@
  *                                          more can land in a closed cycle,
  *                                          so even an under-budget close is
  *                                          final, not a projection.
- *   Cycle still open, budget set        → max(actual so far, budget). Once
- *                                          the family has already exceeded
- *                                          the budget, the budget is
- *                                          counterfactual — actual wins.
- *                                          A cycle with zero transactions
- *                                          yet (entirely future) collapses
- *                                          into this same formula for free:
- *                                          max(0, budget) = budget.
+ *   Cycle in progress (started, not     → actual so far, full stop (Lineu,
+ *   closed: window.start <= today)         2026-11-13: "that number is the
+ *                                          reality, we should use it as
+ *                                          guidance to stay on budget").
+ *                                          The plan reads the statement as
+ *                                          it stands today and moves as
+ *                                          spending lands; the budget is
+ *                                          not stood in for it any more.
+ *   Cycle not started yet, budget set   → max(actual, budget). Usually the
+ *                                          budget; actual only wins when
+ *                                          dated card entries (a recurring
+ *                                          bill on the card) already exceed
+ *                                          it.
  *   Cycle still open, no budget set     → actual spend so far (never $0
  *                                          just because there's no
  *                                          envelope — real recorded
@@ -78,6 +83,9 @@ export type CardCycleRemainder = {
   // True when window.end < today — the statement has already closed, so
   // `actual` is final, not a snapshot of an in-progress cycle.
   closed: boolean;
+  // True when window.start <= today and the statement has not closed: the
+  // cycle is running now, and `payment` is its actual so far.
+  inProgress: boolean;
   // The projected amount this card contributes to the payment landing in
   // the viewed month, per the rules in the file header. Always >= 0.
   payment: number;
@@ -115,10 +123,11 @@ export function computeCardEnvelopeRemainders(params: {
     const cardTxns = transactions.filter((t) => t.account_id === card.id);
     const actual = netCycleSpend(cardTxns, window);
     const closed = window.end < today;
+    const inProgress = !closed && window.start <= today;
     const budget = cardBudgets.has(card.id) ? cardBudgets.get(card.id)! : null;
 
     const actualOwed = Math.max(0, actual);
-    const payment = closed
+    const payment = closed || inProgress
       ? actualOwed
       : budget === null
         ? actualOwed
@@ -130,6 +139,7 @@ export function computeCardEnvelopeRemainders(params: {
       budget,
       actual,
       closed,
+      inProgress,
       payment,
       deduction: r2(payment - actualOwed),
       noData: budget === null && actualOwed === 0,

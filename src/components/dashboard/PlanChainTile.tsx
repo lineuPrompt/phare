@@ -6,7 +6,12 @@ import type { PlanChainMonth, CardCostBasis } from '@/lib/planChainHelpers';
 import { formatCurrency } from './types';
 import UpgradeButton from '@/components/billing/UpgradeButton';
 
-function basisKey(basis: CardCostBasis): 'basisActual' | 'basisBudget' | 'basisMax' | 'basisPosted' {
+// A statement still running is 'actual' with inProgress: what's on it so far.
+function basisKey(
+  basis: CardCostBasis,
+  inProgress: boolean
+): 'basisActual' | 'basisSoFar' | 'basisBudget' | 'basisMax' | 'basisPosted' {
+  if (basis === 'actual' && inProgress) return 'basisSoFar';
   switch (basis) {
     case 'actual': return 'basisActual';
     case 'budget': return 'basisBudget';
@@ -153,7 +158,7 @@ export default function PlanChainTile({
         <ul className="mt-3 space-y-1">
           {planMonth.cardCost.map((c) => (
             <li key={c.cardId} className="text-xs" style={{ color: '#C4B5FD' }}>
-              {t(basisKey(c.basis), { card: c.cardName, amount: formatCurrency(c.amount, locale) })}
+              {t(basisKey(c.basis, c.inProgress), { card: c.cardName, amount: formatCurrency(c.amount, locale) })}
             </li>
           ))}
         </ul>

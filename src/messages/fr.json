@@ -432,6 +432,7 @@
       "labelRemainder": "Si le reste de {month} respecte le budget",
       "labelFull": "Si {month} respecte le budget",
       "basisActual": "{card} : {amount} — réel",
+      "basisSoFar": "{card} : {amount} — réel, relevé encore ouvert",
       "basisBudget": "{card} : {amount} — budget",
       "basisMax": "{card} : {amount} — dépassement de budget, montant réel utilisé",
       "basisPosted": "{card} : déjà payé — inclus dans le solde d'aujourd'hui",

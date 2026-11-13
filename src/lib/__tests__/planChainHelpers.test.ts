@@ -168,9 +168,10 @@ describe('computeMonthCardCost', () => {
     });
     expect(terms[0].basis).toBe('actual');
     expect(terms[0].amount).toBe(100);
+    expect(terms[0].inProgress).toBe(false);
   });
 
-  it('open cycle under budget uses budget', () => {
+  it('in-progress cycle under budget counts actual so far, flagged (Lineu, 2026-11-13)', () => {
     const { terms } = computeMonthCardCost({
       cards: [CARDS[0]],
       cardBudgets: new Map([[CARD_A, 500]]),
@@ -179,11 +180,12 @@ describe('computeMonthCardCost', () => {
       today: '2026-07-20',
       excludeAlreadyPosted: false,
     });
-    expect(terms[0].basis).toBe('budget');
-    expect(terms[0].amount).toBe(500);
+    expect(terms[0].basis).toBe('actual');
+    expect(terms[0].amount).toBe(200);
+    expect(terms[0].inProgress).toBe(true);
   });
 
-  it('open cycle already over budget uses max (actual)', () => {
+  it('in-progress cycle over budget: actual so far, flagged', () => {
     const { terms } = computeMonthCardCost({
       cards: [CARDS[0]],
       cardBudgets: new Map([[CARD_A, 500]]),
@@ -192,8 +194,23 @@ describe('computeMonthCardCost', () => {
       today: '2026-07-20',
       excludeAlreadyPosted: false,
     });
-    expect(terms[0].basis).toBe('max');
+    expect(terms[0].basis).toBe('actual');
     expect(terms[0].amount).toBe(650);
+    expect(terms[0].inProgress).toBe(true);
+  });
+
+  it('a cycle not started yet keeps the budget, not flagged', () => {
+    const { terms } = computeMonthCardCost({
+      cards: [CARDS[0]],
+      cardBudgets: new Map([[CARD_A, 500]]),
+      transactions: [],
+      cycleMonth: '2026-08',
+      today: '2026-07-20',
+      excludeAlreadyPosted: false,
+    });
+    expect(terms[0].basis).toBe('budget');
+    expect(terms[0].amount).toBe(500);
+    expect(terms[0].inProgress).toBe(false);
   });
 
   it('open cycle with no budget set uses actual-so-far', () => {
@@ -228,6 +245,7 @@ describe('computeMonthCardCost', () => {
 
     expect(a.basis).toBe('posted');
     expect(a.amount).toBe(0); // already inside the anchor — no double count
+    expect(a.inProgress).toBe(false); // paid: never "statement still open"
     expect(b.basis).toBe('actual'); // calendar-month cycle, always closed one month later
     expect(b.amount).toBeGreaterThan(0);
     expect(total).toBe(b.amount);

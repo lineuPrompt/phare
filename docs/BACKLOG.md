@@ -369,14 +369,9 @@ the v1.1 list separately.**
   [app-store-listing.md §3c](app-store-listing.md) (product names and
   descriptions EN/FR, App Privacy "Purchase History", review notes).
 
-- **STOP — Open card statement: show what's spent so far** (Lineu,
-  2026-11-13). The plan card counts an open statement as max(budget,
-  actual) and labels it "budget". Evaluated: counting actual alone would
-  overstate "Cash you'll actually have" until the statement closes (Visa
-  Avion: ~$1,751 spent of $3,000 with 14 days left). Proposal: keep the
-  math, add "spent so far · closes <date>" to the open statement's line
-  (web + app; adds `actual` to `CardCostTerm` in
-  `src/lib/planChainHelpers.ts`). Waiting for Lineu's approval.
+- **Web suite: 57 tests fail on clean main** (found 2026-11-13) — the
+  event-writer test double records nothing. Diagnose first.
+  [ticket](tickets/web-suite-57-failing-on-main.md)
 
 ## LINEU (needs Lineu, not code)
 
@@ -480,6 +475,7 @@ for when it thaws:
 
 | Item | Commit |
 |---|---|
+| Open card statement counts its actual (2026-11-13, approved by Lineu): a statement already running = actual on it so far (flag `inProgress`, basis stays `actual` so installed apps don't break); future = budget, closed = actual, unchanged. Web + app | _(Lineu)_ |
 | Date pickers on every date field in the app (2026-11-13): quick entry, edit entry, balance, onboarding next payday, recurring date / end date / applies from; `@react-native-community/datetimepicker` 9.1.0 (SDK 57 pin) — needs a new build | _(Lineu)_ |
 | Recurring entries keep going (2026-11-04): the daily 07:00 job tops every active rule up to 12 months ahead (deleted or edited-alone dates never come back); optional end date on web and app; migration 20261104000000 APPLIED; first run VERIFIED LIVE 2026-11-05 (all 3 real households reach Oct 2027, biweekly rhythm kept, 0 duplicates) | _(Lineu)_ |
 | Monthly letter compares real months (2026-11-03): per-category trends with code-picked biggest increase/decrease, balance progress per goal/reserve/debt, last month's recommendation quoted, the bills before next month's lowest day; QA'd with a real letter over Zezinho Test data (in memory, nothing written) | _(Lineu)_ |

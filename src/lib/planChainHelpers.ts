@@ -12,10 +12,10 @@
  *      correct and intended: unspent money is unspent until something is
  *      dated).
  *   2. The ONLY substitution: when the statement cycle paying in a given
- *      month has NOT closed, its real payment is unknowable, so the card's
- *      BUDGET stands in for it (computeMonthCardCost, reusing
- *      computeCardEnvelopeRemainders unchanged). Once the cycle has closed,
- *      the actual is known and used — nothing is substituted.
+ *      month has NOT STARTED yet, there is nothing real to read, so the
+ *      card's BUDGET stands in for it (computeMonthCardCost, reusing
+ *      computeCardEnvelopeRemainders unchanged). A cycle in progress counts
+ *      its actual so far (Lineu, 2026-11-13); a closed one its final actual.
  * That's the whole model. There used to be a third input (a trailing
  * variable-spend estimate) — removed. It was never part of the requirement
  * and it duplicated what dated entries already do honestly.
@@ -162,6 +162,13 @@ export type CardCostTerm = {
   basis: CardCostBasis;
   amount: number; // 0 when basis === 'posted' — already inside the anchor
   noData: boolean;
+  // basis 'actual' on a statement still running: the amount is what's on it
+  // so far — every dated entry in the window, since the plan counts whatever
+  // is dated (a recurring bill later in the cycle included). A separate
+  // flag, not a fifth basis, on purpose: installed mobile builds (1.0,
+  // 1.1.0) refuse a basis they don't know (homeLoader BASES), and they label
+  // 'actual' truthfully. Newer clients add "statement still open".
+  inProgress: boolean;
 };
 
 export function computeMonthCardCost(params: {
@@ -192,11 +199,11 @@ export function computeMonthCardCost(params: {
       excludeAlreadyPosted && bridgePaymentDate(cycleMonth, card.payment_day ?? 1) <= today;
 
     if (alreadyPosted) {
-      return { cardId: r.cardId, cardName: r.cardName, basis: 'posted', amount: 0, noData: r.noData };
+      return { cardId: r.cardId, cardName: r.cardName, basis: 'posted', amount: 0, noData: r.noData, inProgress: false };
     }
 
     const actualOwed = Math.max(0, r.actual);
-    const basis: CardCostBasis = r.closed
+    const basis: CardCostBasis = r.closed || r.inProgress
       ? 'actual'
       : r.budget === null
         ? 'actual'
@@ -204,7 +211,7 @@ export function computeMonthCardCost(params: {
           ? 'max'
           : 'budget';
 
-    return { cardId: r.cardId, cardName: r.cardName, basis, amount: r.payment, noData: r.noData };
+    return { cardId: r.cardId, cardName: r.cardName, basis, amount: r.payment, noData: r.noData, inProgress: r.inProgress };
   });
 
   return { terms, total: r2(terms.reduce((sum, t) => sum + t.amount, 0)) };
