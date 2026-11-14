@@ -163,6 +163,27 @@ export default function SnapshotCard({
   // not closed yet, which made the plan look wrong beside them.
   const isFutureMonth = showPlanTile && currentMonth !== undefined && month > currentMonth && !!planMonth;
 
+  const planTile = showPlanTile ? (
+    <PlanChainTile
+      horizonLocked={horizonLocked}
+      horizonRemainingMonths={horizonRemainingMonths}
+      monthLabel={monthLabel}
+      currentMonthLabel={monthLabelFor(currentMonth as string, locale)}
+      isPastMonth={isPastMonth as boolean}
+      planMonth={planMonth ?? null}
+      isHorizonEnd={isHorizonEnd ?? false}
+      locale={locale}
+      recurringHref={`/${locale}/recurring`}
+      pathMonths={pathMonths}
+      statementHistory={statementHistory}
+    />
+  ) : null;
+  // The plan leads for the current month and every month ahead (Lineu,
+  // 2026-11-14: "this section is not really useful, put below plan"). A past
+  // month keeps its actuals first — there the Plan card only says the month
+  // has already happened.
+  const planFirst = showPlanTile && !isPastMonth;
+
   return (
     <div className="rounded-2xl bg-white p-4 sm:p-8" style={{ border: '1px solid #E5E7EB', opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s' }}>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
@@ -209,12 +230,16 @@ export default function SnapshotCard({
         style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E' }}
       />
 
-      {isFutureMonth ? (
+      {isFutureMonth && (
         <p className="text-xs font-medium mb-2" style={{ color: '#6B7280' }}>
           {t('plan.future.scheduledFor', { month: monthLabel })}
         </p>
-      ) : (
-        <>
+      )}
+
+      {planFirst && planTile}
+
+      {!isFutureMonth && (
+        <div className={planFirst ? 'mt-6' : undefined}>
         {/* Subject line. This tile and the projection tile below treat the same
             borrowed dollars in opposite ways, which reads as a contradiction
             until each one says which question it answers. This is a FLOW —
@@ -342,24 +367,10 @@ export default function SnapshotCard({
             {t('viewRealBalance')}
           </Link>
         </p>
-        </>
+        </div>
       )}
 
-      {showPlanTile && (
-        <PlanChainTile
-          horizonLocked={horizonLocked}
-          horizonRemainingMonths={horizonRemainingMonths}
-          monthLabel={monthLabel}
-          currentMonthLabel={monthLabelFor(currentMonth as string, locale)}
-          isPastMonth={isPastMonth as boolean}
-          planMonth={planMonth ?? null}
-          isHorizonEnd={isHorizonEnd ?? false}
-          locale={locale}
-          recurringHref={`/${locale}/recurring`}
-          pathMonths={pathMonths}
-          statementHistory={statementHistory}
-        />
-      )}
+      {!planFirst && planTile}
     </div>
   );
 }

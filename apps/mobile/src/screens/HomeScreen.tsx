@@ -509,17 +509,22 @@ export default function HomeScreen() {
           />
         )}
         {/* A month still ahead has no actuals: its header says only which
-            month the plan is for. The current month keeps its actuals. */}
-        {load && (load.plan.kind === 'future' && load.month > load.context.currentMonth
-          ? <ScheduledCard month={load.month} />
-          : <SnapshotCard snapshot={load.snapshot} month={load.month} isPastMonth={load.isPastMonth} />)}
-        {load && (
-          <PlanCard
-            plan={load.plan}
-            month={load.month}
-            currentMonth={load.context.currentMonth}
-            borrowed={load.snapshot.borrowed}
-          />
+            month the plan is for. */}
+        {load && load.plan.kind === 'future' && load.month > load.context.currentMonth && (
+          <ScheduledCard month={load.month} />
+        )}
+        {/* The plan leads for the current month and every month ahead (Lineu,
+            2026-11-14); the current month's actuals follow it. A past month
+            keeps its actuals first — its Plan card only says the month has
+            already happened. */}
+        {load && !load.isPastMonth && (
+          <PlanCard plan={load.plan} month={load.month} currentMonth={load.context.currentMonth} borrowed={load.snapshot.borrowed} />
+        )}
+        {load && !(load.plan.kind === 'future' && load.month > load.context.currentMonth) && (
+          <SnapshotCard snapshot={load.snapshot} month={load.month} isPastMonth={load.isPastMonth} />
+        )}
+        {load && load.isPastMonth && (
+          <PlanCard plan={load.plan} month={load.month} currentMonth={load.context.currentMonth} borrowed={load.snapshot.borrowed} />
         )}
       </ScrollView>
     </SafeAreaView>

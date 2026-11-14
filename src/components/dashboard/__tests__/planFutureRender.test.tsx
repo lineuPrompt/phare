@@ -247,6 +247,21 @@ describe('Plan card — the current month takes the same sum; past months are un
     expect(out).not.toContain('Solde réel');
   });
 
+  it('current month: the plan comes first, this month\'s actuals below it', () => {
+    const out = render('en', '2026-11', NOV);
+    const plan = out.indexOf('Planned chequing balance');
+    const actuals = out.indexOf('Did this month cover itself?');
+    expect(plan).toBeGreaterThan(-1);
+    expect(actuals).toBeGreaterThan(plan);
+    // The whole actuals block, Timeline link included, sits after the plan's last line.
+    expect(out.indexOf('View your real balance in Timeline')).toBeGreaterThan(out.indexOf('An estimate'));
+  });
+
+  it('past month: actuals first, then the "already happened" note', () => {
+    const out = render('en', '2026-09', null);
+    expect(out.indexOf('Did this month cover itself?')).toBeLessThan(out.indexOf('has already happened'));
+  });
+
   it('past month: unchanged — no path, no statement check', () => {
     const out = render('en', '2026-09', null);
     expect(out).toContain('has already happened');
