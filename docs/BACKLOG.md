@@ -154,6 +154,16 @@ the v1.1 list separately.**
 - ~~**`GET /api/goals` ignores read errors**~~ FIXED in code 2026-10-29,
   uncommitted (route, web Goals page, Timeline entry form). —
   [ticket](tickets/goals-get-ignores-read-errors.md)
+- **STOP — Monthly review uses the Plan card's findings (handoff 4, Lineu,
+  2026-11-14).** Design reported 2026-11-14, AWAITING APPROVAL; nothing
+  changed in the service or the prompts. Plan chain extracted from
+  /api/timeline into one server function for the route and the letter;
+  `planAhead` + code-ranked `findings` in the payload; letter opens with
+  findings[0]; recommendation must carry one of its figures. Dry run over
+  2be22642 (real AI, in memory, row counts unchanged): the opening worked,
+  and the AI's recommendation failed its guard twice (code's line used).
+  Open: the 300-word cap was ignored (375 words), and a figure was put on
+  the wrong card ("Visa Avion … budgeted $4,550"), which no guard catches.
 - **Monthly review: the month-end letter gets its own row (Lineu, 2026-11-02).**
   Lineu's October review was never written: his 13 October refresh held
   October's only slot and the 1 November run could only take it over.
