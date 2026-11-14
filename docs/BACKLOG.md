@@ -393,6 +393,13 @@ the v1.1 list separately.**
   when asked about November and December. They still hold the Aug 6 plan
   (Groceries $550).
 
+- *(new 2026-11-14)* Decide the fix for the future-month "Real balance at
+  close" on the Plan tile. It leaves out card statements that haven't closed
+  yet (about $17k over Dec–May for 2be22642), so the plan looks wrong next
+  to it. Options and numbers:
+  [ticket](tickets/future-month-real-close-omits-card-cost.md). This is a web +
+  app copy change, or money math if the fix projects card cycles (then STOP).
+
 ## WAITING ON DATA
 
 - (none — the upload-screen inversion became READY item 5, visual only.)
