@@ -51,6 +51,7 @@ export type CardBasis = 'actual' | 'budget' | 'max' | 'posted';
 /** The month's lines, as planChainHelpers.computeMonthBreakdown sends them. */
 type LinesPayload = {
   income: unknown; bills: unknown; savings: unknown; debtPayments: unknown;
+  savingsByDestination?: { accountId: string | null; name: string | null; amount: unknown }[];
   drawn: unknown; leftAfterBillsAndSavings: unknown; cards: unknown;
 };
 
@@ -70,7 +71,7 @@ type PlanMonthPayload = {
   why?: { kind?: unknown; [field: string]: unknown } | null;
 };
 
-type StatementPayload = { cardId: string; cardName: string; count: unknown; low: unknown; high: unknown };
+type StatementPayload = { cardId: string; cardName: string; count: unknown; average: unknown };
 
 type HomeTimelineResponse =
   | (TimelineOk & { plan: { months: PlanMonthPayload[]; statementHistory?: StatementPayload[] } | null })
@@ -120,11 +121,15 @@ export type HomePlanCard = { cardId: string; cardName: string; basis: CardBasis;
 /** The month-end path: every month the household can see. */
 export type HomePathPoint = { month: string; balance: number };
 
-/** A card's budget for the viewed month beside its real closed statements (low, high, how many). */
-export type HomeStatement = { cardId: string; cardName: string; budget: number | null; count: number; low: number; high: number };
+/** A card's budget for the viewed month beside the average of its real closed statements (the server's), and how many. */
+export type HomeStatement = { cardId: string; cardName: string; budget: number | null; count: number; average: number };
 
 /** A future month's sum. Every line is the server's; nothing here is added up. */
-export type HomePlanLines = { income: number; bills: number; savings: number; debtPayments: number; drawn: number };
+export type HomePlanLines = {
+  income: number; bills: number; savings: number; debtPayments: number; drawn: number;
+  /** Where the savings went — the server's partition, as on the snapshot. `name: null` is "Other". */
+  savingsLines: { key: string; name: string | null; amount: number }[];
+};
 
 /** Why a month dips — chosen by the server (explainPlanPath), worded here. */
 export type HomeWhy =
@@ -155,13 +160,16 @@ export type HomePlan =
       statements: HomeStatement[];
     }
   /**
-   * A month after the current one (2026-11-14): ONE basis, the plan, as a sum
-   * that adds up. No real-balance lines — they leave out card statements that
-   * have not closed yet. `lines: null` is a breakdown the server could not
-   * build: the card shows only that message, never a partial sum.
+   * The current month and every month after it (2026-11-14): ONE basis, the
+   * plan, as a sum that adds up. The current month (isPartialMonth) starts
+   * from today's balance. No real-balance lines — they leave out card
+   * statements that have not closed yet. `lines: null` is a breakdown the
+   * server could not build: the card shows only that message, never a
+   * partial sum. (`kind: 'ready'` remains for a server older than this.)
    */
   | {
       kind: 'future';
+      isPartialMonth: boolean;
       startBalance: number;
       lines: HomePlanLines | null;
       balance: number;
@@ -276,8 +284,7 @@ function statementsFrom(history: StatementPayload[] | undefined, planMonth: Plan
       cardName: text(h.cardName, 'statement card name'),
       budget: budget === undefined || budget === null ? null : amount(budget, 'card budget'),
       count: amount(h.count, 'statement count'),
-      low: amount(h.low, 'statement low'),
-      high: amount(h.high, 'statement high'),
+      average: amount(h.average, 'statement average'),
     };
   });
 }
@@ -317,6 +324,11 @@ function linesFrom(breakdown: NonNullable<PlanMonthPayload['breakdown']>): HomeP
     income: amount(l.income, 'lines income'),
     bills: amount(l.bills, 'lines bills'),
     savings: amount(l.savings, 'lines savings'),
+    savingsLines: (l.savingsByDestination ?? []).map((line) => ({
+      key: line.accountId ?? '__other__',
+      name: line.name ?? null,
+      amount: amount(line.amount, 'lines savingsByDestination.amount'),
+    })),
     debtPayments: amount(l.debtPayments, 'lines debtPayments'),
     drawn: amount(l.drawn, 'lines drawn'),
   };
@@ -337,10 +349,11 @@ function planFrom(data: HomeTimelineResponse, month: string, currentMonth: strin
   const path = pathFrom(data.plan?.months ?? []);
   const statements = statementsFrom(data.plan?.statementHistory, planMonth);
 
-  if (month > currentMonth && planMonth.breakdown !== undefined) {
+  if (month >= currentMonth && planMonth.breakdown !== undefined) {
     const lines = linesFrom(planMonth.breakdown);
     return {
       kind: 'future',
+      isPartialMonth: planMonth.isPartialMonth === true,
       startBalance: amount(planMonth.startBalance, 'plan startBalance'),
       lines,
       balance,

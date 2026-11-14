@@ -478,7 +478,7 @@ describe('buildPlanChain — startBalance and the month breakdown', () => {
   const DEBT = 'debt-1';
   const accounts = [
     { id: CHEQUING, type: 'chequing' },
-    { id: SAV, type: 'savings' },
+    { id: SAV, type: 'savings', name: 'Trip' },
     { id: DEBT, type: 'debt' },
   ];
   // Peers on the goal side of each transfer: their account decides the bucket.
@@ -523,6 +523,8 @@ describe('buildPlanChain — startBalance and the month breakdown', () => {
         income: 3000,
         bills: 1234.56, // the 777 card payment is the card's own term, not a bill
         savings: 300,
+        // The savings row's own destinations, named — they add up to 300.
+        savingsByDestination: [{ accountId: SAV, name: 'Trip', amount: 300 }],
         debtPayments: 200,
         drawn: 620, // 500 borrowed + 120 withdrawn
         leftAfterBillsAndSavings: 1465.44, // 3000 - 1234.56 - 300
@@ -543,6 +545,8 @@ describe('buildPlanChain — startBalance and the month breakdown', () => {
       expect(c(m.startBalance) + c(l.income) + c(l.drawn) - c(l.bills) - c(l.savings) - c(l.debtPayments) - c(l.cards))
         .toBe(c(m.balance));
       expect(l.cards).toBe(m.cardCostTotal);
+      // The savings row opens to parts that add up to it exactly.
+      expect(l.savingsByDestination.reduce((sum, d) => sum + c(d.amount), 0)).toBe(c(l.savings));
     }
   });
 
@@ -587,14 +591,14 @@ describe('explainPlanPath', () => {
     return {
       rangeStart: `${over.month}-01`, rangeEnd: `${over.month}-28`, isPartialMonth: false,
       income: 0, datedExpenses: 0, cardCost: [], cardCostTotal: 0,
-      breakdown: { status: 'ok', lines: { income: 0, bills: 0, savings: 0, debtPayments: 0, drawn: 0, leftAfterBillsAndSavings: 0, cards: 0 } },
+      breakdown: { status: 'ok', lines: { income: 0, bills: 0, savings: 0, savingsByDestination: [], debtPayments: 0, drawn: 0, leftAfterBillsAndSavings: 0, cards: 0 } },
       extraPayments: [], why: null, unanchoredIncomeCount: 0, unanchoredExpenseCount: 0,
       ...over,
     };
   }
   const lines = (left: number, cards: number) => ({
     status: 'ok' as const,
-    lines: { income: 0, bills: 0, savings: 0, debtPayments: 0, drawn: 0, leftAfterBillsAndSavings: left, cards },
+    lines: { income: 0, bills: 0, savings: 0, savingsByDestination: [], debtPayments: 0, drawn: 0, leftAfterBillsAndSavings: left, cards },
   });
   const extra = (name: string) => ({ name, occurrences: 3, usualOccurrences: 2, dates: ['2027-05-03', '2027-05-17', '2027-05-31'] });
 
@@ -670,10 +674,11 @@ describe('computeStatementHistory', () => {
     spend('2026-11-01', 999), // the open statement, never in the check
   ];
 
-  it('the last 4 closed statements, newest first, their low and high', () => {
+  it('the last 4 closed statements, newest first, and their average to the cent', () => {
     const [h] = computeStatementHistory({ ...base, cardTransactions: txns, firstTransactionDate: new Map([[CARD_A, '2026-07-01']]) });
     expect(h).toEqual({
-      cardId: CARD_A, cardName: 'Visa', count: 4, low: 4049.28, high: 5696.18,
+      // (5696.18 + 5197.77 + 4049.28 + 4522.01) / 4 = 19,465.24 / 4
+      cardId: CARD_A, cardName: 'Visa', count: 4, average: 4866.31,
       statements: [
         { cycleMonth: '2026-10', total: 5696.18 },
         { cycleMonth: '2026-09', total: 5197.77 },
@@ -689,13 +694,13 @@ describe('computeStatementHistory', () => {
       firstTransactionDate: new Map([[CARD_A, '2026-06-01']]),
     });
     expect(h.count).toBe(4);
-    expect(h.low).toBe(4049.28); // the June statement ($10) is the 5th — not in the range
+    expect(h.average).toBe(4866.31); // the June statement ($10) is the 5th — not averaged in
   });
 
   it('a statement that ended before the first transaction is skipped, not a $0 statement', () => {
     const [h] = computeStatementHistory({ ...base, cardTransactions: txns, firstTransactionDate: new Map([[CARD_A, '2026-08-01']]) });
     expect(h.statements.map((s) => s.cycleMonth)).toEqual(['2026-10', '2026-09', '2026-08']);
-    expect(h.low).toBe(4049.28);
+    expect(h.average).toBe(4981.08); // (5696.18 + 5197.77 + 4049.28) / 3 = 4981.0766…, to the cent
   });
 
   it('fewer than 2 statements, or no transaction ever, leaves the card out', () => {

@@ -400,7 +400,7 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
       accounts: [
         baseScript.accounts[0],
         baseScript.accounts[1],
-        { data: [{ id: 'acc-1', type: 'chequing' }, { id: 'sav-1', type: 'savings' }] },
+        { data: [{ id: 'acc-1', type: 'chequing' }, { id: 'sav-1', type: 'savings', name: 'Bigode' }] },
       ],
     });
     const { createClient } = await import('@/lib/supabase-server');
@@ -418,7 +418,11 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
     expect(json.plan.months[0].startBalance).toBe(1000);
     expect(json.plan.months[0].breakdown).toEqual({
       status: 'ok',
-      lines: { income: 0, bills: 0, savings: 350, debtPayments: 0, drawn: 0, leftAfterBillsAndSavings: -350, cards: 0 },
+      lines: {
+        income: 0, bills: 0, savings: 350, debtPayments: 0, drawn: 0, leftAfterBillsAndSavings: -350, cards: 0,
+        // Named from the accounts read, for the expandable savings row.
+        savingsByDestination: [{ accountId: 'sav-1', name: 'Bigode', amount: 350 }],
+      },
     });
   });
 
@@ -559,7 +563,7 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
 
     const json = await (await getTimeline('account=acc-1&includePlan=1')).json();
     expect(json.plan.statementHistory).toEqual([{
-      cardId: 'card-1', cardName: 'Visa', count: 2, low: 100, high: 200,
+      cardId: 'card-1', cardName: 'Visa', count: 2, average: 150,
       statements: [{ cycleMonth: '2026-07', total: 200 }, { cycleMonth: '2026-06', total: 100 }],
     }]);
   });

@@ -2,34 +2,21 @@
 
 import { useTranslations } from 'next-intl';
 import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
-import type { PlanChainMonthPayload, CardCostBasis, CardStatementHistory } from '@/lib/planChainHelpers';
+import type { PlanChainMonthPayload, CardStatementHistory } from '@/lib/planChainHelpers';
 import { FuturePlanSum, PlanWhyLine, PlanPathChart, StatementCheck } from './PlanFutureParts';
-import { formatCurrency } from './types';
 import UpgradeButton from '@/components/billing/UpgradeButton';
 
-// A statement still running is 'actual' with inProgress: what's on it so far.
-function basisKey(
-  basis: CardCostBasis,
-  inProgress: boolean
-): 'basisActual' | 'basisSoFar' | 'basisBudget' | 'basisMax' | 'basisPosted' {
-  if (basis === 'actual' && inProgress) return 'basisSoFar';
-  switch (basis) {
-    case 'actual': return 'basisActual';
-    case 'budget': return 'basisBudget';
-    case 'max': return 'basisMax';
-    case 'posted': return 'basisPosted';
-  }
-}
-
-// Replaces the retired single-month "Projected month-end" tile. Lives on
-// the dashboard snapshot, follows the SAME month nav as the rest of the
-// card. realCloseAmount is shown first — it's THE figure the chain must be
-// read against (planChainHelpers.ts's INVARIANT: for the current month,
-// plan <= real close, and equals it exactly once every card cycle has
-// closed). carriedInAmount (the month's opening balance) is kept only as
-// secondary context. Neither is stacked as if it arithmetically resolves
-// into the chain figure below it — each is labeled by the question it
-// answers.
+// The Plan card on the dashboard snapshot, following the same month nav.
+//
+// ONE BASIS, THE PLAN (2026-11-14). The current month and every month after
+// it show the plan as a sum that adds up (FuturePlanSum): the current month
+// starts from today's real balance and adds what is still scheduled; a future
+// month starts where the month before it ends. The "real balance at close /
+// carried in" lines are gone: for any month still running or ahead, they left
+// out card statements that have not closed yet, and the plan looked wrong
+// beside them (docs/tickets/future-month-real-close-omits-card-cost.md).
+// Borrowed cash is not a separate caption any more — it is the sum's own
+// "From savings / borrowed" row.
 export default function PlanChainTile({
   monthLabel,
   currentMonthLabel,
@@ -38,12 +25,8 @@ export default function PlanChainTile({
   isHorizonEnd,
   horizonLocked = false,
   horizonRemainingMonths = 0,
-  carriedInAmount,
-  realCloseAmount,
-  totalBorrowed,
   locale,
   recurringHref,
-  isFutureMonth = false,
   pathMonths = [],
   statementHistory = [],
 }: {
@@ -59,20 +42,9 @@ export default function PlanChainTile({
   // reason (genuinely outside the window), which must still render nothing.
   horizonLocked?: boolean;
   horizonRemainingMonths?: number;
-  // The real OPENING balance for `month` (buildMonthView's opensAt) —
-  // secondary context only.
-  carriedInAmount: number | null;
-  // THE figure the plan must be read against (buildMonthView's closesAt).
-  realCloseAmount: number | null;
-  totalBorrowed: number;
   locale: string;
   recurringHref: string;
-  // A month after the current one (2026-11-14): ONE basis, the plan, as a sum
-  // that adds up (FuturePlanSum) — the real-balance lines are not shown, they
-  // leave out card statements that have not closed yet.
-  isFutureMonth?: boolean;
-  // Every month the household can see, for the month-end path (current and
-  // future months alike).
+  // Every month the household can see, for the month-end path.
   pathMonths?: { month: string; balance: number }[];
   statementHistory?: CardStatementHistory[];
 }) {
@@ -100,7 +72,7 @@ export default function PlanChainTile({
   // projection silently gone reads as a bug; saying what is behind it reads as
   // a tier. Deliberately an invitation and not a wall — it names the thing
   // ("9 more months of projection") and links to the plan. No countdown, no
-  // urgency, nothing that pressures a family looking at their own money.
+  // urgency, nothing that pressures a household looking at their own money.
   if (!planMonth && horizonLocked) {
     return (
       <div className="mt-4 rounded-2xl p-4 sm:p-6" style={{ background: '#0F2044' }}>
@@ -122,15 +94,7 @@ export default function PlanChainTile({
   // never a fabricated figure, hide entirely.
   if (!planMonth) return null;
 
-  const positive = planMonth.balance >= 0;
-
   return (
-    // Same treatment as TopPriorityCard (#0F2044 ground, #2ABFBF label, white
-    // figure) — this is the dashboard's other "here is the number that
-    // matters" card, and it read as a footnote to the snapshot while it sat on
-    // white. Every colour below is the on-dark counterpart of what it replaced,
-    // NOT a new palette: the muted greys become slate, the purples become the
-    // light violet that survives on navy.
     <div className="mt-4 rounded-2xl p-4 sm:p-6" style={{ background: '#0F2044' }}>
       <span
         className="inline-block text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full mb-2"
@@ -139,82 +103,16 @@ export default function PlanChainTile({
         {t('badge')}
       </span>
 
-      {isFutureMonth ? (
-        <>
-          <p className="text-sm font-medium" style={{ color: '#2ABFBF' }}>
-            {t('future.question')}
-          </p>
-          <p className="text-sm" style={{ color: '#94A3B8' }}>
-            {t('future.label')}
-          </p>
-          <FuturePlanSum planMonth={planMonth} monthLabel={monthLabel} locale={locale} />
-          <PlanWhyLine planMonth={planMonth} monthLabel={monthLabel} locale={locale} />
-        </>
-      ) : (
-        <>
-        {realCloseAmount !== null && (
-          <p className="text-xs" style={{ color: '#94A3B8' }}>
-            {t('closesAt', { month: monthLabel, amount: formatCurrency(realCloseAmount, locale) })}
-          </p>
-        )}
-        {carriedInAmount !== null && (
-          <p className="text-xs mb-2" style={{ color: '#64748B' }}>
-            {t('carriedIn', { month: monthLabel, amount: formatCurrency(carriedInAmount, locale) })}
-          </p>
-        )}
-
-        {/* Subject line — see SnapshotCard's. This is a STOCK ("how much money
-            will actually be there"), so borrowed cash IS counted: it really is
-            in chequing. Saying which question this answers is what stops the
-            different treatment reading as an inconsistency. */}
-        <p className="text-sm font-medium" style={{ color: '#2ABFBF' }}>
-          {t('question')}
-        </p>
-        <p className="text-sm mb-1" style={{ color: '#94A3B8' }}>
-          {t(planMonth.isPartialMonth ? 'labelRemainder' : 'labelFull', { month: monthLabel })}
-        </p>
-        {/* A negative projection must still read as bad on a dark ground — white
-            would flatten it into just another figure. */}
-        <p className="text-2xl font-bold" style={{ color: positive ? '#FFFFFF' : '#FCA5A5' }}>
-          {formatCurrency(planMonth.balance, locale)}
-        </p>
-
-        {planMonth.cardCost.length > 0 && (
-          <ul className="mt-3 space-y-1">
-            {planMonth.cardCost.map((c) => (
-              <li key={c.cardId} className="text-xs" style={{ color: '#C4B5FD' }}>
-                {t(basisKey(c.basis, c.inProgress), { card: c.cardName, amount: formatCurrency(c.amount, locale) })}
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {/* BORROWED DISCLOSURE — deliberately a caption here, not a red alarm.
-            Superseded decision (founder call, 2026-08-01): this used to be a red
-            box at "the same prominence as the surplus box above", on the
-            reasoning that the reader needs an identical "this was borrowed"
-            signal. In use that backfired. The same $2,000 appeared twice on one
-            screen in two identical red boxes with opposite verbs — "NOT counted
-            in this surplus" here vs "Includes ... borrowed" there — and read as
-            a contradiction rather than a warning. ("o que nao fecha pra mim.")
-
-            The SIGNAL stays and is unconditional; only its alarm level changes.
-            A warning that gets read as noise protects nobody, and the two tiles
-            are not in conflict — they answer different questions, which the
-            subject lines now say out loud. One alarm, on the snapshot, where
-            borrowing genuinely qualifies the month. Here it qualifies a balance
-            that really is in chequing, so it sits in the tile's own colour,
-            subordinate to the number it describes.
-
-            Do not restore the red box without also removing the snapshot's —
-            two alarms for one dollar amount is what caused the confusion. */}
-        {totalBorrowed > 0 && (
-          <p className="text-sm font-semibold mt-2" style={{ color: '#C4B5FD' }}>
-            {t('borrowedNote', { amount: formatCurrency(totalBorrowed, locale) })}
-          </p>
-        )}
-        </>
-      )}
+      <p className="text-sm font-medium" style={{ color: '#2ABFBF' }}>
+        {t('future.question')}
+      </p>
+      <p className="text-sm" style={{ color: '#94A3B8' }}>
+        {planMonth.isPartialMonth
+          ? t('future.labelRemainder', { month: monthLabel })
+          : t('future.label')}
+      </p>
+      <FuturePlanSum planMonth={planMonth} monthLabel={monthLabel} locale={locale} />
+      <PlanWhyLine planMonth={planMonth} monthLabel={monthLabel} locale={locale} />
 
       <AwaitingDatesNotice
         incomeCount={planMonth.unanchoredIncomeCount}
@@ -227,12 +125,9 @@ export default function PlanChainTile({
       <PlanPathChart months={pathMonths} selectedMonth={planMonth.month} locale={locale} />
       <StatementCheck history={statementHistory} cardCost={planMonth.cardCost} locale={locale} />
 
-      {/* No Timeline link here. SnapshotCard renders one seven lines above
-          this tile, to the identical URL — and its sentence ("this month's
-          cash flow only, not your running balance") is what sets that link
-          up, so it is the one that has to keep it. Two adjacent links to the
-          same place had already drifted to different wording in both
-          locales; this note stands on its own without one. */}
+      {/* No Timeline link here: the snapshot above carries it for the
+          current month, and the month name in the card's header links there
+          for every month. */}
       <p className="text-xs mt-2" style={{ color: '#94A3B8' }}>
         {t('note')}
       </p>

@@ -274,6 +274,11 @@ export type PlanMonthLines = {
   income: number;
   bills: number; // chequing expenses; card payments (is_bridge) excluded
   savings: number;
+  // Where the savings line went — computeMonthTotals' own integer-cent
+  // partition, so the parts add up to `savings` exactly (the snapshot's
+  // expandable savings row, 2026-11-14). name: null is "Other" — a
+  // contribution whose destination account can no longer be named.
+  savingsByDestination: { accountId: string | null; name: string | null; amount: number }[];
   debtPayments: number;
   // Cash coming IN from a debt account or a savings account. One row on
   // screen ("From savings / borrowed"); summed here, in cents, never by a client.
@@ -349,7 +354,7 @@ function cents(n: number): number {
 export function computeMonthBreakdown(params: {
   monthRows: ChequingChainTx[];
   peerRows: TxRow[];
-  accounts: AccountRow[];
+  accounts: (AccountRow & { name?: string | null })[];
   chainIncome: number;
   chainExpenses: number;
   cardCostTotal: number;
@@ -382,6 +387,11 @@ export function computeMonthBreakdown(params: {
       income: totals.totalIncome,
       bills: totals.totalExpenses,
       savings: totals.totalSavings,
+      savingsByDestination: totals.savingsByDestination.map((d) => ({
+        accountId: d.accountId,
+        name: d.accountId === null ? null : accounts.find((a) => a.id === d.accountId)?.name ?? null,
+        amount: d.amount,
+      })),
       debtPayments: totals.totalDebtPayments,
       drawn: drawnC / 100,
       leftAfterBillsAndSavings:
@@ -472,17 +482,19 @@ export function explainPlanPath(months: PlanChainMonth[]): PlanChainMonth[] {
 //
 // Per card, its last closed statements (up to 4), totalled by the Cards page's
 // own totalSpendForCard over its statement windows, with cycleState deciding
-// "closed". Real statements, never an average: the low and the high, and how
-// many statements they cover. A statement that ended before the card's first
-// recorded transaction is not a $0 statement — it is no data — so it is
-// skipped. A card with fewer than 2 is left out.
+// "closed". Shown as their AVERAGE with how many statements it covers — a
+// deliberate exception to "real months, never averages", Lineu 2026-11-14
+// (it replaced a low–high range). The average is of real closed statements
+// only, computed here once in integer cents; no client recomputes it. A
+// statement that ended before the card's first recorded transaction is not a
+// $0 statement — it is no data — so it is skipped and never pulls the average
+// down. A card with fewer than 2 is left out.
 
 export type CardStatementHistory = {
   cardId: string;
   cardName: string;
   count: number;
-  low: number;
-  high: number;
+  average: number; // sum of the statements' cents ÷ count, rounded to the cent
   statements: { cycleMonth: string; total: number }[]; // newest first
 };
 
@@ -515,13 +527,12 @@ export function computeStatementHistory(params: {
       });
     }
     if (statements.length < 2) continue;
-    const totals = statements.map((s) => s.total);
+    const totalCents = statements.reduce((sum, s) => sum + cents(s.total), 0);
     out.push({
       cardId: card.id,
       cardName: card.name,
       count: statements.length,
-      low: Math.min(...totals),
-      high: Math.max(...totals),
+      average: Math.round(totalCents / statements.length) / 100,
       statements,
     });
   }
@@ -551,7 +562,7 @@ export function buildPlanChain(params: {
   // For the breakdown and the extra payments only — the balance never reads
   // them. Absent: every transfer classifies as savings (computeMonthTotals'
   // own fallback) and no extra payment is found.
-  accounts?: AccountRow[];
+  accounts?: (AccountRow & { name?: string | null })[];
   transferPeers?: TxRow[];
   recurringItems?: { id: string; description: string; cadence: string; type: string }[];
 }): PlanChainMonth[] {

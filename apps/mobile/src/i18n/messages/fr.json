@@ -542,6 +542,8 @@
         "scheduledFor": "Prévu pour {month}",
         "question": "Solde prévu du compte chèques",
         "label": "Si les factures et les budgets de cartes se réalisent comme prévu",
+        "labelRemainder": "Si les factures et les budgets de cartes du reste de {month} se réalisent comme prévu",
+        "startToday": "Solde d'aujourd'hui",
         "start": "Début {month} (prévu)",
         "income": "Revenus prévus",
         "drawn": "Tiré de l'épargne ou emprunté",
@@ -569,8 +571,8 @@
       },
       "statements": {
         "title": "Budgets de cartes et relevés réels",
-        "row": "{card} : budget de {budget} · {count} derniers relevés : de {low} à {high}",
-        "rowNoBudget": "{card} : aucun budget · {count} derniers relevés : de {low} à {high}"
+        "row": "{card} : budget de {budget} · moyenne des {count} derniers relevés : {average}",
+        "rowNoBudget": "{card} : aucun budget · moyenne des {count} derniers relevés : {average}"
       }
     },
     "awaitingDates": "Certains revenus ou certaines factures n'ont pas encore de date et ne sont donc pas comptés ici. Indiquez leurs dates sur phare.money.",

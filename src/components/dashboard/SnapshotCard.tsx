@@ -105,8 +105,6 @@ export default function SnapshotCard({
   unanchoredExpenseCount,
   currentMonth,
   isPastMonth,
-  carriedInAmount,
-  realCloseAmount,
   planMonth,
   isHorizonEnd,
   horizonLocked,
@@ -137,10 +135,6 @@ export default function SnapshotCard({
   // navigates. undefined hides the section entirely — see PlanChainTile.
   currentMonth?: string;
   isPastMonth?: boolean;
-  carriedInAmount?: number | null;
-  // THE figure the plan must be read against (plan <= realCloseAmount) —
-  // see PlanChainTile.
-  realCloseAmount?: number | null;
   planMonth?: PlanChainMonthPayload | null;
   isHorizonEnd?: boolean;
   // Pure pass-through to PlanChainTile — SnapshotCard makes no tier decision
@@ -360,12 +354,8 @@ export default function SnapshotCard({
           isPastMonth={isPastMonth as boolean}
           planMonth={planMonth ?? null}
           isHorizonEnd={isHorizonEnd ?? false}
-          carriedInAmount={carriedInAmount ?? null}
-          realCloseAmount={realCloseAmount ?? null}
-          totalBorrowed={summary.totalBorrowed}
           locale={locale}
           recurringHref={`/${locale}/recurring`}
-          isFutureMonth={isFutureMonth}
           pathMonths={pathMonths}
           statementHistory={statementHistory}
         />

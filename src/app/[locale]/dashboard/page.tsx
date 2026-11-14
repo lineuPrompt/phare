@@ -17,7 +17,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import { addMonthsToMonth } from '@/lib/goalHelpers';
 import type { TimelineDay, DipInfo } from '@/lib/timelineHelpers';
 import TimelineHeader from '@/components/timeline/TimelineHeader';
-import { buildMonthView, type UnbalancedDay } from '@/lib/timelineDisplayHelpers';
+import type { UnbalancedDay } from '@/lib/timelineDisplayHelpers';
 import type { PlanChainMonthPayload, CardStatementHistory } from '@/lib/planChainHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 import SupportLine from '@/components/shared/SupportLine';
@@ -83,14 +83,9 @@ export default function DashboardPage() {
   // when we could not check.
   const [hasAnchor, setHasAnchor] = useState(true);
 
-  // Plan tile (replaces the retired single-month "Projected month-end" tile)
-  // — slices the SAME single /api/timeline fetch above (real balance walk,
-  // via buildMonthView, for the truthful carriedIn caption) plus its
-  // includePlan=1 addition (the chained 12-month plan). One fetch, two uses.
-  const [timelineDays, setTimelineDays] = useState<TimelineDay[]>([]);
-  const [timelineUnbalancedDays, setTimelineUnbalancedDays] = useState<UnbalancedDay[]>([]);
-  const [timelineOpeningBalance, setTimelineOpeningBalance] = useState(0);
-  const [timelineBalancesStartDate, setTimelineBalancesStartDate] = useState<string | null>(null);
+  // Plan tile — the chained 12-month plan from the SAME /api/timeline fetch
+  // (includePlan=1). The real-balance lines it used to slice from that walk
+  // are gone (2026-11-14): the plan shows one basis, as a sum.
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   // The Timeline's "Balance today" card (Lineu, 2026-11-01: shown again on
   // the Overview, above the snapshot). Same component, same figures from the
@@ -107,28 +102,11 @@ export default function DashboardPage() {
       })
       .then((d: TimelineDipResponse | null) => {
         if (!d || !d.ok) { setHasAnchor(false); return; }
-        setTimelineDays(d.days);
-        setTimelineUnbalancedDays(d.unbalancedDays ?? []);
-        setTimelineOpeningBalance(d.openingBalance);
-        setTimelineBalancesStartDate(d.balancesStartDate);
         setPlan(d.plan ?? null);
         setBalanceCard({ todayBalance: d.todayBalance, dip: d.dip, nextIncomeDate: d.nextIncomeDate });
       })
       .catch(() => {});
   }, []);
-
-  // Real carried-in balance for the viewed month — pure re-slice, not a
-  // recompute (same buildCashTimeline walk already fetched above). null
-  // whenever displayMonth falls outside the fetched window (e.g. a past
-  // month — this fetch only covers currentMonth..currentMonth+11).
-  const monthView = timelineBalancesStartDate
-    ? buildMonthView(timelineDays, timelineUnbalancedDays, timelineOpeningBalance, timelineBalancesStartDate, displayMonth)
-    : null;
-  const carriedInAmount = monthView?.opensAt ?? null;
-  // THE comparison figure for the plan invariant (plan <= real close,
-  // planChainHelpers.ts's INVARIANT note) — opensAt alone left that
-  // comparison invisible on screen. Same object, already computed.
-  const realCloseAmount = monthView?.closesAt ?? null;
 
   // The chain entry for the viewed month — plan.months only ever spans
   // currentMonth..currentMonth+11 (buildPlanChain, planChainHelpers.ts), so
@@ -358,8 +336,6 @@ export default function DashboardPage() {
                   unanchoredExpenseCount={data.unanchoredExpenseCount}
                   currentMonth={calendarMonth}
                   isPastMonth={isPastMonth}
-                  carriedInAmount={carriedInAmount}
-                  realCloseAmount={realCloseAmount}
                   planMonth={planMonth}
                   isHorizonEnd={isHorizonEnd}
                   horizonLocked={horizonLock.locked}

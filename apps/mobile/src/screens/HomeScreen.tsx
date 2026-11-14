@@ -261,10 +261,15 @@ function PlanCard({
         <Text style={styles.badge}>{t('home.plan.badge')}</Text>
         <View>
           <Text style={styles.planQuestion}>{t('home.plan.future.question')}</Text>
-          <Text style={styles.planLabel}>{t('home.plan.future.label')}</Text>
+          <Text style={styles.planLabel}>
+            {plan.isPartialMonth
+              ? t('home.plan.future.labelRemainder', { month: monthLabel })
+              : t('home.plan.future.label')}
+          </Text>
         </View>
         <FutureSum
           month={month}
+          isPartialMonth={plan.isPartialMonth}
           startBalance={plan.startBalance}
           lines={plan.lines}
           balance={plan.balance}
@@ -503,7 +508,9 @@ export default function HomeScreen() {
             locale={locale}
           />
         )}
-        {load && (load.plan.kind === 'future'
+        {/* A month still ahead has no actuals: its header says only which
+            month the plan is for. The current month keeps its actuals. */}
+        {load && (load.plan.kind === 'future' && load.month > load.context.currentMonth
           ? <ScheduledCard month={load.month} />
           : <SnapshotCard snapshot={load.snapshot} month={load.month} isPastMonth={load.isPastMonth} />)}
         {load && (

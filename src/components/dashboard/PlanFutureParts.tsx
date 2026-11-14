@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatPlanDates, planCardBasisKey, planPathGeometry, planPathMonthLabel, sentenceStart } from '@phare/core';
 import type {
@@ -25,8 +26,10 @@ const C = {
   bar: '#2ABFBF',
 };
 
-function Row({ op, label, amount, locale, color, emphasis = false }: {
+function Row({ op, label, amount, locale, color, emphasis = false, onToggle, expanded = false, toggleLabel }: {
   op: string; label: string; amount: number; locale: string; color: string; emphasis?: boolean;
+  /** Present only on the savings row, and only when it has destinations — as on the snapshot. */
+  onToggle?: () => void; expanded?: boolean; toggleLabel?: string;
 }) {
   return (
     <div
@@ -34,9 +37,23 @@ function Row({ op, label, amount, locale, color, emphasis = false }: {
       style={emphasis ? { borderTop: `1px solid ${C.rule}` } : undefined}
     >
       <span aria-hidden="true" className="w-3 shrink-0 text-center text-sm font-semibold" style={{ color: C.operator }}>{op}</span>
+      {onToggle ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="flex-1 min-w-0 flex items-baseline gap-1.5 text-left cursor-pointer text-sm"
+          style={{ color: C.label }}
+        >
+          <span>{label}</span>
+          <span aria-hidden="true" className="text-xs" style={{ color: C.bar }}>{expanded ? '▴' : '▾'}</span>
+          <span className="sr-only">{toggleLabel}</span>
+        </button>
+      ) : (
       <span className={`flex-1 min-w-0 ${emphasis ? 'text-sm font-semibold' : 'text-sm'}`} style={{ color: emphasis ? C.white : C.label }}>
         {label}
       </span>
+      )}
       <span className={`shrink-0 tabular-nums font-bold ${emphasis ? 'text-xl' : 'text-sm'}`} style={{ color }}>
         {formatCurrency(amount, locale)}
       </span>
@@ -50,10 +67,36 @@ function Row({ op, label, amount, locale, color, emphasis = false }: {
  * breakdown that did not add up on the server is NOT drawn — no partial line,
  * no end figure — only the message.
  */
+/**
+ * Where the month's savings go, one line per destination — the same lines the
+ * snapshot's savings row opens to. They come from the server's own partition
+ * of the savings figure, so they add up to it exactly.
+ */
+export function SavingsLines({ lines, locale }: {
+  lines: { accountId: string | null; name: string | null; amount: number }[]; locale: string;
+}) {
+  const t = useTranslations('dashboard');
+  return (
+    <div className="pl-5 pb-1">
+      {lines.map((line) => (
+        <div key={line.accountId ?? '__other__'} className="flex items-baseline gap-2 py-0.5">
+          <span className="flex-1 min-w-0 text-xs" style={{ color: C.muted }}>{line.name ?? t('savingsOther')}</span>
+          <span className="shrink-0 tabular-nums text-xs" style={{ color: C.label }}>{formatCurrency(line.amount, locale)}</span>
+        </div>
+      ))}
+      {lines.some((l) => l.name === null) && (
+        <p className="text-xs" style={{ color: C.muted }}>{t('savingsOtherHint')}</p>
+      )}
+    </div>
+  );
+}
+
 export function FuturePlanSum({ planMonth, monthLabel, locale }: {
   planMonth: PlanChainMonthPayload; monthLabel: string; locale: string;
 }) {
   const t = useTranslations('dashboard.plan.future');
+  const tDash = useTranslations('dashboard');
+  const [savingsOpen, setSavingsOpen] = useState(false);
   if (planMonth.breakdown.status !== 'ok') {
     return (
       <p role="alert" className="text-sm font-medium mt-2" style={{ color: C.negative }}>
@@ -65,11 +108,22 @@ export function FuturePlanSum({ planMonth, monthLabel, locale }: {
   const end = planMonth.balance;
   return (
     <div className="mt-2">
-      <Row op="" label={t('start', { month: monthLabel })} amount={planMonth.startBalance} locale={locale} color={C.white} />
+      {/* The current month starts from today's real balance; a later month from where the one before it ends. */}
+      <Row
+        op=""
+        label={planMonth.isPartialMonth ? t('startToday') : t('start', { month: monthLabel })}
+        amount={planMonth.startBalance} locale={locale} color={C.white}
+      />
       <Row op="+" label={t('income')} amount={l.income} locale={locale} color={C.white} />
       {l.drawn > 0 && <Row op="+" label={t('drawn')} amount={l.drawn} locale={locale} color={C.white} />}
       <Row op="−" label={t('bills')} amount={l.bills} locale={locale} color={C.white} />
-      <Row op="−" label={t('savings')} amount={l.savings} locale={locale} color={C.white} />
+      <Row
+        op="−" label={t('savings')} amount={l.savings} locale={locale} color={C.white}
+        onToggle={l.savingsByDestination.length > 0 ? () => setSavingsOpen((v) => !v) : undefined}
+        expanded={savingsOpen}
+        toggleLabel={savingsOpen ? tDash('savingsBreakdownHide') : tDash('savingsBreakdownShow')}
+      />
+      {savingsOpen && l.savingsByDestination.length > 0 && <SavingsLines lines={l.savingsByDestination} locale={locale} />}
       {l.debtPayments > 0 && <Row op="−" label={t('debtPayments')} amount={l.debtPayments} locale={locale} color={C.white} />}
       {planMonth.cardCost.map((c) => (
         <Row
@@ -190,7 +244,7 @@ export function PlanPathChart({ months, selectedMonth, locale }: {
 
 /**
  * Each card's budget for this month beside its real closed statements (the
- * Cards page's own totals): the low, the high, and how many. Real
+ * Cards page's own totals): their average, and how many it covers. Real
  * statements, never an average. Hidden for a card with fewer than 2 — the
  * server already leaves those out.
  */
@@ -209,8 +263,7 @@ export function StatementCheck({ history, cardCost, locale }: {
           const values = {
             card: h.cardName,
             count: h.count,
-            low: formatCurrency(h.low, locale),
-            high: formatCurrency(h.high, locale),
+            average: formatCurrency(h.average, locale),
           };
           return (
             <li key={h.cardId} className="text-xs" style={{ color: C.card }}>

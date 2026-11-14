@@ -341,7 +341,7 @@ export async function GET(request: Request) {
           .map((t) => t.transfer_peer_id as string)
       )];
       const [accountsRes, rulesRes, peersRes] = await Promise.all([
-        supabase.from('accounts').select('id, type').eq('household_id', householdId),
+        supabase.from('accounts').select('id, type, name').eq('household_id', householdId),
         supabase.from('recurring_items').select('id, description, cadence, type')
           .eq('household_id', householdId).in('type', ['income', 'expense']),
         transferPeerIds.length === 0
@@ -375,7 +375,7 @@ export async function GET(request: Request) {
         cardTransactions: cardTxRows,
         unanchoredIncomeCount: unanchoredIncomeCount ?? 0,
         unanchoredExpenseCount: unanchoredExpenseCount ?? 0,
-        accounts: (accountsRes.data ?? []).map((a) => ({ id: a.id as string, type: a.type as string })),
+        accounts: (accountsRes.data ?? []).map((a) => ({ id: a.id as string, type: a.type as string, name: (a.name ?? null) as string | null })),
         transferPeers: ((peersRes.data ?? []) as Record<string, unknown>[]).map((p) => ({
           id: p.id as string, account_id: (p.account_id ?? null) as string | null,
           type: p.type as string, amount: Number(p.amount),

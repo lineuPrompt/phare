@@ -371,7 +371,13 @@ describe('loadHomeMonth: one month over the loaded context', () => {
 // computed them (read-only), placed one month after the fixture's October.
 
 describe('loadHome: a future month reads the plan sum, never adds it up', () => {
-  const LINES = { income: 11115, bills: 7123.33, savings: 1489.52, debtPayments: 0, drawn: 0, leftAfterBillsAndSavings: 2502.15, cards: 4550 };
+  const SAVINGS = [
+    { accountId: 'resp', name: 'RESP (CTS Savings)', amount: 464 },
+    { accountId: 'sf', name: 'Sinking funds', amount: 425.52 },
+    { accountId: 'rrsp', name: 'Lineu -RRSP', amount: 350 },
+    { accountId: null, name: null, amount: 250 },
+  ];
+  const LINES = { income: 11115, bills: 7123.33, savings: 1489.52, savingsByDestination: SAVINGS, debtPayments: 0, drawn: 0, leftAfterBillsAndSavings: 2502.15, cards: 4550 };
   const FUTURE = {
     month: '2026-11', isPartialMonth: false, balance: -637.84, startBalance: 1410.01,
     cardCost: [
@@ -383,8 +389,8 @@ describe('loadHome: a future month reads the plan sum, never adds it up', () => 
     why: { kind: 'extraPayments', items: [{ name: 'Mortgage / Hypothèque', occurrences: 3, usualOccurrences: 2, dates: ['2027-05-03', '2027-05-17', '2027-05-31'] }] },
   };
   const HISTORY = [
-    { cardId: 'v', cardName: 'Visa Avion', count: 4, low: 4049.28, high: 5696.18, statements: [] },
-    { cardId: 'c', cardName: 'Costco Julia', count: 3, low: 443.19, high: 1933.12, statements: [] },
+    { cardId: 'v', cardName: 'Visa Avion', count: 4, average: 4866.31, statements: [] },
+    { cardId: 'c', cardName: 'Costco Julia', count: 3, average: 941.97, statements: [] },
   ];
 
   async function future(planMonth: Record<string, unknown>, history: unknown[] = HISTORY) {
@@ -400,8 +406,18 @@ describe('loadHome: a future month reads the plan sum, never adds it up', () => 
     const { plan } = await future(FUTURE);
     expect(plan).toEqual({
       kind: 'future',
+      isPartialMonth: false,
       startBalance: 1410.01,
-      lines: { income: 11115, bills: 7123.33, savings: 1489.52, debtPayments: 0, drawn: 0 },
+      lines: {
+        income: 11115, bills: 7123.33, savings: 1489.52, debtPayments: 0, drawn: 0,
+        // The savings row's destinations, as the server partitioned them; null → "Other".
+        savingsLines: [
+          { key: 'resp', name: 'RESP (CTS Savings)', amount: 464 },
+          { key: 'sf', name: 'Sinking funds', amount: 425.52 },
+          { key: 'rrsp', name: 'Lineu -RRSP', amount: 350 },
+          { key: '__other__', name: null, amount: 250 },
+        ],
+      },
       balance: -637.84,
       cards: [
         { cardId: 'v', cardName: 'Visa Avion', basis: 'budget', amount: 2550, inProgress: false },
@@ -412,14 +428,14 @@ describe('loadHome: a future month reads the plan sum, never adds it up', () => 
       path: [{ month: '2026-10', balance: 2811.07 }, { month: '2026-11', balance: -637.84 }],
       // Budget joined from THIS month's card line, by id — null stays null.
       statements: [
-        { cardId: 'v', cardName: 'Visa Avion', budget: 2550, count: 4, low: 4049.28, high: 5696.18 },
-        { cardId: 'c', cardName: 'Costco Julia', budget: null, count: 3, low: 443.19, high: 1933.12 },
+        { cardId: 'v', cardName: 'Visa Avion', budget: 2550, count: 4, average: 4866.31 },
+        { cardId: 'c', cardName: 'Costco Julia', budget: null, count: 3, average: 941.97 },
       ],
     });
   });
 
   it('every line lands in its own field — each one distinct, so a swap cannot pass', async () => {
-    const lines = { income: 1.11, bills: 2.22, savings: 3.33, debtPayments: 4.44, drawn: 5.55, leftAfterBillsAndSavings: 9.99, cards: 6.66 };
+    const lines = { income: 1.11, bills: 2.22, savings: 3.33, savingsByDestination: [], debtPayments: 4.44, drawn: 5.55, leftAfterBillsAndSavings: 9.99, cards: 6.66 };
     const { plan } = await future({ ...FUTURE, breakdown: { status: 'ok', lines } });
     expect(plan).toMatchObject({ kind: 'future', lines: { income: 1.11, bills: 2.22, savings: 3.33, debtPayments: 4.44, drawn: 5.55 } });
   });
@@ -440,7 +456,7 @@ describe('loadHome: a future month reads the plan sum, never adds it up', () => 
     expect(plan).toMatchObject({ kind: 'future', lines: null, why: null });
   });
 
-  it('the current month keeps the older layout even when the server sends a breakdown', async () => {
+  it('the current month takes the same sum, starting from today', async () => {
     const r = recorder(table({
       [homeTimelinePath('chq')]: timeline({ plan: { months: [{
         ...PLAN_MONTH, startBalance: 3900, breakdown: { status: 'ok', lines: LINES }, why: null,
@@ -448,8 +464,10 @@ describe('loadHome: a future month reads the plan sum, never adds it up', () => 
       }], statementHistory: HISTORY } }),
     }));
     const { plan } = await loadHome(r.get, MID_OCT);
-    expect(plan.kind).toBe('ready');
-    expect(plan).toMatchObject({ statements: [{ cardId: 'v', budget: 900 }, { cardId: 'c', budget: null }] });
+    expect(plan).toMatchObject({
+      kind: 'future', isPartialMonth: true, startBalance: 3900, balance: 2811.07,
+      statements: [{ cardId: 'v', budget: 900 }, { cardId: 'c', budget: null }],
+    });
   });
 
   it('a server from before 2026-11-14 (no breakdown) keeps the older layout for a future month', async () => {
@@ -465,6 +483,8 @@ describe('loadHome: a future month reads the plan sum, never adds it up', () => 
     await expect(future({ ...FUTURE, breakdown: { status: 'maybe' } })).rejects.toThrow('unknown breakdown');
     await expect(future({ ...FUTURE, why: { kind: 'vibes' } })).rejects.toThrow('unknown why');
     await expect(future({ ...FUTURE, why: { ...FUTURE.why, items: [{ ...FUTURE.why.items[0], dates: ['May 3'] }] } })).rejects.toThrow('why dates are not dates');
-    await expect(future(FUTURE, [{ ...HISTORY[0], low: undefined }])).rejects.toThrow('statement low is not a number');
+    await expect(future(FUTURE, [{ ...HISTORY[0], average: undefined }])).rejects.toThrow('statement average is not a number');
+    await expect(future({ ...FUTURE, breakdown: { status: 'ok', lines: { ...LINES, savingsByDestination: [{ accountId: 'x', name: 'X', amount: '5' }] } } }))
+      .rejects.toThrow('lines savingsByDestination.amount is not a number');
   });
 });

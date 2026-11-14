@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   formatCADLocale,
   formatPlanDates,
@@ -35,26 +36,46 @@ const C = {
   why: '#FCD34D',
 } as const;
 
-function SumRow({ op, label, value, color, emphasis = false }: {
+function SumRow({ op, label, value, color, emphasis = false, onPress, expanded, toggleLabel }: {
   op: string; label: string; value: string; color: string; emphasis?: boolean;
+  /** Present only on the savings row, and only when it has destinations — as on the snapshot. */
+  onPress?: () => void; expanded?: boolean; toggleLabel?: string;
 }) {
-  return (
-    <View style={[styles.sumRow, emphasis && styles.sumRowEmphasis]}>
+  const content = (
+    <>
       <Text style={styles.op}>{op}</Text>
-      <Text style={[styles.sumLabel, emphasis && styles.sumLabelEmphasis]}>{label}</Text>
+      <Text style={[styles.sumLabel, emphasis && styles.sumLabelEmphasis]}>
+        {label}
+        {onPress ? (expanded ? '  ▴' : '  ▾') : ''}
+      </Text>
       <Text style={[styles.sumValue, emphasis && styles.sumValueEmphasis, { color }]}>{value}</Text>
-    </View>
+    </>
   );
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}, ${value}. ${toggleLabel ?? ''}`}
+        accessibilityState={{ expanded }}
+        onPress={onPress}
+        style={styles.sumRow}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+  return <View style={[styles.sumRow, emphasis && styles.sumRowEmphasis]}>{content}</View>;
 }
 
 /**
  * The one sum. Rows in formula order; a zero debt-payment or drawn row is left
  * out. `lines: null` (the server could not build it) draws the message only.
  */
-export function FutureSum({ month, startBalance, lines, balance, cards }: {
-  month: string; startBalance: number; lines: HomePlanLines | null; balance: number; cards: HomePlanCard[];
+export function FutureSum({ month, isPartialMonth, startBalance, lines, balance, cards }: {
+  month: string; isPartialMonth: boolean; startBalance: number; lines: HomePlanLines | null; balance: number; cards: HomePlanCard[];
 }) {
   const { t, locale } = useI18n();
+  const [savingsOpen, setSavingsOpen] = useState(false);
   const money = (n: number) => formatCADLocale(n, locale);
   const monthLabel = formatMonthLong(month, locale);
 
@@ -75,11 +96,38 @@ export function FutureSum({ month, startBalance, lines, balance, cards }: {
 
   return (
     <View>
-      <SumRow op="" label={t('home.plan.future.start', { month: monthLabel })} value={money(startBalance)} color={C.white} />
+      {/* The current month starts from today's balance; a later one from where the month before it ends. */}
+      <SumRow
+        op=""
+        label={isPartialMonth ? t('home.plan.future.startToday') : t('home.plan.future.start', { month: monthLabel })}
+        value={money(startBalance)}
+        color={C.white}
+      />
       <SumRow op="+" label={t('home.plan.future.income')} value={money(lines.income)} color={C.white} />
       {lines.drawn > 0 && <SumRow op="+" label={t('home.plan.future.drawn')} value={money(lines.drawn)} color={C.white} />}
       <SumRow op="−" label={t('home.plan.future.bills')} value={money(lines.bills)} color={C.white} />
-      <SumRow op="−" label={t('home.plan.future.savings')} value={money(lines.savings)} color={C.white} />
+      <SumRow
+        op="−"
+        label={t('home.plan.future.savings')}
+        value={money(lines.savings)}
+        color={C.white}
+        onPress={lines.savingsLines.length > 0 ? () => setSavingsOpen((open) => !open) : undefined}
+        expanded={savingsOpen}
+        toggleLabel={savingsOpen ? t('home.snapshot.hideBreakdown') : t('home.snapshot.showBreakdown')}
+      />
+      {savingsOpen && lines.savingsLines.length > 0 && (
+        <View style={styles.savingsLines}>
+          {lines.savingsLines.map((line) => (
+            <View key={line.key} style={styles.savingsLine}>
+              <Text style={styles.savingsName} numberOfLines={1}>{line.name ?? t('home.snapshot.savingsOther')}</Text>
+              <Text style={styles.savingsAmount}>{money(line.amount)}</Text>
+            </View>
+          ))}
+          {lines.savingsLines.some((line) => line.name === null) && (
+            <Text style={styles.small}>{t('home.snapshot.savingsOtherHint')}</Text>
+          )}
+        </View>
+      )}
       {lines.debtPayments > 0 && (
         <SumRow op="−" label={t('home.plan.future.debtPayments')} value={money(lines.debtPayments)} color={C.white} />
       )}
@@ -173,7 +221,7 @@ export function PlanPath({ points, selectedMonth }: { points: HomePathPoint[]; s
   );
 }
 
-/** Each card's budget for this month beside its real closed statements: low, high, how many. */
+/** Each card's budget for this month beside the server's average of its closed statements, and how many. */
 export function StatementCheck({ statements }: { statements: HomeStatement[] }) {
   const { t, locale } = useI18n();
   if (statements.length === 0) return null;
@@ -182,7 +230,7 @@ export function StatementCheck({ statements }: { statements: HomeStatement[] }) 
     <View style={styles.gapXs}>
       <Text style={styles.small}>{t('home.plan.statements.title')}</Text>
       {statements.map((s) => {
-        const values = { card: s.cardName, count: String(s.count), low: money(s.low), high: money(s.high) };
+        const values = { card: s.cardName, count: String(s.count), average: money(s.average) };
         return (
           <Text key={s.cardId} style={styles.statement}>
             {s.budget === null
@@ -214,4 +262,8 @@ const styles = StyleSheet.create({
   pathLabels: { flexDirection: 'row' },
   pathLabel: { flex: 1, textAlign: 'center', fontSize: 10, color: C.muted },
   statement: { fontSize: 12, lineHeight: 17, color: C.card },
+  savingsLines: { paddingLeft: theme.space.lg, gap: 2, paddingBottom: theme.space.xs },
+  savingsLine: { flexDirection: 'row', justifyContent: 'space-between', gap: theme.space.sm },
+  savingsName: { flex: 1, fontSize: 12, color: C.muted },
+  savingsAmount: { fontSize: 12, color: C.label, fontVariant: ['tabular-nums'] },
 });

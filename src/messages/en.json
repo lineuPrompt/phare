@@ -445,6 +445,8 @@
         "scheduledFor": "Scheduled for {month}",
         "question": "Planned chequing balance",
         "label": "If bills and card budgets land as planned",
+        "labelRemainder": "If the rest of {month}'s bills and card budgets land as planned",
+        "startToday": "Balance today",
         "start": "Start of {month} (planned)",
         "income": "Income scheduled",
         "drawn": "From savings / borrowed",
@@ -472,8 +474,8 @@
       },
       "statements": {
         "title": "Card budgets vs real statements",
-        "row": "{card}: budget {budget} · last {count} statements {low} – {high}",
-        "rowNoBudget": "{card}: no budget · last {count} statements {low} – {high}"
+        "row": "{card}: budget {budget} · average of last {count} statements {average}",
+        "rowNoBudget": "{card}: no budget · average of last {count} statements {average}"
       }
     },
     "topPriority": "Your #1 priority",
