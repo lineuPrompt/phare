@@ -537,7 +537,41 @@
       "basisPosted": "{card} : déjà payé — inclus dans le solde d'aujourd'hui",
       "borrowedNote": "{amount} de ce solde est emprunté — de l'argent réel que vous pouvez dépenser, et que vous devrez rembourser.",
       "note": "Une estimation — suppose que les factures fixes, les transferts et les budgets de carte se déroulent comme prévu.",
-      "pastMonth": "Le plan se projette à partir de {currentMonth} — {month} est déjà passé."
+      "pastMonth": "Le plan se projette à partir de {currentMonth} — {month} est déjà passé.",
+      "future": {
+        "scheduledFor": "Prévu pour {month}",
+        "question": "Solde prévu du compte chèques",
+        "label": "Si les factures et les budgets de cartes se réalisent comme prévu",
+        "start": "Début {month} (prévu)",
+        "income": "Revenus prévus",
+        "drawn": "Tiré de l'épargne ou emprunté",
+        "bills": "Factures payées du compte chèques",
+        "savings": "Virements vers l'épargne",
+        "debtPayments": "Remboursements de dettes",
+        "cardBudget": "{card} — votre budget (relevé pas encore ouvert)",
+        "cardSoFar": "{card} — relevé en cours",
+        "cardClosed": "{card} — relevé fermé",
+        "cardMax": "{card} — budget dépassé, montant réel utilisé",
+        "cardPosted": "{card} — déjà payé",
+        "end": "Fin {month} (prévu)",
+        "breakdownError": "Nous n'avons pas pu établir le détail de ce mois."
+      },
+      "why": {
+        "extraPayment": "{month} compte {count} paiements « {name} » ({dates}).",
+        "cardsOverLeft": "Les cartes ({cards}) dépassent ce qui reste après les factures et l'épargne ({left}).",
+        "startsBelowZero": "{month} commence à {amount}.",
+        "todayBelowZero": "Le solde d'aujourd'hui est de {amount}.",
+        "moreOutThanIn": "En {month}, les sorties prévues dépassent les entrées de {amount}."
+      },
+      "path": {
+        "title": "Soldes de fin de mois (prévus)",
+        "item": "{month} : {amount}"
+      },
+      "statements": {
+        "title": "Budgets de cartes et relevés réels",
+        "row": "{card} : budget de {budget} · {count} derniers relevés : de {low} à {high}",
+        "rowNoBudget": "{card} : aucun budget · {count} derniers relevés : de {low} à {high}"
+      }
     },
     "awaitingDates": "Certains revenus ou certaines factures n'ont pas encore de date et ne sont donc pas comptés ici. Indiquez leurs dates sur phare.money.",
     "noAnchor": "Pour afficher votre plan, Phare a besoin du solde de votre compte chèques à une date que vous connaissez.",

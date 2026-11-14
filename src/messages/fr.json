@@ -440,7 +440,41 @@
       "horizonEnd": "L'horizon du plan s'arrête ici — Phare planifie 12 mois à l'avance.",
       "note": "Une estimation — suppose que les factures fixes, les transferts et les budgets de carte se déroulent comme prévu.",
       "question": "L'argent que vous aurez réellement",
-      "horizonLocked": "{count, plural, one {# mois de projection de plus} other {# mois de projection de plus}} avec Phare Pro"
+      "horizonLocked": "{count, plural, one {# mois de projection de plus} other {# mois de projection de plus}} avec Phare Pro",
+      "future": {
+        "scheduledFor": "Prévu pour {month}",
+        "question": "Solde prévu du compte chèques",
+        "label": "Si les factures et les budgets de cartes se réalisent comme prévu",
+        "start": "Début {month} (prévu)",
+        "income": "Revenus prévus",
+        "drawn": "Tiré de l'épargne ou emprunté",
+        "bills": "Factures payées du compte chèques",
+        "savings": "Virements vers l'épargne",
+        "debtPayments": "Remboursements de dettes",
+        "cardBudget": "{card} — votre budget (relevé pas encore ouvert)",
+        "cardSoFar": "{card} — relevé en cours",
+        "cardClosed": "{card} — relevé fermé",
+        "cardMax": "{card} — budget dépassé, montant réel utilisé",
+        "cardPosted": "{card} — déjà payé",
+        "end": "Fin {month} (prévu)",
+        "breakdownError": "Nous n'avons pas pu établir le détail de ce mois."
+      },
+      "why": {
+        "extraPayment": "{month} compte {count} paiements « {name} » ({dates}).",
+        "cardsOverLeft": "Les cartes ({cards}) dépassent ce qui reste après les factures et l'épargne ({left}).",
+        "startsBelowZero": "{month} commence à {amount}.",
+        "todayBelowZero": "Le solde d'aujourd'hui est de {amount}.",
+        "moreOutThanIn": "En {month}, les sorties prévues dépassent les entrées de {amount}."
+      },
+      "path": {
+        "title": "Soldes de fin de mois (prévus)",
+        "item": "{month} : {amount}"
+      },
+      "statements": {
+        "title": "Budgets de cartes et relevés réels",
+        "row": "{card} : budget de {budget} · {count} derniers relevés : de {low} à {high}",
+        "rowNoBudget": "{card} : aucun budget · {count} derniers relevés : de {low} à {high}"
+      }
     },
     "topPriority": "Votre priorité #1",
     "sinkingFunds": "Fonds de réserve",

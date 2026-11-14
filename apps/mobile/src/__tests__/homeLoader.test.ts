@@ -186,6 +186,10 @@ describe('loadHome: the plan card', () => {
         { cardId: 'm', cardName: 'Mastercard', basis: 'posted', amount: 0, inProgress: false },
       ],
       awaitingDates: false,
+      // The month-end path: every month the chain sent. No statement history
+      // in this fixture (a server from before 2026-11-14): none shown.
+      path: [{ month: '2026-10', balance: 2811.07 }, { month: '2026-11', balance: 1 }],
+      statements: [],
     });
   });
 
@@ -359,5 +363,108 @@ describe('loadHomeMonth: one month over the loaded context', () => {
     const ctx = await context();
     const r = recorder({ [homeSnapshotPath('2026-11')]: dashboard({ month: '2026-10-01' }) });
     await expect(loadHomeMonth(r.get, ctx, '2026-11')).rejects.toThrow('asked for 2026-11');
+  });
+});
+
+// ── A future month: one sum, its why, the path and the statement check ─────
+// (2026-11-14). Figures: household 2be22642's May 2027, as the live chain
+// computed them (read-only), placed one month after the fixture's October.
+
+describe('loadHome: a future month reads the plan sum, never adds it up', () => {
+  const LINES = { income: 11115, bills: 7123.33, savings: 1489.52, debtPayments: 0, drawn: 0, leftAfterBillsAndSavings: 2502.15, cards: 4550 };
+  const FUTURE = {
+    month: '2026-11', isPartialMonth: false, balance: -637.84, startBalance: 1410.01,
+    cardCost: [
+      { cardId: 'v', cardName: 'Visa Avion', basis: 'budget', amount: 2550, budget: 2550, inProgress: false },
+      { cardId: 'c', cardName: 'Costco Julia', basis: 'actual', amount: 2000, budget: null, inProgress: true },
+    ],
+    unanchoredIncomeCount: 0, unanchoredExpenseCount: 0,
+    breakdown: { status: 'ok', lines: LINES },
+    why: { kind: 'extraPayments', items: [{ name: 'Mortgage / Hypothèque', occurrences: 3, usualOccurrences: 2, dates: ['2027-05-03', '2027-05-17', '2027-05-31'] }] },
+  };
+  const HISTORY = [
+    { cardId: 'v', cardName: 'Visa Avion', count: 4, low: 4049.28, high: 5696.18, statements: [] },
+    { cardId: 'c', cardName: 'Costco Julia', count: 3, low: 443.19, high: 1933.12, statements: [] },
+  ];
+
+  async function future(planMonth: Record<string, unknown>, history: unknown[] = HISTORY) {
+    const r = recorder(table({
+      [homeTimelinePath('chq')]: timeline({ plan: { months: [{ ...PLAN_MONTH, startBalance: 3900, breakdown: { status: 'ok', lines: LINES }, why: null }, planMonth], statementHistory: history } }),
+      [homeSnapshotPath('2026-11')]: dashboard({ month: '2026-11-01' }),
+    }));
+    const load = await loadHome(r.get, MID_OCT);
+    return loadHomeMonth(r.get, load.context, '2026-11');
+  }
+
+  it('carries every line, card, reason, path point and statement to the cent', async () => {
+    const { plan } = await future(FUTURE);
+    expect(plan).toEqual({
+      kind: 'future',
+      startBalance: 1410.01,
+      lines: { income: 11115, bills: 7123.33, savings: 1489.52, debtPayments: 0, drawn: 0 },
+      balance: -637.84,
+      cards: [
+        { cardId: 'v', cardName: 'Visa Avion', basis: 'budget', amount: 2550, inProgress: false },
+        { cardId: 'c', cardName: 'Costco Julia', basis: 'actual', amount: 2000, inProgress: true },
+      ],
+      why: { kind: 'extraPayments', items: [{ name: 'Mortgage / Hypothèque', occurrences: 3, dates: ['2027-05-03', '2027-05-17', '2027-05-31'] }] },
+      awaitingDates: false,
+      path: [{ month: '2026-10', balance: 2811.07 }, { month: '2026-11', balance: -637.84 }],
+      // Budget joined from THIS month's card line, by id — null stays null.
+      statements: [
+        { cardId: 'v', cardName: 'Visa Avion', budget: 2550, count: 4, low: 4049.28, high: 5696.18 },
+        { cardId: 'c', cardName: 'Costco Julia', budget: null, count: 3, low: 443.19, high: 1933.12 },
+      ],
+    });
+  });
+
+  it('every line lands in its own field — each one distinct, so a swap cannot pass', async () => {
+    const lines = { income: 1.11, bills: 2.22, savings: 3.33, debtPayments: 4.44, drawn: 5.55, leftAfterBillsAndSavings: 9.99, cards: 6.66 };
+    const { plan } = await future({ ...FUTURE, breakdown: { status: 'ok', lines } });
+    expect(plan).toMatchObject({ kind: 'future', lines: { income: 1.11, bills: 2.22, savings: 3.33, debtPayments: 4.44, drawn: 5.55 } });
+  });
+
+  it('each other reason arrives as sent', async () => {
+    for (const why of [
+      { kind: 'cardsOverLeft', cards: 4550, left: 4002.15 },
+      { kind: 'startsBelowZero', startBalance: -542.28, isPartialMonth: false },
+      { kind: 'moreOutThanIn', amount: 120 },
+    ]) {
+      expect((await future({ ...FUTURE, why })).plan).toMatchObject({ kind: 'future', why });
+    }
+    expect((await future({ ...FUTURE, why: null })).plan).toMatchObject({ kind: 'future', why: null });
+  });
+
+  it('a breakdown the server could not build: no lines and no reason, only the message', async () => {
+    const { plan } = await future({ ...FUTURE, breakdown: { status: 'error' } });
+    expect(plan).toMatchObject({ kind: 'future', lines: null, why: null });
+  });
+
+  it('the current month keeps the older layout even when the server sends a breakdown', async () => {
+    const r = recorder(table({
+      [homeTimelinePath('chq')]: timeline({ plan: { months: [{
+        ...PLAN_MONTH, startBalance: 3900, breakdown: { status: 'ok', lines: LINES }, why: null,
+        cardCost: [{ cardId: 'v', cardName: 'Visa', basis: 'budget', amount: 900, budget: 900 }],
+      }], statementHistory: HISTORY } }),
+    }));
+    const { plan } = await loadHome(r.get, MID_OCT);
+    expect(plan.kind).toBe('ready');
+    expect(plan).toMatchObject({ statements: [{ cardId: 'v', budget: 900 }, { cardId: 'c', budget: null }] });
+  });
+
+  it('a server from before 2026-11-14 (no breakdown) keeps the older layout for a future month', async () => {
+    const { breakdown: _b, startBalance: _s, why: _w, ...older } = FUTURE;
+    void _b; void _s; void _w;
+    const { plan } = await future(older, []);
+    expect(plan.kind).toBe('ready');
+  });
+
+  it('refuses a payload it cannot trust, rather than drawing it', async () => {
+    await expect(future({ ...FUTURE, startBalance: '1410.01' })).rejects.toThrow('plan startBalance is not a number');
+    await expect(future({ ...FUTURE, breakdown: { status: 'ok', lines: { ...LINES, bills: null } } })).rejects.toThrow('lines bills is not a number');
+    await expect(future({ ...FUTURE, breakdown: { status: 'maybe' } })).rejects.toThrow('unknown breakdown');
+    await expect(future({ ...FUTURE, why: { kind: 'vibes' } })).rejects.toThrow('unknown why');
+    await expect(future({ ...FUTURE, why: { ...FUTURE.why, items: [{ ...FUTURE.why.items[0], dates: ['May 3'] }] } })).rejects.toThrow('why dates are not dates');
+    await expect(future(FUTURE, [{ ...HISTORY[0], low: undefined }])).rejects.toThrow('statement low is not a number');
   });
 });

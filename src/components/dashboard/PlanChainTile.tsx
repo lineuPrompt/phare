@@ -2,7 +2,8 @@
 
 import { useTranslations } from 'next-intl';
 import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
-import type { PlanChainMonth, CardCostBasis } from '@/lib/planChainHelpers';
+import type { PlanChainMonthPayload, CardCostBasis, CardStatementHistory } from '@/lib/planChainHelpers';
+import { FuturePlanSum, PlanWhyLine, PlanPathChart, StatementCheck } from './PlanFutureParts';
 import { formatCurrency } from './types';
 import UpgradeButton from '@/components/billing/UpgradeButton';
 
@@ -42,13 +43,16 @@ export default function PlanChainTile({
   totalBorrowed,
   locale,
   recurringHref,
+  isFutureMonth = false,
+  pathMonths = [],
+  statementHistory = [],
 }: {
   monthLabel: string;
   currentMonthLabel: string;
   isPastMonth: boolean;
   // The chain entry for `month`, or null when it's out of the fetched
   // plan window (currentMonth..currentMonth+11) — never fabricated.
-  planMonth: PlanChainMonth | null;
+  planMonth: PlanChainMonthPayload | null;
   isHorizonEnd: boolean;
   // Set when this month EXISTS in the computed window but was withheld from
   // a free household. Distinct from planMonth being null for the ordinary
@@ -63,6 +67,14 @@ export default function PlanChainTile({
   totalBorrowed: number;
   locale: string;
   recurringHref: string;
+  // A month after the current one (2026-11-14): ONE basis, the plan, as a sum
+  // that adds up (FuturePlanSum) — the real-balance lines are not shown, they
+  // leave out card statements that have not closed yet.
+  isFutureMonth?: boolean;
+  // Every month the household can see, for the month-end path (current and
+  // future months alike).
+  pathMonths?: { month: string; balance: number }[];
+  statementHistory?: CardStatementHistory[];
 }) {
   const t = useTranslations('dashboard.plan');
 
@@ -127,66 +139,81 @@ export default function PlanChainTile({
         {t('badge')}
       </span>
 
-      {realCloseAmount !== null && (
-        <p className="text-xs" style={{ color: '#94A3B8' }}>
-          {t('closesAt', { month: monthLabel, amount: formatCurrency(realCloseAmount, locale) })}
+      {isFutureMonth ? (
+        <>
+          <p className="text-sm font-medium" style={{ color: '#2ABFBF' }}>
+            {t('future.question')}
+          </p>
+          <p className="text-sm" style={{ color: '#94A3B8' }}>
+            {t('future.label')}
+          </p>
+          <FuturePlanSum planMonth={planMonth} monthLabel={monthLabel} locale={locale} />
+          <PlanWhyLine planMonth={planMonth} monthLabel={monthLabel} locale={locale} />
+        </>
+      ) : (
+        <>
+        {realCloseAmount !== null && (
+          <p className="text-xs" style={{ color: '#94A3B8' }}>
+            {t('closesAt', { month: monthLabel, amount: formatCurrency(realCloseAmount, locale) })}
+          </p>
+        )}
+        {carriedInAmount !== null && (
+          <p className="text-xs mb-2" style={{ color: '#64748B' }}>
+            {t('carriedIn', { month: monthLabel, amount: formatCurrency(carriedInAmount, locale) })}
+          </p>
+        )}
+
+        {/* Subject line — see SnapshotCard's. This is a STOCK ("how much money
+            will actually be there"), so borrowed cash IS counted: it really is
+            in chequing. Saying which question this answers is what stops the
+            different treatment reading as an inconsistency. */}
+        <p className="text-sm font-medium" style={{ color: '#2ABFBF' }}>
+          {t('question')}
         </p>
-      )}
-      {carriedInAmount !== null && (
-        <p className="text-xs mb-2" style={{ color: '#64748B' }}>
-          {t('carriedIn', { month: monthLabel, amount: formatCurrency(carriedInAmount, locale) })}
+        <p className="text-sm mb-1" style={{ color: '#94A3B8' }}>
+          {t(planMonth.isPartialMonth ? 'labelRemainder' : 'labelFull', { month: monthLabel })}
         </p>
-      )}
-
-      {/* Subject line — see SnapshotCard's. This is a STOCK ("how much money
-          will actually be there"), so borrowed cash IS counted: it really is
-          in chequing. Saying which question this answers is what stops the
-          different treatment reading as an inconsistency. */}
-      <p className="text-sm font-medium" style={{ color: '#2ABFBF' }}>
-        {t('question')}
-      </p>
-      <p className="text-sm mb-1" style={{ color: '#94A3B8' }}>
-        {t(planMonth.isPartialMonth ? 'labelRemainder' : 'labelFull', { month: monthLabel })}
-      </p>
-      {/* A negative projection must still read as bad on a dark ground — white
-          would flatten it into just another figure. */}
-      <p className="text-2xl font-bold" style={{ color: positive ? '#FFFFFF' : '#FCA5A5' }}>
-        {formatCurrency(planMonth.balance, locale)}
-      </p>
-
-      {planMonth.cardCost.length > 0 && (
-        <ul className="mt-3 space-y-1">
-          {planMonth.cardCost.map((c) => (
-            <li key={c.cardId} className="text-xs" style={{ color: '#C4B5FD' }}>
-              {t(basisKey(c.basis, c.inProgress), { card: c.cardName, amount: formatCurrency(c.amount, locale) })}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* BORROWED DISCLOSURE — deliberately a caption here, not a red alarm.
-          Superseded decision (founder call, 2026-08-01): this used to be a red
-          box at "the same prominence as the surplus box above", on the
-          reasoning that the reader needs an identical "this was borrowed"
-          signal. In use that backfired. The same $2,000 appeared twice on one
-          screen in two identical red boxes with opposite verbs — "NOT counted
-          in this surplus" here vs "Includes ... borrowed" there — and read as
-          a contradiction rather than a warning. ("o que nao fecha pra mim.")
-
-          The SIGNAL stays and is unconditional; only its alarm level changes.
-          A warning that gets read as noise protects nobody, and the two tiles
-          are not in conflict — they answer different questions, which the
-          subject lines now say out loud. One alarm, on the snapshot, where
-          borrowing genuinely qualifies the month. Here it qualifies a balance
-          that really is in chequing, so it sits in the tile's own colour,
-          subordinate to the number it describes.
-
-          Do not restore the red box without also removing the snapshot's —
-          two alarms for one dollar amount is what caused the confusion. */}
-      {totalBorrowed > 0 && (
-        <p className="text-sm font-semibold mt-2" style={{ color: '#C4B5FD' }}>
-          {t('borrowedNote', { amount: formatCurrency(totalBorrowed, locale) })}
+        {/* A negative projection must still read as bad on a dark ground — white
+            would flatten it into just another figure. */}
+        <p className="text-2xl font-bold" style={{ color: positive ? '#FFFFFF' : '#FCA5A5' }}>
+          {formatCurrency(planMonth.balance, locale)}
         </p>
+
+        {planMonth.cardCost.length > 0 && (
+          <ul className="mt-3 space-y-1">
+            {planMonth.cardCost.map((c) => (
+              <li key={c.cardId} className="text-xs" style={{ color: '#C4B5FD' }}>
+                {t(basisKey(c.basis, c.inProgress), { card: c.cardName, amount: formatCurrency(c.amount, locale) })}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* BORROWED DISCLOSURE — deliberately a caption here, not a red alarm.
+            Superseded decision (founder call, 2026-08-01): this used to be a red
+            box at "the same prominence as the surplus box above", on the
+            reasoning that the reader needs an identical "this was borrowed"
+            signal. In use that backfired. The same $2,000 appeared twice on one
+            screen in two identical red boxes with opposite verbs — "NOT counted
+            in this surplus" here vs "Includes ... borrowed" there — and read as
+            a contradiction rather than a warning. ("o que nao fecha pra mim.")
+
+            The SIGNAL stays and is unconditional; only its alarm level changes.
+            A warning that gets read as noise protects nobody, and the two tiles
+            are not in conflict — they answer different questions, which the
+            subject lines now say out loud. One alarm, on the snapshot, where
+            borrowing genuinely qualifies the month. Here it qualifies a balance
+            that really is in chequing, so it sits in the tile's own colour,
+            subordinate to the number it describes.
+
+            Do not restore the red box without also removing the snapshot's —
+            two alarms for one dollar amount is what caused the confusion. */}
+        {totalBorrowed > 0 && (
+          <p className="text-sm font-semibold mt-2" style={{ color: '#C4B5FD' }}>
+            {t('borrowedNote', { amount: formatCurrency(totalBorrowed, locale) })}
+          </p>
+        )}
+        </>
       )}
 
       <AwaitingDatesNotice
@@ -196,6 +223,9 @@ export default function PlanChainTile({
         className="block text-xs mt-2 hover:underline"
         style={{ color: '#FCD34D' }}
       />
+
+      <PlanPathChart months={pathMonths} selectedMonth={planMonth.month} locale={locale} />
+      <StatementCheck history={statementHistory} cardCost={planMonth.cardCost} locale={locale} />
 
       {/* No Timeline link here. SnapshotCard renders one seven lines above
           this tile, to the identical URL — and its sentence ("this month's

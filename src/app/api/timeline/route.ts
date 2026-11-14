@@ -16,9 +16,14 @@ import { logEvent } from '@/lib/eventLogger';
 import { addMonthsToMonth } from '@/lib/goalHelpers';
 import {
   buildPlanChain,
+  explainPlanPath,
+  computeStatementHistory,
+  STATEMENT_CHECK_LOOKBACK_MONTHS,
+  type CardStatementHistory,
   type ChequingChainTx,
-  type PlanChainMonth,
+  type PlanChainMonthPayload as PlanMonthPayload,
 } from '@/lib/planChainHelpers';
+import type { EnvTx } from '@/lib/envelopeHelpers';
 import { TRANSACTION_COLUMNS, toTimelineTxs, markWithdrawals } from '@/lib/timelineLedger';
 
 
@@ -245,10 +250,11 @@ export async function GET(request: Request) {
     // is RETURNED. They differ only for a free household, and the gap is what
     // the lock UI reports honestly rather than guessing at.
     let plan: {
-      months: PlanChainMonth[];
+      months: PlanMonthPayload[];
       horizonMonths: number;
       horizonLocked: boolean;
       horizonAvailable: number;
+      statementHistory: CardStatementHistory[];
     } | null = null;
 
     if (includePlan && result.ok && result.todayBalance !== null) {
@@ -264,19 +270,22 @@ export async function GET(request: Request) {
         amount: t.amount,
         recurring_item_id: t.recurringItemId,
         is_bridge: t.isBridge,
+        id: t.id,
+        transfer_peer_id: t.transferPeerId,
       }));
 
       // Card budgets/actuals across the whole 12-month plan horizon. Cards
       // were already resolved above for bridge-ensuring; reused as-is.
       let cardBudgetRows: { account_id: string; card_goal: number; month: string }[] = [];
-      let cardTxRows: { account_id: string; date: string; type: string; amount: number }[] = [];
+      let cardTxRows: (EnvTx & { amount: number })[] = [];
+      const firstCardTxDate = new Map<string, string>();
       if (cards.length > 0) {
         const cardIds = cards.map((c) => c.id);
         // Latest cycle month the chain ever needs: month 12's relevant cycle
         // is (currentMonth + 11) − 1 = currentMonth + 10.
         const latestCycleMonth = addMonthsToMonth(currentMonth, 10);
 
-        const [{ data: goalRows }, { data: cardTxns }] = await Promise.all([
+        const [{ data: goalRows }, { data: cardTxns, error: cardTxErr }, ...firsts] = await Promise.all([
           supabase
             .from('monthly_goals')
             .select('account_id, card_goal, month')
@@ -285,23 +294,64 @@ export async function GET(request: Request) {
             .lte('month', `${latestCycleMonth}-01`),
           supabase
             .from('transactions')
-            .select('account_id, date, type, amount')
+            .select('account_id, date, type, amount, category_id, is_bridge')
             .eq('household_id', householdId)
             .in('account_id', cardIds)
             .in('type', ['expense', 'income'])
-            // A close_day near month-start can push a cycle's window back
-            // close to a month early — 2 months of slack is generous.
-            .gte('date', `${addMonthsToMonth(currentMonth, -2)}-01`)
+            // The plan needs ~2 months back (a close_day near month-start
+            // pushes a window back); the statement check needs its closed
+            // statements, the oldest starting a month before its cycle month.
+            .gte('date', `${addMonthsToMonth(currentMonth, -(STATEMENT_CHECK_LOOKBACK_MONTHS + 1))}-01`)
             .lte('date', windowEnd),
+          // Each card's first transaction ever: a statement that ended before
+          // it is "no data", not a $0 statement (computeStatementHistory).
+          ...cardIds.map((id) =>
+            supabase
+              .from('transactions')
+              .select('date')
+              .eq('household_id', householdId)
+              .eq('account_id', id)
+              .order('date', { ascending: true })
+              .limit(1)
+          ),
         ]);
+        if (cardTxErr) throw new Error(`card transactions read failed: ${cardTxErr.message}`);
 
         cardBudgetRows = (goalRows ?? []).map((r) => ({
           account_id: r.account_id as string, card_goal: Number(r.card_goal), month: r.month as string,
         }));
         cardTxRows = (cardTxns ?? []).map((r) => ({
           account_id: r.account_id as string, date: r.date as string, type: r.type as string, amount: Number(r.amount),
+          category_id: (r.category_id ?? null) as string | null, is_bridge: (r.is_bridge ?? null) as boolean | null,
         }));
+        firsts.forEach((res, i) => {
+          if (res.error) throw new Error(`card first transaction read failed: ${res.error.message}`);
+          const row = (res.data as { date: string }[] | null)?.[0];
+          if (row) firstCardTxDate.set(cardIds[i], row.date);
+        });
       }
+
+      // The breakdown's classifier inputs: every account (savings vs debt by
+      // type), the other side of each planned transfer, and the recurring
+      // rules (extra payments). Reads that fail throw — a breakdown built on
+      // a missing read would misclassify silently.
+      const transferPeerIds = [...new Set(
+        datedTransactions
+          .filter((t) => t.type === 'transfer' && t.date > today && t.transfer_peer_id)
+          .map((t) => t.transfer_peer_id as string)
+      )];
+      const [accountsRes, rulesRes, peersRes] = await Promise.all([
+        supabase.from('accounts').select('id, type').eq('household_id', householdId),
+        supabase.from('recurring_items').select('id, description, cadence, type')
+          .eq('household_id', householdId).in('type', ['income', 'expense']),
+        transferPeerIds.length === 0
+          ? Promise.resolve({ data: [], error: null })
+          : supabase.from('transactions').select('id, account_id, type, amount')
+              .eq('household_id', householdId).in('id', transferPeerIds),
+      ]);
+      if (accountsRes.error) throw new Error(`accounts read failed: ${accountsRes.error.message}`);
+      if (rulesRes.error) throw new Error(`recurring rules read failed: ${rulesRes.error.message}`);
+      if (peersRes.error) throw new Error(`transfer peers read failed: ${peersRes.error.message}`);
 
       // Unanchored recurring items disclosed per month (all months equally
       // affected — a never-anchored rule materializes into none of them,
@@ -325,6 +375,14 @@ export async function GET(request: Request) {
         cardTransactions: cardTxRows,
         unanchoredIncomeCount: unanchoredIncomeCount ?? 0,
         unanchoredExpenseCount: unanchoredExpenseCount ?? 0,
+        accounts: (accountsRes.data ?? []).map((a) => ({ id: a.id as string, type: a.type as string })),
+        transferPeers: ((peersRes.data ?? []) as Record<string, unknown>[]).map((p) => ({
+          id: p.id as string, account_id: (p.account_id ?? null) as string | null,
+          type: p.type as string, amount: Number(p.amount),
+        })),
+        recurringItems: ((rulesRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
+          id: r.id as string, description: r.description as string, cadence: r.cadence as string, type: r.type as string,
+        })),
       });
 
       // ── Horizon gate ─────────────────────────────────────────────────────
@@ -342,11 +400,30 @@ export async function GET(request: Request) {
       // Computing all 12 and slicing also lets the lock state say honestly how
       // many further months exist, without a second pass.
       const allowedMonths = horizonMonthCount;
+
+      // The "why" line reads the path the household SEES — the lowest month
+      // of 3 is not the lowest of 12.
+      const visible = explainPlanPath(months.slice(0, allowedMonths));
+
+      // A breakdown that does not add up to the chain's own change is an
+      // error for THAT month only: logged with both nets, sent with none.
+      // The Timeline, the snapshot and every other month carry on.
+      const payloadMonths: PlanMonthPayload[] = visible.map((m) => {
+        if (m.breakdown.status === 'ok') return m as PlanMonthPayload;
+        console.error('plan breakdown mismatch', {
+          householdId, month: m.month, linesNet: m.breakdown.linesNet, chainNet: m.breakdown.chainNet,
+        });
+        return { ...m, breakdown: { status: 'error' } };
+      });
+
       plan = {
-        months: months.slice(0, allowedMonths),
+        months: payloadMonths,
         horizonMonths: allowedMonths,
         horizonLocked: months.length > allowedMonths,
         horizonAvailable: months.length,
+        statementHistory: computeStatementHistory({
+          cards, cardTransactions: cardTxRows, firstTransactionDate: firstCardTxDate, currentMonth, today,
+        }),
       };
     }
 

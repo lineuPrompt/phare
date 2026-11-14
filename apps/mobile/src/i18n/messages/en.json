@@ -537,7 +537,41 @@
       "basisPosted": "{card}: already paid — included in today's balance",
       "borrowedNote": "{amount} of this is borrowed — real cash you can spend, and you'll owe it back.",
       "note": "An estimate — assumes fixed bills, transfers, and card budgets land as dated.",
-      "pastMonth": "The plan looks forward from {currentMonth} — {month} has already happened."
+      "pastMonth": "The plan looks forward from {currentMonth} — {month} has already happened.",
+      "future": {
+        "scheduledFor": "Scheduled for {month}",
+        "question": "Planned chequing balance",
+        "label": "If bills and card budgets land as planned",
+        "start": "Start of {month} (planned)",
+        "income": "Income scheduled",
+        "drawn": "From savings / borrowed",
+        "bills": "Bills from chequing",
+        "savings": "Savings transfers",
+        "debtPayments": "Debt payments",
+        "cardBudget": "{card} — your budget (statement not open yet)",
+        "cardSoFar": "{card} — statement so far",
+        "cardClosed": "{card} — closed statement",
+        "cardMax": "{card} — over budget, using actual",
+        "cardPosted": "{card} — already paid",
+        "end": "End of {month} (planned)",
+        "breakdownError": "We couldn't build this month's breakdown."
+      },
+      "why": {
+        "extraPayment": "{month} has {count} {name} payments ({dates}).",
+        "cardsOverLeft": "Cards ({cards}) take more than what's left after bills and savings ({left}).",
+        "startsBelowZero": "{month} starts at {amount}.",
+        "todayBelowZero": "Today's balance is {amount}.",
+        "moreOutThanIn": "In {month}, {amount} more is planned to go out than to come in."
+      },
+      "path": {
+        "title": "Month-end balances (planned)",
+        "item": "{month}: {amount}"
+      },
+      "statements": {
+        "title": "Card budgets vs real statements",
+        "row": "{card}: budget {budget} · last {count} statements {low} – {high}",
+        "rowNoBudget": "{card}: no budget · last {count} statements {low} – {high}"
+      }
     },
     "awaitingDates": "Some income or bills don't have a date yet, so they aren't counted here. Set their dates on phare.money.",
     "noAnchor": "To show your plan, Phare needs your chequing balance on a date you know.",

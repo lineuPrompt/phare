@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import AwaitingDatesNotice from '@/components/shared/AwaitingDatesNotice';
 import PlanChainTile from './PlanChainTile';
-import type { PlanChainMonth } from '@/lib/planChainHelpers';
+import type { PlanChainMonthPayload, CardStatementHistory } from '@/lib/planChainHelpers';
 import { DashboardSummary, formatCurrency } from './types';
 
 function monthLabelFor(month: string, locale: string): string {
@@ -111,6 +111,8 @@ export default function SnapshotCard({
   isHorizonEnd,
   horizonLocked,
   horizonRemainingMonths,
+  pathMonths,
+  statementHistory,
 }: {
   summary: DashboardSummary;
   locale: string;
@@ -139,12 +141,15 @@ export default function SnapshotCard({
   // THE figure the plan must be read against (plan <= realCloseAmount) —
   // see PlanChainTile.
   realCloseAmount?: number | null;
-  planMonth?: PlanChainMonth | null;
+  planMonth?: PlanChainMonthPayload | null;
   isHorizonEnd?: boolean;
   // Pure pass-through to PlanChainTile — SnapshotCard makes no tier decision
   // of its own; the server already decided what this household receives.
   horizonLocked?: boolean;
   horizonRemainingMonths?: number;
+  // Pass-through to PlanChainTile's month-end path and statement check.
+  pathMonths?: { month: string; balance: number }[];
+  statementHistory?: CardStatementHistory[];
 }) {
   const t = useTranslations('dashboard');
   const tNav = useTranslations('dashboard.snapshotNav');
@@ -157,6 +162,12 @@ export default function SnapshotCard({
 
   const monthLabel = monthLabelFor(month, locale);
   const showPlanTile = currentMonth !== undefined && isPastMonth !== undefined;
+  // A month after the current one, with a plan for it: the card shows ONE
+  // basis, the plan (2026-11-14). This month's actuals ("did it cover
+  // itself?") and the real-balance lines answer nothing about a month that
+  // has not happened — and the real lines leave out card statements that have
+  // not closed yet, which made the plan look wrong beside them.
+  const isFutureMonth = showPlanTile && currentMonth !== undefined && month > currentMonth && !!planMonth;
 
   return (
     <div className="rounded-2xl bg-white p-4 sm:p-8" style={{ border: '1px solid #E5E7EB', opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s' }}>
@@ -204,133 +215,141 @@ export default function SnapshotCard({
         style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E' }}
       />
 
-      {/* Subject line. This tile and the projection tile below treat the same
-          borrowed dollars in opposite ways, which reads as a contradiction
-          until each one says which question it answers. This is a FLOW —
-          "did the month pay for itself" — so borrowed cash is excluded by
-          definition. The projection tile is a STOCK and includes it. */}
-      <p className="text-xs font-medium" style={{ color: '#6B7280' }}>
-        {t('surplusQuestion')}
-      </p>
-      <p className="text-[11px] mb-2" style={{ color: '#9CA3AF' }}>
-        {isPastMonth ? t('actualsForMonth', { month: monthLabel }) : t('actualsToDate')}
-      </p>
+      {isFutureMonth ? (
+        <p className="text-xs font-medium mb-2" style={{ color: '#6B7280' }}>
+          {t('plan.future.scheduledFor', { month: monthLabel })}
+        </p>
+      ) : (
+        <>
+        {/* Subject line. This tile and the projection tile below treat the same
+            borrowed dollars in opposite ways, which reads as a contradiction
+            until each one says which question it answers. This is a FLOW —
+            "did the month pay for itself" — so borrowed cash is excluded by
+            definition. The projection tile is a STOCK and includes it. */}
+        <p className="text-xs font-medium" style={{ color: '#6B7280' }}>
+          {t('surplusQuestion')}
+        </p>
+        <p className="text-[11px] mb-2" style={{ color: '#9CA3AF' }}>
+          {isPastMonth ? t('actualsForMonth', { month: monthLabel }) : t('actualsToDate')}
+        </p>
 
-      {/* THE SUBTRACTION, shown as a subtraction.
+        {/* THE SUBTRACTION, shown as a subtraction.
 
-          Previously three tiles in a grid (income, expenses, savings) with
-          debt payments as a purple footnote below. That did not add up on
-          screen: netCashFlow subtracts FOUR terms, so in any month with a debt
-          payment the three visible figures missed the surplus by exactly that
-          amount — July 2026 showed 15,719.84 − 9,399.75 − 989.15 = 5,330.94
-          against a displayed surplus of 4,330.94. The missing $1,000 was the
-          footnote. Every term that the formula subtracts is now a row, in
-          formula order, with its operator, so the arithmetic resolves for a
-          reader.
+            Previously three tiles in a grid (income, expenses, savings) with
+            debt payments as a purple footnote below. That did not add up on
+            screen: netCashFlow subtracts FOUR terms, so in any month with a debt
+            payment the three visible figures missed the surplus by exactly that
+            amount — July 2026 showed 15,719.84 − 9,399.75 − 989.15 = 5,330.94
+            against a displayed surplus of 4,330.94. The missing $1,000 was the
+            footnote. Every term that the formula subtracts is now a row, in
+            formula order, with its operator, so the arithmetic resolves for a
+            reader.
 
-          Debt payments appear only when non-zero: at zero the remaining rows
-          already resolve exactly, so a permanent "− 0.00" would be noise
-          rather than clarity. Borrowed cash is deliberately NOT a row here —
-          it is not a term in this formula, which is precisely what the
-          disclosure below it says. */}
-      <div className="rounded-xl overflow-hidden mb-3" style={{ border: '1px solid #E5E7EB' }}>
-        <SubtractionRow
-          label={t('income')} operator="" amount={summary.totalIncome}
-          locale={locale} color="#16A34A"
-        />
-        <SubtractionRow
-          label={t('expenses')} operator="−" amount={summary.totalExpenses}
-          locale={locale} color="#DC2626"
-        />
-        <SubtractionRow
-          label={t('savings')} operator="−" amount={summary.totalSavings}
-          locale={locale} color="#0284C7"
-          onToggle={savingsLines.length > 0 ? () => setSavingsOpen((v) => !v) : undefined}
-          expanded={savingsOpen}
-          toggleLabel={savingsOpen ? t('savingsBreakdownHide') : t('savingsBreakdownShow')}
-        />
-        {/* Where the money actually went. These are emitted from the same
-            branch that computed the headline above (computeMonthTotals), in
-            integer cents, so they sum to it exactly — the whole point of the
-            feature is that a household can check that by eye. Names are the
-            household's own; "Other" is a contribution whose destination
-            cannot be named, never a category we invented. */}
-        {savingsOpen && savingsLines.length > 0 && (
-          <div style={{ background: '#F8FAFC', borderTop: '1px solid #E5E7EB' }}>
-            {savingsLines.map((line) => (
-              <div
-                key={line.accountId ?? '__other__'}
-                className="flex items-center gap-2 pl-8 pr-3 sm:pr-4 py-2"
-              >
-                <p className="flex-1 min-w-0 truncate text-sm" style={{ color: '#6B7280' }}>
-                  {line.name ?? t('savingsOther')}
+            Debt payments appear only when non-zero: at zero the remaining rows
+            already resolve exactly, so a permanent "− 0.00" would be noise
+            rather than clarity. Borrowed cash is deliberately NOT a row here —
+            it is not a term in this formula, which is precisely what the
+            disclosure below it says. */}
+        <div className="rounded-xl overflow-hidden mb-3" style={{ border: '1px solid #E5E7EB' }}>
+          <SubtractionRow
+            label={t('income')} operator="" amount={summary.totalIncome}
+            locale={locale} color="#16A34A"
+          />
+          <SubtractionRow
+            label={t('expenses')} operator="−" amount={summary.totalExpenses}
+            locale={locale} color="#DC2626"
+          />
+          <SubtractionRow
+            label={t('savings')} operator="−" amount={summary.totalSavings}
+            locale={locale} color="#0284C7"
+            onToggle={savingsLines.length > 0 ? () => setSavingsOpen((v) => !v) : undefined}
+            expanded={savingsOpen}
+            toggleLabel={savingsOpen ? t('savingsBreakdownHide') : t('savingsBreakdownShow')}
+          />
+          {/* Where the money actually went. These are emitted from the same
+              branch that computed the headline above (computeMonthTotals), in
+              integer cents, so they sum to it exactly — the whole point of the
+              feature is that a household can check that by eye. Names are the
+              household's own; "Other" is a contribution whose destination
+              cannot be named, never a category we invented. */}
+          {savingsOpen && savingsLines.length > 0 && (
+            <div style={{ background: '#F8FAFC', borderTop: '1px solid #E5E7EB' }}>
+              {savingsLines.map((line) => (
+                <div
+                  key={line.accountId ?? '__other__'}
+                  className="flex items-center gap-2 pl-8 pr-3 sm:pr-4 py-2"
+                >
+                  <p className="flex-1 min-w-0 truncate text-sm" style={{ color: '#6B7280' }}>
+                    {line.name ?? t('savingsOther')}
+                  </p>
+                  <p className="shrink-0 tabular-nums text-sm" style={{ color: '#0284C7' }}>
+                    {formatCurrency(line.amount, locale)}
+                  </p>
+                </div>
+              ))}
+              {savingsLines.some((l) => l.name === null) && (
+                <p className="pl-8 pr-3 sm:pr-4 pb-2 text-xs" style={{ color: '#9CA3AF' }}>
+                  {t('savingsOtherHint')}
                 </p>
-                <p className="shrink-0 tabular-nums text-sm" style={{ color: '#0284C7' }}>
-                  {formatCurrency(line.amount, locale)}
-                </p>
-              </div>
-            ))}
-            {savingsLines.some((l) => l.name === null) && (
-              <p className="pl-8 pr-3 sm:pr-4 pb-2 text-xs" style={{ color: '#9CA3AF' }}>
-                {t('savingsOtherHint')}
-              </p>
-            )}
+              )}
+            </div>
+          )}
+          {summary.totalDebtPayments > 0 && (
+            <SubtractionRow
+              label={t('debtPayments')} operator="−" amount={summary.totalDebtPayments}
+              locale={locale} color="#7C3AED"
+            />
+          )}
+          <SubtractionRow
+            label={surplus ? t('surplus') : t('deficit')}
+            operator="="
+            amount={summary.netCashFlow}
+            locale={locale}
+            color={surplus ? '#16A34A' : '#DC2626'}
+            emphasis
+          />
+        </div>
+
+        {/* Borrowed cash (a debt draw) is deliberately NOT a term in the
+            subtraction above — a month that only "balanced" by borrowing must
+            never read as a surplus month. Disclosed here with real visual
+            weight (red, not a muted caption): a family scanning the number must
+            not be able to miss that it was propped up by borrowing. This is the
+            ONE alarm for these dollars — the projection tile states the same
+            fact as a plain caption, deliberately (founder call, 2026-08-01; see
+            PlanChainTile). */}
+        {summary.totalBorrowed > 0 && (
+          <div
+            className="rounded-xl px-3 py-2.5 mt-2"
+            style={{ background: '#FEF2F2', border: '1.5px solid #FECACA' }}
+          >
+            <p className="text-sm font-semibold" style={{ color: '#B91C1C' }}>
+              {t('borrowedNote', { amount: formatCurrency(summary.totalBorrowed, locale) })}
+            </p>
           </div>
         )}
-        {summary.totalDebtPayments > 0 && (
-          <SubtractionRow
-            label={t('debtPayments')} operator="−" amount={summary.totalDebtPayments}
-            locale={locale} color="#7C3AED"
-          />
-        )}
-        <SubtractionRow
-          label={surplus ? t('surplus') : t('deficit')}
-          operator="="
-          amount={summary.netCashFlow}
-          locale={locale}
-          color={surplus ? '#16A34A' : '#DC2626'}
-          emphasis
-        />
-      </div>
 
-      {/* Borrowed cash (a debt draw) is deliberately NOT a term in the
-          subtraction above — a month that only "balanced" by borrowing must
-          never read as a surplus month. Disclosed here with real visual
-          weight (red, not a muted caption): a family scanning the number must
-          not be able to miss that it was propped up by borrowing. This is the
-          ONE alarm for these dollars — the projection tile states the same
-          fact as a plain caption, deliberately (founder call, 2026-08-01; see
-          PlanChainTile). */}
-      {summary.totalBorrowed > 0 && (
-        <div
-          className="rounded-xl px-3 py-2.5 mt-2"
-          style={{ background: '#FEF2F2', border: '1.5px solid #FECACA' }}
-        >
-          <p className="text-sm font-semibold" style={{ color: '#B91C1C' }}>
-            {t('borrowedNote', { amount: formatCurrency(summary.totalBorrowed, locale) })}
+        {/* Withdrawn from savings (2026-10-27) — excluded from the figure above
+            for the same reason as borrowed cash, but it is the household's own
+            money, not debt: stated plainly, without the borrowing alarm. */}
+        {summary.totalWithdrawn > 0 && (
+          <p className="text-sm font-medium mt-2" style={{ color: '#B45309' }}>
+            {t('withdrawnNote', { amount: formatCurrency(summary.totalWithdrawn, locale) })}
           </p>
-        </div>
-      )}
+        )}
 
-      {/* Withdrawn from savings (2026-10-27) — excluded from the figure above
-          for the same reason as borrowed cash, but it is the household's own
-          money, not debt: stated plainly, without the borrowing alarm. */}
-      {summary.totalWithdrawn > 0 && (
-        <p className="text-sm font-medium mt-2" style={{ color: '#B45309' }}>
-          {t('withdrawnNote', { amount: formatCurrency(summary.totalWithdrawn, locale) })}
+        {/* This figure is this month's cash flow only — it never carries
+            forward a prior month's leftover balance. The real running balance
+            (which does) lives on Timeline; this note points there so the two
+            numbers are never mistaken for the same thing. */}
+        <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>
+          {t('monthOnlyNote')}{' '}
+          <Link href={`/${locale}/timeline?month=${month}`} className="underline hover:no-underline">
+            {t('viewRealBalance')}
+          </Link>
         </p>
+        </>
       )}
-
-      {/* This figure is this month's cash flow only — it never carries
-          forward a prior month's leftover balance. The real running balance
-          (which does) lives on Timeline; this note points there so the two
-          numbers are never mistaken for the same thing. */}
-      <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>
-        {t('monthOnlyNote')}{' '}
-        <Link href={`/${locale}/timeline?month=${month}`} className="underline hover:no-underline">
-          {t('viewRealBalance')}
-        </Link>
-      </p>
 
       {showPlanTile && (
         <PlanChainTile
@@ -346,6 +365,9 @@ export default function SnapshotCard({
           totalBorrowed={summary.totalBorrowed}
           locale={locale}
           recurringHref={`/${locale}/recurring`}
+          isFutureMonth={isFutureMonth}
+          pathMonths={pathMonths}
+          statementHistory={statementHistory}
         />
       )}
     </div>

@@ -27,6 +27,7 @@ import {
   type HomeSnapshot,
 } from '../lib/homeLoader';
 import { formatMonthLong } from '../lib/timelineView';
+import { FutureSum, PlanPath, StatementCheck, WhyLines } from '../components/PlanParts';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
 
@@ -200,6 +201,21 @@ function SnapshotCard({
   );
 }
 
+/**
+ * A month after the current one has nothing to report as actuals: the
+ * snapshot's sum gives way to the plan's (PlanCard), and this card says only
+ * which month the plan is for — the web card's "Scheduled for {month}".
+ */
+function ScheduledCard({ month }: { month: string }) {
+  const { t, locale } = useI18n();
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>{t('home.snapshot.title')}</Text>
+      <Text style={styles.question}>{t('home.plan.future.scheduledFor', { month: formatMonthLong(month, locale) })}</Text>
+    </View>
+  );
+}
+
 function PlanCard({
   plan,
   month,
@@ -235,6 +251,32 @@ function PlanCard({
         <Text style={styles.badge}>{t('home.plan.badge')}</Text>
         <Text style={styles.planLabel}>{t('home.noAnchor')}</Text>
         <ActionButton label={t('home.setBalance')} onPress={() => router.push('/balance')} onDark />
+      </View>
+    );
+  }
+
+  if (plan.kind === 'future') {
+    return (
+      <View style={styles.planCard}>
+        <Text style={styles.badge}>{t('home.plan.badge')}</Text>
+        <View>
+          <Text style={styles.planQuestion}>{t('home.plan.future.question')}</Text>
+          <Text style={styles.planLabel}>{t('home.plan.future.label')}</Text>
+        </View>
+        <FutureSum
+          month={month}
+          startBalance={plan.startBalance}
+          lines={plan.lines}
+          balance={plan.balance}
+          cards={plan.cards}
+        />
+        <WhyLines month={month} why={plan.why} />
+        {plan.awaitingDates && (
+          <Text style={[styles.planSmall, { color: PLAN.notice }]}>{t('home.awaitingDates')}</Text>
+        )}
+        <PlanPath points={plan.path} selectedMonth={month} />
+        <StatementCheck statements={plan.statements} />
+        <Text style={styles.planSmall}>{t('home.plan.note')}</Text>
       </View>
     );
   }
@@ -294,6 +336,9 @@ function PlanCard({
       {plan.awaitingDates && (
         <Text style={[styles.planSmall, { color: PLAN.notice }]}>{t('home.awaitingDates')}</Text>
       )}
+
+      <PlanPath points={plan.path} selectedMonth={month} />
+      <StatementCheck statements={plan.statements} />
 
       <Text style={styles.planSmall}>{t('home.plan.note')}</Text>
     </View>
@@ -458,7 +503,9 @@ export default function HomeScreen() {
             locale={locale}
           />
         )}
-        {load && <SnapshotCard snapshot={load.snapshot} month={load.month} isPastMonth={load.isPastMonth} />}
+        {load && (load.plan.kind === 'future'
+          ? <ScheduledCard month={load.month} />
+          : <SnapshotCard snapshot={load.snapshot} month={load.month} isPastMonth={load.isPastMonth} />)}
         {load && (
           <PlanCard
             plan={load.plan}

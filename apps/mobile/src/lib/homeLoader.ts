@@ -48,19 +48,32 @@ import type { AccountsResponse, TimelineOk, TimezoneResponse } from './timeline'
 /** How a card's cost entered the plan. Mirrors CardCostBasis on the web. */
 export type CardBasis = 'actual' | 'budget' | 'max' | 'posted';
 
+/** The month's lines, as planChainHelpers.computeMonthBreakdown sends them. */
+type LinesPayload = {
+  income: unknown; bills: unknown; savings: unknown; debtPayments: unknown;
+  drawn: unknown; leftAfterBillsAndSavings: unknown; cards: unknown;
+};
+
 /** One month of GET /api/timeline?includePlan=1 → plan.months, as the route sends it. */
 type PlanMonthPayload = {
   month: string;
   isPartialMonth: boolean;
   balance: number;
-  /** inProgress: absent from a server older than 2026-11-13. */
-  cardCost: { cardId: string; cardName: string; basis: CardBasis; amount: number; inProgress?: boolean }[];
+  /** inProgress: absent from a server older than 2026-11-13. budget: older than 2026-11-14. */
+  cardCost: { cardId: string; cardName: string; basis: CardBasis; amount: number; inProgress?: boolean; budget?: unknown }[];
   unanchoredIncomeCount: number;
   unanchoredExpenseCount: number;
+  // Absent from a server older than 2026-11-14 — a future month then keeps
+  // the older layout rather than a sum the server never sent.
+  startBalance?: unknown;
+  breakdown?: { status?: unknown; lines?: LinesPayload };
+  why?: { kind?: unknown; [field: string]: unknown } | null;
 };
 
+type StatementPayload = { cardId: string; cardName: string; count: unknown; low: unknown; high: unknown };
+
 type HomeTimelineResponse =
-  | (TimelineOk & { plan: { months: PlanMonthPayload[] } | null })
+  | (TimelineOk & { plan: { months: PlanMonthPayload[]; statementHistory?: StatementPayload[] } | null })
   | { ok: false; reason: 'no_anchor' };
 
 /** GET /api/dashboard?snapshotOnly=1. */
@@ -101,6 +114,25 @@ export type HomeSnapshot = {
   awaitingDates: boolean;
 };
 
+/** One card's line in the plan. inProgress: a statement still running — `amount` is what's on it so far. */
+export type HomePlanCard = { cardId: string; cardName: string; basis: CardBasis; amount: number; inProgress: boolean };
+
+/** The month-end path: every month the household can see. */
+export type HomePathPoint = { month: string; balance: number };
+
+/** A card's budget for the viewed month beside its real closed statements (low, high, how many). */
+export type HomeStatement = { cardId: string; cardName: string; budget: number | null; count: number; low: number; high: number };
+
+/** A future month's sum. Every line is the server's; nothing here is added up. */
+export type HomePlanLines = { income: number; bills: number; savings: number; debtPayments: number; drawn: number };
+
+/** Why a month dips — chosen by the server (explainPlanPath), worded here. */
+export type HomeWhy =
+  | { kind: 'extraPayments'; items: { name: string; occurrences: number; dates: string[] }[] }
+  | { kind: 'cardsOverLeft'; cards: number; left: number }
+  | { kind: 'startsBelowZero'; startBalance: number; isPartialMonth: boolean }
+  | { kind: 'moreOutThanIn'; amount: number };
+
 export type HomePlan =
   /** No chequing account, or no real balance set yet. Both are set on the web. */
   | { kind: 'noAnchor' }
@@ -117,9 +149,27 @@ export type HomePlan =
       /** The plan's balance at month end. */
       balance: number;
       isPartialMonth: boolean;
-      /** inProgress: a statement still running — `amount` is what's on it so far. */
-      cards: { cardId: string; cardName: string; basis: CardBasis; amount: number; inProgress: boolean }[];
+      cards: HomePlanCard[];
       awaitingDates: boolean;
+      path: HomePathPoint[];
+      statements: HomeStatement[];
+    }
+  /**
+   * A month after the current one (2026-11-14): ONE basis, the plan, as a sum
+   * that adds up. No real-balance lines — they leave out card statements that
+   * have not closed yet. `lines: null` is a breakdown the server could not
+   * build: the card shows only that message, never a partial sum.
+   */
+  | {
+      kind: 'future';
+      startBalance: number;
+      lines: HomePlanLines | null;
+      balance: number;
+      cards: HomePlanCard[];
+      why: HomeWhy | null;
+      awaitingDates: boolean;
+      path: HomePathPoint[];
+      statements: HomeStatement[];
     };
 
 /** One month of Home. */
@@ -188,11 +238,120 @@ function snapshotFrom(data: SnapshotResponse, month: string): HomeSnapshot {
   };
 }
 
-function planFrom(data: HomeTimelineResponse, month: string): HomePlan {
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function text(value: unknown, name: string): string {
+  if (typeof value !== 'string') throw new Error(`home: ${name} is not text`);
+  return value;
+}
+
+function cardsFrom(planMonth: PlanMonthPayload): HomePlanCard[] {
+  return planMonth.cardCost.map((c) => {
+    if (!BASES.includes(c.basis)) throw new Error(`home: unknown card basis "${String(c.basis)}"`);
+    // Absent = a server from before the flag existed: nothing is "so far".
+    if (c.inProgress !== undefined && typeof c.inProgress !== 'boolean') {
+      throw new Error(`home: card inProgress is not a boolean`);
+    }
+    return {
+      cardId: c.cardId,
+      cardName: c.cardName,
+      basis: c.basis,
+      amount: amount(c.amount, 'card cost'),
+      inProgress: c.inProgress === true,
+    };
+  });
+}
+
+function pathFrom(months: PlanMonthPayload[]): HomePathPoint[] {
+  return months.map((m) => ({ month: text(m.month, 'path month'), balance: amount(m.balance, 'path balance') }));
+}
+
+/** Each card's statements, beside the budget this month's plan used for it (joined by id, not computed). */
+function statementsFrom(history: StatementPayload[] | undefined, planMonth: PlanMonthPayload): HomeStatement[] {
+  const budgetOf = new Map(planMonth.cardCost.map((c) => [c.cardId, c.budget]));
+  return (history ?? []).map((h) => {
+    const budget = budgetOf.get(h.cardId);
+    return {
+      cardId: text(h.cardId, 'statement card id'),
+      cardName: text(h.cardName, 'statement card name'),
+      budget: budget === undefined || budget === null ? null : amount(budget, 'card budget'),
+      count: amount(h.count, 'statement count'),
+      low: amount(h.low, 'statement low'),
+      high: amount(h.high, 'statement high'),
+    };
+  });
+}
+
+function whyFrom(why: PlanMonthPayload['why']): HomeWhy | null {
+  if (why === null || why === undefined) return null;
+  switch (why.kind) {
+    case 'extraPayments': {
+      if (!Array.isArray(why.items)) throw new Error('home: why items is not a list');
+      return {
+        kind: 'extraPayments',
+        items: (why.items as Record<string, unknown>[]).map((item) => {
+          if (!Array.isArray(item.dates) || !item.dates.every((d) => typeof d === 'string' && DATE.test(d))) {
+            throw new Error('home: why dates are not dates');
+          }
+          return { name: text(item.name, 'why name'), occurrences: amount(item.occurrences, 'why occurrences'), dates: item.dates as string[] };
+        }),
+      };
+    }
+    case 'cardsOverLeft':
+      return { kind: 'cardsOverLeft', cards: amount(why.cards, 'why cards'), left: amount(why.left, 'why left') };
+    case 'startsBelowZero':
+      if (typeof why.isPartialMonth !== 'boolean') throw new Error('home: why isPartialMonth is not a boolean');
+      return { kind: 'startsBelowZero', startBalance: amount(why.startBalance, 'why start'), isPartialMonth: why.isPartialMonth };
+    case 'moreOutThanIn':
+      return { kind: 'moreOutThanIn', amount: amount(why.amount, 'why amount') };
+    default:
+      throw new Error(`home: unknown why "${String(why.kind)}"`);
+  }
+}
+
+function linesFrom(breakdown: NonNullable<PlanMonthPayload['breakdown']>): HomePlanLines | null {
+  if (breakdown.status === 'error') return null;
+  if (breakdown.status !== 'ok' || !breakdown.lines) throw new Error(`home: unknown breakdown "${String(breakdown.status)}"`);
+  const l = breakdown.lines;
+  return {
+    income: amount(l.income, 'lines income'),
+    bills: amount(l.bills, 'lines bills'),
+    savings: amount(l.savings, 'lines savings'),
+    debtPayments: amount(l.debtPayments, 'lines debtPayments'),
+    drawn: amount(l.drawn, 'lines drawn'),
+  };
+}
+
+function planFrom(data: HomeTimelineResponse, month: string, currentMonth: string): HomePlan {
   if (!data.ok) return { kind: 'noAnchor' };
 
   const planMonth = data.plan?.months.find((m) => m.month === month) ?? null;
   if (!planMonth) return { kind: 'hidden' };
+
+  // The viewed month's own balance first: its failure names the figure on screen.
+  const balance = amount(planMonth.balance, 'plan balance');
+  const awaitingDates =
+    amount(planMonth.unanchoredIncomeCount, 'plan unanchoredIncomeCount') +
+      amount(planMonth.unanchoredExpenseCount, 'plan unanchoredExpenseCount') >
+    0;
+  const path = pathFrom(data.plan?.months ?? []);
+  const statements = statementsFrom(data.plan?.statementHistory, planMonth);
+
+  if (month > currentMonth && planMonth.breakdown !== undefined) {
+    const lines = linesFrom(planMonth.breakdown);
+    return {
+      kind: 'future',
+      startBalance: amount(planMonth.startBalance, 'plan startBalance'),
+      lines,
+      balance,
+      cards: cardsFrom(planMonth),
+      // A breakdown the server could not build shows only its message.
+      why: lines === null ? null : whyFrom(planMonth.why),
+      awaitingDates,
+      path,
+      statements,
+    };
+  }
 
   const view = buildMonthView(
     data.days,
@@ -206,26 +365,12 @@ function planFrom(data: HomeTimelineResponse, month: string): HomePlan {
     kind: 'ready',
     realClose: view ? view.closesAt : null,
     carriedIn: view ? view.opensAt : null,
-    balance: amount(planMonth.balance, 'plan balance'),
+    balance,
     isPartialMonth: planMonth.isPartialMonth === true,
-    cards: planMonth.cardCost.map((c) => {
-      if (!BASES.includes(c.basis)) throw new Error(`home: unknown card basis "${String(c.basis)}"`);
-      // Absent = a server from before the flag existed: nothing is "so far".
-      if (c.inProgress !== undefined && typeof c.inProgress !== 'boolean') {
-        throw new Error(`home: card inProgress is not a boolean`);
-      }
-      return {
-        cardId: c.cardId,
-        cardName: c.cardName,
-        basis: c.basis,
-        amount: amount(c.amount, 'card cost'),
-        inProgress: c.inProgress === true,
-      };
-    }),
-    awaitingDates:
-      amount(planMonth.unanchoredIncomeCount, 'plan unanchoredIncomeCount') +
-        amount(planMonth.unanchoredExpenseCount, 'plan unanchoredExpenseCount') >
-      0,
+    cards: cardsFrom(planMonth),
+    awaitingDates,
+    path,
+    statements,
   };
 }
 
@@ -263,7 +408,7 @@ function monthFrom(data: SnapshotResponse, context: HomeContext, month: string):
     plan: isPastMonth
       ? { kind: 'past' }
       : context.timeline
-        ? planFrom(context.timeline, month)
+        ? planFrom(context.timeline, month, context.currentMonth)
         : { kind: 'noAnchor' },
   };
 }

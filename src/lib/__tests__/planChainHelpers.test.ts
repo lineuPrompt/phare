@@ -4,7 +4,12 @@ import {
   computeMonthCardCost,
   resolveCardBudgetsForCycle,
   buildPlanChain,
+  computeMonthBreakdown,
+  findExtraPayments,
+  explainPlanPath,
+  computeStatementHistory,
   type ChequingChainTx,
+  type PlanChainMonth,
 } from '../planChainHelpers';
 import { buildCashTimeline, type TimelineTx } from '../timelineHelpers';
 
@@ -462,5 +467,239 @@ describe('THE INVARIANT: month 1 vs. the real ledger close', () => {
     expect(months[0].cardCost[0].basis).toBe('actual');
     expect(months[0].cardCostTotal).toBe(150);
     expect(months[0].balance).toBeLessThan(datedOnlyClose);
+  });
+});
+
+// ── The month's breakdown, extra payments, the "why" line, statements ───────
+// (2026-11-14 — one sum per future month; see planChainHelpers.ts.)
+
+describe('buildPlanChain — startBalance and the month breakdown', () => {
+  const SAV = 'sav-1';
+  const DEBT = 'debt-1';
+  const accounts = [
+    { id: CHEQUING, type: 'chequing' },
+    { id: SAV, type: 'savings' },
+    { id: DEBT, type: 'debt' },
+  ];
+  // Peers on the goal side of each transfer: their account decides the bucket.
+  const transferPeers = [
+    { id: 'p-sav', account_id: SAV, type: 'transfer', amount: 300 },
+    { id: 'p-debt', account_id: DEBT, type: 'transfer', amount: 200 },
+    { id: 'p-draw', account_id: DEBT, type: 'transfer', amount: -500 },
+    { id: 'p-wd', account_id: SAV, type: 'transfer', amount: -120 },
+  ];
+  const rows: ChequingChainTx[] = [
+    tx({ date: '2026-08-01', amount: 3000, type: 'income' }),
+    tx({ date: '2026-08-03', amount: 1234.56, type: 'expense' }),
+    tx({ date: '2026-08-05', amount: 777, type: 'expense', is_bridge: true }), // card payment, never a bill
+    tx({ date: '2026-08-06', amount: 300, type: 'transfer', id: 'c-sav', transfer_peer_id: 'p-sav' }),
+    tx({ date: '2026-08-07', amount: 200, type: 'transfer', id: 'c-debt', transfer_peer_id: 'p-debt' }),
+    tx({ date: '2026-08-08', amount: -500, type: 'transfer', id: 'c-draw', transfer_peer_id: 'p-draw' }),
+    tx({ date: '2026-08-09', amount: -120, type: 'transfer', id: 'c-wd', transfer_peer_id: 'p-wd' }),
+    tx({ date: '2026-09-02', amount: 2500, type: 'income' }),
+    tx({ date: '2026-09-04', amount: 99.99, type: 'expense' }),
+  ];
+  const cards = [{ id: CARD_A, name: 'Visa', statement_close_day: 15, payment_day: 5 }];
+  const params = {
+    anchorBalance: 1000, today: '2026-07-20', currentMonth: '2026-07', monthsAhead: 4, chequingId: CHEQUING,
+    datedTransactions: rows, cards,
+    cardBudgetRows: [{ account_id: CARD_A, card_goal: 400, month: '2026-01-01' }],
+    cardTransactions: [],
+    unanchoredIncomeCount: 0, unanchoredExpenseCount: 0,
+    accounts, transferPeers,
+  };
+
+  it('startBalance is the anchor for the first month and the previous month-end after it', () => {
+    const months = buildPlanChain(params);
+    expect(months[0].startBalance).toBe(1000);
+    for (let i = 1; i < months.length; i++) expect(months[i].startBalance).toBe(months[i - 1].balance);
+  });
+
+  it('splits a month into the snapshot buckets: bills without card payments, savings vs debt payment by peer, draws in', () => {
+    const aug = buildPlanChain(params).find((m) => m.month === '2026-08')!;
+    expect(aug.breakdown).toEqual({
+      status: 'ok',
+      lines: {
+        income: 3000,
+        bills: 1234.56, // the 777 card payment is the card's own term, not a bill
+        savings: 300,
+        debtPayments: 200,
+        drawn: 620, // 500 borrowed + 120 withdrawn
+        leftAfterBillsAndSavings: 1465.44, // 3000 - 1234.56 - 300
+        cards: 0, // pays the July statement: closed on the 15th with nothing on it
+      },
+    });
+  });
+
+  it('every month: start + income + drawn - bills - savings - debt payments - cards = balance, to the cent', () => {
+    const c = (n: number) => Math.round(n * 100);
+    const months = buildPlanChain(params);
+    // The identity must be exercised WITH a card budget in it, not only at 0.
+    expect(months.find((m) => m.month === '2026-10')!.cardCostTotal).toBe(400);
+    for (const m of months) {
+      expect(m.breakdown.status).toBe('ok');
+      if (m.breakdown.status !== 'ok') continue;
+      const l = m.breakdown.lines;
+      expect(c(m.startBalance) + c(l.income) + c(l.drawn) - c(l.bills) - c(l.savings) - c(l.debtPayments) - c(l.cards))
+        .toBe(c(m.balance));
+      expect(l.cards).toBe(m.cardCostTotal);
+    }
+  });
+
+  it('a month the classifier cannot bucket is an error with both nets, never adjusted lines', () => {
+    const odd: ChequingChainTx[] = [
+      tx({ date: '2026-08-02', amount: 100, type: 'income' }),
+      tx({ date: '2026-08-03', amount: 40, type: 'adjustment' }),
+    ];
+    const totals = computeDatedRangeTotals(odd, CHEQUING, { start: '2026-08-01', end: '2026-08-31' });
+    expect(computeMonthBreakdown({
+      monthRows: odd, peerRows: [], accounts,
+      chainIncome: totals.income, chainExpenses: totals.expenses, cardCostTotal: 0,
+    })).toEqual({ status: 'error', linesNet: 100, chainNet: 60 });
+  });
+});
+
+describe('findExtraPayments', () => {
+  const MORTGAGE = { id: 'ri-mtg', description: 'Mortgage', cadence: 'biweekly', type: 'expense' };
+  const SALARY = { id: 'ri-sal', description: 'Salary', cadence: 'biweekly', type: 'income' };
+
+  it('names a third biweekly expense with its dates, ascending', () => {
+    const rows = ['2027-05-31', '2027-05-03', '2027-05-17'].map((d) =>
+      tx({ date: d, amount: 1500, type: 'expense', recurring_item_id: 'ri-mtg' }));
+    expect(findExtraPayments(rows, [MORTGAGE])).toEqual([
+      { name: 'Mortgage', occurrences: 3, usualOccurrences: 2, dates: ['2027-05-03', '2027-05-17', '2027-05-31'] },
+    ]);
+  });
+
+  it('a usual month, and an extra paycheque, are not extra payments', () => {
+    const rows = [
+      tx({ date: '2027-05-03', amount: 1500, type: 'expense', recurring_item_id: 'ri-mtg' }),
+      tx({ date: '2027-05-17', amount: 1500, type: 'expense', recurring_item_id: 'ri-mtg' }),
+      ...['2027-06-02', '2027-06-16', '2027-06-30'].map((d) =>
+        tx({ date: d, amount: 2600, type: 'income', recurring_item_id: 'ri-sal' })),
+    ];
+    expect(findExtraPayments(rows, [MORTGAGE, SALARY])).toEqual([]);
+  });
+});
+
+describe('explainPlanPath', () => {
+  function month(over: Partial<PlanChainMonth> & { month: string; startBalance: number; balance: number }): PlanChainMonth {
+    return {
+      rangeStart: `${over.month}-01`, rangeEnd: `${over.month}-28`, isPartialMonth: false,
+      income: 0, datedExpenses: 0, cardCost: [], cardCostTotal: 0,
+      breakdown: { status: 'ok', lines: { income: 0, bills: 0, savings: 0, debtPayments: 0, drawn: 0, leftAfterBillsAndSavings: 0, cards: 0 } },
+      extraPayments: [], why: null, unanchoredIncomeCount: 0, unanchoredExpenseCount: 0,
+      ...over,
+    };
+  }
+  const lines = (left: number, cards: number) => ({
+    status: 'ok' as const,
+    lines: { income: 0, bills: 0, savings: 0, debtPayments: 0, drawn: 0, leftAfterBillsAndSavings: left, cards },
+  });
+  const extra = (name: string) => ({ name, occurrences: 3, usualOccurrences: 2, dates: ['2027-05-03', '2027-05-17', '2027-05-31'] });
+
+  it('only a month below zero, or the lowest month, gets a reason', () => {
+    const out = explainPlanPath([
+      month({ month: '2027-01', startBalance: 500, balance: 900 }),
+      month({ month: '2027-02', startBalance: 900, balance: 300 }), // lowest
+      month({ month: '2027-03', startBalance: 300, balance: 700 }),
+    ]);
+    expect(out.map((m) => m.why)).toEqual([null, { kind: 'moreOutThanIn', amount: 600 }, null]);
+  });
+
+  it('a month below zero gets a reason even when a later month is lower', () => {
+    const out = explainPlanPath([
+      month({ month: '2027-08', startBalance: 10, balance: -90 }),
+      month({ month: '2027-09', startBalance: -90, balance: -300 }), // lowest
+    ]);
+    expect(out[0].why).toEqual({ kind: 'moreOutThanIn', amount: 100 });
+  });
+
+  it('extra payments come first, at most two named', () => {
+    const [m] = explainPlanPath([month({
+      month: '2027-05', startBalance: 1410.01, balance: -637.84,
+      breakdown: lines(2502.15, 4550), extraPayments: [extra('A'), extra('B'), extra('C')],
+    })]);
+    expect(m.why).toEqual({ kind: 'extraPayments', items: [extra('A'), extra('B')] });
+  });
+
+  it('then card budgets above what is left after bills and savings', () => {
+    const [m] = explainPlanPath([month({ month: '2027-08', startBalance: 5.57, balance: -542.28, breakdown: lines(4002.15, 4550) })]);
+    expect(m.why).toEqual({ kind: 'cardsOverLeft', cards: 4550, left: 4002.15 });
+  });
+
+  it('no card cost is never the card reason, even when nothing is left', () => {
+    const [m] = explainPlanPath([month({ month: '2027-08', startBalance: 50, balance: -50, breakdown: lines(-100, 0) })]);
+    expect(m.why).toEqual({ kind: 'moreOutThanIn', amount: 100 });
+  });
+
+  it('then a month that starts below zero', () => {
+    const [m] = explainPlanPath([month({ month: '2027-09', startBalance: -50, balance: -10, breakdown: lines(500, 460) })]);
+    expect(m.why).toEqual({ kind: 'startsBelowZero', startBalance: -50, isPartialMonth: false });
+  });
+
+  it('a broken breakdown never feeds the card reason', () => {
+    const [m] = explainPlanPath([month({
+      month: '2027-08', startBalance: 100, balance: -20,
+      breakdown: { status: 'error', linesNet: 1, chainNet: 2 },
+    })]);
+    expect(m.why).toEqual({ kind: 'moreOutThanIn', amount: 120 });
+  });
+
+  it('a tie for lowest goes to the first month; nothing true to say is null', () => {
+    const out = explainPlanPath([
+      month({ month: '2027-01', startBalance: 100, balance: 200 }),
+      month({ month: '2027-02', startBalance: 300, balance: 200 }), // same low, and it DID go down
+    ]);
+    // Lowest is January (the first of the tie), and January went UP: no
+    // reason is invented — and February, not the lowest, gets none either.
+    expect(out.map((m) => m.why)).toEqual([null, null]);
+  });
+});
+
+describe('computeStatementHistory', () => {
+  const cards = [{ id: CARD_A, name: 'Visa', statement_close_day: 27 }];
+  const spend = (date: string, amount: number, type = 'expense') =>
+    ({ account_id: CARD_A, date, type, amount, category_id: null, is_bridge: false });
+  const base = { cards, currentMonth: '2026-11', today: '2026-11-14' };
+  // Shaped like Visa Avion's real closed statements (2be22642, read 2026-11-14).
+  const txns = [
+    spend('2026-07-10', 4522.01), spend('2026-08-10', 4049.28),
+    spend('2026-09-10', 5300), spend('2026-09-12', 102.23, 'income'), // a refund nets: 5197.77
+    spend('2026-10-10', 5696.18),
+    spend('2026-11-01', 999), // the open statement, never in the check
+  ];
+
+  it('the last 4 closed statements, newest first, their low and high', () => {
+    const [h] = computeStatementHistory({ ...base, cardTransactions: txns, firstTransactionDate: new Map([[CARD_A, '2026-07-01']]) });
+    expect(h).toEqual({
+      cardId: CARD_A, cardName: 'Visa', count: 4, low: 4049.28, high: 5696.18,
+      statements: [
+        { cycleMonth: '2026-10', total: 5696.18 },
+        { cycleMonth: '2026-09', total: 5197.77 },
+        { cycleMonth: '2026-08', total: 4049.28 },
+        { cycleMonth: '2026-07', total: 4522.01 },
+      ],
+    });
+  });
+
+  it('never more than 4, even with 5 closed statements on record', () => {
+    const [h] = computeStatementHistory({
+      ...base, cardTransactions: [...txns, spend('2026-06-10', 10)],
+      firstTransactionDate: new Map([[CARD_A, '2026-06-01']]),
+    });
+    expect(h.count).toBe(4);
+    expect(h.low).toBe(4049.28); // the June statement ($10) is the 5th — not in the range
+  });
+
+  it('a statement that ended before the first transaction is skipped, not a $0 statement', () => {
+    const [h] = computeStatementHistory({ ...base, cardTransactions: txns, firstTransactionDate: new Map([[CARD_A, '2026-08-01']]) });
+    expect(h.statements.map((s) => s.cycleMonth)).toEqual(['2026-10', '2026-09', '2026-08']);
+    expect(h.low).toBe(4049.28);
+  });
+
+  it('fewer than 2 statements, or no transaction ever, leaves the card out', () => {
+    expect(computeStatementHistory({ ...base, cardTransactions: txns, firstTransactionDate: new Map([[CARD_A, '2026-10-01']]) })).toEqual([]);
+    expect(computeStatementHistory({ ...base, cardTransactions: txns, firstTransactionDate: new Map() })).toEqual([]);
   });
 });

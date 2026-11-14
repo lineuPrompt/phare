@@ -18,13 +18,13 @@ import { addMonthsToMonth } from '@/lib/goalHelpers';
 import type { TimelineDay, DipInfo } from '@/lib/timelineHelpers';
 import TimelineHeader from '@/components/timeline/TimelineHeader';
 import { buildMonthView, type UnbalancedDay } from '@/lib/timelineDisplayHelpers';
-import type { PlanChainMonth } from '@/lib/planChainHelpers';
+import type { PlanChainMonthPayload, CardStatementHistory } from '@/lib/planChainHelpers';
 import { useBusinessToday } from '@/lib/useBusinessToday';
 import SupportLine from '@/components/shared/SupportLine';
 import UpgradeButton from '@/components/billing/UpgradeButton';
 import { formatArchiveMonth } from '@/lib/reviewArchive';
 
-type PlanResponse = { months: PlanChainMonth[] };
+type PlanResponse = { months: PlanChainMonthPayload[]; statementHistory?: CardStatementHistory[] };
 
 type TimelineDipResponse =
   | {
@@ -364,6 +364,8 @@ export default function DashboardPage() {
                   isHorizonEnd={isHorizonEnd}
                   horizonLocked={horizonLock.locked}
                   horizonRemainingMonths={horizonLock.remainingMonths}
+                  pathMonths={plan?.months.map((m) => ({ month: m.month, balance: m.balance })) ?? []}
+                  statementHistory={plan?.statementHistory ?? []}
                 />
               )}
             </div>

@@ -27,3 +27,4 @@ export * from './privacyPolicy';
 export * from './termsOfService';
 export * from './cardPlan';
 export * from './members';
+export * from './planDisplay';

@@ -1,5 +1,14 @@
 # Future month "Real balance at close" leaves out card payments (found 2026-11-14)
 
+**Status: FIXED 2026-11-14 (approved by Lineu as an exception to the web
+freeze).** A future month now shows one basis only, the plan, as a sum that
+adds up (start + income + drawn − bills − savings − debt payments − cards =
+end), with a code-chosen "why" line, the month-end path and a card statement
+check, on the web dashboard and the app's Home. The real-balance lines are
+gone from future months; the current and past months keep their layout.
+Reconciled to the cent for 2be22642 (May −637.84, Aug −542.28, Oct
+−1,637.98).
+
 **Found:** Lineu asked why May 2027 read "Real balance at close: $18,158.73"
 next to a plan of −$637.84 (household 2be22642, read-only).
 

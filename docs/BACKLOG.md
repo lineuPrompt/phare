@@ -393,13 +393,6 @@ the v1.1 list separately.**
   when asked about November and December. They still hold the Aug 6 plan
   (Groceries $550).
 
-- *(new 2026-11-14)* Decide the fix for the future-month "Real balance at
-  close" on the Plan tile. It leaves out card statements that haven't closed
-  yet (about $17k over Dec–May for 2be22642), so the plan looks wrong next
-  to it. Options and numbers:
-  [ticket](tickets/future-month-real-close-omits-card-cost.md). This is a web +
-  app copy change, or money math if the fix projects card cycles (then STOP).
-
 ## WAITING ON DATA
 
 - (none — the upload-screen inversion became READY item 5, visual only.)
@@ -482,6 +475,7 @@ for when it thaws:
 
 | Item | Commit |
 |---|---|
+| Future month = one plan sum (2026-11-14, approved by Lineu as a web-freeze exception; [ticket](tickets/future-month-real-close-omits-card-cost.md), closed): start + income + drawn − bills − savings − debt payments − cards = end, a code-chosen "why" line (extra payments, cards over what's left, starts below zero, more out than in), the month-end path (plain bars, shared geometry in `@phare/core`) and each card's last closed statements vs its budget. Web dashboard + app Home, same payload; a breakdown that does not add up to the cent is an error for that month only. Reconciled live 2be22642 (read-only) May/Aug/Oct to the cent; Zezinho write test passed; web and app match on 22 future months | _(Lineu)_ |
 | Open card statement counts its actual (2026-11-13, approved by Lineu): a statement already running = actual on it so far (flag `inProgress`, basis stays `actual` so installed apps don't break); future = budget, closed = actual, unchanged. Web + app | _(Lineu)_ |
 | Date pickers on every date field in the app (2026-11-13): quick entry, edit entry, balance, onboarding next payday, recurring date / end date / applies from; `@react-native-community/datetimepicker` 9.1.0 (SDK 57 pin) — needs a new build | _(Lineu)_ |
 | Recurring entries keep going (2026-11-04): the daily 07:00 job tops every active rule up to 12 months ahead (deleted or edited-alone dates never come back); optional end date on web and app; migration 20261104000000 APPLIED; first run VERIFIED LIVE 2026-11-05 (all 3 real households reach Oct 2027, biweekly rhythm kept, 0 duplicates) | _(Lineu)_ |

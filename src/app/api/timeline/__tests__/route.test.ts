@@ -7,7 +7,7 @@ import { recordedEvents } from '../../../../test/eventWriterDouble';
 // bridgeHelpers.test.ts, and scripting its internal supabase calls here
 // would just duplicate that coverage for no benefit.
 
-type Resolution = { data?: unknown; error?: unknown };
+type Resolution = { data?: unknown; error?: unknown; count?: number };
 
 function makeResultChain(resolution: Resolution) {
   const handler: ProxyHandler<object> = {
@@ -60,7 +60,9 @@ vi.mock('@/lib/supabase-server', () => ({
 }));
 
 const ensureBridgesMock = vi.fn().mockResolvedValue(undefined);
-vi.mock('@/lib/bridgeHelpers', () => ({
+vi.mock('@/lib/bridgeHelpers', async (importOriginal) => ({
+  // The pure helpers stay real: the plan's card cost reads netCycleSpend.
+  ...(await importOriginal<typeof import('@/lib/bridgeHelpers')>()),
   ensureBridgesForWindow: (...args: unknown[]) => ensureBridgesMock(...args),
 }));
 
@@ -270,6 +272,7 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
     accounts: [
       { data: { id: 'acc-1', type: 'chequing' } },
       { data: [] }, // no credit cards — skips the monthly_goals/card-transactions queries
+      { data: [{ id: 'acc-1', type: 'chequing' }] }, // every account — the breakdown's classifier
     ],
     household_members: [{ data: { id: 'mem-1' } }],
     account_balance_anchors: [{ data: [{ anchor_date: '2026-07-01', balance: 1000 }] }],
@@ -277,6 +280,7 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
       { data: [] }, // main real-walk fetch (also reused as the plan's dated basis)
     ],
     recurring_items: [
+      { data: [] },           // the rules (extra payments)
       { count: 0, data: [] }, // unanchored income count
       { count: 0, data: [] }, // unanchored expense count
     ],
@@ -390,6 +394,13 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
             },
           ],
         },
+        // The other side of the transfer, read so the breakdown can classify it.
+        { data: [{ id: 'peer-1', account_id: 'sav-1', type: 'transfer', amount: 350 }] },
+      ],
+      accounts: [
+        baseScript.accounts[0],
+        baseScript.accounts[1],
+        { data: [{ id: 'acc-1', type: 'chequing' }, { id: 'sav-1', type: 'savings' }] },
       ],
     });
     const { createClient } = await import('@/lib/supabase-server');
@@ -402,5 +413,163 @@ describe('GET /api/timeline — includePlan (the chained 12-month plan)', () => 
     // A transfer contribution is an outflow — same rule the real ledger
     // walk (todayBalance itself) already applies via signAmount.
     expect(json.plan.months[0].balance).toBe(650); // 1000 - 350, not 1000
+    // The same row, through the same trip, lands in the breakdown's savings
+    // line — classified by its peer's account, and the sum closes.
+    expect(json.plan.months[0].startBalance).toBe(1000);
+    expect(json.plan.months[0].breakdown).toEqual({
+      status: 'ok',
+      lines: { income: 0, bills: 0, savings: 350, debtPayments: 0, drawn: 0, leftAfterBillsAndSavings: -350, cards: 0 },
+    });
+  });
+
+  it('a month whose lines do not add up is an error for THAT month only — logged with both nets, sent with none', async () => {
+    // Through this route a mismatch needs a row the classifier cannot bucket,
+    // and toTimelineTxs already drops unknown types — so the detection itself
+    // is pinned in planChainHelpers.test.ts (computeMonthBreakdown). Here the
+    // chain is real and only August's breakdown is forced to an error, to
+    // prove what the ROUTE does with one.
+    vi.doMock('@/lib/planChainHelpers', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/lib/planChainHelpers')>();
+      return {
+        ...actual,
+        buildPlanChain: (p: Parameters<typeof actual.buildPlanChain>[0]) =>
+          actual.buildPlanChain(p).map((m) =>
+            m.month === '2026-08' ? { ...m, breakdown: { status: 'error' as const, linesNet: 0, chainNet: -40 } } : m
+          ),
+      };
+    });
+    const { client } = makeSupabaseMock(proScript);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const res = await getTimeline('account=acc-1&includePlan=1');
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.ok).toBe(true);
+      const aug = json.plan.months.find((m: { month: string }) => m.month === '2026-08');
+      // No figures reach the client — not the nets, not partial lines.
+      expect(aug.breakdown).toEqual({ status: 'error' });
+      expect(aug.balance).toBe(1000);
+      const others = json.plan.months.filter((m: { month: string }) => m.month !== '2026-08');
+      expect(others).toHaveLength(11);
+      expect(others.every((m: { breakdown: { status: string } }) => m.breakdown.status === 'ok')).toBe(true);
+      expect(errorSpy).toHaveBeenCalledWith('plan breakdown mismatch', {
+        householdId: 'hh1', month: '2026-08', linesNet: 0, chainNet: -40,
+      });
+    } finally {
+      errorSpy.mockRestore();
+      vi.doUnmock('@/lib/planChainHelpers');
+    }
+  });
+
+  // One planned chequing row in the given month, shaped like a DB row.
+  const dbRow = (id: string, date: string, amount: number, type: string, peer: string | null = null) => ({
+    id, date, description: id, amount, type, recurring_item_id: null, recurrence_id: null, installment_label: null,
+    transfer_peer_id: peer, is_bridge: false, bridge_source_account: null, bridge_source_month: null,
+  });
+
+  it('a transfer to a DEBT account is a debt payment — the peer read decides, not the fallback', async () => {
+    const { client } = makeSupabaseMock({
+      ...proScript,
+      transactions: [
+        { data: [dbRow('tx-pay', '2026-08-04', 350, 'transfer', 'peer-d')] },
+        { data: [{ id: 'peer-d', account_id: 'debt-1', type: 'transfer', amount: 350 }] },
+      ],
+      accounts: [
+        baseScript.accounts[0],
+        baseScript.accounts[1],
+        { data: [{ id: 'acc-1', type: 'chequing' }, { id: 'debt-1', type: 'debt' }] },
+      ],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const json = await (await getTimeline('account=acc-1&includePlan=1')).json();
+    const aug = json.plan.months.find((m: { month: string }) => m.month === '2026-08');
+    expect(aug.breakdown.lines.debtPayments).toBe(350);
+    expect(aug.breakdown.lines.savings).toBe(0);
+  });
+
+  it('the "why" line reads only the months a free household can see', async () => {
+    // A $100 bill in August (visible) and a $5,000 one in December (not sent
+    // to a free household). The lowest SEEN month is August.
+    const { client } = makeSupabaseMock({
+      ...baseScript,
+      transactions: [{ data: [dbRow('tx-aug', '2026-08-04', 100, 'expense'), dbRow('tx-dec', '2026-12-04', 5000, 'expense')] }],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const json = await (await getTimeline('account=acc-1&includePlan=1')).json();
+    expect(json.plan.months.map((m: { why: unknown }) => m.why)).toEqual([
+      null,
+      { kind: 'moreOutThanIn', amount: 100 },
+      null,
+    ]);
+  });
+
+  it('names an extra payment from the recurring rules it reads', async () => {
+    const { client } = makeSupabaseMock({
+      ...proScript,
+      transactions: [{
+        data: ['2026-09-01', '2026-09-15', '2026-09-29'].map((d, i) => ({
+          ...dbRow(`mtg-${i}`, d, 1500, 'expense'), recurring_item_id: 'ri-mtg',
+        })),
+      }],
+      recurring_items: [
+        { data: [{ id: 'ri-mtg', description: 'Mortgage', cadence: 'biweekly', type: 'expense' }] },
+        { count: 0, data: [] },
+        { count: 0, data: [] },
+      ],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const json = await (await getTimeline('account=acc-1&includePlan=1')).json();
+    const sep = json.plan.months.find((m: { month: string }) => m.month === '2026-09');
+    expect(sep.why).toEqual({
+      kind: 'extraPayments',
+      items: [{ name: 'Mortgage', occurrences: 3, usualOccurrences: 2, dates: ['2026-09-01', '2026-09-15', '2026-09-29'] }],
+    });
+  });
+
+  it('sends each card closed statements, from its first transaction on', async () => {
+    const { client } = makeSupabaseMock({
+      ...proScript,
+      accounts: [
+        baseScript.accounts[0],
+        { data: [{ id: 'card-1', name: 'Visa', payment_day: 5, statement_close_day: 15 }] },
+        { data: [{ id: 'acc-1', type: 'chequing' }, { id: 'card-1', type: 'credit_card' }] },
+      ],
+      monthly_goals: [{ data: [] }],
+      transactions: [
+        { data: [] }, // chequing
+        { data: [ // card rows: the June and July statements (close day 15)
+          { account_id: 'card-1', date: '2026-06-01', type: 'expense', amount: 100, category_id: null, is_bridge: false },
+          { account_id: 'card-1', date: '2026-07-01', type: 'expense', amount: 200, category_id: null, is_bridge: false },
+        ] },
+        { data: [{ date: '2026-06-01' }] }, // the card's first transaction
+      ],
+    });
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const json = await (await getTimeline('account=acc-1&includePlan=1')).json();
+    expect(json.plan.statementHistory).toEqual([{
+      cardId: 'card-1', cardName: 'Visa', count: 2, low: 100, high: 200,
+      statements: [{ cycleMonth: '2026-07', total: 200 }, { cycleMonth: '2026-06', total: 100 }],
+    }]);
+  });
+
+  it('sends the statement history beside the months (empty without cards)', async () => {
+    const { client } = makeSupabaseMock(proScript);
+    const { createClient } = await import('@/lib/supabase-server');
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(client);
+
+    const json = await (await getTimeline('account=acc-1&includePlan=1')).json();
+    expect(json.plan.statementHistory).toEqual([]);
   });
 });
