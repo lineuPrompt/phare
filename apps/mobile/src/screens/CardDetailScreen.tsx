@@ -7,6 +7,7 @@ import { canEditPlan, loadCardDetail, type BudgetStatus, type CardDetail, type C
 import { cardFigure } from '../lib/cardsLoader';
 import { onEntrySaved } from '../lib/entryEvents';
 import { formatDayShort, formatMonthLong } from '../lib/timelineView';
+import { amountField } from '../lib/entryEdit';
 import ActionButton from '../components/ActionButton';
 import { useI18n } from '../i18n';
 import { theme } from '../theme';
@@ -19,8 +20,8 @@ import { theme } from '../theme';
  * only: a closed one keeps the plan it had.
  *
  * Tapping a category opens its entries for the cycle (Lineu, 2026-10-23), as
- * the route groups them. Read-only here: editing an entry stays on the
- * Timeline, which knows whether it repeats.
+ * the route groups them. Tapping an entry opens the Timeline's edit screen
+ * (edit or delete); the route says whether it repeats, so the screen warns.
  */
 
 const STATUS_COLOR: Record<BudgetStatus, string> = {
@@ -120,11 +121,32 @@ export default function CardDetailScreen() {
       : t('cardPlan.cycle.open')
     : null;
 
+  const openEntry = (e: CardEntry) =>
+    router.push({
+      pathname: '/entry-edit',
+      params: {
+        id: e.id,
+        kind: 'entry',
+        type: e.type,
+        date: e.date,
+        description: e.description ?? '',
+        amount: amountField(e.amount),
+        recurring: e.recurringItemId !== null ? '1' : '0',
+      },
+    });
+
   const entryList = (entries: CardEntry[]) => (
     <View style={styles.entries}>
       {entries.length === 0 && <Text style={styles.budgetDetail}>{t('cardPlan.noEntries')}</Text>}
       {entries.map((e) => (
-        <View key={e.id} style={styles.entry}>
+        // Tap → the Timeline's edit screen (edit or delete), same route and
+        // rules. It warns when the entry repeats, and the card reloads after.
+        <Pressable
+          key={e.id}
+          accessibilityRole="button"
+          onPress={() => openEntry(e)}
+          style={({ pressed }) => [styles.entry, pressed && styles.pressed]}
+        >
           <Text style={styles.entryDate}>{formatDayShort(e.date, locale)}</Text>
           <Text style={styles.entryText} numberOfLines={1}>
             {e.description ?? '—'}{e.installmentLabel ? ` (${e.installmentLabel})` : ''}
@@ -132,7 +154,8 @@ export default function CardDetailScreen() {
           <Text style={[styles.entryAmount, e.type === 'income' && { color: theme.color.positive }]}>
             {e.type === 'income' ? '+' : ''}{cardFigure(e.amount, locale)}
           </Text>
-        </View>
+          <Text style={styles.entryChevron}>›</Text>
+        </Pressable>
       ))}
     </View>
   );
@@ -289,6 +312,7 @@ const styles = StyleSheet.create({
   entryDate: { width: 84, fontSize: 13, color: theme.color.muted },
   entryText: { flex: 1, fontSize: 14, color: theme.color.body },
   entryAmount: { fontSize: 14, color: theme.color.body },
+  entryChevron: { fontSize: 16, color: theme.color.muted },
   budgetName: { flex: 1, fontSize: 15, fontWeight: '600', color: theme.color.body },
   budgetDetail: { fontSize: 13, color: theme.color.muted },
   empty: { fontSize: 14, color: theme.color.muted },

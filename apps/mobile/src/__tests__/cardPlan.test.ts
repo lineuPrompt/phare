@@ -191,7 +191,7 @@ describe('a category expanded: its entries', () => {
     ...ANSWER,
     entriesByCategory: {
       'cat-gro': [
-        { id: 'e2', date: '2026-10-20', description: 'IGA', amount: '80.25', type: 'expense', installmentLabel: null },
+        { id: 'e2', date: '2026-10-20', description: 'IGA', amount: '80.25', type: 'expense', installmentLabel: null, recurringItemId: 'ri-groceries' },
         { id: 'e1', date: '2026-10-17', description: 'Costco', amount: 400.25, type: 'expense', installmentLabel: null },
         { id: 'e3', date: '2026-10-21', description: 'Refund', amount: 12, type: 'income', installmentLabel: null },
       ],
@@ -202,7 +202,7 @@ describe('a category expanded: its entries', () => {
   it('each category keeps its own entries, oldest first, numerics read exactly', () => {
     const d = parseCardDetail(withEntries, '2026-11');
     expect(d.entriesByCategory['cat-gro'].map((e) => e.id)).toEqual(['e1', 'e2', 'e3']);
-    expect(d.entriesByCategory['cat-gro'][1]).toEqual({ id: 'e2', date: '2026-10-20', description: 'IGA', amount: 80.25, type: 'expense', installmentLabel: null });
+    expect(d.entriesByCategory['cat-gro'][1]).toEqual({ id: 'e2', date: '2026-10-20', description: 'IGA', amount: 80.25, type: 'expense', installmentLabel: null, recurringItemId: 'ri-groceries' });
   });
 
   it('a refund stays a refund (income), not spend', () => {
@@ -211,8 +211,14 @@ describe('a category expanded: its entries', () => {
 
   it('entries with no category, with no description and an installment label, are kept', () => {
     expect(parseCardDetail(withEntries, '2026-11').uncategorizedEntries).toEqual([
-      { id: 'u1', date: '2026-10-18', description: null, amount: 12.25, type: 'expense', installmentLabel: '2/6' },
+      { id: 'u1', date: '2026-10-18', description: null, amount: 12.25, type: 'expense', installmentLabel: '2/6', recurringItemId: null },
     ]);
+  });
+
+  it('an entry from a recurring rule says so (the edit screen warns it will detach); a one-off does not', () => {
+    const d = parseCardDetail(withEntries, '2026-11');
+    expect(d.entriesByCategory['cat-gro'].find((e) => e.id === 'e2')?.recurringItemId).toBe('ri-groceries');
+    expect(d.entriesByCategory['cat-gro'].find((e) => e.id === 'e1')?.recurringItemId).toBeNull();
   });
 
   it('an unreadable entry amount is an error, not a zero', () => {

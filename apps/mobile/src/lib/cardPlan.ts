@@ -38,7 +38,7 @@ export type CardBudget = {
   planned: boolean;
 };
 
-/** One entry of the cycle, as the route groups them. Read-only here. */
+/** One entry of the cycle, as the route groups them (card payments excluded). */
 export type CardEntry = {
   id: string;
   date: string;
@@ -47,6 +47,8 @@ export type CardEntry = {
   amount: number;
   type: 'expense' | 'income';
   installmentLabel: string | null;
+  /** Set when the entry is one occurrence of a recurring rule: editing it detaches it. */
+  recurringItemId: string | null;
 };
 
 export type CardDetail = {
@@ -78,6 +80,7 @@ function parseEntries(raw: unknown, what: string): CardEntry[] {
         amount: num(e.amount, `${what} entry ${i}`),
         type: e.type === 'income' ? 'income' as const : 'expense' as const,
         installmentLabel: typeof e.installmentLabel === 'string' ? e.installmentLabel : null,
+        recurringItemId: typeof e.recurringItemId === 'string' ? e.recurringItemId : null,
       };
     })
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
