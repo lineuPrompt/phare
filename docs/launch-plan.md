@@ -54,7 +54,7 @@
 | 2.8 | App Privacy: add "Purchase history" | P0 | L (C gives answers) | None | Saved in App Store Connect |
 | 2.9 | App Review notes for IAP, and a **second, non-Pro demo account** | P0 | C (text), L (account) | 2.2 | Notes pasted; the reviewer can buy in the sandbox |
 | 2.10 | Terms and Privacy final (Apple billing, stale "once paid subscriptions" line) | P0 | K | 2.1 | Published on the web; the app links them |
-| 2.11 | v1.0 status: resolve **RESOLVED 2026-11-18: v1.0 submitted 2026-11-14 with build 1.2.0 (20), with the Phare Pro group and both subscriptions; Waiting for Review. Build 21 is held: nothing new is submitted while build 20 is in review unless Apple rejects it.** | P0 | L | None | Known: withdrawn, unreleased, or live |
+| 2.11 | v1.0 status: resolve **RESOLVED 2026-11-18: v1.0 submitted 2026-11-14 with build 1.2.0 (20), with the Phare Pro group and both subscriptions; Waiting for Review. Build 21 is held: nothing new is submitted while build 20 is in review unless Apple rejects it. UPDATE 2026-11-19: Lineu withdrew build 20 and submitted the newest build (balance today = start of day, card entry edit/delete) for review at 1 pm.** | P0 | L | None | Known: withdrawn, unreleased, or live |
 | 2.12 | **Readiness question → submit** | P0 | C asks, L decides | 2.1–2.11 | Lineu answers "yes" to "Is this build ready for submission?"; submitted |
 | 2.13 | Date picker for date fields (native) | P2 | C | None | Typed dates no longer needed |
 
