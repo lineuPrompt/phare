@@ -94,6 +94,29 @@ export function classifyDip(dip: DipInfo | null): DipStatus {
   return 'healthy';
 }
 
+// ── "Balance today" headline ────────────────────────────────────────────────
+
+/**
+ * What the "Balance today" card shows (Lineu, 2026-11-19). The headline is the
+ * START of today, the figure a bank shows before today's bills post; the end
+ * of today follows as a second line only when entries dated today move it.
+ *
+ * `todayStartBalance` undefined means a server that predates the field: the
+ * card falls back to the end-of-day figure it always showed, with no second
+ * line. Both figures are the route's; nothing is computed here.
+ */
+export function balanceTodayDisplay(
+  todayBalance: number | null,
+  todayStartBalance: number | null | undefined
+): { headline: number | null; afterToday: number | null } {
+  if (todayStartBalance === undefined) return { headline: todayBalance, afterToday: null };
+  if (todayStartBalance === null) return { headline: null, afterToday: null };
+  return {
+    headline: todayStartBalance,
+    afterToday: todayBalance !== null && todayBalance !== todayStartBalance ? todayBalance : null,
+  };
+}
+
 // ── Single-month slice ───────────────────────────────────────────────────────
 
 export type MonthView = {

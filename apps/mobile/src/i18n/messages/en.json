@@ -56,6 +56,7 @@
     },
     "header": {
       "balanceToday": "Balance today",
+      "afterToday": "After today's entries:",
       "on": "on",
       "noDip": "No upcoming pay found, so there's no dip to show. Add your income on phare.money.",
       "lowestBeforePay": "Lowest point before your next pay ({payday}):",

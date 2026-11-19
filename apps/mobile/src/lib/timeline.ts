@@ -33,6 +33,11 @@ export type TimelineOk = {
   closingBalance: number;
   /** Null when today falls outside the returned window. */
   todayBalance: number | null;
+  /**
+   * Start of today, before entries dated today. Optional: a server deployed
+   * before 2026-11-19 does not send it, and the card falls back to todayBalance.
+   */
+  todayStartBalance?: number | null;
   /** Every day in the window, including days with no entries. */
   days: TimelineDay[];
   /** Lowest end-of-day balance between today and the next pay, or null. */

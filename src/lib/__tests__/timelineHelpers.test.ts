@@ -143,6 +143,54 @@ describe('buildCashTimeline — basic balance', () => {
     expect(result.todayBalance).toBe(1300); // 1000 + 500 - 200
   });
 
+  // Lineu, 2026-11-19: bank $1,951.36, card $1,654.60 — three bills dated today.
+  it('todayStartBalance is today before its entries; todayBalance after them', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-11-01', 2000)],
+      transactions: [
+        tx({ date: '2026-11-18', amount: 48.64, type: 'expense' }),
+        tx({ date: '2026-11-19', amount: 93.77, type: 'expense' }),
+        tx({ date: '2026-11-19', amount: 173.61, type: 'expense' }),
+        tx({ date: '2026-11-19', amount: 29.38, type: 'expense' }),
+        tx({ date: '2026-11-20', amount: 500, type: 'income' }),
+      ],
+      windowStart: '2026-11-01',
+      windowEnd: '2026-11-30',
+      today: '2026-11-19',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.todayStartBalance).toBe(1951.36);
+    expect(result.todayBalance).toBe(1654.6);
+  });
+
+  it('todayStartBalance includes an anchor dated today (anchors apply at the start of the day)', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-07-01', 1000), anchor('2026-07-05', 700)],
+      transactions: [tx({ date: '2026-07-05', amount: 100, type: 'expense' })],
+      windowStart: '2026-07-01',
+      windowEnd: '2026-07-31',
+      today: '2026-07-05',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.todayStartBalance).toBe(700);
+    expect(result.todayBalance).toBe(600);
+  });
+
+  it('todayStartBalance is null when today is before balancesStartDate', () => {
+    const result = buildCashTimeline({
+      anchors: [anchor('2026-07-15', 1000)],
+      transactions: [],
+      windowStart: '2026-07-01',
+      windowEnd: '2026-07-31',
+      today: '2026-07-10',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.todayStartBalance).toBeNull();
+  });
+
   it('todayBalance is null when today is before balancesStartDate', () => {
     const result = buildCashTimeline({
       anchors: [anchor('2026-07-15', 1000)],

@@ -47,6 +47,7 @@ type TimelineResponse =
       openingBalance: number;
       closingBalance: number;
       todayBalance: number | null;
+      todayStartBalance: number | null;
       days: TimelineDay[];
       dip: DipInfo | null;
       nextIncomeDate: string | null;
@@ -282,7 +283,7 @@ export default function TimelinePage() {
 
   return shell(
     <>
-      <TimelineHeader todayBalance={data.todayBalance} dip={data.dip} nextIncomeDate={data.nextIncomeDate} locale={locale} />
+      <TimelineHeader todayBalance={data.todayBalance} todayStartBalance={data.todayStartBalance} dip={data.dip} nextIncomeDate={data.nextIncomeDate} locale={locale} />
 
       {/* Add entry — the one place chequing transactions get added by hand */}
       <div>
@@ -408,7 +409,7 @@ export default function TimelinePage() {
             <AnchorForm
               accountId={chequingId}
               defaultDate={today}
-              defaultBalance={data.todayBalance ?? undefined}
+              defaultBalance={data.todayStartBalance ?? undefined}
               onSaved={onAnchorSaved}
               onCancel={() => setShowReAnchor(false)}
             />

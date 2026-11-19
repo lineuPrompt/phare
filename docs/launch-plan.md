@@ -44,17 +44,17 @@
 
 | # | Item | Pri | Owner | Depends on | Verifiable exit criterion |
 |---|---|---|---|---|---|
-| 2.1 | **Sign-up decisions:** platform on the signup event (trigger change), email links opening the app, Terms without the web price | P0 | L decides, K (Terms) | Phase 1 | Three decisions written in BACKLOG |
-| 2.2 | **S1:** sign-up, password reset, updated-terms acceptance in the app | P0 | C | 2.1 | A new account created and confirmed in the app, with no web page; `signup` event carries `platform: 'mobile'`; reset finishes in the app |
+| 2.1 | **Sign-up decisions:** platform on the signup event (trigger change), email links opening the app, Terms without the web price **2026-11-18: Lineu — not important now; deferred.** **Overtaken: S1 shipped 2026-11-05 with these settled in code.** | P0 | L decides, K (Terms) | Phase 1 | Three decisions written in BACKLOG |
+| 2.2 | **S1:** sign-up, password reset, updated-terms acceptance in the app **DONE 2026-11-05 (677b1ae; invite/sign-up security c5f12a6, proven live cca5c32): sign-up, password reset and updated Terms in the app; signup event records its platform.** | P0 | C | 2.1 | A new account created and confirmed in the app, with no web page; `signup` event carries `platform: 'mobile'`; reset finishes in the app |
 | 2.3 | **S4:** income and bill dates, editing them (effective-dated). **DONE 2026-10-23 (f01d795); server fixes verified live on Zezinho Test: bill rows carry no member, impossible "applies from" refused.** | P0 | C (diagnose → STOP) | Phase 1 | Dateless lines dated in the app; a raise saved from a date leaves past months unchanged |
 | 2.4 | **S5:** cards: close and payment days, detail, goal and budgets. **BUILT 2026-10-22, uncommitted; device test pending.** | P0 | C | Phase 1 | A card's days, goal and two budgets set in the app match the web for the same month; closed cycle refused |
 | 2.5 | **S6 remainder:** add income and transfers in the app. **BUILT 2026-10-22, uncommitted; verified live on Zezinho Test (income, contribution, debt payment and draw).** | P0 | C | Phase 1 | An income and a transfer added in the app appear on the Timeline and web identically |
-| 2.6 | Product metadata EN/FR, and review screenshot per product | P0 | L (C writes text) | 1.9 | Both products "Ready to Submit" |
-| 2.7 | App Store screenshots (new screens, EN/FR) | P0 | L | 2.2–2.5 | Uploaded for both locales |
+| 2.6 | Product metadata EN/FR, and review screenshot per product **DONE (confirmed 2026-11-18): EN/FR names and a review screenshot on both products.** | P0 | L (C writes text) | 1.9 | Both products "Ready to Submit" |
+| 2.7 | App Store screenshots (new screens, EN/FR) **2026-11-18: required English iPhone screenshots uploaded and accepted; new screens and French not yet.** | P0 | L | 2.2–2.5 | Uploaded for both locales |
 | 2.8 | App Privacy: add "Purchase history" | P0 | L (C gives answers) | None | Saved in App Store Connect |
 | 2.9 | App Review notes for IAP, and a **second, non-Pro demo account** | P0 | C (text), L (account) | 2.2 | Notes pasted; the reviewer can buy in the sandbox |
 | 2.10 | Terms and Privacy final (Apple billing, stale "once paid subscriptions" line) | P0 | K | 2.1 | Published on the web; the app links them |
-| 2.11 | v1.0 status: resolve | P0 | L | None | Known: withdrawn, unreleased, or live |
+| 2.11 | v1.0 status: resolve **RESOLVED 2026-11-18: v1.0 submitted 2026-11-14 with build 1.2.0 (20), with the Phare Pro group and both subscriptions; Waiting for Review. Build 21 is held: nothing new is submitted while build 20 is in review unless Apple rejects it.** | P0 | L | None | Known: withdrawn, unreleased, or live |
 | 2.12 | **Readiness question → submit** | P0 | C asks, L decides | 2.1–2.11 | Lineu answers "yes" to "Is this build ready for submission?"; submitted |
 | 2.13 | Date picker for date fields (native) | P2 | C | None | Typed dates no longer needed |
 

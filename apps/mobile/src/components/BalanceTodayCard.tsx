@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { classifyDip, formatCADLocale, type DipInfo, type DipStatus } from '@phare/core';
+import { balanceTodayDisplay, classifyDip, formatCADLocale, type DipInfo, type DipStatus } from '@phare/core';
 import { formatDayLong } from '../lib/timelineView';
 import { useI18n } from '../i18n';
 import type { Locale } from '../i18n';
@@ -21,11 +21,13 @@ const DIP_PALETTE: Record<DipStatus, { surface: string; border: string; text: st
  */
 export default function BalanceTodayCard({
   todayBalance,
+  todayStartBalance,
   dip,
   nextIncomeDate,
   locale,
 }: {
   todayBalance: number | null;
+  todayStartBalance: number | null | undefined;
   dip: DipInfo | null;
   nextIncomeDate: string | null;
   locale: Locale;
@@ -33,6 +35,7 @@ export default function BalanceTodayCard({
   const { t } = useI18n();
   const status = classifyDip(dip);
   const palette = DIP_PALETTE[status];
+  const shown = balanceTodayDisplay(todayBalance, todayStartBalance);
   // Only read when a dip exists, and the route sends both together or neither.
   const payday = nextIncomeDate ? formatDayLong(nextIncomeDate, locale) : '';
 
@@ -42,8 +45,14 @@ export default function BalanceTodayCard({
       {/* null is not zero: today outside the returned window has no balance
           to report, and $0 would read as an empty account. */}
       <Text style={styles.balanceValue}>
-        {todayBalance !== null ? formatCADLocale(todayBalance, locale) : '—'}
+        {shown.headline !== null ? formatCADLocale(shown.headline, locale) : '—'}
       </Text>
+      {shown.afterToday !== null && (
+        <Text style={styles.afterToday}>
+          {t('timeline.header.afterToday')}{' '}
+          <Text style={styles.dipFigure}>{formatCADLocale(shown.afterToday, locale)}</Text>
+        </Text>
+      )}
 
       <View style={[styles.dipBox, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         {dip === null ? (
@@ -75,6 +84,7 @@ const styles = StyleSheet.create({
   },
   balanceLabel: { fontSize: 13, color: theme.color.muted },
   balanceValue: { fontSize: 30, fontWeight: '700', color: theme.color.heading },
+  afterToday: { fontSize: 13, color: theme.color.muted },
   dipBox: {
     marginTop: theme.space.sm,
     borderRadius: theme.radius.md,

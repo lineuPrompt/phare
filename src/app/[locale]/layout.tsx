@@ -2,6 +2,7 @@ import {NextIntlClientProvider} from 'next-intl';
 import {getMessages} from 'next-intl/server';
 import type {Metadata} from 'next';
 import TermsGuard from '@/components/legal/TermsGuard';
+import NumberInputGuard from '@/components/forms/NumberInputGuard';
 import '../globals.css';
 
 export const metadata: Metadata = {
@@ -26,6 +27,7 @@ export default async function LocaleLayout({
           {/* One consent check for every page. Renders nothing; exempts the
               public and pre-consent routes itself. */}
           <TermsGuard />
+          <NumberInputGuard />
           {children}
         </NextIntlClientProvider>
       </body>

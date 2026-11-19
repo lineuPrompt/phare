@@ -503,6 +503,7 @@ export default function HomeScreen() {
         {load?.context.timeline?.ok && (
           <BalanceTodayCard
             todayBalance={load.context.timeline.todayBalance}
+            todayStartBalance={load.context.timeline.todayStartBalance}
             dip={load.context.timeline.dip}
             nextIncomeDate={load.context.timeline.nextIncomeDate}
             locale={locale}

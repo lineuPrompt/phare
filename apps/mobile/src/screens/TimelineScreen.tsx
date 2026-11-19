@@ -340,6 +340,7 @@ export default function TimelineScreen() {
 
             <BalanceTodayCard
               todayBalance={load.data.todayBalance}
+              todayStartBalance={load.data.todayStartBalance}
               dip={load.data.dip}
               nextIncomeDate={load.data.nextIncomeDate}
               locale={locale}

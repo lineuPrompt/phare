@@ -127,6 +127,14 @@ export type TimelineResult =
        * or a past month where today has already passed the window end).
        */
       todayBalance: number | null;
+      /**
+       * Balance at the START of today: after an anchor dated today, before any
+       * entry dated today. The figure a bank shows before today's bills post
+       * (Lineu, 2026-11-19: $1,951.36 at the bank, $1,654.60 end of day, the
+       * gap being three bills dated today). Null exactly when todayBalance is.
+       * Display only — the plan chain and the dip stay on todayBalance.
+       */
+      todayStartBalance: number | null;
       /** All days from balancesStartDate to windowEnd, including days with no entries. */
       days: TimelineDay[];
       /**
@@ -232,6 +240,7 @@ export function buildCashTimeline(params: {
   let running: number | null = null;
   let openingBalance = 0;
   let todayBalance: number | null = null;
+  let todayStartBalance: number | null = null;
   let openingCaptured = false;
 
   let cursor = walkStart;
@@ -245,6 +254,11 @@ export function buildCashTimeline(params: {
     if (!openingCaptured && cursor === balancesStartDate && running !== null) {
       openingBalance = running;
       openingCaptured = true;
+    }
+
+    // Today's balance before today's entries (after a same-day anchor).
+    if (cursor === today) {
+      todayStartBalance = running;
     }
 
     // Apply each transaction, rounding after every step to prevent FP drift.
@@ -326,6 +340,7 @@ export function buildCashTimeline(params: {
     openingBalance,
     closingBalance,
     todayBalance,
+    todayStartBalance,
     days,
     dip,
     nextIncomeDate,

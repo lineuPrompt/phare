@@ -32,6 +32,7 @@ type TimelineDipResponse =
       balancesStartDate: string;
       openingBalance: number;
       todayBalance: number | null;
+      todayStartBalance: number | null;
       dip: DipInfo | null;
       nextIncomeDate: string | null;
       days: TimelineDay[];
@@ -90,7 +91,7 @@ export default function DashboardPage() {
   // The Timeline's "Balance today" card (Lineu, 2026-11-01: shown again on
   // the Overview, above the snapshot). Same component, same figures from the
   // same /api/timeline response — a second display, never a recompute.
-  const [balanceCard, setBalanceCard] = useState<{ todayBalance: number | null; dip: DipInfo | null; nextIncomeDate: string | null } | null>(null);
+  const [balanceCard, setBalanceCard] = useState<{ todayBalance: number | null; todayStartBalance: number | null; dip: DipInfo | null; nextIncomeDate: string | null } | null>(null);
 
   useEffect(() => {
     fetch('/api/accounts')
@@ -103,7 +104,7 @@ export default function DashboardPage() {
       .then((d: TimelineDipResponse | null) => {
         if (!d || !d.ok) { setHasAnchor(false); return; }
         setPlan(d.plan ?? null);
-        setBalanceCard({ todayBalance: d.todayBalance, dip: d.dip, nextIncomeDate: d.nextIncomeDate });
+        setBalanceCard({ todayBalance: d.todayBalance, todayStartBalance: d.todayStartBalance, dip: d.dip, nextIncomeDate: d.nextIncomeDate });
       })
       .catch(() => {});
   }, []);
@@ -317,6 +318,7 @@ export default function DashboardPage() {
               {balanceCard && (
                 <TimelineHeader
                   todayBalance={balanceCard.todayBalance}
+                  todayStartBalance={balanceCard.todayStartBalance}
                   dip={balanceCard.dip}
                   nextIncomeDate={balanceCard.nextIncomeDate}
                   locale={locale}

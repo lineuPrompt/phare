@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { classifyDip, type DipInfo } from '@/lib/timelineHelpers';
+import { balanceTodayDisplay } from '@phare/core';
 import { formatCurrency } from '@/components/expenses/types';
 
 function fmtDay(iso: string, locale: string) {
@@ -25,11 +26,14 @@ function fmtDay(iso: string, locale: string) {
  */
 export default function TimelineHeader({
   todayBalance,
+  todayStartBalance,
   dip,
   nextIncomeDate,
   locale,
 }: {
   todayBalance: number | null;
+  /** Start of today (before entries dated today); see balanceTodayDisplay. */
+  todayStartBalance?: number | null;
   dip: DipInfo | null;
   /** The payday the dip window ends on. null only when dip is null. */
   nextIncomeDate: string | null;
@@ -38,6 +42,7 @@ export default function TimelineHeader({
   const t = useTranslations('timeline.header');
 
   const status = classifyDip(dip);
+  const shown = balanceTodayDisplay(todayBalance, todayStartBalance);
 
   const palette = {
     none:    { bg: '#F9FAFB', border: 'transparent', text: '#6B7280' },
@@ -54,8 +59,13 @@ export default function TimelineHeader({
       <div className="flex-1">
         <p className="text-sm font-medium" style={{ color: '#6B7280' }}>{t('balanceToday')}</p>
         <p className="text-3xl font-bold" style={{ color: '#0F2044' }}>
-          {todayBalance !== null ? formatCurrency(todayBalance, locale) : '—'}
+          {shown.headline !== null ? formatCurrency(shown.headline, locale) : '—'}
         </p>
+        {shown.afterToday !== null && (
+          <p className="text-sm mt-1" style={{ color: '#6B7280' }}>
+            {t('afterToday')} <strong>{formatCurrency(shown.afterToday, locale)}</strong>
+          </p>
+        )}
       </div>
 
       <div

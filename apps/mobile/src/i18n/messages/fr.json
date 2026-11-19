@@ -56,6 +56,7 @@
     },
     "header": {
       "balanceToday": "Solde aujourd'hui",
+      "afterToday": "Après les opérations du jour :",
       "on": "le",
       "noDip": "Aucune paie à venir n'a été trouvée : impossible d'afficher un creux. Ajoutez vos revenus sur phare.money.",
       "lowestBeforePay": "Point le plus bas avant votre prochaine paie ({payday}) :",
